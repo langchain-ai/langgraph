@@ -47,14 +47,14 @@ async def drain_topics(
             async for msgs in orch:
                 orch_msgs.extend(msgs)
                 if debug:
-                    print("orch", len(msgs))
+                    print("\n---\norch", len(msgs), msgs)
 
     async def executor() -> None:
         async with KafkaExecutor(graph, topics) as exec:
             async for msgs in exec:
                 exec_msgs.extend(msgs)
                 if debug:
-                    print("exec", len(msgs))
+                    print("\n---\nexec", len(msgs), msgs)
 
     async def error_consumer() -> None:
         async with AIOKafkaConsumer(topics.error) as consumer:

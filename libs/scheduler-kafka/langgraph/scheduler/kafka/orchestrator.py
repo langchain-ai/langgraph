@@ -10,9 +10,11 @@ from langgraph.constants import (
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_ENSURE_LATEST,
     INTERRUPT,
+    NS_END,
+    NS_SEP,
     SCHEDULED,
 )
-from langgraph.errors import CheckpointNotLatest
+from langgraph.errors import CheckpointNotLatest, GraphInterrupt
 from langgraph.pregel import Pregel
 from langgraph.pregel.loop import AsyncPregelLoop
 from langgraph.pregel.types import RetryPolicy
@@ -60,6 +62,9 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         self.producer = await self.stack.enter_async_context(
             aiokafka.AIOKafkaProducer(value_serializer=serde.dumps, **self.kwargs)
         )
+        self.subgraphs = {
+            k: v async for k, v in self.graph.aget_subgraphs(recurse=True)
+        }
         return self
 
     async def __aexit__(self, *args: Any) -> None:
@@ -91,6 +96,8 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
             await aretry(self.retry_policy, self.attempt, msg)
         except CheckpointNotLatest:
             pass
+        except GraphInterrupt:
+            pass
         except Exception as exc:
             await self.producer.send_and_wait(
                 self.topics.error,
@@ -102,6 +109,19 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
             )
 
     async def attempt(self, msg: MessageToOrchestrator) -> None:
+        # find graph
+        if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            if recast_checkpoint_ns in self.subgraphs:
+                graph = self.subgraphs[recast_checkpoint_ns]
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+        else:
+            graph = self.graph
         # process message
         async with AsyncPregelLoop(
             msg["input"],
@@ -109,15 +129,15 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
             stream=None,
             store=self.graph.store,
             checkpointer=self.graph.checkpointer,
-            nodes=self.graph.nodes,
-            specs=self.graph.channels,
-            output_keys=self.graph.output_channels,
-            stream_keys=self.graph.stream_channels,
+            nodes=graph.nodes,
+            specs=graph.channels,
+            output_keys=graph.output_channels,
+            stream_keys=graph.stream_channels,
         ) as loop:
             if loop.tick(
-                input_keys=self.graph.input_channels,
-                interrupt_after=self.graph.interrupt_after_nodes,
-                interrupt_before=self.graph.interrupt_before_nodes,
+                input_keys=graph.input_channels,
+                interrupt_after=graph.interrupt_after_nodes,
+                interrupt_before=graph.interrupt_before_nodes,
             ):
                 # wait for checkpoint to be saved
                 if hasattr(loop, "_put_checkpoint_fut"):
@@ -139,6 +159,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                                         },
                                     ),
                                     task=ExecutorTask(id=task.id, path=task.path),
+                                    finally_executor=msg.get("finally_executor"),
                                 ),
                             )
                             for task in new_tasks
@@ -162,5 +183,13 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                                 )
                             ],
                         )
-            else:
-                pass
+            elif loop.status == "done" and msg.get("finally_executor"):
+                # schedule any finally_executor tasks
+                futs = await asyncio.gather(
+                    *(
+                        self.producer.send(self.topics.executor, value=m)
+                        for m in msg["finally_executor"]
+                    )
+                )
+                # wait for messages to be sent
+                await asyncio.gather(*futs)

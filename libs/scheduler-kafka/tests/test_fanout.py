@@ -16,7 +16,7 @@ from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
 from tests.any import AnyDict
-from tests.run import drain_topics
+from tests.drain import drain_topics
 
 pytestmark = pytest.mark.anyio
 
@@ -138,6 +138,7 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
                 "tags": [],
             },
             "input": None,
+            "finally_executor": None,
         }
         for c in reversed(history)
         for _ in c.tasks
@@ -162,6 +163,7 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
                 "id": t.id,
                 "path": list(t.path),
             },
+            "finally_executor": None,
         }
         for c in reversed(history)
         for t in c.tasks
@@ -220,8 +222,11 @@ async def test_fanout_graph_w_interrupt(
                 "tags": [],
             },
             "input": None,
+            "finally_executor": None,
         }
         for c in reversed(history[1:])  # the last one wasn't executed
+        # orchestrator messages appear only after tasks for that checkpoint
+        # finish executing, ie. after executor sends message to resume checkpoint
         for _ in c.tasks
     ]
     assert exec_msgs == [
@@ -244,6 +249,7 @@ async def test_fanout_graph_w_interrupt(
                 "id": t.id,
                 "path": list(t.path),
             },
+            "finally_executor": None,
         }
         for c in reversed(history[1:])  # the last one wasn't executed
         for t in c.tasks

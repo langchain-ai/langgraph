@@ -15,8 +15,8 @@ from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from tests.any import AnyStr
-from tests.run import drain_topics
+from tests.any import AnyDict, AnyStr
+from tests.drain import drain_topics
 
 pytestmark = pytest.mark.anyio
 C = ParamSpec("C")
@@ -140,13 +140,281 @@ async def test_subgraph_w_interrupt(
 
     # check interrupted state
     state = await graph.aget_state(config)
-    assert len(orch_msgs) == 4
-    assert len(exec_msgs) == 3
+    assert len(orch_msgs) == 6
+    assert len(exec_msgs) == 5
     assert state.next == ("weather_graph",)
     assert state.values == {
         "messages": [HumanMessage(id=AnyStr(), content="what's the weather in sf")],
         "route": "weather",
     }
+
+    # check outer history
+    history = [c async for c in graph.aget_state_history(config)]
+    assert len(history) == 3
+
+    # check child history
+    child_history = [
+        c async for c in graph.aget_state_history(history[0].tasks[0].state)
+    ]
+    assert len(child_history) == 3
+
+    # check messages
+    assert (
+        orch_msgs
+        == (
+            # initial message to outer graph
+            [MessageToOrchestrator(input=input, config=config)]
+            # outer graph messages, until interrupted
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": False,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_ns": "",
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "input": None,
+                    "finally_executor": None,
+                }
+                for c in reversed(history[1:])  # the last one wasn't executed
+                # orchestrator messages appear only after tasks for that checkpoint
+                # finish executing, ie. after executor sends message to resume checkpoint
+                for _ in c.tasks
+            ]
+            # initial message to child graph
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_checkpointer": None,
+                            "__pregel_delegate": False,
+                            "__pregel_read": None,
+                            "__pregel_send": None,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": False,
+                            "__pregel_task_id": history[0].tasks[0].id,
+                            "checkpoint_id": None,
+                            "checkpoint_map": {
+                                "": history[0].config["configurable"]["checkpoint_id"]
+                            },
+                            "checkpoint_ns": history[0]
+                            .tasks[0]
+                            .state["configurable"]["checkpoint_ns"],
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "input": {
+                        "messages": [
+                            {
+                                "id": [
+                                    "langchain",
+                                    "schema",
+                                    "messages",
+                                    "HumanMessage",
+                                ],
+                                "kwargs": {
+                                    "content": "what's the weather in sf",
+                                    "id": AnyStr(),
+                                    "type": "human",
+                                },
+                                "lc": 1,
+                                "type": "constructor",
+                            }
+                        ],
+                        "route": "weather",
+                    },
+                    "finally_executor": [
+                        {
+                            "config": {
+                                "callbacks": None,
+                                "configurable": {
+                                    "__pregel_dedupe_tasks": True,
+                                    "__pregel_ensure_latest": True,
+                                    "__pregel_resuming": False,
+                                    "checkpoint_id": history[0].config["configurable"][
+                                        "checkpoint_id"
+                                    ],
+                                    "checkpoint_ns": "",
+                                    "thread_id": "1",
+                                },
+                                "metadata": AnyDict(),
+                                "recursion_limit": 25,
+                                "tags": [],
+                            },
+                            "finally_executor": None,
+                            "task": {
+                                "id": history[0].tasks[0].id,
+                                "path": list(history[0].tasks[0].path),
+                            },
+                        }
+                    ],
+                }
+            ]
+            # child graph messages, until interrupted
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_checkpointer": None,
+                            "__pregel_delegate": False,
+                            "__pregel_read": None,
+                            "__pregel_send": None,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": False,
+                            "__pregel_task_id": history[0].tasks[0].id,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_map": {
+                                "": history[0].config["configurable"]["checkpoint_id"]
+                            },
+                            "checkpoint_ns": history[0]
+                            .tasks[0]
+                            .state["configurable"]["checkpoint_ns"],
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "input": None,
+                    "finally_executor": [
+                        {
+                            "config": {
+                                "callbacks": None,
+                                "configurable": {
+                                    "__pregel_dedupe_tasks": True,
+                                    "__pregel_ensure_latest": True,
+                                    "__pregel_resuming": False,
+                                    "checkpoint_id": history[0].config["configurable"][
+                                        "checkpoint_id"
+                                    ],
+                                    "checkpoint_ns": "",
+                                    "thread_id": "1",
+                                },
+                                "metadata": AnyDict(),
+                                "recursion_limit": 25,
+                                "tags": [],
+                            },
+                            "finally_executor": None,
+                            "task": {
+                                "id": history[0].tasks[0].id,
+                                "path": list(history[0].tasks[0].path),
+                            },
+                        }
+                    ],
+                }
+                for c in reversed(child_history[1:])  # the last one wasn't executed
+                # orchestrator messages appear only after tasks for that checkpoint
+                # finish executing, ie. after executor sends message to resume checkpoint
+                for _ in c.tasks
+            ]
+        )
+    )
+    assert (
+        exec_msgs
+        == (
+            # outer graph tasks
+            [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": False,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_ns": "",
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "task": {
+                        "id": t.id,
+                        "path": list(t.path),
+                    },
+                    "finally_executor": None,
+                }
+                for c in reversed(history)
+                for t in c.tasks
+            ]
+            # child graph tasks
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_checkpointer": None,
+                            "__pregel_delegate": False,
+                            "__pregel_read": None,
+                            "__pregel_send": None,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": False,
+                            "__pregel_task_id": history[0].tasks[0].id,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_map": {
+                                "": history[0].config["configurable"]["checkpoint_id"]
+                            },
+                            "checkpoint_ns": history[0]
+                            .tasks[0]
+                            .state["configurable"]["checkpoint_ns"],
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "task": {
+                        "id": t.id,
+                        "path": list(t.path),
+                    },
+                    "finally_executor": [
+                        {
+                            "config": {
+                                "callbacks": None,
+                                "configurable": {
+                                    "__pregel_dedupe_tasks": True,
+                                    "__pregel_ensure_latest": True,
+                                    "__pregel_resuming": False,
+                                    "checkpoint_id": history[0].config["configurable"][
+                                        "checkpoint_id"
+                                    ],
+                                    "checkpoint_ns": "",
+                                    "thread_id": "1",
+                                },
+                                "metadata": AnyDict(),
+                                "recursion_limit": 25,
+                                "tags": [],
+                            },
+                            "finally_executor": None,
+                            "task": {
+                                "id": history[0].tasks[0].id,
+                                "path": list(history[0].tasks[0].path),
+                            },
+                        }
+                    ],
+                }
+                for c in reversed(child_history[1:])  # the last one wasn't executed
+                for t in c.tasks
+            ]
+        )
+    )
 
     # resume the thread
     async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
@@ -156,13 +424,13 @@ async def test_subgraph_w_interrupt(
         )
 
     orch_msgs, exec_msgs = await drain_topics(
-        topics, graph, config, until=lambda state: state.next == (), debug=True
+        topics, graph, config, until=lambda state: state.next == ()
     )
 
     # check final state
     state = await graph.aget_state(config)
-    assert len(orch_msgs) == 2
-    assert len(exec_msgs) == 1
+    assert len(orch_msgs) == 4
+    assert len(exec_msgs) == 3
     assert state.next == ()
     assert state.values == {
         "messages": [
@@ -171,3 +439,275 @@ async def test_subgraph_w_interrupt(
         ],
         "route": "weather",
     }
+
+    # check outer history
+    history = [c async for c in graph.aget_state_history(config)]
+    assert len(history) == 4
+
+    # check child history
+    # accessing second to last checkpoint, since that's the one w/ subgraph task
+    child_history = [
+        c async for c in graph.aget_state_history(history[1].tasks[0].state)
+    ]
+    assert len(child_history) == 4
+
+    # check messages
+    assert (
+        orch_msgs
+        == (
+            # initial message to outer graph
+            [MessageToOrchestrator(input=None, config=config)]
+            # initial message to child graph
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_checkpointer": None,
+                            "__pregel_delegate": False,
+                            "__pregel_read": None,
+                            "__pregel_send": None,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": True,
+                            "__pregel_task_id": history[1].tasks[0].id,
+                            "checkpoint_id": None,
+                            "checkpoint_map": {
+                                "": history[1].config["configurable"]["checkpoint_id"]
+                            },
+                            "checkpoint_ns": history[1]
+                            .tasks[0]
+                            .state["configurable"]["checkpoint_ns"],
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "input": None,
+                    "finally_executor": [
+                        {
+                            "config": {
+                                "callbacks": None,
+                                "configurable": {
+                                    "__pregel_dedupe_tasks": True,
+                                    "__pregel_ensure_latest": True,
+                                    "__pregel_resuming": True,
+                                    "checkpoint_id": history[1].config["configurable"][
+                                        "checkpoint_id"
+                                    ],
+                                    "checkpoint_ns": "",
+                                    "thread_id": "1",
+                                },
+                                "metadata": AnyDict(),
+                                "recursion_limit": 25,
+                                "tags": [],
+                            },
+                            "finally_executor": None,
+                            "task": {
+                                "id": history[1].tasks[0].id,
+                                "path": list(history[1].tasks[0].path),
+                            },
+                        }
+                    ],
+                }
+            ]
+            # child graph messages, from previous last checkpoint onwards
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_checkpointer": None,
+                            "__pregel_delegate": False,
+                            "__pregel_read": None,
+                            "__pregel_send": None,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": True,
+                            "__pregel_task_id": history[1].tasks[0].id,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_map": {
+                                "": history[1].config["configurable"]["checkpoint_id"]
+                            },
+                            "checkpoint_ns": history[1]
+                            .tasks[0]
+                            .state["configurable"]["checkpoint_ns"],
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "input": None,
+                    "finally_executor": [
+                        {
+                            "config": {
+                                "callbacks": None,
+                                "configurable": {
+                                    "__pregel_dedupe_tasks": True,
+                                    "__pregel_ensure_latest": True,
+                                    "__pregel_resuming": True,
+                                    "checkpoint_id": history[1].config["configurable"][
+                                        "checkpoint_id"
+                                    ],
+                                    "checkpoint_ns": "",
+                                    "thread_id": "1",
+                                },
+                                "metadata": AnyDict(),
+                                "recursion_limit": 25,
+                                "tags": [],
+                            },
+                            "finally_executor": None,
+                            "task": {
+                                "id": history[1].tasks[0].id,
+                                "path": list(history[1].tasks[0].path),
+                            },
+                        }
+                    ],
+                }
+                for c in reversed(child_history[:2])
+                for _ in c.tasks
+            ]
+            # outer graph messages, from previous last checkpoint onwards
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": True,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_ns": "",
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "input": None,
+                    "finally_executor": None,
+                }
+                for c in reversed(history[:2])
+                for _ in c.tasks
+            ]
+        )
+    )
+    assert (
+        exec_msgs
+        == (
+            # outer graph tasks
+            [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": True,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_ns": "",
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "task": {
+                        "id": t.id,
+                        "path": list(t.path),
+                    },
+                    "finally_executor": None,
+                }
+                for c in reversed(history[:2])
+                for t in c.tasks
+            ]
+            # child graph tasks
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_checkpointer": None,
+                            "__pregel_delegate": False,
+                            "__pregel_read": None,
+                            "__pregel_send": None,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_resuming": True,
+                            "__pregel_task_id": history[1].tasks[0].id,
+                            "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                            "checkpoint_map": {
+                                "": history[1].config["configurable"]["checkpoint_id"]
+                            },
+                            "checkpoint_ns": history[1]
+                            .tasks[0]
+                            .state["configurable"]["checkpoint_ns"],
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "task": {
+                        "id": t.id,
+                        "path": list(t.path),
+                    },
+                    "finally_executor": [
+                        {
+                            "config": {
+                                "callbacks": None,
+                                "configurable": {
+                                    "__pregel_dedupe_tasks": True,
+                                    "__pregel_ensure_latest": True,
+                                    "__pregel_resuming": True,
+                                    "checkpoint_id": history[1].config["configurable"][
+                                        "checkpoint_id"
+                                    ],
+                                    "checkpoint_ns": "",
+                                    "thread_id": "1",
+                                },
+                                "metadata": AnyDict(),
+                                "recursion_limit": 25,
+                                "tags": [],
+                            },
+                            "finally_executor": None,
+                            "task": {
+                                "id": history[1].tasks[0].id,
+                                "path": list(history[1].tasks[0].path),
+                            },
+                        }
+                    ],
+                }
+                for c in reversed(child_history[:2])
+                for t in c.tasks
+            ]
+            # "finally" tasks
+            + [
+                {
+                    "config": {
+                        "callbacks": None,
+                        "configurable": {
+                            "__pregel_dedupe_tasks": True,
+                            "__pregel_ensure_latest": True,
+                            "__pregel_resuming": True,
+                            "checkpoint_id": history[1].config["configurable"][
+                                "checkpoint_id"
+                            ],
+                            "checkpoint_ns": "",
+                            "thread_id": "1",
+                        },
+                        "metadata": AnyDict(),
+                        "recursion_limit": 25,
+                        "tags": [],
+                    },
+                    "finally_executor": None,
+                    "task": {
+                        "id": history[1].tasks[0].id,
+                        "path": list(history[1].tasks[0].path),
+                    },
+                }
+            ]
+        )
+    )

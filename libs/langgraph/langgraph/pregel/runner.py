@@ -13,7 +13,7 @@ from typing import (
 )
 
 from langgraph.constants import ERROR, INTERRUPT, NO_WRITES
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphDelegate, GraphInterrupt
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
 from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
@@ -71,6 +71,8 @@ class PregelRunner:
                         # save interrupt to checkpointer
                         if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
                             self.put_writes(task.id, interrupts)
+                    elif isinstance(exc, GraphDelegate):
+                        raise exc
                     else:
                         # save error to checkpointer
                         self.put_writes(task.id, [(ERROR, exc)])
@@ -135,6 +137,8 @@ class PregelRunner:
                         # save interrupt to checkpointer
                         if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
                             self.put_writes(task.id, interrupts)
+                    elif isinstance(exc, GraphDelegate):
+                        raise exc
                     else:
                         # save error to checkpointer
                         self.put_writes(task.id, [(ERROR, exc)])

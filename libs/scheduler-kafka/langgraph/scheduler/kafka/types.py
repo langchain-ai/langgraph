@@ -1,4 +1,4 @@
-from typing import Any, NamedTuple, Optional, TypedDict, Union
+from typing import Any, NamedTuple, Optional, Sequence, TypedDict, Union
 
 from langchain_core.runnables import RunnableConfig
 
@@ -12,6 +12,7 @@ class Topics(NamedTuple):
 class MessageToOrchestrator(TypedDict):
     input: Optional[dict[str, Any]]
     config: RunnableConfig
+    finally_executor: Optional[Sequence["MessageToExecutor"]]
 
 
 class ExecutorTask(TypedDict):
@@ -22,6 +23,7 @@ class ExecutorTask(TypedDict):
 class MessageToExecutor(TypedDict):
     config: RunnableConfig
     task: ExecutorTask
+    finally_executor: Optional[Sequence["MessageToExecutor"]]
 
 
 class ErrorMessage(TypedDict):

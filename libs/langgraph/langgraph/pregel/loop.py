@@ -40,6 +40,7 @@ from langgraph.checkpoint.base import (
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_DEDUPE_TASKS,
+    CONFIG_KEY_DELEGATE,
     CONFIG_KEY_ENSURE_LATEST,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
@@ -50,7 +51,12 @@ from langgraph.constants import (
     SCHEDULED,
     TAG_HIDDEN,
 )
-from langgraph.errors import CheckpointNotLatest, EmptyInputError, GraphInterrupt
+from langgraph.errors import (
+    CheckpointNotLatest,
+    EmptyInputError,
+    GraphDelegate,
+    GraphInterrupt,
+)
 from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
@@ -337,6 +343,18 @@ class PregelLoop:
             self.status = "done"
             return False
 
+        # check if we should delegate (used by subgraphs in distributed mode)
+        if self.config["configurable"].get(CONFIG_KEY_DELEGATE):
+            assert self.input is INPUT_RESUMING
+            raise GraphDelegate(
+                {
+                    "config": patch_configurable(
+                        self.config, {CONFIG_KEY_DELEGATE: False}
+                    ),
+                    "input": None,
+                }
+            )
+
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
@@ -412,6 +430,16 @@ class PregelLoop:
             )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # check if we should delegate (used by subgraphs in distributed mode)
+            if self.config["configurable"].get(CONFIG_KEY_DELEGATE):
+                raise GraphDelegate(
+                    {
+                        "config": patch_configurable(
+                            self.config, {CONFIG_KEY_DELEGATE: False}
+                        ),
+                        "input": self.input,
+                    }
+                )
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
