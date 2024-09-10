@@ -79,6 +79,10 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
+  - exclude:
+      glob:
+        - tutorials/llm-compiler/math_tools.py
+        - tutorials/llm-compiler/output_parser.py
 nav:
   - Home:
       - "index.md"
