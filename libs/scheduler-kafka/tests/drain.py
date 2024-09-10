@@ -1,5 +1,4 @@
 import asyncio
-import functools
 from typing import Callable, Optional, TypeVar
 
 import anyio
@@ -17,19 +16,6 @@ C = ParamSpec("C")
 R = TypeVar("R")
 
 
-def timeout(delay: int):
-    def decorator(func: Callable[C, R]) -> Callable[C, R]:
-        @functools.wraps(func)
-        async def new_func(*args: C.args, **kwargs: C.kwargs) -> R:
-            async with asyncio.timeout(delay):
-                return await func(*args, **kwargs)
-
-        return new_func
-
-    return decorator
-
-
-@timeout(20)
 async def drain_topics(
     topics: Topics,
     graph: Pregel,
@@ -79,6 +65,7 @@ async def drain_topics(
 
     # run the orchestrator and executor until break_when
     async with anyio.create_task_group() as tg:
+        tg.cancel_scope.deadline = anyio.current_time() + 20
         scope = tg.cancel_scope
         tg.start_soon(orchestrator, name="orchestrator")
         tg.start_soon(executor, name="executor")
