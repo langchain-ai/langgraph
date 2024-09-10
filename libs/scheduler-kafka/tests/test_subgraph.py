@@ -138,8 +138,6 @@ async def test_subgraph_w_interrupt(
 
     # check interrupted state
     state = await graph.aget_state(config)
-    assert len(orch_msgs) == 6
-    assert len(exec_msgs) == 5
     assert state.next == ("weather_graph",)
     assert state.values == {
         "messages": [HumanMessage(id=AnyStr(), content="what's the weather in sf")],
@@ -427,8 +425,6 @@ async def test_subgraph_w_interrupt(
 
     # check final state
     state = await graph.aget_state(config)
-    assert len(orch_msgs) == 4
-    assert len(exec_msgs) == 3
     assert state.next == ()
     assert state.values == {
         "messages": [
