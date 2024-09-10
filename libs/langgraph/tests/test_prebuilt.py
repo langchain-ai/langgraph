@@ -382,6 +382,53 @@ async def test_tool_node():
     )
     assert tool_message.tool_call_id == "some 0"
 
+    # test error handling
+
+    with pytest.raises(ValueError, match="Test error"):
+        ToolNode([tool1], handle_tool_errors=False).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool1",
+                                "args": {"some_val": 0, "some_other_val": "foo"},
+                                "id": "some 0",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
+
+    def dummy_tool_error_handling(e, call):
+        return ToolMessage(content="Tool failed", tool_call_id=call["id"])
+
+    error_result = ToolNode(
+        [tool1], handle_tool_errors=dummy_tool_error_handling
+    ).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+
+    tool_message: ToolMessage = error_result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.content == "Tool failed"
+    assert tool_message.tool_call_id == "some 0"
+
 
 def my_function(some_val: int, some_other_val: str) -> str:
     return f"{some_val} - {some_other_val}"

@@ -43,6 +43,11 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
+def default_handle_tool_errors(e, call):
+    content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
+    return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
+
+
 def str_output(output: Any) -> str:
     if isinstance(output, str):
         return output
@@ -60,10 +65,11 @@ class ToolNode(RunnableCallable):
         tools (Sequence[Union[BaseTool, Callable]]): A sequence of tools that can be invoked.
         name (str, optional): The name of the node, defaults to "tools"
         tags (list[str], optional): Tags to associate with the node
-        handle_tool_errors (union(callable, false), optional): If false then each tool should be
-            defined to handle errors on it's own. If a callable, then the callable will be applied
+        handle_tool_errors (union(callable, bool), optional): If false then each tool should be
+            defined to handle errors on it's own. If true, then the default_handle_tool_errors
+            will be used. If a callable, then the callable will be applied
             to each error that is thrown when a tool is called.
-            
+
             If a callable, then it must have the following attributes:
 
             - Accepts two arguments, first the error raised and second the original tool call
@@ -119,7 +125,7 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
-        handle_tool_errors: Optional[Union[Callable, Literal[False]]] = False,
+        handle_tool_errors: Optional[Union[Callable, bool]] = True,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: Dict[str, BaseTool] = {}
@@ -167,7 +173,7 @@ class ToolNode(RunnableCallable):
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            if self.handle_tool_errors == False:
+            if not self.handle_tool_errors:
                 tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
                     input, config
                 )
@@ -177,12 +183,15 @@ class ToolNode(RunnableCallable):
                         input, config
                     )
                 except Exception as e:
-                    tool_message = self.handle_tool_errors(e, call)
+                    if isinstance(self.handle_tool_errors, bool):
+                        tool_message = default_handle_tool_errors(e, call)
+                    else:
+                        tool_message = self.handle_tool_errors(e, call)
             # TODO: handle this properly in core
             tool_message.content = str_output(tool_message.content)
             return tool_message
         except Exception as e:
-            if self.handle_tool_errors == False:
+            if not self.handle_tool_errors:
                 raise e
             else:
                 raise ValueError(f"Your handle_tool_errors function needs updating, it threw {repr(e)} when trying to call tool {call['name']} \
@@ -194,22 +203,25 @@ class ToolNode(RunnableCallable):
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            if self.handle_tool_errors == False:
-                tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                    input, config
-                )
+            if not self.handle_tool_errors:
+                tool_message: ToolMessage = await self.tools_by_name[
+                    call["name"]
+                ].ainvoke(input, config)
             else:
                 try:
-                    tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                        input, config
-                    )
+                    tool_message: ToolMessage = await self.tools_by_name[
+                        call["name"]
+                    ].ainvoke(input, config)
                 except Exception as e:
-                    tool_message = self.handle_tool_errors(e, call)
+                    if isinstance(self.handle_tool_errors, bool):
+                        tool_message = default_handle_tool_errors(e, call)
+                    else:
+                        tool_message = self.handle_tool_errors(e, call)
             # TODO: handle this properly in core
             tool_message.content = str_output(tool_message.content)
             return tool_message
         except Exception as e:
-            if self.handle_tool_errors == False:
+            if not self.handle_tool_errors:
                 raise e
             else:
                 raise ValueError(f"Your handle_tool_errors function needs updating, it threw {repr(e)} when trying to call tool {call['name']} \
