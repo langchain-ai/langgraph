@@ -56,6 +56,40 @@ def str_output(output: Any) -> str:
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
+    Args:
+        tools (Sequence[Union[BaseTool, Callable]]): A sequence of tools that can be invoked.
+        name (str, optional): The name of the node, defaults to "tools"
+        tags (list[str], optional): Tags to associate with the node
+        handle_tool_errors (union(callable, false), optional): If false then each tool should be
+            defined to handle errors on it's own. If a callable, then the callable will be applied
+            to each error that is thrown when a tool is called.
+            
+            If a callable, then it must have the following attributes:
+
+            - Accepts two arguments, first the error raised and second the original tool call
+            - Must return a ToolMessage that will be passed back to the chat model
+
+    Example:
+
+        @tool
+        def complex_tool(int_arg: int, float_arg: float, dict_arg: dict) -> int:
+            \"\"\"Do something complex with a complex tool.\"\"\"
+            return int_arg * float_arg
+
+        tools = [complex_tool]
+
+        def handle_tool_errors(e, call):
+            content = f"Error: {repr(e)}\n Please fix your mistakes."
+            return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
+
+        tool_node = ToolNode(
+                        tools,
+                        name="my_tool_node",
+                        tags=["my_tag_1","my_tag_2"],
+                        handle_tool_errors = handle_tool_errors
+                    )
+
+
     It can be used either in StateGraph with a "messages" key or in MessageGraph. If
     multiple tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
@@ -85,7 +119,7 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
-        handle_tool_errors: Optional[bool] = True,
+        handle_tool_errors: Optional[Union[Callable, Literal[False]]] = False,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: Dict[str, BaseTool] = {}
@@ -133,34 +167,53 @@ class ToolNode(RunnableCallable):
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                input, config
-            )
+            if self.handle_tool_errors == False:
+                tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
+                    input, config
+                )
+            else:
+                try:
+                    tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
+                        input, config
+                    )
+                except Exception as e:
+                    tool_message = self.handle_tool_errors(e, call)
             # TODO: handle this properly in core
             tool_message.content = str_output(tool_message.content)
             return tool_message
         except Exception as e:
-            if not self.handle_tool_errors:
+            if self.handle_tool_errors == False:
                 raise e
-            content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
-            return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
+            else:
+                raise ValueError(f"Your handle_tool_errors function needs updating, it threw {repr(e)} when trying to call tool {call['name']} \
+                                 with the following input: {input} and configuration: {config}")
 
     async def _arun_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
+
         try:
             input = {**call, **{"type": "tool_call"}}
-            tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
-                input, config
-            )
+            if self.handle_tool_errors == False:
+                tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
+                    input, config
+                )
+            else:
+                try:
+                    tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
+                        input, config
+                    )
+                except Exception as e:
+                    tool_message = self.handle_tool_errors(e, call)
             # TODO: handle this properly in core
             tool_message.content = str_output(tool_message.content)
             return tool_message
         except Exception as e:
-            if not self.handle_tool_errors:
+            if self.handle_tool_errors == False:
                 raise e
-            content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
-            return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
+            else:
+                raise ValueError(f"Your handle_tool_errors function needs updating, it threw {repr(e)} when trying to call tool {call['name']} \
+                                 with the following input: {input} and configuration: {config}")
 
     def _parse_input(
         self,
