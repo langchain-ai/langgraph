@@ -511,7 +511,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph"
-version = "0.2.17"
+version = "0.2.19"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -1179,4 +1179,4 @@ watchmedo = ["PyYAML (>=3.10)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "29e1bd946c9d7c9424219fa94fca03c80514d98c58e9fc5a7d52f735b8d0d8c9"
+content-hash = "4fd0a2d16956a5e92ef42cbd23a1649cc5cefcc2da1d58d0065fa355668dfaa9"
