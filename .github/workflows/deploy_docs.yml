@@ -59,10 +59,3 @@ jobs:
         if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Deploy Pull Request Preview
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v2
-        with:
-          name: pr-preview-${{ github.event.number }}
-          path: ./docs/site/
