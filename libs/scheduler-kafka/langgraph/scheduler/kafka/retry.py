@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import random
-from typing import Awaitable, Callable, Optional, ParamSpec
+from typing import Awaitable, Callable, Optional
+
+from typing_extensions import ParamSpec
 
 from langgraph.pregel.types import RetryPolicy
 
