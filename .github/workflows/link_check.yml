@@ -26,7 +26,7 @@ jobs:
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          folder-path: "examples/,docs/"
+          folder-path: "docs/"
           check-modified-files-only: ${{ github.event_name != 'schedule' }}
           file-path: "./README.md"
           config-file: "./.markdown-link-check.config.json"
@@ -54,8 +54,8 @@ jobs:
           LANGCHAIN_API_KEY: test
         run: |
           if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
-            echo "Running link check on all notebooks in examples directory..."
-            poetry run pytest -v --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links examples
+            echo "Running link check on all notebooks in docs directory..."
+            poetry run pytest -v --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links docs
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
