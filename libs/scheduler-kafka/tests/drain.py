@@ -1,10 +1,11 @@
 import asyncio
 import functools
-from typing import Callable, Optional, ParamSpec, TypeVar
+from typing import Callable, Optional, TypeVar
 
 import anyio
 from aiokafka import AIOKafkaConsumer
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import ParamSpec
 
 from langgraph.pregel import Pregel
 from langgraph.pregel.types import StateSnapshot

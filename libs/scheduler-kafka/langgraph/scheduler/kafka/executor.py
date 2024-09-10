@@ -36,12 +36,16 @@ class KafkaExecutor(AbstractAsyncContextManager):
         batch_max_n: int = 10,
         batch_max_ms: int = 1000,
         retry_policy: Optional[RetryPolicy] = None,
+        consumer_kwargs: Optional[dict[str, Any]] = None,
+        producer_kwargs: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
         self.graph = graph
         self.topics = topics
         self.stack = AsyncExitStack()
         self.kwargs = kwargs
+        self.consumer_kwargs = consumer_kwargs or {}
+        self.producer_kwargs = producer_kwargs or {}
         self.group_id = group_id
         self.batch_max_n = batch_max_n
         self.batch_max_ms = batch_max_ms

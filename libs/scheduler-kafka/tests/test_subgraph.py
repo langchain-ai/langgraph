@@ -1,4 +1,4 @@
-from typing import Literal, ParamSpec, TypeVar, cast
+from typing import Literal, cast
 
 import pytest
 from aiokafka import AIOKafkaProducer
@@ -19,8 +19,6 @@ from tests.any import AnyDict, AnyStr
 from tests.drain import drain_topics
 
 pytestmark = pytest.mark.anyio
-C = ParamSpec("C")
-R = TypeVar("R")
 
 
 def mk_weather_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
