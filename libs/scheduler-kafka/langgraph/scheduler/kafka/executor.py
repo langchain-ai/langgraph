@@ -1,11 +1,12 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from functools import partial
-from typing import Any, Optional, Self, Sequence
+from typing import Any, Optional, Sequence
 
 import aiokafka
 import orjson
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import Self
 
 import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import CONFIG_KEY_DELEGATE, ERROR, NS_END, NS_SEP

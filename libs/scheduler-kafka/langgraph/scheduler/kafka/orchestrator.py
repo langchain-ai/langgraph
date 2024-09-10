@@ -1,9 +1,10 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
-from typing import Any, Optional, Self
+from typing import Any, Optional
 
 import aiokafka
 from langchain_core.runnables import ensure_config
+from typing_extensions import Self
 
 import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import (
