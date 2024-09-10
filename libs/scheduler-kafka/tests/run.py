@@ -92,6 +92,6 @@ async def drain_topics(
         pass
 
     # check no errors
-    assert not errors
+    assert not errors, errors
 
     return orch_msgs, exec_msgs

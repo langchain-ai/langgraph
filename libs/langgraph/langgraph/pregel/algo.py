@@ -518,6 +518,7 @@ def prepare_single_task(
                                     **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                     parent_ns: checkpoint["id"],
                                 },
+                                "checkpoint_id": None,
                                 "checkpoint_ns": task_checkpoint_ns,
                             },
                         ),

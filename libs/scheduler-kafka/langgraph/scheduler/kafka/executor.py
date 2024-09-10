@@ -120,6 +120,7 @@ class KafkaExecutor(AbstractAsyncContextManager):
                 config=msg["config"],
                 step=saved.metadata["step"] + 1,
                 for_execution=True,
+                checkpointer=self.graph.checkpointer,
             ):
                 # execute task, saving writes
                 runner = PregelRunner(
@@ -146,5 +147,4 @@ class KafkaExecutor(AbstractAsyncContextManager):
         task_id: str,
         writes: list[tuple[str, Any]],
     ) -> None:
-        print("put_writes", task_id, writes)
         return submit(self.graph.checkpointer.aput_writes, config, writes, task_id)
