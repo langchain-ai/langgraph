@@ -562,13 +562,10 @@ class AssistantsClient:
             "/assistants/search",
             json=payload,
         )
-    
-    async def get_versions(
-            self,
-            assistant_id: str
-    ) -> list[Assistant]:
+
+    async def get_versions(self, assistant_id: str) -> list[Assistant]:
         """List all versions of an assistant.
-        
+
         Args:
             assistant_id: The assistant ID to delete.
 
@@ -584,6 +581,7 @@ class AssistantsClient:
         """  # noqa: E501
 
         return await self.http.get(f"/assistants/{assistant_id}/versions")
+
 
 class ThreadsClient:
     def __init__(self, http: HttpClient) -> None:
