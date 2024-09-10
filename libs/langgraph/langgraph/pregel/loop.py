@@ -40,6 +40,7 @@ from langgraph.checkpoint.base import (
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_DEDUPE_TASKS,
+    CONFIG_KEY_ENSURE_LATEST,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -49,7 +50,7 @@ from langgraph.constants import (
     SCHEDULED,
     TAG_HIDDEN,
 )
-from langgraph.errors import EmptyInputError, GraphInterrupt
+from langgraph.errors import CheckpointNotLatest, EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
@@ -599,11 +600,26 @@ class SyncPregelLoop(PregelLoop, ContextManager):
     # context manager
 
     def __enter__(self) -> Self:
-        saved = (
-            self.checkpointer.get_tuple(self.checkpoint_config)
-            if self.checkpointer
-            else None
-        ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
+        if self.config.get("configurable", {}).get(
+            CONFIG_KEY_ENSURE_LATEST
+        ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            saved = self.checkpointer.get_tuple(
+                patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
+            )
+            if (
+                saved is None
+                or saved.checkpoint["id"]
+                != self.checkpoint_config["configurable"]["checkpoint_id"]
+            ):
+                raise CheckpointNotLatest
+        elif self.checkpointer:
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+        else:
+            saved = None
+        if saved is None:
+            saved = CheckpointTuple(
+                self.config, empty_checkpoint(), {"step": -2}, None, []
+            )
         self.checkpoint_config = {
             **self.config,
             **saved.config,
@@ -702,11 +718,26 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
-        saved = (
-            await self.checkpointer.aget_tuple(self.checkpoint_config)
-            if self.checkpointer
-            else None
-        ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
+        if self.config.get("configurable", {}).get(
+            CONFIG_KEY_ENSURE_LATEST
+        ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            saved = await self.checkpointer.aget_tuple(
+                patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
+            )
+            if (
+                saved is None
+                or saved.checkpoint["id"]
+                != self.checkpoint_config["configurable"]["checkpoint_id"]
+            ):
+                raise CheckpointNotLatest
+        elif self.checkpointer:
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+        else:
+            saved = None
+        if saved is None:
+            saved = CheckpointTuple(
+                self.config, empty_checkpoint(), {"step": -2}, None, []
+            )
         self.checkpoint_config = {
             **self.config,
             **saved.config,

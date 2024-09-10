@@ -55,6 +55,12 @@ class TaskNotFound(Exception):
     pass
 
 
+class CheckpointNotLatest(Exception):
+    """Raised when the checkpoint is not the latest version."""
+
+    pass
+
+
 __all__ = [
     "GraphRecursionError",
     "InvalidUpdateError",

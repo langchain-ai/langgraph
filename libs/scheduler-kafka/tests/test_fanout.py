@@ -126,6 +126,7 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
             "config": {
                 "callbacks": None,
                 "configurable": {
+                    "__pregel_ensure_latest": True,
                     "__pregel_dedupe_tasks": True,
                     "__pregel_resuming": False,
                     "checkpoint_id": c.config["configurable"]["checkpoint_id"],
@@ -146,6 +147,7 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
             "config": {
                 "callbacks": None,
                 "configurable": {
+                    "__pregel_ensure_latest": True,
                     "__pregel_dedupe_tasks": True,
                     "__pregel_resuming": False,
                     "checkpoint_id": c.config["configurable"]["checkpoint_id"],
@@ -206,6 +208,7 @@ async def test_fanout_graph_w_interrupt(
             "config": {
                 "callbacks": None,
                 "configurable": {
+                    "__pregel_ensure_latest": True,
                     "__pregel_dedupe_tasks": True,
                     "__pregel_resuming": False,
                     "checkpoint_id": c.config["configurable"]["checkpoint_id"],
@@ -226,6 +229,7 @@ async def test_fanout_graph_w_interrupt(
             "config": {
                 "callbacks": None,
                 "configurable": {
+                    "__pregel_ensure_latest": True,
                     "__pregel_dedupe_tasks": True,
                     "__pregel_resuming": False,
                     "checkpoint_id": c.config["configurable"]["checkpoint_id"],

@@ -12,7 +12,7 @@ from typing import (
     Union,
 )
 
-from langgraph.constants import ERROR, INTERRUPT
+from langgraph.constants import ERROR, INTERRUPT, NO_WRITES
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
@@ -69,12 +69,15 @@ class PregelRunner:
                 if exc := _exception(fut):
                     if isinstance(exc, GraphInterrupt):
                         # save interrupt to checkpointer
-                        self.put_writes(task.id, [(INTERRUPT, i) for i in exc.args[0]])
+                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
+                            self.put_writes(task.id, interrupts)
                     else:
                         # save error to checkpointer
                         self.put_writes(task.id, [(ERROR, exc)])
-
                 else:
+                    if not task.writes:
+                        # add no writes marker
+                        task.writes.append((NO_WRITES, None))
                     # save task writes to checkpointer
                     self.put_writes(task.id, task.writes)
             else:
@@ -130,11 +133,15 @@ class PregelRunner:
                 if exc := _exception(fut):
                     if isinstance(exc, GraphInterrupt):
                         # save interrupt to checkpointer
-                        self.put_writes(task.id, [(INTERRUPT, i) for i in exc.args[0]])
+                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
+                            self.put_writes(task.id, interrupts)
                     else:
                         # save error to checkpointer
                         self.put_writes(task.id, [(ERROR, exc)])
                 else:
+                    if not task.writes:
+                        # add no writes marker
+                        task.writes.append((NO_WRITES, None))
                     # save task writes to checkpointer
                     self.put_writes(task.id, task.writes)
             else:

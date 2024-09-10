@@ -6,7 +6,13 @@ import aiokafka
 from langchain_core.runnables import ensure_config
 
 import langgraph.scheduler.kafka.serde as serde
-from langgraph.constants import CONFIG_KEY_DEDUPE_TASKS, INTERRUPT, SCHEDULED
+from langgraph.constants import (
+    CONFIG_KEY_DEDUPE_TASKS,
+    CONFIG_KEY_ENSURE_LATEST,
+    INTERRUPT,
+    SCHEDULED,
+)
+from langgraph.errors import CheckpointNotLatest
 from langgraph.pregel import Pregel
 from langgraph.pregel.loop import AsyncPregelLoop
 from langgraph.pregel.types import RetryPolicy
@@ -83,6 +89,8 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
     async def each(self, msg: MessageToOrchestrator) -> None:
         try:
             await aretry(self.retry_policy, self.attempt, msg)
+        except CheckpointNotLatest:
+            pass
         except Exception as exc:
             await self.producer.send_and_wait(
                 self.topics.error,
@@ -127,6 +135,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                                         {
                                             **loop.checkpoint_config["configurable"],
                                             CONFIG_KEY_DEDUPE_TASKS: True,
+                                            CONFIG_KEY_ENSURE_LATEST: True,
                                         },
                                     ),
                                     task=ExecutorTask(id=task.id, path=task.path),

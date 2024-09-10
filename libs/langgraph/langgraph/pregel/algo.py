@@ -28,6 +28,7 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
+    NO_WRITES,
     NS_SEP,
     PULL,
     PUSH,
@@ -196,7 +197,9 @@ def apply_writes(
     pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
-            if chan == TASKS:
+            if chan == NO_WRITES:
+                pass
+            elif chan == TASKS:
                 checkpoint["pending_sends"].append(val)
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
@@ -331,6 +334,8 @@ def prepare_single_task(
 
     if task_path[0] == PUSH:
         idx = int(task_path[1])
+        if idx >= len(checkpoint["pending_sends"]):
+            return
         packet = checkpoint["pending_sends"][idx]
         if not isinstance(packet, Send):
             logger.warning(
@@ -425,6 +430,8 @@ def prepare_single_task(
             return PregelTask(task_id, packet.node, task_path)
     elif task_path[0] == PULL:
         name = str(task_path[1])
+        if name not in processes:
+            return
         proc = processes[name]
         version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
         null_version = version_type()

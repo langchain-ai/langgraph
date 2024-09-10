@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import ERROR
-from langgraph.errors import TaskNotFound
+from langgraph.errors import CheckpointNotLatest, TaskNotFound
 from langgraph.pregel import Pregel
 from langgraph.pregel.algo import prepare_single_task
 from langgraph.pregel.executor import AsyncBackgroundExecutor, Submit
@@ -22,6 +22,7 @@ from langgraph.scheduler.kafka.types import (
     MessageToOrchestrator,
     Topics,
 )
+from langgraph.utils.config import patch_configurable
 
 
 class KafkaExecutor(AbstractAsyncContextManager):
@@ -91,6 +92,8 @@ class KafkaExecutor(AbstractAsyncContextManager):
     async def each(self, msg: MessageToExecutor) -> None:
         try:
             await aretry(self.retry_policy, self.attempt, msg)
+        except CheckpointNotLatest:
+            pass
         except Exception as exc:
             await self.producer.send_and_wait(
                 self.topics.error,
@@ -103,9 +106,13 @@ class KafkaExecutor(AbstractAsyncContextManager):
 
     async def attempt(self, msg: MessageToExecutor) -> None:
         # process message
-        saved = await self.graph.checkpointer.aget_tuple(msg["config"])
+        saved = await self.graph.checkpointer.aget_tuple(
+            patch_configurable(msg["config"], {"checkpoint_id": None})
+        )
         if saved is None:
             raise RuntimeError("Checkpoint not found")
+        if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
+            raise CheckpointNotLatest()
         async with AsyncChannelsManager(
             self.graph.channels, saved.checkpoint, msg["config"], self.graph.store
         ) as (channels, managed), AsyncBackgroundExecutor() as submit:
@@ -138,6 +145,8 @@ class KafkaExecutor(AbstractAsyncContextManager):
         await self.producer.send_and_wait(
             self.topics.orchestrator,
             value=MessageToOrchestrator(input=None, config=msg["config"]),
+            # use thread_id as partition key
+            key=msg["config"]["configurable"]["thread_id"].encode(),
         )
 
     def _put_writes(
