@@ -129,12 +129,7 @@ async def test_subgraph_w_interrupt(
             MessageToOrchestrator(input=input, config=config),
         )
 
-    orch_msgs, exec_msgs = await drain_topics(
-        topics,
-        graph,
-        config,
-        until=lambda state: state.next == ("weather_graph",),
-    )
+    orch_msgs, exec_msgs = await drain_topics(topics, graph)
 
     # check interrupted state
     state = await graph.aget_state(config)
@@ -419,9 +414,7 @@ async def test_subgraph_w_interrupt(
             MessageToOrchestrator(input=None, config=config),
         )
 
-    orch_msgs, exec_msgs = await drain_topics(
-        topics, graph, config, until=lambda state: state.next == ()
-    )
+    orch_msgs, exec_msgs = await drain_topics(topics, graph)
 
     # check final state
     state = await graph.aget_state(config)

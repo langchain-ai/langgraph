@@ -1,13 +1,11 @@
 import asyncio
-from typing import Callable, Optional, TypeVar
+from typing import Optional, TypeVar
 
 import anyio
 from aiokafka import AIOKafkaConsumer
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import ParamSpec
 
 from langgraph.pregel import Pregel
-from langgraph.pregel.types import StateSnapshot
 from langgraph.scheduler.kafka.executor import KafkaExecutor
 from langgraph.scheduler.kafka.orchestrator import KafkaOrchestrator
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
@@ -17,31 +15,38 @@ R = TypeVar("R")
 
 
 async def drain_topics(
-    topics: Topics,
-    graph: Pregel,
-    config: RunnableConfig,
-    *,
-    until: Callable[[StateSnapshot], bool],
-    debug: bool = False,
+    topics: Topics, graph: Pregel, *, debug: bool = False
 ) -> tuple[list[MessageToOrchestrator], list[MessageToOrchestrator]]:
     scope: Optional[anyio.CancelScope] = None
     orch_msgs = []
     exec_msgs = []
     errors = []
 
+    def done() -> bool:
+        return (
+            len(orch_msgs) > 0
+            and len(exec_msgs) > 0
+            and not orch_msgs[-1]
+            and not exec_msgs[-1]
+        )
+
     async def orchestrator() -> None:
         async with KafkaOrchestrator(graph, topics) as orch:
             async for msgs in orch:
-                orch_msgs.extend(msgs)
+                orch_msgs.append(msgs)
                 if debug:
                     print("\n---\norch", len(msgs), msgs)
+                if done():
+                    scope.cancel()
 
     async def executor() -> None:
         async with KafkaExecutor(graph, topics) as exec:
             async for msgs in exec:
-                exec_msgs.extend(msgs)
+                exec_msgs.append(msgs)
                 if debug:
                     print("\n---\nexec", len(msgs), msgs)
+                if done():
+                    scope.cancel()
 
     async def error_consumer() -> None:
         async with AIOKafkaConsumer(topics.error) as consumer:
@@ -50,18 +55,8 @@ async def drain_topics(
                 if scope:
                     scope.cancel()
 
-    async def poller(expected_next: tuple[str, ...]) -> None:
-        while True:
-            await asyncio.sleep(0.5)
-            state = await graph.aget_state(config)
-            if until(state):
-                break
-        if scope:
-            scope.cancel()
-
-    # start error consumer and poller
+    # start error consumer
     error_task = asyncio.create_task(error_consumer(), name="error_consumer")
-    poller_task = asyncio.create_task(poller(()), name="poller")
 
     # run the orchestrator and executor until break_when
     async with anyio.create_task_group() as tg:
@@ -70,16 +65,15 @@ async def drain_topics(
         tg.start_soon(orchestrator, name="orchestrator")
         tg.start_soon(executor, name="executor")
 
-    # cancel error consumer and poller
+    # cancel error consumer
     error_task.cancel()
-    poller_task.cancel()
 
     try:
-        await asyncio.gather(error_task, poller_task)
+        await error_task
     except asyncio.CancelledError:
         pass
 
     # check no errors
     assert not errors, errors
 
-    return orch_msgs, exec_msgs
+    return [m for mm in orch_msgs for m in mm], [m for mm in exec_msgs for m in mm]

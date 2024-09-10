@@ -99,9 +99,7 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         )
 
     # drain topics
-    orch_msgs, exec_msgs = await drain_topics(
-        topics, graph, config, until=lambda s: s.values and s.next == ()
-    )
+    orch_msgs, exec_msgs = await drain_topics(topics, graph)
 
     # check state
     state = await graph.aget_state(config)
@@ -184,9 +182,7 @@ async def test_fanout_graph_w_interrupt(
             MessageToOrchestrator(input=input, config=config),
         )
 
-    orch_msgs, exec_msgs = await drain_topics(
-        topics, graph, config, until=lambda s: s.values and s.next == ("qa",)
-    )
+    orch_msgs, exec_msgs = await drain_topics(topics, graph)
 
     # check interrupted state
     state = await graph.aget_state(config)
@@ -262,9 +258,7 @@ async def test_fanout_graph_w_interrupt(
             MessageToOrchestrator(input=None, config=config),
         )
 
-    orch_msgs, exec_msgs = await drain_topics(
-        topics, graph, config, until=lambda s: s.values and s.next == ()
-    )
+    orch_msgs, exec_msgs = await drain_topics(topics, graph)
 
     # check final state
     state = await graph.aget_state(config)
