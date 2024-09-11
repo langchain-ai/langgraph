@@ -2,7 +2,6 @@ import asyncio
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from typing import Any, Optional
 
-import aiokafka
 from langchain_core.runnables import ensure_config
 from typing_extensions import Self
 
@@ -21,6 +20,8 @@ from langgraph.pregel.loop import AsyncPregelLoop
 from langgraph.pregel.types import RetryPolicy
 from langgraph.scheduler.kafka.retry import aretry
 from langgraph.scheduler.kafka.types import (
+    AsyncConsumer,
+    AsyncProducer,
     ErrorMessage,
     ExecutorTask,
     MessageToExecutor,
@@ -31,50 +32,55 @@ from langgraph.utils.config import patch_configurable
 
 
 class KafkaOrchestrator(AbstractAsyncContextManager):
+    consumer: AsyncConsumer
+
+    producer: AsyncProducer
+
     def __init__(
         self,
         graph: Pregel,
         topics: Topics,
-        group_id: str = "orchestrator",
         batch_max_n: int = 10,
         batch_max_ms: int = 1000,
         retry_policy: Optional[RetryPolicy] = None,
-        consumer_kwargs: Optional[dict[str, Any]] = None,
-        producer_kwargs: Optional[dict[str, Any]] = None,
+        consumer: Optional[AsyncConsumer] = None,
+        producer: Optional[AsyncProducer] = None,
         **kwargs: Any,
     ) -> None:
         self.graph = graph
         self.topics = topics
         self.stack = AsyncExitStack()
         self.kwargs = kwargs
-        self.consumer_kwargs = consumer_kwargs or {}
-        self.producer_kwargs = producer_kwargs or {}
-        self.group_id = group_id
+        self.consumer = consumer
+        self.producer = producer
         self.batch_max_n = batch_max_n
         self.batch_max_ms = batch_max_ms
         self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
-        self.consumer = await self.stack.enter_async_context(
-            aiokafka.AIOKafkaConsumer(
-                self.topics.orchestrator,
-                auto_offset_reset="earliest",
-                group_id=self.group_id,
-                enable_auto_commit=False,
-                **self.kwargs,
-                **self.consumer_kwargs,
-            )
-        )
-        self.producer = await self.stack.enter_async_context(
-            aiokafka.AIOKafkaProducer(
-                value_serializer=serde.dumps,
-                **self.kwargs,
-                **self.producer_kwargs,
-            )
-        )
         self.subgraphs = {
             k: v async for k, v in self.graph.aget_subgraphs(recurse=True)
         }
+        if self.consumer is None:
+            from langgraph.scheduler.kafka.default_async import DefaultAsyncConsumer
+
+            self.consumer = await self.stack.enter_async_context(
+                DefaultAsyncConsumer(
+                    self.topics.orchestrator,
+                    auto_offset_reset="earliest",
+                    group_id="orchestrator",
+                    enable_auto_commit=False,
+                    **self.kwargs,
+                )
+            )
+        if self.producer is None:
+            from langgraph.scheduler.kafka.default_async import DefaultAsyncProducer
+
+            self.producer = await self.stack.enter_async_context(
+                DefaultAsyncProducer(
+                    **self.kwargs,
+                )
+            )
         return self
 
     async def __aexit__(self, *args: Any) -> None:
@@ -85,15 +91,12 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
 
     async def __anext__(self) -> list[MessageToOrchestrator]:
         # wait for next batch
-        try:
-            recs = await self.consumer.getmany(
-                timeout_ms=self.batch_max_ms, max_records=self.batch_max_n
-            )
-            # dedupe messages, eg. if multiple nodes finish around same time
-            uniq = set(msg.value for msgs in recs.values() for msg in msgs)
-            msgs: list[MessageToOrchestrator] = [serde.loads(msg) for msg in uniq]
-        except aiokafka.ConsumerStoppedError:
-            raise StopAsyncIteration from None
+        recs = await self.consumer.getmany(
+            timeout_ms=self.batch_max_ms, max_records=self.batch_max_n
+        )
+        # dedupe messages, eg. if multiple nodes finish around same time
+        uniq = set(msg["value"] for msgs in recs.values() for msg in msgs)
+        msgs: list[MessageToOrchestrator] = [serde.loads(msg) for msg in uniq]
         # process batch
         await asyncio.gather(*(self.each(msg) for msg in msgs))
         # commit offsets
@@ -109,14 +112,17 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         except GraphInterrupt:
             pass
         except Exception as exc:
-            await self.producer.send_and_wait(
+            fut = await self.producer.send(
                 self.topics.error,
-                value=ErrorMessage(
-                    topic=self.topics.orchestrator,
-                    msg=msg,
-                    error=repr(exc),
+                value=serde.dumps(
+                    ErrorMessage(
+                        topic=self.topics.orchestrator,
+                        msg=msg,
+                        error=repr(exc),
+                    )
                 ),
             )
+            await fut
 
     async def attempt(self, msg: MessageToOrchestrator) -> None:
         # find graph
@@ -155,21 +161,25 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                 # schedule any new tasks
                 if new_tasks := [t for t in loop.tasks.values() if not t.scheduled]:
                     # send messages to executor
-                    futures: list[asyncio.Future] = await asyncio.gather(
+                    futures = await asyncio.gather(
                         *(
                             self.producer.send(
                                 self.topics.executor,
-                                value=MessageToExecutor(
-                                    config=patch_configurable(
-                                        loop.config,
-                                        {
-                                            **loop.checkpoint_config["configurable"],
-                                            CONFIG_KEY_DEDUPE_TASKS: True,
-                                            CONFIG_KEY_ENSURE_LATEST: True,
-                                        },
-                                    ),
-                                    task=ExecutorTask(id=task.id, path=task.path),
-                                    finally_executor=msg.get("finally_executor"),
+                                value=serde.dumps(
+                                    MessageToExecutor(
+                                        config=patch_configurable(
+                                            loop.config,
+                                            {
+                                                **loop.checkpoint_config[
+                                                    "configurable"
+                                                ],
+                                                CONFIG_KEY_DEDUPE_TASKS: True,
+                                                CONFIG_KEY_ENSURE_LATEST: True,
+                                            },
+                                        ),
+                                        task=ExecutorTask(id=task.id, path=task.path),
+                                        finally_executor=msg.get("finally_executor"),
+                                    )
                                 ),
                             )
                             for task in new_tasks
@@ -197,7 +207,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                 # schedule any finally_executor tasks
                 futs = await asyncio.gather(
                     *(
-                        self.producer.send(self.topics.executor, value=m)
+                        self.producer.send(self.topics.executor, value=serde.dumps(m))
                         for m in msg["finally_executor"]
                     )
                 )
