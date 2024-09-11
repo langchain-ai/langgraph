@@ -1,7 +1,6 @@
 from typing import Literal, cast
 
 import pytest
-from aiokafka import AIOKafkaProducer
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )
@@ -14,9 +13,10 @@ from langgraph.graph import MessagesState
 from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
+from langgraph.scheduler.kafka.default_sync import DefaultProducer
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
 from tests.any import AnyDict, AnyStr
-from tests.drain import drain_topics_async
+from tests.drain import drain_topics
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 pytestmark = pytest.mark.anyio
@@ -101,8 +101,8 @@ def mk_weather_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
         else:
             return "normal_llm_node"
 
-    async def weather_graph(state: RouterState):
-        return await subgraph.ainvoke(state)
+    def weather_graph(state: RouterState):
+        return subgraph.invoke(state)
 
     graph = StateGraph(RouterState)
     graph.add_node(router_node)
@@ -116,24 +116,25 @@ def mk_weather_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
     return graph.compile(checkpointer=checkpointer)
 
 
-async def test_subgraph_w_interrupt(
-    topics: Topics, acheckpointer: BaseCheckpointSaver
+def test_subgraph_w_interrupt(
+    topics: Topics, checkpointer: BaseCheckpointSaver
 ) -> None:
     input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     config = {"configurable": {"thread_id": "1"}}
-    graph = mk_weather_graph(acheckpointer)
+    graph = mk_weather_graph(checkpointer)
 
     # start a new run
-    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
-        await producer.send_and_wait(
+    with DefaultProducer() as producer:
+        producer.send(
             topics.orchestrator,
-            MessageToOrchestrator(input=input, config=config),
+            value=serde.dumps(MessageToOrchestrator(input=input, config=config)),
         )
+        producer.flush()
 
-    orch_msgs, exec_msgs = await drain_topics_async(topics, graph)
+    orch_msgs, exec_msgs = drain_topics(topics, graph)
 
     # check interrupted state
-    state = await graph.aget_state(config)
+    state = graph.get_state(config)
     assert state.next == ("weather_graph",)
     assert state.values == {
         "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
@@ -141,13 +142,11 @@ async def test_subgraph_w_interrupt(
     }
 
     # check outer history
-    history = [c async for c in graph.aget_state_history(config)]
+    history = [c for c in graph.get_state_history(config)]
     assert len(history) == 3
 
     # check child history
-    child_history = [
-        c async for c in graph.aget_state_history(history[0].tasks[0].state)
-    ]
+    child_history = [c for c in graph.get_state_history(history[0].tasks[0].state)]
     assert len(child_history) == 3
 
     # check messages
@@ -409,16 +408,17 @@ async def test_subgraph_w_interrupt(
     )
 
     # resume the thread
-    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
-        await producer.send_and_wait(
+    with DefaultProducer() as producer:
+        producer.send(
             topics.orchestrator,
-            MessageToOrchestrator(input=None, config=config),
+            value=serde.dumps(MessageToOrchestrator(input=None, config=config)),
         )
+        producer.flush()
 
-    orch_msgs, exec_msgs = await drain_topics_async(topics, graph)
+    orch_msgs, exec_msgs = drain_topics(topics, graph)
 
     # check final state
-    state = await graph.aget_state(config)
+    state = graph.get_state(config)
     assert state.next == ()
     assert state.values == {
         "messages": [
@@ -429,14 +429,12 @@ async def test_subgraph_w_interrupt(
     }
 
     # check outer history
-    history = [c async for c in graph.aget_state_history(config)]
+    history = [c for c in graph.get_state_history(config)]
     assert len(history) == 4
 
     # check child history
     # accessing second to last checkpoint, since that's the one w/ subgraph task
-    child_history = [
-        c async for c in graph.aget_state_history(history[1].tasks[0].state)
-    ]
+    child_history = [c for c in graph.get_state_history(history[1].tasks[0].state)]
     assert len(child_history) == 4
 
     # check messages

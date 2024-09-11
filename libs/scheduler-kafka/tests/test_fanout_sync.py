@@ -1,5 +1,5 @@
-import asyncio
 import operator
+import time
 from typing import (
     Annotated,
     Sequence,
@@ -7,18 +7,14 @@ from typing import (
     Union,
 )
 
-import pytest
-from aiokafka import AIOKafkaProducer
-
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
+from langgraph.scheduler.kafka.default_sync import DefaultProducer
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
 from tests.any import AnyDict
-from tests.drain import drain_topics_async
-
-pytestmark = pytest.mark.anyio
+from tests.drain import drain_topics
 
 
 def mk_fanout_graph(
@@ -39,26 +35,26 @@ def mk_fanout_graph(
         answer: str
         docs: Annotated[list[str], sorted_add]
 
-    async def rewrite_query(data: State) -> State:
+    def rewrite_query(data: State) -> State:
         return {"query": f'query: {data["query"]}'}
 
-    async def retriever_picker(data: State) -> list[str]:
+    def retriever_picker(data: State) -> list[str]:
         return ["analyzer_one", "retriever_two"]
 
-    async def analyzer_one(data: State) -> State:
+    def analyzer_one(data: State) -> State:
         return {"query": f'analyzed: {data["query"]}'}
 
-    async def retriever_one(data: State) -> State:
+    def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
 
-    async def retriever_two(data: State) -> State:
-        await asyncio.sleep(0.1)
+    def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
-    async def qa(data: State) -> State:
+    def qa(data: State) -> State:
         return {"answer": ",".join(data["docs"])}
 
-    async def decider(data: State) -> None:
+    def decider(data: State) -> None:
         return None
 
     def decider_cond(data: State) -> str:
@@ -86,27 +82,28 @@ def mk_fanout_graph(
     return builder.compile(checkpointer, interrupt_before=interrupt_before)
 
 
-async def test_fanout_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) -> None:
+def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -> None:
     input = {"query": "what is weather in sf"}
     config = {"configurable": {"thread_id": "1"}}
-    graph = mk_fanout_graph(acheckpointer)
+    graph = mk_fanout_graph(checkpointer)
 
     # start a new run
-    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
-        await producer.send_and_wait(
+    with DefaultProducer() as producer:
+        producer.send(
             topics.orchestrator,
-            MessageToOrchestrator(input=input, config=config),
+            value=serde.dumps(MessageToOrchestrator(input=input, config=config)),
         )
+        producer.flush()
 
     # drain topics
-    orch_msgs, exec_msgs = await drain_topics_async(topics, graph)
+    orch_msgs, exec_msgs = drain_topics(topics, graph, debug=1)
 
     # check state
-    state = await graph.aget_state(config)
+    state = graph.get_state(config)
     assert state.next == ()
     assert (
         state.values
-        == await graph.ainvoke(input, {"configurable": {"thread_id": "2"}})
+        == graph.invoke(input, {"configurable": {"thread_id": "2"}})
         == {
             "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
             "query": "analyzed: query: analyzed: query: what is weather in sf",
@@ -115,7 +112,7 @@ async def test_fanout_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) 
     )
 
     # check history
-    history = [c async for c in graph.aget_state_history(config)]
+    history = [c for c in graph.get_state_history(config)]
     assert len(history) == 11
 
     # check messages
@@ -168,28 +165,29 @@ async def test_fanout_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) 
     ]
 
 
-async def test_fanout_graph_w_interrupt(
-    topics: Topics, acheckpointer: BaseCheckpointSaver
+def test_fanout_graph_w_interrupt(
+    topics: Topics, checkpointer: BaseCheckpointSaver
 ) -> None:
     input = {"query": "what is weather in sf"}
     config = {"configurable": {"thread_id": "1"}}
-    graph = mk_fanout_graph(acheckpointer, interrupt_before=["qa"])
+    graph = mk_fanout_graph(checkpointer, interrupt_before=["qa"])
 
     # start a new run
-    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
-        await producer.send_and_wait(
+    with DefaultProducer() as producer:
+        producer.send(
             topics.orchestrator,
-            MessageToOrchestrator(input=input, config=config),
+            value=serde.dumps(MessageToOrchestrator(input=input, config=config)),
         )
+        producer.flush()
 
-    orch_msgs, exec_msgs = await drain_topics_async(topics, graph)
+    orch_msgs, exec_msgs = drain_topics(topics, graph, debug=1)
 
     # check interrupted state
-    state = await graph.aget_state(config)
+    state = graph.get_state(config)
     assert state.next == ("qa",)
     assert (
         state.values
-        == await graph.ainvoke(input, {"configurable": {"thread_id": "2"}})
+        == graph.invoke(input, {"configurable": {"thread_id": "2"}})
         == {
             "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
             "query": "analyzed: query: analyzed: query: what is weather in sf",
@@ -197,7 +195,7 @@ async def test_fanout_graph_w_interrupt(
     )
 
     # check history
-    history = [c async for c in graph.aget_state_history(config)]
+    history = [c for c in graph.get_state_history(config)]
     assert len(history) == 10
 
     # check messages
@@ -252,20 +250,21 @@ async def test_fanout_graph_w_interrupt(
     ]
 
     # resume the thread
-    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
-        await producer.send_and_wait(
+    with DefaultProducer() as producer:
+        producer.send(
             topics.orchestrator,
-            MessageToOrchestrator(input=None, config=config),
+            value=serde.dumps(MessageToOrchestrator(input=None, config=config)),
         )
+        producer.flush()
 
-    orch_msgs, exec_msgs = await drain_topics_async(topics, graph)
+    orch_msgs, exec_msgs = drain_topics(topics, graph)
 
     # check final state
-    state = await graph.aget_state(config)
+    state = graph.get_state(config)
     assert state.next == ()
     assert (
         state.values
-        == await graph.ainvoke(None, {"configurable": {"thread_id": "2"}})
+        == graph.invoke(None, {"configurable": {"thread_id": "2"}})
         == {
             "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
             "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],

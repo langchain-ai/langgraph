@@ -3,9 +3,10 @@ from uuid import uuid4
 
 import kafka.admin
 import pytest
-from psycopg import AsyncConnection
-from psycopg_pool import AsyncConnectionPool
+from psycopg import AsyncConnection, Connection
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.scheduler.kafka.types import Topics
 
@@ -39,7 +40,7 @@ def topics() -> Iterator[Topics]:
 
 
 @pytest.fixture
-async def checkpointer() -> AsyncIterator[AsyncPostgresSaver]:
+async def acheckpointer() -> AsyncIterator[AsyncPostgresSaver]:
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     async with await AsyncConnection.connect(
@@ -60,3 +61,23 @@ async def checkpointer() -> AsyncIterator[AsyncPostgresSaver]:
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
             await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture
+def checkpointer() -> Iterator[PostgresSaver]:
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        # yield checkpointer
+        with ConnectionPool(
+            DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
+        ) as pool:
+            checkpointer = PostgresSaver(pool)
+            checkpointer.setup()
+            yield checkpointer
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")

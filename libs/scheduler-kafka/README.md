@@ -26,7 +26,7 @@ import asyncio
 import logging
 import os
 
-from langgraph.scheduler.kafka.orchestrator import KafkaOrchestrator
+from langgraph.scheduler.kafka.orchestrator import AsyncKafkaOrchestrator
 from langgraph.scheduler.kafka.types import Topics
 
 from your_lib import graph # graph expected to be a compiled LangGraph graph
@@ -40,7 +40,7 @@ topics = Topics(
 )
 
 async def main():
-    async with KafkaOrchestrator(graph, topics) as orch:
+    async with AsyncKafkaOrchestrator(graph, topics) as orch:
         async for msgs in orch:
             logger.info('Procesed %d messages', len(msgs))
 
@@ -56,7 +56,7 @@ import asyncio
 import logging
 import os
 
-from langgraph.scheduler.kafka.executor import KafkaExecutor
+from langgraph.scheduler.kafka.executor import AsyncKafkaExecutor
 from langgraph.scheduler.kafka.types import Topics
 
 from your_lib import graph # graph expected to be a compiled LangGraph graph
@@ -70,7 +70,7 @@ topics = Topics(
 )
 
 async def main():
-    async with KafkaExecutor(graph, topics) as orch:
+    async with AsyncKafkaExecutor(graph, topics) as orch:
         async for msgs in orch:
             logger.info('Procesed %d messages', len(msgs))
 
@@ -88,6 +88,8 @@ python executor.py &
 ```
 
 ## Configuration
+
+We offer sync and async versions of the orchestrator and executor, `KafkaOrchestrator` and `AsyncKafkaOrchestrator`, and `KafkaExecutor` and `AsyncKafkaExecutor` respectively. The async versions are recommended, especially if you want to process tasks in batches. With the async classes we recommend using `uvloop` for better performance.
 
 You can pass any of the following values as `kwargs` to either `KafkaOrchestrator` or `KafkaExecutor` to configure the consumer:
 
@@ -131,3 +133,7 @@ By default the orchestrator and executor will attempt to connect to a Kafka brok
 - connections_max_idle_ms (int): Close idle connections after the number
   of milliseconds specified by this config. Specifying `None` will
   disable idle checks. Default: 540000 (9 minutes).
+
+### Custom consumer/producer
+
+Both the orchestrator and executor accept a `consumer` and `producer` argument, which should implement the `Consumer` or `Producer` protocols respectively. We expect the consumer to have auto-commit disabled, and the producer and consumer to have no serializers/deserializers set.
