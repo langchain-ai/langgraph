@@ -187,7 +187,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                                             },
                                         ),
                                         task=ExecutorTask(id=task.id, path=task.path),
-                                        finally_executor=msg.get("finally_executor"),
+                                        finally_send=msg.get("finally_send"),
                                     )
                                 ),
                             )
@@ -212,12 +212,16 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                                 )
                             ],
                         )
-            elif loop.status == "done" and msg.get("finally_executor"):
-                # schedule any finally_executor tasks
+            elif loop.status == "done" and msg.get("finally_send"):
+                # send any finally_send messages
                 futs = await asyncio.gather(
                     *(
-                        self.producer.send(self.topics.executor, value=serde.dumps(m))
-                        for m in msg["finally_executor"]
+                        self.producer.send(
+                            m["topic"],
+                            value=serde.dumps(m["value"]) if m.get("value") else None,
+                            key=serde.dumps(m["key"]) if m.get("key") else None,
+                        )
+                        for m in msg["finally_send"]
                     )
                 )
                 # wait for messages to be sent
@@ -288,7 +292,6 @@ class KafkaOrchestrator(AbstractContextManager):
         recs = self.consumer.getmany(
             timeout_ms=self.batch_max_ms, max_records=self.batch_max_n
         )
-        print("orch.__next__", recs)
         # dedupe messages, eg. if multiple nodes finish around same time
         uniq = set(msg.value for msgs in recs.values() for msg in msgs)
         msgs: list[MessageToOrchestrator] = [serde.loads(msg) for msg in uniq]
@@ -370,7 +373,7 @@ class KafkaOrchestrator(AbstractContextManager):
                                         },
                                     ),
                                     task=ExecutorTask(id=task.id, path=task.path),
-                                    finally_executor=msg.get("finally_executor"),
+                                    finally_send=msg.get("finally_send"),
                                 )
                             ),
                         )
@@ -394,11 +397,15 @@ class KafkaOrchestrator(AbstractContextManager):
                                 )
                             ],
                         )
-            elif loop.status == "done" and msg.get("finally_executor"):
-                # schedule any finally_executor tasks
+            elif loop.status == "done" and msg.get("finally_send"):
+                # schedule any finally_send msgs
                 futs = [
-                    self.producer.send(self.topics.executor, value=serde.dumps(m))
-                    for m in msg["finally_executor"]
+                    self.producer.send(
+                        m["topic"],
+                        value=serde.dumps(m["value"]) if m.get("value") else None,
+                        key=serde.dumps(m["key"]) if m.get("key") else None,
+                    )
+                    for m in msg["finally_send"]
                 ]
                 # wait for messages to be sent
                 concurrent.futures.wait(futs)

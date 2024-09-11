@@ -110,7 +110,6 @@ def drain_topics(
                     if debug:
                         print("\n---\norch", len(msgs), msgs)
                     if done():
-                        print("am i done? orchestrator")
                         event.set()
                     if event.is_set():
                         break
@@ -126,7 +125,6 @@ def drain_topics(
                     if debug:
                         print("\n---\nexec", len(msgs), msgs)
                     if done():
-                        print("am i done? executor")
                         event.set()
                     if event.is_set():
                         break

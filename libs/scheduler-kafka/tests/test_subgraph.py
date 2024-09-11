@@ -174,7 +174,7 @@ async def test_subgraph_w_interrupt(
                         "tags": [],
                     },
                     "input": None,
-                    "finally_executor": None,
+                    "finally_send": None,
                 }
                 for c in reversed(history[1:])  # the last one wasn't executed
                 # orchestrator messages appear only after tasks for that checkpoint
@@ -228,28 +228,31 @@ async def test_subgraph_w_interrupt(
                         ],
                         "route": "weather",
                     },
-                    "finally_executor": [
+                    "finally_send": [
                         {
-                            "config": {
-                                "callbacks": None,
-                                "configurable": {
-                                    "__pregel_dedupe_tasks": True,
-                                    "__pregel_ensure_latest": True,
-                                    "__pregel_resuming": False,
-                                    "checkpoint_id": history[0].config["configurable"][
-                                        "checkpoint_id"
-                                    ],
-                                    "checkpoint_ns": "",
-                                    "thread_id": "1",
+                            "topic": topics.executor,
+                            "value": {
+                                "config": {
+                                    "callbacks": None,
+                                    "configurable": {
+                                        "__pregel_dedupe_tasks": True,
+                                        "__pregel_ensure_latest": True,
+                                        "__pregel_resuming": False,
+                                        "checkpoint_id": history[0].config[
+                                            "configurable"
+                                        ]["checkpoint_id"],
+                                        "checkpoint_ns": "",
+                                        "thread_id": "1",
+                                    },
+                                    "metadata": AnyDict(),
+                                    "recursion_limit": 25,
+                                    "tags": [],
                                 },
-                                "metadata": AnyDict(),
-                                "recursion_limit": 25,
-                                "tags": [],
-                            },
-                            "finally_executor": None,
-                            "task": {
-                                "id": history[0].tasks[0].id,
-                                "path": list(history[0].tasks[0].path),
+                                "finally_send": None,
+                                "task": {
+                                    "id": history[0].tasks[0].id,
+                                    "path": list(history[0].tasks[0].path),
+                                },
                             },
                         }
                     ],
@@ -283,28 +286,31 @@ async def test_subgraph_w_interrupt(
                         "tags": [],
                     },
                     "input": None,
-                    "finally_executor": [
+                    "finally_send": [
                         {
-                            "config": {
-                                "callbacks": None,
-                                "configurable": {
-                                    "__pregel_dedupe_tasks": True,
-                                    "__pregel_ensure_latest": True,
-                                    "__pregel_resuming": False,
-                                    "checkpoint_id": history[0].config["configurable"][
-                                        "checkpoint_id"
-                                    ],
-                                    "checkpoint_ns": "",
-                                    "thread_id": "1",
+                            "topic": topics.executor,
+                            "value": {
+                                "config": {
+                                    "callbacks": None,
+                                    "configurable": {
+                                        "__pregel_dedupe_tasks": True,
+                                        "__pregel_ensure_latest": True,
+                                        "__pregel_resuming": False,
+                                        "checkpoint_id": history[0].config[
+                                            "configurable"
+                                        ]["checkpoint_id"],
+                                        "checkpoint_ns": "",
+                                        "thread_id": "1",
+                                    },
+                                    "metadata": AnyDict(),
+                                    "recursion_limit": 25,
+                                    "tags": [],
                                 },
-                                "metadata": AnyDict(),
-                                "recursion_limit": 25,
-                                "tags": [],
-                            },
-                            "finally_executor": None,
-                            "task": {
-                                "id": history[0].tasks[0].id,
-                                "path": list(history[0].tasks[0].path),
+                                "finally_send": None,
+                                "task": {
+                                    "id": history[0].tasks[0].id,
+                                    "path": list(history[0].tasks[0].path),
+                                },
                             },
                         }
                     ],
@@ -340,7 +346,7 @@ async def test_subgraph_w_interrupt(
                         "id": t.id,
                         "path": list(t.path),
                     },
-                    "finally_executor": None,
+                    "finally_send": None,
                 }
                 for c in reversed(history)
                 for t in c.tasks
@@ -376,28 +382,31 @@ async def test_subgraph_w_interrupt(
                         "id": t.id,
                         "path": list(t.path),
                     },
-                    "finally_executor": [
+                    "finally_send": [
                         {
-                            "config": {
-                                "callbacks": None,
-                                "configurable": {
-                                    "__pregel_dedupe_tasks": True,
-                                    "__pregel_ensure_latest": True,
-                                    "__pregel_resuming": False,
-                                    "checkpoint_id": history[0].config["configurable"][
-                                        "checkpoint_id"
-                                    ],
-                                    "checkpoint_ns": "",
-                                    "thread_id": "1",
+                            "topic": topics.executor,
+                            "value": {
+                                "config": {
+                                    "callbacks": None,
+                                    "configurable": {
+                                        "__pregel_dedupe_tasks": True,
+                                        "__pregel_ensure_latest": True,
+                                        "__pregel_resuming": False,
+                                        "checkpoint_id": history[0].config[
+                                            "configurable"
+                                        ]["checkpoint_id"],
+                                        "checkpoint_ns": "",
+                                        "thread_id": "1",
+                                    },
+                                    "metadata": AnyDict(),
+                                    "recursion_limit": 25,
+                                    "tags": [],
                                 },
-                                "metadata": AnyDict(),
-                                "recursion_limit": 25,
-                                "tags": [],
-                            },
-                            "finally_executor": None,
-                            "task": {
-                                "id": history[0].tasks[0].id,
-                                "path": list(history[0].tasks[0].path),
+                                "finally_send": None,
+                                "task": {
+                                    "id": history[0].tasks[0].id,
+                                    "path": list(history[0].tasks[0].path),
+                                },
                             },
                         }
                     ],
@@ -473,28 +482,31 @@ async def test_subgraph_w_interrupt(
                         "tags": [],
                     },
                     "input": None,
-                    "finally_executor": [
+                    "finally_send": [
                         {
-                            "config": {
-                                "callbacks": None,
-                                "configurable": {
-                                    "__pregel_dedupe_tasks": True,
-                                    "__pregel_ensure_latest": True,
-                                    "__pregel_resuming": True,
-                                    "checkpoint_id": history[1].config["configurable"][
-                                        "checkpoint_id"
-                                    ],
-                                    "checkpoint_ns": "",
-                                    "thread_id": "1",
+                            "topic": topics.executor,
+                            "value": {
+                                "config": {
+                                    "callbacks": None,
+                                    "configurable": {
+                                        "__pregel_dedupe_tasks": True,
+                                        "__pregel_ensure_latest": True,
+                                        "__pregel_resuming": True,
+                                        "checkpoint_id": history[1].config[
+                                            "configurable"
+                                        ]["checkpoint_id"],
+                                        "checkpoint_ns": "",
+                                        "thread_id": "1",
+                                    },
+                                    "metadata": AnyDict(),
+                                    "recursion_limit": 25,
+                                    "tags": [],
                                 },
-                                "metadata": AnyDict(),
-                                "recursion_limit": 25,
-                                "tags": [],
-                            },
-                            "finally_executor": None,
-                            "task": {
-                                "id": history[1].tasks[0].id,
-                                "path": list(history[1].tasks[0].path),
+                                "finally_send": None,
+                                "task": {
+                                    "id": history[1].tasks[0].id,
+                                    "path": list(history[1].tasks[0].path),
+                                },
                             },
                         }
                     ],
@@ -528,28 +540,31 @@ async def test_subgraph_w_interrupt(
                         "tags": [],
                     },
                     "input": None,
-                    "finally_executor": [
+                    "finally_send": [
                         {
-                            "config": {
-                                "callbacks": None,
-                                "configurable": {
-                                    "__pregel_dedupe_tasks": True,
-                                    "__pregel_ensure_latest": True,
-                                    "__pregel_resuming": True,
-                                    "checkpoint_id": history[1].config["configurable"][
-                                        "checkpoint_id"
-                                    ],
-                                    "checkpoint_ns": "",
-                                    "thread_id": "1",
+                            "topic": topics.executor,
+                            "value": {
+                                "config": {
+                                    "callbacks": None,
+                                    "configurable": {
+                                        "__pregel_dedupe_tasks": True,
+                                        "__pregel_ensure_latest": True,
+                                        "__pregel_resuming": True,
+                                        "checkpoint_id": history[1].config[
+                                            "configurable"
+                                        ]["checkpoint_id"],
+                                        "checkpoint_ns": "",
+                                        "thread_id": "1",
+                                    },
+                                    "metadata": AnyDict(),
+                                    "recursion_limit": 25,
+                                    "tags": [],
                                 },
-                                "metadata": AnyDict(),
-                                "recursion_limit": 25,
-                                "tags": [],
-                            },
-                            "finally_executor": None,
-                            "task": {
-                                "id": history[1].tasks[0].id,
-                                "path": list(history[1].tasks[0].path),
+                                "finally_send": None,
+                                "task": {
+                                    "id": history[1].tasks[0].id,
+                                    "path": list(history[1].tasks[0].path),
+                                },
                             },
                         }
                     ],
@@ -575,7 +590,7 @@ async def test_subgraph_w_interrupt(
                         "tags": [],
                     },
                     "input": None,
-                    "finally_executor": None,
+                    "finally_send": None,
                 }
                 for c in reversed(history[:2])
                 for _ in c.tasks
@@ -606,7 +621,7 @@ async def test_subgraph_w_interrupt(
                         "id": t.id,
                         "path": list(t.path),
                     },
-                    "finally_executor": None,
+                    "finally_send": None,
                 }
                 for c in reversed(history[:2])
                 for t in c.tasks
@@ -642,28 +657,31 @@ async def test_subgraph_w_interrupt(
                         "id": t.id,
                         "path": list(t.path),
                     },
-                    "finally_executor": [
+                    "finally_send": [
                         {
-                            "config": {
-                                "callbacks": None,
-                                "configurable": {
-                                    "__pregel_dedupe_tasks": True,
-                                    "__pregel_ensure_latest": True,
-                                    "__pregel_resuming": True,
-                                    "checkpoint_id": history[1].config["configurable"][
-                                        "checkpoint_id"
-                                    ],
-                                    "checkpoint_ns": "",
-                                    "thread_id": "1",
+                            "topic": topics.executor,
+                            "value": {
+                                "config": {
+                                    "callbacks": None,
+                                    "configurable": {
+                                        "__pregel_dedupe_tasks": True,
+                                        "__pregel_ensure_latest": True,
+                                        "__pregel_resuming": True,
+                                        "checkpoint_id": history[1].config[
+                                            "configurable"
+                                        ]["checkpoint_id"],
+                                        "checkpoint_ns": "",
+                                        "thread_id": "1",
+                                    },
+                                    "metadata": AnyDict(),
+                                    "recursion_limit": 25,
+                                    "tags": [],
                                 },
-                                "metadata": AnyDict(),
-                                "recursion_limit": 25,
-                                "tags": [],
-                            },
-                            "finally_executor": None,
-                            "task": {
-                                "id": history[1].tasks[0].id,
-                                "path": list(history[1].tasks[0].path),
+                                "finally_send": None,
+                                "task": {
+                                    "id": history[1].tasks[0].id,
+                                    "path": list(history[1].tasks[0].path),
+                                },
                             },
                         }
                     ],
@@ -690,7 +708,7 @@ async def test_subgraph_w_interrupt(
                         "recursion_limit": 25,
                         "tags": [],
                     },
-                    "finally_executor": None,
+                    "finally_send": None,
                     "task": {
                         "id": history[1].tasks[0].id,
                         "path": list(history[1].tasks[0].path),

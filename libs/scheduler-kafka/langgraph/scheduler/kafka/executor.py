@@ -35,6 +35,7 @@ from langgraph.scheduler.kafka.types import (
     MessageToExecutor,
     MessageToOrchestrator,
     Producer,
+    Sendable,
     Topics,
 )
 from langgraph.utils.config import patch_configurable
@@ -129,7 +130,9 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                             input=orjson.Fragment(
                                 self.graph.checkpointer.serde.dumps(arg["input"])
                             ),
-                            finally_executor=[msg],
+                            finally_send=[
+                                Sendable(topic=self.topics.executor, value=msg)
+                            ],
                         )
                     ),
                     # use thread_id, checkpoint_ns as partition key
@@ -211,7 +214,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 MessageToOrchestrator(
                     input=None,
                     config=msg["config"],
-                    finally_executor=msg.get("finally_executor"),
+                    finally_send=msg.get("finally_send"),
                 )
             ),
             # use thread_id, checkpoint_ns as partition key
@@ -322,7 +325,9 @@ class KafkaExecutor(AbstractContextManager):
                             input=orjson.Fragment(
                                 self.graph.checkpointer.serde.dumps(arg["input"])
                             ),
-                            finally_executor=[msg],
+                            finally_send=[
+                                Sendable(topic=self.topics.executor, value=msg)
+                            ],
                         )
                     ),
                     # use thread_id, checkpoint_ns as partition key
@@ -403,7 +408,7 @@ class KafkaExecutor(AbstractContextManager):
                 MessageToOrchestrator(
                     input=None,
                     config=msg["config"],
-                    finally_executor=msg.get("finally_executor"),
+                    finally_send=msg.get("finally_send"),
                 )
             ),
             # use thread_id, checkpoint_ns as partition key

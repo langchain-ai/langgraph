@@ -136,7 +136,7 @@ async def test_fanout_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) 
                 "tags": [],
             },
             "input": None,
-            "finally_executor": None,
+            "finally_send": None,
         }
         for c in reversed(history)
         for _ in c.tasks
@@ -161,7 +161,7 @@ async def test_fanout_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) 
                 "id": t.id,
                 "path": list(t.path),
             },
-            "finally_executor": None,
+            "finally_send": None,
         }
         for c in reversed(history)
         for t in c.tasks
@@ -218,7 +218,7 @@ async def test_fanout_graph_w_interrupt(
                 "tags": [],
             },
             "input": None,
-            "finally_executor": None,
+            "finally_send": None,
         }
         for c in reversed(history[1:])  # the last one wasn't executed
         # orchestrator messages appear only after tasks for that checkpoint
@@ -245,7 +245,7 @@ async def test_fanout_graph_w_interrupt(
                 "id": t.id,
                 "path": list(t.path),
             },
-            "finally_executor": None,
+            "finally_send": None,
         }
         for c in reversed(history[1:])  # the last one wasn't executed
         for t in c.tasks
