@@ -1,16 +1,4 @@
 # serializer version: 1
-# name: test_branch_then
-  '''
-  graph TD;
-  	__start__ --> prepare;
-  	finish --> __end__;
-  	prepare -.-> tool_two_slow;
-  	tool_two_slow --> finish;
-  	prepare -.-> tool_two_fast;
-  	tool_two_fast --> finish;
-  
-  '''
-# ---
 # name: test_branch_then.1
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
@@ -49,12 +37,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	prepare(prepare)
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
   	finish(finish)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare -.-> tool_two_slow;
@@ -83,12 +71,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	prepare(prepare)
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
   	finish(finish)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare -.-> tool_two_slow;
@@ -117,12 +105,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	prepare(prepare)
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
   	finish(finish)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare -.-> tool_two_slow;
@@ -151,12 +139,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	prepare(prepare)
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
   	finish(finish)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare -.-> tool_two_slow;
@@ -185,12 +173,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	prepare(prepare)
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
   	finish(finish)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare -.-> tool_two_slow;
@@ -4629,10 +4617,10 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	inner(inner)
   	side(side)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> inner;
   	inner --> side;
   	side --> __end__;
@@ -4771,14 +4759,14 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	tool_one(tool_one)
-  	tool_two___start__(__start__)
+  	tool_two___start__(<p>__start__</p>)
   	tool_two_tool_two_slow(tool_two_slow)
   	tool_two_tool_two_fast(tool_two_fast)
-  	tool_two___end__(__end__)
+  	tool_two___end__(<p>__end__</p>)
   	tool_three(tool_three)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_one;
   	tool_one --> __end__;
   	__start__ -.-> tool_two___start__;
@@ -4965,15 +4953,15 @@
   '''
   graph TD;
   	__start__ --> Researcher;
-  	Researcher -. &nbspcontinue&nbsp .-> Chart_Generator;
-  	Researcher -. &nbspcall_tool&nbsp .-> Call_Tool;
-  	Researcher -. &nbspend&nbsp .-> __end__;
-  	Chart_Generator -. &nbspcontinue&nbsp .-> Researcher;
-  	Chart_Generator -. &nbspcall_tool&nbsp .-> Call_Tool;
-  	Chart_Generator -. &nbspend&nbsp .-> __end__;
+  	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
+  	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
+  	Researcher -. &nbsp;end&nbsp; .-> __end__;
+  	Chart_Generator -. &nbsp;continue&nbsp; .-> Researcher;
+  	Chart_Generator -. &nbsp;call_tool&nbsp; .-> Call_Tool;
+  	Chart_Generator -. &nbsp;end&nbsp; .-> __end__;
   	Call_Tool -.-> Researcher;
   	Call_Tool -.-> Chart_Generator;
-  	Researcher -. &nbspredo&nbsp .-> Researcher;
+  	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
   
   '''
 # ---
@@ -4989,32 +4977,14 @@
   
   '''
 # ---
-# name: test_start_branch_then
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__([__start__]):::first
-  	tool_two_slow(tool_two_slow)
-  	tool_two_fast(tool_two_fast)
-  	__end__([__end__]):::last
-  	__start__ -.-> tool_two_slow;
-  	tool_two_slow --> __end__;
-  	__start__ -.-> tool_two_fast;
-  	tool_two_fast --> __end__;
-  	classDef default fill:#f2f0ff,line-height:1.2
-  	classDef first fill-opacity:0
-  	classDef last fill:#bfb6fc
-  
-  '''
-# ---
 # name: test_start_branch_then[memory]
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
   	__start__ -.-> tool_two_fast;
@@ -5029,10 +4999,10 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
   	__start__ -.-> tool_two_fast;
@@ -5047,10 +5017,10 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
   	__start__ -.-> tool_two_fast;
@@ -5065,10 +5035,10 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
   	__start__ -.-> tool_two_fast;
@@ -5083,10 +5053,10 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
   	__start__ -.-> tool_two_fast;
@@ -5128,12 +5098,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -5153,12 +5123,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -5178,12 +5148,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -5203,12 +5173,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -5228,12 +5198,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -5253,22 +5223,22 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	p_one(p_one)
-  	p_two___start__(__start__)
+  	p_two___start__(<p>__start__</p>)
   	p_two_c_one(c_one)
   	p_two_c_two(c_two)
-  	p_two___end__(__end__)
-  	__end__([__end__]):::last
+  	p_two___end__(<p>__end__</p>)
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> p_one;
   	p_two___end__ --> p_one;
-  	p_one -. &nbsp0&nbsp .-> p_two___start__;
-  	p_one -. &nbsp1&nbsp .-> __end__;
+  	p_one -. &nbsp;0&nbsp; .-> p_two___start__;
+  	p_one -. &nbsp;1&nbsp; .-> __end__;
   	subgraph p_two
   	p_two___start__ --> p_two_c_one;
   	p_two_c_two --> p_two_c_one;
-  	p_two_c_one -. &nbsp0&nbsp .-> p_two_c_two;
-  	p_two_c_one -. &nbsp1&nbsp .-> p_two___end__;
+  	p_two_c_one -. &nbsp;0&nbsp; .-> p_two_c_two;
+  	p_two_c_one -. &nbsp;1&nbsp; .-> p_two___end__;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
