@@ -9,7 +9,7 @@ all: help
 
 # Benchmarks
 
-OUTPUT ?= out/bench.json
+OUTPUT ?= out/benchmark.json
 
 benchmark:
 	mkdir -p out
