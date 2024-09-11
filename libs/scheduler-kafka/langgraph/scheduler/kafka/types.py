@@ -11,10 +11,16 @@ class Topics(NamedTuple):
     error: str
 
 
+class Sendable(TypedDict):
+    topic: str
+    value: Optional[Any]
+    key: Optional[Any]
+
+
 class MessageToOrchestrator(TypedDict):
     input: Optional[dict[str, Any]]
     config: RunnableConfig
-    finally_executor: Optional[Sequence["MessageToExecutor"]]
+    finally_send: Optional[Sequence[Sendable]]
 
 
 class ExecutorTask(TypedDict):
@@ -25,7 +31,7 @@ class ExecutorTask(TypedDict):
 class MessageToExecutor(TypedDict):
     config: RunnableConfig
     task: ExecutorTask
-    finally_executor: Optional[Sequence["MessageToExecutor"]]
+    finally_send: Optional[Sequence[Sendable]]
 
 
 class ErrorMessage(TypedDict):

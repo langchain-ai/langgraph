@@ -32,7 +32,9 @@ async def drain_topics_async(
     def done() -> bool:
         return (
             len(orch_msgs) > 0
+            and any(orch_msgs)
             and len(exec_msgs) > 0
+            and any(exec_msgs)
             and not orch_msgs[-1]
             and not exec_msgs[-1]
         )
@@ -97,7 +99,9 @@ def drain_topics(
     def done() -> bool:
         return (
             len(orch_msgs) > 0
+            and any(orch_msgs)
             and len(exec_msgs) > 0
+            and any(exec_msgs)
             and not orch_msgs[-1]
             and not exec_msgs[-1]
         )
@@ -110,7 +114,6 @@ def drain_topics(
                     if debug:
                         print("\n---\norch", len(msgs), msgs)
                     if done():
-                        print("am i done? orchestrator")
                         event.set()
                     if event.is_set():
                         break
@@ -126,7 +129,6 @@ def drain_topics(
                     if debug:
                         print("\n---\nexec", len(msgs), msgs)
                     if done():
-                        print("am i done? executor")
                         event.set()
                     if event.is_set():
                         break
