@@ -15,7 +15,8 @@ jobs:
     name: "bench/baseline"
     steps:
       - uses: actions/checkout@v4
-        ref: main
+        with:
+          ref: main
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         if: steps.changed-files.outputs.all
         uses: "./.github/actions/poetry_setup"
@@ -34,7 +35,9 @@ jobs:
           path: out/bench.json
   compare:
     runs_on: ubuntu-latest
-    working-directory: libs/langgraph
+    defaults:
+      run:
+        working-directory: libs/langgraph
     name: "bench/compare"
     needs: [baseline]
     steps:
@@ -45,6 +48,7 @@ jobs:
         with:
           python-version: "3.11"
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: libs/langgraph
           cache-key: bench
       - name: Install dependencies
         run: poetry install --with dev
