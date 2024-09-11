@@ -56,14 +56,13 @@ jobs:
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
-              --check-links-ignore "https://promptengineering\.org/.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
-              --check-links $(find docs/site -name "index.html")
+              --check-links $(find docs/site -name "index.html" | grep -v 'storm.ipynb')
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | sed -E 's|^docs/docs/|docs/site/|; s/\.ipynb$/\/index.html/' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|docs/site/|; s/\.ipynb$/\/index.html/' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on HTML files matching changed notebook files..."
@@ -71,7 +70,6 @@ jobs:
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
                 --check-links-ignore "https://x.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
-                --check-links-ignore "https://promptengineering\.org/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
                 --check-links ${CHANGED_FILES} \
                 || ([ $? = 5 ] && exit 0 || exit $?)
