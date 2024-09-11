@@ -31,8 +31,8 @@ jobs:
       - name: Upload benchmark baseline
         uses: actions/upload-artifact@v4
         with:
-          name: bench-baseline.json
-          path: out/bench.json
+          name: benchmark-baseline.json
+          path: libs/langgraph/out/benchmark.json
   compare:
     runs-on: ubuntu-latest
     defaults:
@@ -55,9 +55,9 @@ jobs:
       - name: Download benchmark baseline
         uses: actions/download-artifact@v4
         with:
-          name: bench-baseline.json
+          name: benchmark-baseline.json
           path: out
       - name: Compare benchmarks
-        run: poetry run pyperf compare_to out/bench-baseline.json out/bench.json --table --group-by-speed >> $GITHUB_OUTPUT
+        run: poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
       - name: Annotation
         run: echo "::notice file=libs/langgraph/bench/__main__.py::$GITHUB_OUTPUT"

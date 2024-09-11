@@ -46,6 +46,8 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
+EMPTY_SEQ = tuple()
+
 
 class WritesProtocol(Protocol):
     name: str
@@ -78,7 +80,10 @@ def should_interrupt(
             task
             for task in tasks
             if (
-                (not task.config or TAG_HIDDEN not in task.config.get("tags"))
+                (
+                    not task.config
+                    or TAG_HIDDEN not in task.config.get("tags", EMPTY_SEQ)
+                )
                 if interrupt_nodes == "*"
                 else task.name in interrupt_nodes
             )

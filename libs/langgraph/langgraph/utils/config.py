@@ -174,7 +174,7 @@ def get_callback_manager_for_config(
     # merge tags
     all_tags = config.get("tags")
     if all_tags is not None and tags is not None:
-        all_tags = tuple(*tags, *tags)
+        all_tags = [*all_tags, *tags]
     elif tags is not None:
         all_tags = tags
     # use existing callbacks if they exist
