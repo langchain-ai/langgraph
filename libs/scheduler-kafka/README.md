@@ -34,9 +34,9 @@ from your_lib import graph # graph expected to be a compiled LangGraph graph
 logger = logging.getLogger(__name__)
 
 topics = Topics(
-    orchestrator: os.environ['KAFKA_TOPIC_ORCHESTRATOR'],
-    executor: os.environ['KAFKA_TOPIC_EXECUTOR'],
-    error: os.environ['KAFKA_TOPIC_ERROR'],
+    orchestrator=os.environ['KAFKA_TOPIC_ORCHESTRATOR'],
+    executor=os.environ['KAFKA_TOPIC_EXECUTOR'],
+    error=os.environ['KAFKA_TOPIC_ERROR'],
 )
 
 async def main():
@@ -64,9 +64,9 @@ from your_lib import graph # graph expected to be a compiled LangGraph graph
 logger = logging.getLogger(__name__)
 
 topics = Topics(
-    orchestrator: os.environ['KAFKA_TOPIC_ORCHESTRATOR'],
-    executor: os.environ['KAFKA_TOPIC_EXECUTOR'],
-    error: os.environ['KAFKA_TOPIC_ERROR'],
+    orchestrator=os.environ['KAFKA_TOPIC_ORCHESTRATOR'],
+    executor=os.environ['KAFKA_TOPIC_EXECUTOR'],
+    error=os.environ['KAFKA_TOPIC_ERROR'],
 )
 
 async def main():
@@ -91,7 +91,6 @@ python executor.py &
 
 You can pass any of the following values as `kwargs` to either `KafkaOrchestrator` or `KafkaExecutor` to configure the consumer:
 
-- group_id (str): a name for the consumer group. Defaults to 'orchestrator' or 'executor', respectively.
 - batch_max_n (int): Maximum number of messages to include in a single batch. Default: 10.
 - batch_max_ms (int): Maximum time in milliseconds to wait for messages to include in a batch. Default: 1000.
 - retry_policy (langgraph.pregel.types.RetryPolicy): Controls which graph-level errors will be retried when processing messages. A good use for this is to retry database errors thrown by the checkpointer. Defaults to None.
