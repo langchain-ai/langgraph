@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix bench profile
+.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -11,7 +11,7 @@ all: help
 
 OUTPUT ?= out/bench.json
 
-bench:
+benchmark:
 	mkdir -p out
 	poetry run python -m bench -o $(OUTPUT) --rigorous
 
