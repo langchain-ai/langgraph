@@ -57,7 +57,7 @@ jobs:
               --check-links-ignore "https://x.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
-              --check-links $(find docs/site -name "index.html" | grep -v 'storm.ipynb')
+              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html')
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
