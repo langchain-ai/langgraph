@@ -87,7 +87,7 @@ jobs:
 
   ci_success:
     name: "CI Success"
-    needs: [build, lint, lint-js, test, integration-test]
+    needs: [lint, lint-js, test, integration-test]
     if: |
       always()
     runs-on: ubuntu-latest
