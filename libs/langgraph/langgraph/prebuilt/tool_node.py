@@ -79,6 +79,8 @@ class ToolNode(RunnableCallable):
         - The `AIMessage` MUST have `tool_calls` populated.
     """
 
+    name: str = "ToolNode"
+
     def __init__(
         self,
         tools: Sequence[Union[BaseTool, Callable]],
