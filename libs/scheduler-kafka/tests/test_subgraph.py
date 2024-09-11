@@ -5,7 +5,7 @@ from aiokafka import AIOKafkaProducer
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )
-from langchain_core.messages import AIMessage, HumanMessage, ToolCall
+from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.tools import tool
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -17,6 +17,7 @@ from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
 from tests.any import AnyDict, AnyStr
 from tests.drain import drain_topics
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 pytestmark = pytest.mark.anyio
 
@@ -135,7 +136,7 @@ async def test_subgraph_w_interrupt(
     state = await graph.aget_state(config)
     assert state.next == ("weather_graph",)
     assert state.values == {
-        "messages": [HumanMessage(id=AnyStr(), content="what's the weather in sf")],
+        "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
         "route": "weather",
     }
 
@@ -421,8 +422,8 @@ async def test_subgraph_w_interrupt(
     assert state.next == ()
     assert state.values == {
         "messages": [
-            HumanMessage(id=AnyStr(), content="what's the weather in sf"),
-            AIMessage(content="I'ts sunny in San Francisco!", id=AnyStr()),
+            _AnyIdHumanMessage(content="what's the weather in sf"),
+            _AnyIdAIMessage(content="I'ts sunny in San Francisco!"),
         ],
         "route": "weather",
     }
