@@ -1950,6 +1950,22 @@ files = [
 tests = ["pytest"]
 
 [[package]]
+name = "py-spy"
+version = "0.3.14"
+description = "Sampling profiler for Python programs"
+optional = false
+python-versions = "*"
+files = [
+    {file = "py_spy-0.3.14-py2.py3-none-macosx_10_7_x86_64.whl", hash = "sha256:5b342cc5feb8d160d57a7ff308de153f6be68dcf506ad02b4d67065f2bae7f45"},
+    {file = "py_spy-0.3.14-py2.py3-none-macosx_10_9_x86_64.macosx_11_0_arm64.macosx_10_9_universal2.whl", hash = "sha256:fe7efe6c91f723442259d428bf1f9ddb9c1679828866b353d539345ca40d9dd2"},
+    {file = "py_spy-0.3.14-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:590905447241d789d9de36cff9f52067b6f18d8b5e9fb399242041568d414461"},
+    {file = "py_spy-0.3.14-py2.py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:fd6211fe7f587b3532ba9d300784326d9a6f2b890af7bf6fff21a029ebbc812b"},
+    {file = "py_spy-0.3.14-py2.py3-none-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:3e8e48032e71c94c3dd51694c39e762e4bbfec250df5bf514adcdd64e79371e0"},
+    {file = "py_spy-0.3.14-py2.py3-none-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:f59b0b52e56ba9566305236375e6fc68888261d0d36b5addbe3cf85affbefc0e"},
+    {file = "py_spy-0.3.14-py2.py3-none-win_amd64.whl", hash = "sha256:8f5b311d09f3a8e33dbd0d44fc6e37b715e8e0c7efefafcda8bfd63b31ab5a31"},
+]
+
+[[package]]
 name = "pycparser"
 version = "2.22"
 description = "C parser in Python"
@@ -2097,6 +2113,23 @@ files = [
 
 [package.extras]
 diagrams = ["jinja2", "railroad-diagrams"]
+
+[[package]]
+name = "pyperf"
+version = "2.7.0"
+description = "Python module to run and analyze benchmarks"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "pyperf-2.7.0-py3-none-any.whl", hash = "sha256:dce63053b916b73d8736a77404309328f938851b5c2c5e8493cde910ce37e362"},
+    {file = "pyperf-2.7.0.tar.gz", hash = "sha256:4201c6601032f374e9c900c6d2544a2f5891abedc1a96eec0e7b2338a6247589"},
+]
+
+[package.dependencies]
+psutil = ">=5.9.0"
+
+[package.extras]
+dev = ["importlib-metadata", "tox"]
 
 [[package]]
 name = "pytest"
@@ -3126,4 +3159,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "f4ed3ad03f1ed1db10fcd18edd6665fc691411473026e2ddb5c8634043b6ef96"
+content-hash = "ea51ea9d9a33ea282b72e48ab84e1c07533ab5fee04ff7b1672599e38902e74d"

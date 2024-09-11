@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix
+.PHONY: all format lint test test_watch integration_tests spell_check spell_fix bench profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -6,6 +6,20 @@ all: help
 ######################
 # TESTING AND COVERAGE
 ######################
+
+# Benchmarks
+
+OUTPUT ?= out/results.json
+
+bench:
+	mkdir -p out
+	poetry run python -m bench -o $(OUTPUT) --rigorous
+
+GRAPH ?= bench/fanout_to_subgraph.py
+
+profile:
+	mkdir -p out
+	sudo poetry run py-spy record -g -o out/profile.svg -- python $(GRAPH)
 
 # Run unit tests and generate a coverage report.
 coverage:

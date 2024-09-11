@@ -32,6 +32,8 @@ langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 psycopg = {extras = ["binary"], version = ">=3.0.0"}
 uvloop = "^0.20.0"
+pyperf = "^2.7.0"
+py-spy = "^0.3.14"
 
 [tool.ruff]
 lint.select = [ "E", "F", "I" ]
