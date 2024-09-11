@@ -36,7 +36,7 @@ jobs:
           name: bench-baseline.json
           path: out/bench.json
   compare:
-    runs_on: ubuntu-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: libs/langgraph
