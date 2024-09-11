@@ -14,7 +14,6 @@ jobs:
     defaults:
       run:
         working-directory: libs/langgraph
-    name: "bench/baseline"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +38,6 @@ jobs:
     defaults:
       run:
         working-directory: libs/langgraph
-    name: "bench/compare"
     needs: [baseline]
     steps:
       - uses: actions/checkout@v4
