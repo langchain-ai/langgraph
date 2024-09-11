@@ -18,8 +18,8 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v44
       - name: Filter by size
+        # TODO: roll back the web voyager hack
         run: |
-          # TODO: roll back the web voyager hack
           large_added_files=$(find ${{ steps.changed-files.outputs.added_files }} -maxdepth 0 -size +1M | grep -v "web_voyager")
           if [ -n "$large_added_files" ]; then
             echo "Large files added: $large_added_files"
