@@ -2,6 +2,7 @@ import asyncio
 from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
+from hashlib import sha1
 from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
@@ -14,10 +15,11 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    EmptyChannelError,
     SerializerProtocol,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.types import TASKS
+from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 
 class MemorySaver(
@@ -457,3 +459,17 @@ class MemorySaver(
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put_writes, config, writes, task_id
         )
+
+    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+        if current is None:
+            current_v = 0
+        elif isinstance(current, int):
+            current_v = current
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        try:
+            next_h = sha1(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
+        except EmptyChannelError:
+            next_h = ""
+        return f"{next_v:032}.{next_h}"

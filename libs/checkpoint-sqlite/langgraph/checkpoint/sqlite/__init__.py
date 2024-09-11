@@ -1,7 +1,7 @@
 import sqlite3
 import threading
 from contextlib import closing, contextmanager
-from hashlib import md5
+from hashlib import sha1
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
@@ -515,7 +515,7 @@ class SqliteSaver(BaseCheckpointSaver):
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
         try:
-            next_h = md5(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
+            next_h = sha1(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
         except EmptyChannelError:
             next_h = ""
         return f"{next_v:032}.{next_h}"

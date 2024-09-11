@@ -19,6 +19,7 @@ from ipaddress import (
 from typing import Any, Optional, Sequence
 from uuid import UUID
 
+import orjson
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
@@ -62,6 +63,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(
                 obj.__class__, method=(None, "construct"), kwargs=obj.dict()
             )
+        elif hasattr(obj, "_asdict") and callable(obj._asdict):
+            return self._encode_constructor_args(obj.__class__, kwargs=obj._asdict())
         elif isinstance(obj, pathlib.Path):
             return self._encode_constructor_args(pathlib.Path, args=obj.parts)
         elif isinstance(obj, re.Pattern):
@@ -172,9 +175,7 @@ class JsonPlusSerializer(SerializerProtocol):
         return LC_REVIVER(value)
 
     def dumps(self, obj: Any) -> bytes:
-        return json.dumps(obj, default=self._default, ensure_ascii=False).encode(
-            "utf-8", "ignore"
-        )
+        return orjson.dumps(obj, default=self._default, option=_option)
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         if isinstance(obj, bytes):
@@ -197,3 +198,10 @@ class JsonPlusSerializer(SerializerProtocol):
             return self.loads(data_)
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
+
+
+_option = (
+    orjson.OPT_PASSTHROUGH_DATACLASS
+    | orjson.OPT_PASSTHROUGH_DATETIME
+    | orjson.OPT_NON_STR_KEYS
+)
