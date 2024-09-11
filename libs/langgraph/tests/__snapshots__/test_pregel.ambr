@@ -268,8 +268,8 @@
   '''
   graph TD;
   	right --> __end__;
-  	__start__ -. &nbspgo-left&nbsp .-> left;
-  	__start__ -. &nbspgo-right&nbsp .-> right;
+  	__start__ -. &nbsp;go-left&nbsp; .-> left;
+  	__start__ -. &nbsp;go-right&nbsp; .-> right;
   	left -.-> __end__;
   
   '''
@@ -351,8 +351,8 @@
   '''
   graph TD;
   	right --> __end__;
-  	__start__ -. &nbspgo-left&nbsp .-> left;
-  	__start__ -. &nbspgo-right&nbsp .-> right;
+  	__start__ -. &nbsp;go-left&nbsp; .-> left;
+  	__start__ -. &nbsp;go-right&nbsp; .-> right;
   	left -.-> __end__;
   
   '''
@@ -417,75 +417,6 @@
   	__start__ -.-> get_weather;
   	__start__ -.-> __end__;
   
-  '''
-# ---
-# name: test_conditional_graph
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "agent",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "schema",
-            "runnable",
-            "RunnableAssign"
-          ],
-          "name": "agent"
-        }
-      },
-      {
-        "id": "tools",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "tools"
-        },
-        "metadata": {
-          "version": 2,
-          "variant": "b"
-        }
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      }
-    ],
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "agent"
-      },
-      {
-        "source": "tools",
-        "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "tools",
-        "data": "continue",
-        "conditional": true
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "data": "exit",
-        "conditional": true
-      }
-    ]
-  }
   '''
 # ---
 # name: test_conditional_graph.1
@@ -840,8 +771,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -849,16 +780,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1020,8 +951,8 @@
   	Passthrough --> Parallel_agent_outcome_Output;
   	__start__ --> Parallel_agent_outcome_Input;
   	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
-  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
+  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1102,16 +1033,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1194,8 +1125,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1203,16 +1134,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1374,8 +1305,8 @@
   	Passthrough --> Parallel_agent_outcome_Output;
   	__start__ --> Parallel_agent_outcome_Input;
   	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
-  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
+  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1456,16 +1387,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1548,8 +1479,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1557,16 +1488,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1728,8 +1659,8 @@
   	Passthrough --> Parallel_agent_outcome_Output;
   	__start__ --> Parallel_agent_outcome_Input;
   	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
-  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
+  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1810,16 +1741,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1902,8 +1833,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1911,16 +1842,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -2082,8 +2013,8 @@
   	Passthrough --> Parallel_agent_outcome_Output;
   	__start__ --> Parallel_agent_outcome_Input;
   	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
-  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
+  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2164,16 +2095,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -2256,8 +2187,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2265,16 +2196,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -2436,8 +2367,8 @@
   	Passthrough --> Parallel_agent_outcome_Output;
   	__start__ --> Parallel_agent_outcome_Input;
   	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
-  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
+  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2518,16 +2449,16 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
   	tools(tools<hr/><small><em>parents = {}
   version = 2
   variant = b</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -2689,8 +2620,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2771,8 +2702,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2853,8 +2784,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2935,8 +2866,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -3017,8 +2948,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspexit&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -4275,8 +4206,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspend&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   
   '''
 # ---
@@ -4356,8 +4287,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspend&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   
   '''
 # ---
@@ -4437,8 +4368,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspend&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   
   '''
 # ---
@@ -4518,8 +4449,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspend&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   
   '''
 # ---
@@ -4599,8 +4530,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspend&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   
   '''
 # ---
@@ -4944,8 +4875,8 @@
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
-  	agent -. &nbspcontinue&nbsp .-> tools;
-  	agent -. &nbspend&nbsp .-> __end__;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   
   '''
 # ---
