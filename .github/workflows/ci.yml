@@ -97,7 +97,7 @@ jobs:
 
   ci_success:
     name: "CI Success"
-    needs: [lint, lint-js, test, integration-test]
+    needs: [lint, lint-js, test, test-langgraph, test-scheduler-kafka, integration-test]
     if: |
       always()
     runs-on: ubuntu-latest
