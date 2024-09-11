@@ -11,7 +11,9 @@ env:
 jobs:
   baseline:
     runs-on: ubuntu-latest
-    working-directory: libs/langgraph
+    defaults:
+      run:
+        working-directory: libs/langgraph
     name: "bench/baseline"
     steps:
       - uses: actions/checkout@v4
