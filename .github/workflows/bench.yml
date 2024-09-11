@@ -20,7 +20,6 @@ jobs:
         with:
           ref: main
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        if: steps.changed-files.outputs.all
         uses: "./.github/actions/poetry_setup"
         with:
           python-version: "3.11"
@@ -45,7 +44,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        if: steps.changed-files.outputs.all
         uses: "./.github/actions/poetry_setup"
         with:
           python-version: "3.11"
