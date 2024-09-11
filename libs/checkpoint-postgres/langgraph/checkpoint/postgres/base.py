@@ -110,6 +110,15 @@ UPSERT_CHECKPOINTS_SQL = """
 UPSERT_CHECKPOINT_WRITES_SQL = """
     INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
+        channel = EXCLUDED.channel,
+        type = EXCLUDED.type,
+        blob = EXCLUDED.blob;
+"""
+
+INSERT_CHECKPOINT_WRITES_SQL = """
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
@@ -120,6 +129,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
+    INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
     jsonplus_serde = JsonPlusSerializer()
 

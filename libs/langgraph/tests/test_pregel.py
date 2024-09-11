@@ -52,7 +52,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import ERROR, Interrupt, Send
+from langgraph.constants import ERROR, PULL, PUSH, Interrupt, Send
 from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
@@ -741,7 +741,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
-            tasks=(PregelTask(AnyStr(), "two"),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
             next=("two",),
             config={
                 "configurable": {
@@ -761,7 +761,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 3},
-            tasks=(PregelTask(AnyStr(), "one"),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
             next=("one",),
             config={
                 "configurable": {
@@ -781,7 +781,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 20},
-            tasks=(PregelTask(AnyStr(), "two"),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
             next=("two",),
             config={
                 "configurable": {
@@ -801,7 +801,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 20},
-            tasks=(PregelTask(AnyStr(), "one"),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
             next=("one",),
             config={
                 "configurable": {
@@ -836,7 +836,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "input": 2},
-            tasks=(PregelTask(AnyStr(), "two"),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
             next=("two",),
             config={
                 "configurable": {
@@ -856,7 +856,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"input": 2},
-            tasks=(PregelTask(AnyStr(), "one"),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
             next=("one",),
             config={
                 "configurable": {
@@ -941,7 +941,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=5,
-            tasks=(PregelTask(AnyStr(), "add_one"),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -961,7 +961,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=4,
-            tasks=(PregelTask(AnyStr(), "add_one"),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -981,7 +981,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=3,
-            tasks=(PregelTask(AnyStr(), "add_one"),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1001,7 +1001,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=2,
-            tasks=(PregelTask(AnyStr(), "add_one"),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1021,7 +1021,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=1,
-            tasks=(PregelTask(AnyStr(), "add_one"),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1036,7 +1036,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=0,
-            tasks=(PregelTask(AnyStr(), "__start__"),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -1474,8 +1474,8 @@ def test_pending_writes_resume(
     assert state.values == {"value": 1}
     assert state.next == ("one", "two")
     assert state.tasks == (
-        PregelTask(AnyStr(), "one"),
-        PregelTask(AnyStr(), "two", 'ConnectionError("I\'m not good")'),
+        PregelTask(AnyStr(), "one", (PULL, "one")),
+        PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
     )
     assert state.metadata == {
         "parents": {},
@@ -2261,7 +2261,7 @@ def test_conditional_graph(
                 ),
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -2314,7 +2314,7 @@ def test_conditional_graph(
                 "input": "what is weather in sf",
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2487,7 +2487,7 @@ def test_conditional_graph(
                 ),
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2534,7 +2534,7 @@ def test_conditional_graph(
                 "input": "what is weather in sf",
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2707,7 +2707,7 @@ def test_conditional_graph(
                 ),
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3182,7 +3182,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3224,7 +3224,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3349,7 +3349,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3390,7 +3390,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3501,7 +3501,7 @@ def test_conditional_state_graph(
         values={
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "agent"),),
+        tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3526,7 +3526,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3580,7 +3580,7 @@ def test_conditional_state_graph(
                 ]
             ],
         },
-        tasks=(PregelTask(AnyStr(), "agent"),),
+        tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3645,7 +3645,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3699,7 +3699,7 @@ def test_conditional_state_graph(
                 ]
             ],
         },
-        tasks=(PregelTask(AnyStr(), "agent"),),
+        tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4482,7 +4482,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
         next=("tools",),
         config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4534,7 +4534,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4632,7 +4632,10 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools"), PregelTask(AnyStr(), "tools")),
+        tasks=(
+            PregelTask(AnyStr(), "tools", (PUSH, 0)),
+            PregelTask(AnyStr(), "tools", (PUSH, 1)),
+        ),
         next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4977,7 +4980,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5023,7 +5026,7 @@ def test_message_graph(
                 ],
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=next_config,
         created_at=AnyStr(),
@@ -5104,7 +5107,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5207,7 +5210,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5253,7 +5256,7 @@ def test_message_graph(
                 ],
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5334,7 +5337,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5428,7 +5431,7 @@ def test_message_graph(
             AIMessage(content="answer", id="ai2"),
             _AnyIdAIMessage(content="an extra message"),
         ],
-        tasks=(PregelTask(AnyStr(), "agent"),),
+        tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5703,7 +5706,7 @@ def test_root_graph(
                 id="ai1",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5749,7 +5752,7 @@ def test_root_graph(
                 ],
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=next_config,
         created_at=AnyStr(),
@@ -5831,7 +5834,7 @@ def test_root_graph(
                 id="ai2",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5935,7 +5938,7 @@ def test_root_graph(
                 id="ai1",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5981,7 +5984,7 @@ def test_root_graph(
                 ],
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -6063,7 +6066,7 @@ def test_root_graph(
                 id="ai2",
             ),
         ],
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -6156,7 +6159,7 @@ def test_root_graph(
             AIMessage(content="answer", id="ai2"),
             _AnyIdAIMessage(content="an extra message"),
         ],
-        tasks=(PregelTask(AnyStr(), "agent"),),
+        tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -6228,7 +6231,7 @@ def test_root_graph(
                 _AnyIdAIMessage(content="an extra message"),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "agent"),),
+        tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -6581,6 +6584,7 @@ def test_dynamic_interrupt(
             PregelTask(
                 AnyStr(),
                 "tool_two",
+                (PULL, "tool_two"),
                 interrupts=(Interrupt("Just because..."),),
             ),
         ),
@@ -6673,7 +6677,7 @@ def test_start_branch_then(
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
-        tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6708,7 +6712,7 @@ def test_start_branch_then(
     }
     assert tool_two.get_state(thread2) == StateSnapshot(
         values={"my_key": "value", "market": "US"},
-        tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread2).config,
         created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6743,7 +6747,7 @@ def test_start_branch_then(
     }
     assert tool_two.get_state(thread3) == StateSnapshot(
         values={"my_key": "value", "market": "US"},
-        tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread3).config,
         created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -6754,7 +6758,7 @@ def test_start_branch_then(
     tool_two.update_state(thread3, {"my_key": "key"})  # appends to my_key
     assert tool_two.get_state(thread3) == StateSnapshot(
         values={"my_key": "valuekey", "market": "US"},
-        tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread3).config,
         created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -7064,7 +7068,7 @@ def test_branch_then(
     }
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value prepared", "market": "DE"},
-        tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -7104,7 +7108,7 @@ def test_branch_then(
     }
     assert tool_two.get_state(thread2) == StateSnapshot(
         values={"my_key": "value prepared", "market": "US"},
-        tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread2).config,
         created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -7152,7 +7156,7 @@ def test_branch_then(
             "my_key": "value prepared slow",
             "market": "DE",
         },
-        tasks=(PregelTask(AnyStr(), "finish"),),
+        tasks=(PregelTask(AnyStr(), "finish", (PULL, "finish")),),
         next=("finish",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -7172,7 +7176,7 @@ def test_branch_then(
             "my_key": "value prepared slower",
             "market": "DE",
         },
-        tasks=(PregelTask(AnyStr(), "finish"),),
+        tasks=(PregelTask(AnyStr(), "finish", (PULL, "finish")),),
         next=("finish",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -7201,7 +7205,7 @@ def test_branch_then(
     }
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value prepared", "market": "DE"},
-        tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -7241,7 +7245,7 @@ def test_branch_then(
     }
     assert tool_two.get_state(thread2) == StateSnapshot(
         values={"my_key": "value prepared", "market": "US"},
-        tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread2).config,
         created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -7279,7 +7283,7 @@ def test_branch_then(
     # check current state
     assert tool_two.get_state(thread3) == StateSnapshot(
         values={"my_key": "key", "market": "DE"},
-        tasks=(PregelTask(AnyStr(), "prepare"),),
+        tasks=(PregelTask(AnyStr(), "prepare", (PULL, "prepare")),),
         next=("prepare",),
         config=uconfig,
         created_at=AnyStr(),
@@ -7299,7 +7303,7 @@ def test_branch_then(
     # get state after first node
     assert tool_two.get_state(thread3) == StateSnapshot(
         values={"my_key": "key prepared", "market": "DE"},
-        tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
         config=tool_two.checkpointer.get_tuple(thread3).config,
         created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -7443,7 +7447,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "query": "analyzed: query: what is weather in sf",
             "docs": ["doc1", "doc2", "doc3", "doc4", "doc5"],
         },
-        tasks=(PregelTask(AnyStr(), "qa"),),
+        tasks=(PregelTask(AnyStr(), "qa", (PULL, "qa")),),
         next=("qa",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -8631,6 +8635,7 @@ def test_nested_graph_state(
             PregelTask(
                 AnyStr(),
                 "inner",
+                (PULL, "inner"),
                 state={"configurable": {"thread_id": "1", "checkpoint_ns": AnyStr()}},
             ),
         ),
@@ -8664,6 +8669,7 @@ def test_nested_graph_state(
             PregelTask(
                 AnyStr(),
                 "inner",
+                (PULL, "inner"),
                 state=StateSnapshot(
                     values={
                         "my_key": "hi my value here",
@@ -8672,8 +8678,8 @@ def test_nested_graph_state(
                     tasks=(
                         PregelTask(
                             AnyStr(),
-                            name="inner_2",
-                            error=None,
+                            "inner_2",
+                            (PULL, "inner_2"),
                         ),
                     ),
                     next=("inner_2",),
@@ -8743,6 +8749,7 @@ def test_nested_graph_state(
                 PregelTask(
                     AnyStr(),
                     "inner",
+                    (PULL, "inner"),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -8776,7 +8783,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
-            tasks=(PregelTask(AnyStr(), "outer_1"),),
+            tasks=(PregelTask(AnyStr(), "outer_1", (PULL, "outer_1")),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8797,7 +8804,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
-            tasks=(PregelTask(AnyStr(), "__start__"),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8851,7 +8858,7 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="inner_2"),),
+            tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -8880,7 +8887,7 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="inner_1"),),
+            tasks=(PregelTask(AnyStr(), "inner_1", (PULL, "inner_1")),),
         ),
         StateSnapshot(
             values={},
@@ -8903,7 +8910,7 @@ def test_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
-            tasks=(PregelTask(id=AnyStr(), name="__start__"),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
         ),
     ]
 
@@ -8971,7 +8978,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
-            tasks=(PregelTask(AnyStr(), "outer_2"),),
+            tasks=(PregelTask(AnyStr(), "outer_2", (PULL, "outer_2")),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -9001,6 +9008,7 @@ def test_nested_graph_state(
                 PregelTask(
                     AnyStr(),
                     "inner",
+                    (PULL, "inner"),
                     state={
                         "configurable": {"thread_id": "1", "checkpoint_ns": AnyStr()}
                     },
@@ -9031,7 +9039,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
-            tasks=(PregelTask(AnyStr(), "outer_1"),),
+            tasks=(PregelTask(AnyStr(), "outer_1", (PULL, "outer_1")),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9052,7 +9060,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
-            tasks=(PregelTask(AnyStr(), "__start__"),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9149,6 +9157,7 @@ def test_doubly_nested_graph_state(
             PregelTask(
                 AnyStr(),
                 "child",
+                (PULL, "child"),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -9189,6 +9198,7 @@ def test_doubly_nested_graph_state(
                 PregelTask(
                     AnyStr(),
                     "child_1",
+                    (PULL, "child_1"),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -9228,6 +9238,7 @@ def test_doubly_nested_graph_state(
             PregelTask(
                 AnyStr(),
                 "grandchild_2",
+                (PULL, "grandchild_2"),
             ),
         ),
         next=("grandchild_2",),
@@ -9272,18 +9283,21 @@ def test_doubly_nested_graph_state(
             PregelTask(
                 AnyStr(),
                 "child",
+                (PULL, "child"),
                 state=StateSnapshot(
                     values={"my_key": "hi my value"},
                     tasks=(
                         PregelTask(
                             AnyStr(),
                             "child_1",
+                            (PULL, "child_1"),
                             state=StateSnapshot(
                                 values={"my_key": "hi my value here"},
                                 tasks=(
                                     PregelTask(
                                         AnyStr(),
                                         "grandchild_2",
+                                        (PULL, "grandchild_2"),
                                     ),
                                 ),
                                 next=("grandchild_2",),
@@ -9476,7 +9490,13 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="parent_2"),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="parent_2",
+                    path=(PULL, "parent_2"),
+                ),
+            ),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -9484,6 +9504,7 @@ def test_doubly_nested_graph_state(
                 PregelTask(
                     AnyStr(),
                     "child",
+                    (PULL, "child"),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -9534,7 +9555,7 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="parent_1"),),
+            tasks=(PregelTask(id=AnyStr(), name="parent_1", path=(PULL, "parent_1")),),
         ),
         StateSnapshot(
             values={},
@@ -9554,7 +9575,9 @@ def test_doubly_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
-            tasks=(PregelTask(id=AnyStr(), name="__start__"),),
+            tasks=(
+                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+            ),
         ),
     ]
     # get child graph history
@@ -9620,6 +9643,7 @@ def test_doubly_nested_graph_state(
                 PregelTask(
                     id=AnyStr(),
                     name="child_1",
+                    path=(PULL, "child_1"),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -9650,7 +9674,9 @@ def test_doubly_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
-            tasks=(PregelTask(id=AnyStr(), name="__start__"),),
+            tasks=(
+                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+            ),
         ),
     ]
     # get grandchild graph history
@@ -9730,7 +9756,11 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="grandchild_2"),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(), name="grandchild_2", path=(PULL, "grandchild_2")
+                ),
+            ),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -9768,7 +9798,11 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="grandchild_1"),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(), name="grandchild_1", path=(PULL, "grandchild_1")
+                ),
+            ),
         ),
         StateSnapshot(
             values={},
@@ -9800,7 +9834,9 @@ def test_doubly_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
-            tasks=(PregelTask(id=AnyStr(), name="__start__"),),
+            tasks=(
+                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+            ),
         ),
     ]
 
@@ -9875,6 +9911,7 @@ def test_send_to_nested_graphs(
             PregelTask(
                 AnyStr(),
                 "generate_joke",
+                (PUSH, 0),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -9885,6 +9922,7 @@ def test_send_to_nested_graphs(
             PregelTask(
                 AnyStr(),
                 "generate_joke",
+                (PUSH, 1),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -9942,7 +9980,7 @@ def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        tasks=(PregelTask(id=AnyStr(""), name="generate"),),
+        tasks=(PregelTask(id=AnyStr(""), name="generate", path=(PULL, "generate")),),
     )
     assert graph.get_state(outer_state.tasks[1].state) == StateSnapshot(
         values={"subject": "dogs - hohoho", "jokes": []},
@@ -9974,7 +10012,7 @@ def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        tasks=(PregelTask(id=AnyStr(""), name="generate"),),
+        tasks=(PregelTask(id=AnyStr(""), name="generate", path=(PULL, "generate")),),
     )
     # update state of dogs joke graph
     graph.update_state(outer_state.tasks[1].state, {"subject": "turtles - hohoho"})
@@ -10069,6 +10107,7 @@ def test_send_to_nested_graphs(
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
+                    (PUSH, 0),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -10079,6 +10118,7 @@ def test_send_to_nested_graphs(
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
+                    (PUSH, 1),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -10107,7 +10147,7 @@ def test_send_to_nested_graphs(
         ),
         StateSnapshot(
             values={"jokes": []},
-            tasks=(PregelTask(AnyStr(), "__start__"),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -10284,6 +10324,7 @@ def test_weather_subgraph(
             PregelTask(
                 id=AnyStr(),
                 name="weather_graph",
+                path=(PULL, "weather_graph"),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -10369,6 +10410,7 @@ def test_weather_subgraph(
             PregelTask(
                 id=AnyStr(),
                 name="weather_graph",
+                path=(PULL, "weather_graph"),
                 state=StateSnapshot(
                     values={
                         "messages": [
@@ -10404,7 +10446,13 @@ def test_weather_subgraph(
                             "checkpoint_id": AnyStr(),
                         }
                     },
-                    tasks=(PregelTask(id=AnyStr(), name="weather_node"),),
+                    tasks=(
+                        PregelTask(
+                            id=AnyStr(),
+                            name="weather_node",
+                            path=(PULL, "weather_node"),
+                        ),
+                    ),
                 ),
             ),
         ),
@@ -10446,6 +10494,7 @@ def test_weather_subgraph(
             PregelTask(
                 id=AnyStr(),
                 name="weather_graph",
+                path=(PULL, "weather_graph"),
                 state=StateSnapshot(
                     values={
                         "messages": [

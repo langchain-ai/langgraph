@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -337,9 +338,14 @@ class PostgresSaver(BasePostgresSaver):
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
         """
+        query = (
+            self.UPSERT_CHECKPOINT_WRITES_SQL
+            if all(w[0] in WRITES_IDX_MAP for w in writes)
+            else self.INSERT_CHECKPOINT_WRITES_SQL
+        )
         with self._cursor(pipeline=True) as cur:
             cur.executemany(
-                self.UPSERT_CHECKPOINT_WRITES_SQL,
+                query,
                 self._dump_writes(
                     config["configurable"]["thread_id"],
                     config["configurable"]["checkpoint_ns"],
