@@ -2,11 +2,6 @@ name: test
 
 on:
   workflow_call:
-    inputs:
-      working-directory:
-        required: true
-        type: string
-        description: "From which folder this pipeline executes"
 
 env:
   POETRY_VERSION: "1.7.1"
@@ -17,11 +12,12 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
-          - "3.10"
           - "3.11"
           - "3.12"
 
+    defaults:
+      run:
+        working-directory: libs/langgraph
     name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
@@ -30,24 +26,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
-          cache-key: test-${{ inputs.working-directory }}
+          cache-key: test-langgraph
 
       - name: Install dependencies
         shell: bash
-        working-directory: ${{ inputs.working-directory }}
         run: |
           poetry install --with dev
 
       - name: Run tests
         shell: bash
-        working-directory: ${{ inputs.working-directory }}
         run: |
           make test
 
       - name: Ensure the tests did not create any additional files
         shell: bash
-        working-directory: ${{ inputs.working-directory }}
         run: |
           set -eu
 

@@ -44,16 +44,26 @@ jobs:
     strategy:
       matrix:
         working-directory: [
-            "libs/langgraph",
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
-            "libs/checkpoint-postgres",
-            "libs/scheduler-kafka"
+            "libs/checkpoint-postgres"
           ]
     uses: ./.github/workflows/_test.yml
     with:
       working-directory: ${{ matrix.working-directory }}
+    secrets: inherit
+
+  # NOTE: we're testing langgraph separately because it requires a different matrix
+  test-langgraph:
+    name: "cd libs/langgraph"
+    uses: ./.github/workflows/_test_langgraph.yml
+    secrets: inherit
+
+  # NOTE: we're testing scheduler-kafka separately because it requires a different matrix
+  test-scheduler-kafka:
+    name: "cd libs/scheduler-kafka"
+    uses: ./.github/workflows/_test_scheduler_kafka.yml
     secrets: inherit
 
   integration-test:
