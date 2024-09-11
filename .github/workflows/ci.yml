@@ -49,7 +49,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
-            # "libs/scheduler-kafka"
+            "libs/scheduler-kafka"
           ]
     uses: ./.github/workflows/_test.yml
     with:
