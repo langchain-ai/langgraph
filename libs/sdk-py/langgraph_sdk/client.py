@@ -574,13 +574,35 @@ class AssistantsClient:
 
         Example Usage:
 
-            assistant_versions await client.assistants.get_versions(
+            assistant_versions = await client.assistants.get_versions(
                 assistant_id="my_assistant_id"
             )
 
         """  # noqa: E501
 
         return await self.http.get(f"/assistants/{assistant_id}/versions")
+    
+    async def change_version(self, assistant_id: str, version: int) -> Assistant:
+        """Change the version of an assistant.
+        
+        Args:
+            assistant_id: The assistant ID to delete.
+            version: The version to change to.
+
+        Returns:
+            Assistant: Assistant Object.
+
+        Example Usage:
+
+            new_version_assistant = await client.assistants.change_version(
+                assistant_id="my_assistant_id",
+                version=3
+            )
+        
+        """ # noqa: E501
+
+        return await self.http.get(f"/assistants/{assistant_id}/change_version/{version}")
+        
 
 
 class ThreadsClient:
