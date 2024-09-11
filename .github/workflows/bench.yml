@@ -46,7 +46,6 @@ jobs:
         with:
           python-version: "3.11"
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: libs/langgraph
           cache-key: bench
       - name: Install dependencies
         run: poetry install --with dev
