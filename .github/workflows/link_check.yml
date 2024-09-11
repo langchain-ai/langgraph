@@ -26,49 +26,11 @@ jobs:
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          folder-path: "examples/,docs/"
+          folder-path: "docs/"
           check-modified-files-only: ${{ github.event_name != 'schedule' }}
           file-path: "./README.md"
           config-file: "./.markdown-link-check.config.json"
 
-  notebook-link-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Set up Python 3.x + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
-        with:
-          python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: core
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          poetry install --with docs
-          poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
-
-      - name: Check links in notebooks
-        env:
-          LANGCHAIN_API_KEY: test
-        run: |
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
-            echo "Running link check on all notebooks in examples directory..."
-            poetry run pytest -v --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links examples
-          else
-            echo "Fetching changes from origin/main..."
-            git fetch origin main
-            echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep '\.ipynb$' || true)
-            echo "Changed files: ${CHANGED_FILES}"
-            if [ -n "${CHANGED_FILES}" ]; then
-              echo "Running link check on changed notebook files..."
-              poetry run pytest -v --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links ${CHANGED_FILES} || ([ $? = 5 ] && exit 0 || exit $?)
-            else
-              echo "No notebook files changed."
-            fi
-          fi
   check-readmes-synced:
     # This checks that the repo README.md is identical to the libs/langgraph/README.md
     runs-on: ubuntu-latest
