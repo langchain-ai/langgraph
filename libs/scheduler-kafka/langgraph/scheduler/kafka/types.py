@@ -34,10 +34,32 @@ class ErrorMessage(TypedDict):
     msg: Union[MessageToExecutor, MessageToOrchestrator]
 
 
+class TopicPartition(Protocol):
+    topic: str
+    partition: int
+
+
+class ConsumerRecord(Protocol):
+    topic: str
+    "The topic this record is received from"
+    partition: int
+    "The partition from which this record is received"
+    offset: int
+    "The position of this record in the corresponding Kafka partition."
+    timestamp: int
+    "The timestamp of this record"
+    timestamp_type: int
+    "The timestamp type of this record"
+    key: Optional[bytes]
+    "The key (or `None` if no key is specified)"
+    value: Optional[bytes]
+    "The value"
+
+
 class Consumer(Protocol):
     def getmany(
         self, timeout_ms: int, max_records: int
-    ) -> dict[str, Sequence[dict[str, Any]]]: ...
+    ) -> dict[TopicPartition, Sequence[ConsumerRecord]]: ...
 
     def commit(self) -> None: ...
 
@@ -45,7 +67,7 @@ class Consumer(Protocol):
 class AsyncConsumer(Protocol):
     async def getmany(
         self, timeout_ms: int, max_records: int
-    ) -> dict[str, Sequence[dict[str, Any]]]: ...
+    ) -> dict[TopicPartition, Sequence[ConsumerRecord]]: ...
 
     async def commit(self) -> None: ...
 

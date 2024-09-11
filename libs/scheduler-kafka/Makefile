@@ -10,14 +10,16 @@ start-services:
 stop-services:
 	docker compose -f tests/compose.yml down
 
+TEST_PATH ?= .
+
 test:
-	make start-services && poetry run pytest; \
+	make start-services && poetry run pytest $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-services && poetry run ptw .; \
+	make start-services && poetry run ptw . -- $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	exit $$EXIT_CODE
