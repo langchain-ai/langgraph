@@ -1,9 +1,13 @@
-name: langgraph-tests
+name: scheduler-kafka-tests
 services:
-  postgres-test:
+  broker:
+    image: apache/kafka:latest
+    ports:
+      - "9092:9092"
+  postgres:
     image: postgres:16
     ports:
-      - "5442:5432"
+      - "5443:5432"
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres

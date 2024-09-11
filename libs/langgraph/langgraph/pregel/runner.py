@@ -12,8 +12,8 @@ from typing import (
     Union,
 )
 
-from langgraph.constants import ERROR, INTERRUPT
-from langgraph.errors import GraphInterrupt
+from langgraph.constants import ERROR, INTERRUPT, NO_WRITES
+from langgraph.errors import GraphDelegate, GraphInterrupt
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
 from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
@@ -35,6 +35,7 @@ class PregelRunner:
         self,
         tasks: list[PregelExecutableTask],
         *,
+        reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
     ) -> Iterator[None]:
@@ -48,6 +49,7 @@ class PregelRunner:
                 run_with_retry,
                 task,
                 retry_policy,
+                __reraise_on_exit__=reraise,
             ): task
             for task in tasks
             if not task.writes
@@ -67,12 +69,17 @@ class PregelRunner:
                 if exc := _exception(fut):
                     if isinstance(exc, GraphInterrupt):
                         # save interrupt to checkpointer
-                        self.put_writes(task.id, [(INTERRUPT, i) for i in exc.args[0]])
+                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
+                            self.put_writes(task.id, interrupts)
+                    elif isinstance(exc, GraphDelegate):
+                        raise exc
                     else:
                         # save error to checkpointer
                         self.put_writes(task.id, [(ERROR, exc)])
-
                 else:
+                    if not task.writes:
+                        # add no writes marker
+                        task.writes.append((NO_WRITES, None))
                     # save task writes to checkpointer
                     self.put_writes(task.id, task.writes)
             else:
@@ -84,12 +91,13 @@ class PregelRunner:
             # give control back to the caller
             yield
         # panic on failure or timeout
-        _panic_or_proceed(all_futures)
+        _panic_or_proceed(all_futures, panic=reraise)
 
     async def atick(
         self,
         tasks: list[PregelExecutableTask],
         *,
+        reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
     ) -> AsyncIterator[None]:
@@ -107,6 +115,7 @@ class PregelRunner:
                 stream=self.use_astream,
                 __name__=task.name,
                 __cancel_on_exit__=True,
+                __reraise_on_exit__=reraise,
             ): task
             for task in tasks
             if not task.writes
@@ -126,11 +135,17 @@ class PregelRunner:
                 if exc := _exception(fut):
                     if isinstance(exc, GraphInterrupt):
                         # save interrupt to checkpointer
-                        self.put_writes(task.id, [(INTERRUPT, i) for i in exc.args[0]])
+                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
+                            self.put_writes(task.id, interrupts)
+                    elif isinstance(exc, GraphDelegate):
+                        raise exc
                     else:
                         # save error to checkpointer
                         self.put_writes(task.id, [(ERROR, exc)])
                 else:
+                    if not task.writes:
+                        # add no writes marker
+                        task.writes.append((NO_WRITES, None))
                     # save task writes to checkpointer
                     self.put_writes(task.id, task.writes)
             else:
@@ -142,7 +157,9 @@ class PregelRunner:
             # give control back to the caller
             yield
         # panic on failure or timeout
-        _panic_or_proceed(all_futures, asyncio.TimeoutError)
+        _panic_or_proceed(
+            all_futures, timeout_exc_cls=asyncio.TimeoutError, panic=reraise
+        )
 
 
 def _should_stop_others(
@@ -171,7 +188,9 @@ def _exception(
 
 def _panic_or_proceed(
     futs: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
+    *,
     timeout_exc_cls: Type[Exception] = TimeoutError,
+    panic: bool = True,
 ) -> None:
     done: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
     inflight: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
@@ -187,7 +206,10 @@ def _panic_or_proceed(
             while inflight:
                 inflight.pop().cancel()
             # raise the exception
-            raise exc
+            if panic:
+                raise exc
+            else:
+                return
     if inflight:
         # if we got here means we timed out
         while inflight:
