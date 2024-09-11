@@ -1,8 +1,14 @@
-from typing import Any, Optional
+from collections import ChainMap
+from typing import Any, Optional, Sequence
 
-from langchain_core.callbacks import Callbacks
+from langchain_core.callbacks import AsyncCallbackManager, CallbackManager, Callbacks
 from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.config import COPIABLE_KEYS, DEFAULT_RECURSION_LIMIT
+from langchain_core.runnables.config import (
+    CONFIG_KEYS,
+    COPIABLE_KEYS,
+    DEFAULT_RECURSION_LIMIT,
+    var_child_runnable_config,
+)
 
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import CONFIG_KEY_CHECKPOINT_MAP
@@ -53,56 +59,56 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     for config in configs:
         if config is None:
             continue
-        for key in config:
+        for key, value in config.items():
+            if not value:
+                continue
             if key == "metadata":
-                base[key] = {  # type: ignore
-                    **base.get(key, {}),  # type: ignore
-                    **(config.get(key) or {}),  # type: ignore
-                }
+                if base_value := base.get(key):  # type: ignore
+                    base[key] = {**base_value, **value}  # type: ignore
+                else:
+                    base[key] = value
             elif key == "tags":
-                base[key] = sorted(  # type: ignore
-                    set(base.get(key, []) + (config.get(key) or [])),  # type: ignore
-                )
+                if base_value := base.get(key):  # type: ignore
+                    base[key] = [*base_value, *value]  # type: ignore
+                else:
+                    base[key] = value
             elif key == "configurable":
-                base[key] = {  # type: ignore
-                    **base.get(key, {}),  # type: ignore
-                    **(config.get(key) or {}),  # type: ignore
-                }
+                if base_value := base.get(key):  # type: ignore
+                    base[key] = {**base_value, **value}  # type: ignore
+                else:
+                    base[key] = value
             elif key == "callbacks":
                 base_callbacks = base.get("callbacks")
-                these_callbacks = config["callbacks"]
                 # callbacks can be either None, list[handler] or manager
                 # so merging two callbacks values has 6 cases
-                if isinstance(these_callbacks, list):
+                if isinstance(value, list):
                     if base_callbacks is None:
-                        base["callbacks"] = these_callbacks.copy()
+                        base["callbacks"] = value.copy()
                     elif isinstance(base_callbacks, list):
-                        base["callbacks"] = base_callbacks + these_callbacks
+                        base["callbacks"] = base_callbacks + value
                     else:
                         # base_callbacks is a manager
                         mngr = base_callbacks.copy()
-                        for callback in these_callbacks:
+                        for callback in value:
                             mngr.add_handler(callback, inherit=True)
                         base["callbacks"] = mngr
-                elif these_callbacks is not None:
-                    # these_callbacks is a manager
+                else:
+                    # value is a manager
                     if base_callbacks is None:
-                        base["callbacks"] = these_callbacks.copy()
+                        base["callbacks"] = value.copy()
                     elif isinstance(base_callbacks, list):
-                        mngr = these_callbacks.copy()
+                        mngr = value.copy()
                         for callback in base_callbacks:
                             mngr.add_handler(callback, inherit=True)
                         base["callbacks"] = mngr
                     else:
                         # base_callbacks is also a manager
-                        base["callbacks"] = base_callbacks.merge(these_callbacks)
+                        base["callbacks"] = base_callbacks.merge(value)
             elif key == "recursion_limit":
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
-            elif key in COPIABLE_KEYS and config[key] is not None:  # type: ignore[literal-required]
-                base[key] = config[key].copy()  # type: ignore[literal-required]
             else:
-                base[key] = config[key] or base.get(key)  # type: ignore
+                base[key] = config[key]
     return base
 
 
@@ -150,3 +156,122 @@ def patch_config(
     if configurable is not None:
         config["configurable"] = {**config.get("configurable", {}), **configurable}
     return config
+
+
+def get_callback_manager_for_config(
+    config: RunnableConfig, tags: Optional[Sequence[str]] = None
+) -> CallbackManager:
+    """Get a callback manager for a config.
+
+    Args:
+        config (RunnableConfig): The config.
+
+    Returns:
+        CallbackManager: The callback manager.
+    """
+    from langchain_core.callbacks.manager import CallbackManager
+
+    # merge tags
+    all_tags = config.get("tags")
+    if all_tags is not None and tags is not None:
+        all_tags = tuple(*tags, *tags)
+    elif tags is not None:
+        all_tags = tags
+    # use existing callbacks if they exist
+    if (callbacks := config.get("callbacks")) and isinstance(
+        callbacks, CallbackManager
+    ):
+        if all_tags:
+            callbacks.add_tags(all_tags)
+        if metadata := config.get("metadata"):
+            callbacks.add_metadata(metadata)
+        return callbacks
+    else:
+        # otherwise create a new manager
+        return CallbackManager.configure(
+            inheritable_callbacks=config.get("callbacks"),
+            inheritable_tags=all_tags,
+            inheritable_metadata=config.get("metadata"),
+        )
+
+
+def get_async_callback_manager_for_config(
+    config: RunnableConfig,
+    tags: Optional[Sequence[str]] = None,
+) -> AsyncCallbackManager:
+    """Get an async callback manager for a config.
+
+    Args:
+        config (RunnableConfig): The config.
+
+    Returns:
+        AsyncCallbackManager: The async callback manager.
+    """
+    from langchain_core.callbacks.manager import AsyncCallbackManager
+
+    # merge tags
+    all_tags = config.get("tags")
+    if all_tags is not None and tags is not None:
+        all_tags = [*all_tags, *tags]
+    elif tags is not None:
+        all_tags = tags
+    # use existing callbacks if they exist
+    if (callbacks := config.get("callbacks")) and isinstance(
+        callbacks, AsyncCallbackManager
+    ):
+        if all_tags:
+            callbacks.add_tags(all_tags)
+        if metadata := config.get("metadata"):
+            callbacks.add_metadata(metadata)
+        return callbacks
+    else:
+        # otherwise create a new manager
+        return AsyncCallbackManager.configure(
+            inheritable_callbacks=config.get("callbacks"),
+            inheritable_tags=config.get("tags"),
+            inheritable_metadata=config.get("metadata"),
+        )
+
+
+def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
+    """Ensure that a config is a dict with all keys present.
+
+    Args:
+        config (Optional[RunnableConfig], optional): The config to ensure.
+          Defaults to None.
+
+    Returns:
+        RunnableConfig: The ensured config.
+    """
+    empty = RunnableConfig(
+        tags=[],
+        metadata=ChainMap(),
+        callbacks=None,
+        recursion_limit=DEFAULT_RECURSION_LIMIT,
+        configurable={},
+    )
+    if var_config := var_child_runnable_config.get():
+        empty.update(
+            {
+                k: v.copy() if k in COPIABLE_KEYS else v  # type: ignore[attr-defined]
+                for k, v in var_config.items()
+                if v is not None
+            },
+        )
+    for config in configs:
+        if config is None:
+            continue
+        for k, v in config.items():
+            if v is not None and k in CONFIG_KEYS:
+                empty[k] = v
+        for k, v in config.items():
+            if v is not None and k not in CONFIG_KEYS:
+                empty["configurable"][k] = v
+    for key, value in empty["configurable"].items():
+        if (
+            not key.startswith("__")
+            and isinstance(value, (str, int, float, bool))
+            and key not in empty["metadata"]
+        ):
+            empty["metadata"][key] = value
+    return empty
