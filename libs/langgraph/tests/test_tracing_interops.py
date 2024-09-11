@@ -5,7 +5,6 @@ from typing import Any, Callable, Tuple, TypedDict, TypeVar
 from unittest.mock import MagicMock
 
 import langsmith as ls
-import pytest
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers import LangChainTracer
 
@@ -53,7 +52,6 @@ def wait_for(
     raise ValueError(f"Callable did not return within {total_time}")
 
 
-@pytest.mark.asyncio
 async def test_nested_tracing():
     lt_py_311 = sys.version_info < (3, 11)
     mock_client = _get_mock_client()
@@ -90,8 +88,6 @@ async def test_nested_tracing():
 
     assert result == {"value": "parent_child_input"}
 
-    # Check POST calls
-    # Wait until we have a call with the name of  "child_node"
     def get_posts():
         post_calls = _get_calls(mock_client, verbs={"POST"})
 
@@ -102,9 +98,15 @@ async def test_nested_tracing():
         return None, False
 
     posts = wait_for(get_posts)
+    # If the callbacks weren't propagated correctly, we'd
+    # end up with broken dotted_orders
     parent_run = next(data for data in posts if data["name"] == "parent_node")
     child_run = next(data for data in posts if data["name"] == "child_node")
     traceable_run = next(data for data in posts if data["name"] == "some_traceable")
 
     assert child_run["dotted_order"].startswith(traceable_run["dotted_order"])
     assert traceable_run["dotted_order"].startswith(parent_run["dotted_order"])
+
+    assert child_run["parent_run_id"] == traceable_run["id"]
+    assert traceable_run["parent_run_id"] == parent_run["id"]
+    assert parent_run["trace_id"] == child_run["trace_id"] == traceable_run["trace_id"]
