@@ -43,19 +43,19 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAAA2xSXW+bMBR951dY9zlMQIB0vK2q1imatGnTplZNhYxzISTGdu3L1jbKf68gJNCo
-        fkDWPT4fHHvvMQb1GjIGYsNJNEb6X9Jd4NLtTbK8+/26vf8WzX9Wy7sy3BS7f39h1jF0sUVBJ9Yn
-        oRsjkWqtjrCwyAk71XARpeEiiIK0Bxq9RtnRKkN+rP0oiGI/SPxwPhA3uhboIGMPHmOM7ftvF1Gt
-        8RkyFsxOkwad4xVCdj7EGFgtuwlw52pHXBHMRlBoRai61KqVcgKQ1jIXXMrR+Lj2k/3YE5cyL+IF
-        qevg/tcrr358j9yf29skvlo+TfyO0i+mD1S2Spz7meDneXZhxhgo3vTcCinvsz/TBZ0x4LZqG1TU
-        RYf9Cp5adJ3gCrKHFUhO6Igp/O8YL3RL7KvW19yu4PEA76QO3kf7x0lLFsvWcTnUN8wP5/uQujJW
-        F+6iXihrVbtNbpG7/jenbXsnt94H2ncXCsbqxlBOeoeqk71aHEVhfG4jGH4eQNLE5WQepN4QE9yL
-        I2zyslYVWmPr/i1AafIoSaOY45wn4B28NwAAAP//AwDk57NQFAMAAA==
+        H4sIAAAAAAAAA2xSy2rjMBTd+yvEXdeD7SRO6l3TFwNT6GSg0DbFKMq141aWXOmaNhPy74MUN3bD
+        aGHEPToPH2kXMAbVGjIGYsNJ1I0ML9K3ebu4Womfsn2IF+nFn/vq/vr34+Pl+HIGZ46hV68o6Iv1
+        Q+i6kUiVVgdYGOSETjWeJmk8jWbnkQdqvUbpaGVD4ViHSZSMw2gSxqOOuNGVQAsZew4YY2znvy6i
+        WuMnZMzL+EmN1vISITseYgyMlm4C3NrKElcEZz0otCJULrVqpRwApLXMBZeyNz6s3WDf98SlzOOP
+        6cJc3T79Sjgm88Xo6S55+FvTduB3kN42PlDRKnHsZ4Af59mJGWOgeO25JVLus3/SCZ0x4KZsa1Tk
+        osNuCe8tWie4hOx5CZITWmIKPyzjK90Su9F6zs0SXvbwTWof/G//MmjJYNFaLrv6uvn+eB9Sl43R
+        K3tSLxSVquwmN8it/81h28GXm/eB9tuFQmN03VBO+g2Vk51ND6LQP7cejM87kDRxOZhHadDFBLu1
+        hHVeVKpE05jKvwUomjyZpMmY44hPINgH/wAAAP//AwCRIq0nFAMAAA==
     headers:
       CF-Cache-Status:
       - DYNAMIC
       CF-RAY:
-      - 8c2262ef2ca60cb1-EWR
+      - 8c22739f0a7443ec-EWR
       Connection:
       - keep-alive
       Content-Encoding:
@@ -63,14 +63,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Thu, 12 Sep 2024 19:43:27 GMT
+      - Thu, 12 Sep 2024 19:54:50 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=Tz_qn4bMHzZFOVKvVDbp7pA5VM4B7BBRm8wa7utNqPQ-1726170207-1.0.1.1-RNP7_oHO0FBTWSavAMHruTlPMr6yVCDfUPmSPLGFvV50qtMENgl1p1Qji31akivRTmXnsQpoYfbQGgjCQ11oWA;
-        path=/; expires=Thu, 12-Sep-24 20:13:27 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=cG4kr1ppK1g8sj5yIhmN1BJ_aJlDy5k88mnQ.mim9pY-1726170890-1.0.1.1-cme6TvzpA0dQ4FUyLDuhSJutk1i71DUkswti2vKI9mjTP_tKFW56045UgJv7FRBi7zLKUCv9Czq_IFW1TBZ48A;
+        path=/; expires=Thu, 12-Sep-24 20:24:50 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=qeXoTr657dgxNQwDR9bArBa0WbGWlzqohXaSFo4oOJ4-1726170207171-0.0.1.1-604800000;
+      - _cfuvid=7gpwk9UNPB1b1ikhcH9ycmE8s2xESd0JZq2bhDozIkM-1726170890581-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Transfer-Encoding:
       - chunked
@@ -83,7 +83,7 @@ interactions:
       openai-organization:
       - langchain
       openai-processing-ms:
-      - '458'
+      - '281'
       openai-version:
       - '2020-10-01'
       strict-transport-security:
@@ -101,18 +101,18 @@ interactions:
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_4af23b8ea4d360003d484c754ada1839
+      - req_847cdd27b2bd487528247dca34f11e88
     status:
       code: 200
       message: OK
 - request:
     body: '{"messages": [{"content": "what''s the latest news about FooBar", "role":
       "user"}, {"content": null, "role": "assistant", "tool_calls": [{"type": "function",
-      "id": "call_b47tnB0YRzagOL2sUGG548Jq", "function": {"name": "get_context", "arguments":
+      "id": "call_1w7RrDGZL2ae2BR3ZM2Vzmty", "function": {"name": "get_context", "arguments":
       "{\"question\": [\"latest news about FooBar\"]}"}}]}, {"content": "FooBar company
       just raised 1 Billion dollars!\n\nFooBar company is now only hiring AI''s\n\nFooBar
       company was founded in 2019\n\nFooBar company makes friendly robots", "role":
-      "tool", "tool_call_id": "call_b47tnB0YRzagOL2sUGG548Jq"}], "model": "gpt-4o",
+      "tool", "tool_call_id": "call_1w7RrDGZL2ae2BR3ZM2Vzmty"}], "model": "gpt-4o",
       "n": 1, "stream": false, "temperature": 0.0, "tools": [{"type": "function",
       "function": {"name": "get_context", "description": "Get context on the question.",
       "parameters": {"type": "object", "properties": {"question": {"description":
@@ -133,8 +133,8 @@ interactions:
       content-type:
       - application/json
       cookie:
-      - __cf_bm=Tz_qn4bMHzZFOVKvVDbp7pA5VM4B7BBRm8wa7utNqPQ-1726170207-1.0.1.1-RNP7_oHO0FBTWSavAMHruTlPMr6yVCDfUPmSPLGFvV50qtMENgl1p1Qji31akivRTmXnsQpoYfbQGgjCQ11oWA;
-        _cfuvid=qeXoTr657dgxNQwDR9bArBa0WbGWlzqohXaSFo4oOJ4-1726170207171-0.0.1.1-604800000
+      - __cf_bm=cG4kr1ppK1g8sj5yIhmN1BJ_aJlDy5k88mnQ.mim9pY-1726170890-1.0.1.1-cme6TvzpA0dQ4FUyLDuhSJutk1i71DUkswti2vKI9mjTP_tKFW56045UgJv7FRBi7zLKUCv9Czq_IFW1TBZ48A;
+        _cfuvid=7gpwk9UNPB1b1ikhcH9ycmE8s2xESd0JZq2bhDozIkM-1726170890581-0.0.1.1-604800000
       host:
       - api.openai.com
       user-agent:
@@ -158,19 +158,19 @@ interactions:
   response:
     body:
       string: !!binary |
-        H4sIAAAAAAAAAwAAAP//bFJNa9tAEL3rV0z3UjB2kBR/YF9KEigp/SAkhxLiYtbSWF57NSN2RqRu
-        8H8va8t2Cr0szHvzhjdv9i0BMK40MzDF2mpRN35wM96mevdY3n992uDdw9MP++e5eijEfSvtd9OP
-        Cl5usNCT6qrguvGojulIFwGtYpyaTfJxNknzdHIgai7RR1nV6GDIgzzNh4N0NMiuO+GaXYFiZvCS
-        AAC8Hd5okUr8bWaQ9k9IjSK2QjM7NwGYwD4ixoo4UUtq+heyYFKkg+t7DAg2IOgawVtFUSB8FWib
-        MlZgl9wqfGa+tWE2pzllV9DrHWuI61rawaYVhWCdYAkZ3DrvHROU7L0N8qHXm1P+H5UTIH4FJr+D
-        tQuOKrj58lFi+5x+cutL2HEL3m0Rag4IJap1XoAJop5X0bXgyeun9zsGXLViY8TUet/h+3Nonqsm
-        8FI6/oyvHDlZLwJaYYoBiXJjDuw+Afh1OE77T96mCVw3ulDeIsWB2ag7jrl8hws7nHakslr/TjWd
-        Jp1DIztRrBcrRxWGJrjjrVbNIh+N86HFazsyyT75CwAA//8DADG+trG0AgAA
+        H4sIAAAAAAAAAwAAAP//ZFLLbtswELzrK7a89BIbluJHokthtyjcQw8FUrRAHRi0tJJoU1yWu0Ji
+        BP73gLJqJ+iFAGc4g9lZviQAypQqB1U0WorW29Fyflh1X+7Wxe+Hz5lZ/gjr7/55nj38/Vnt9uom
+        Kmi3x0L+qcYFtd6iGHJnugioBaNrusjm6WJydz/piZZKtFFWexlNaZRNsuloMhult4OwIVMgqxz+
+        JAAAL/0ZI7oSn1UOvU2PtMisa1T55RGACmQjojSzYdFO1M2VLMgJuj71GgOCDghMLQJVIA2C1YIs
+        4PCJQe+oE/hKtNIh37iNS8fDDeKw2h1h37FA0IaxhBRWxlpDDkqyVgf+sHHZfwrD4OgJyNkjNCYY
+        V8Py20ceR/9f1NkSjtSBNQeElgJCiaKNZSAHUX6OyQidL2PUT2+HC1h1rGO3rrN2wE+XtizVPtCO
+        B/6CV8YZbrYBNZOLzbCQVz17SgAe+61074pWPlDrZSt0QBcN09mwFXX9B1d2uhhIIdH2jep+kQwJ
+        FR9ZsN1WxtUYfDDnJVV+m83m2VTjrZ6p5JS8AgAA//8DAE2xyH6tAgAA
     headers:
       CF-Cache-Status:
       - DYNAMIC
       CF-RAY:
-      - 8c2262f32f950cb1-EWR
+      - 8c2273a2be4143ec-EWR
       Connection:
       - keep-alive
       Content-Encoding:
@@ -178,7 +178,7 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Thu, 12 Sep 2024 19:43:27 GMT
+      - Thu, 12 Sep 2024 19:54:51 GMT
       Server:
       - cloudflare
       Transfer-Encoding:
@@ -192,7 +192,7 @@ interactions:
       openai-organization:
       - langchain
       openai-processing-ms:
-      - '597'
+      - '928'
       openai-version:
       - '2020-10-01'
       strict-transport-security:
@@ -210,7 +210,7 @@ interactions:
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_5d6f1d017b2ce8d0392b2a215844ba3b
+      - req_9aca0910ecb4b7b2d4e8cbe6b16c44ba
     status:
       code: 200
       message: OK
