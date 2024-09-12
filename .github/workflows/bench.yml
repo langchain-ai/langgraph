@@ -16,8 +16,8 @@ jobs:
         working-directory: libs/langgraph
     steps:
       - uses: actions/checkout@v4
-        # with:
-        #   ref: main
+        with:
+          ref: main
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:

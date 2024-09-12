@@ -24,36 +24,36 @@ benchmarks = (
         },
         None,
     ),
-    # (
-    #     "fanout_to_subgraph_10x_checkpoint",
-    #     fanout_to_subgraph().compile(checkpointer=MemorySaver()),
-    #     {
-    #         "subjects": [
-    #             random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(10)
-    #         ]
-    #     },
-    #     {"configurable": {"thread_id": "1"}},
-    # ),
-    # (
-    #     "fanout_to_subgraph_100x",
-    #     fanout_to_subgraph().compile(checkpointer=None),
-    #     {
-    #         "subjects": [
-    #             random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
-    #         ]
-    #     },
-    #     None,
-    # ),
-    # (
-    #     "fanout_to_subgraph_100x_checkpoint",
-    #     fanout_to_subgraph().compile(checkpointer=MemorySaver()),
-    #     {
-    #         "subjects": [
-    #             random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
-    #         ]
-    #     },
-    #     {"configurable": {"thread_id": "1"}},
-    # ),
+    (
+        "fanout_to_subgraph_10x_checkpoint",
+        fanout_to_subgraph().compile(checkpointer=MemorySaver()),
+        {
+            "subjects": [
+                random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(10)
+            ]
+        },
+        {"configurable": {"thread_id": "1"}},
+    ),
+    (
+        "fanout_to_subgraph_100x",
+        fanout_to_subgraph().compile(checkpointer=None),
+        {
+            "subjects": [
+                random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
+            ]
+        },
+        None,
+    ),
+    (
+        "fanout_to_subgraph_100x_checkpoint",
+        fanout_to_subgraph().compile(checkpointer=MemorySaver()),
+        {
+            "subjects": [
+                random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
+            ]
+        },
+        {"configurable": {"thread_id": "1"}},
+    ),
 )
 
 
