@@ -21,3 +21,9 @@ clean-docs:
 
 codespell:
 	./docs/codespell_notebooks.sh .
+
+start-services:
+	docker compose -f docs/test-compose.yml up -V --force-recreate --wait --remove-orphans
+
+stop-services:
+	docker compose -f docs/test-compose.yml down
