@@ -430,6 +430,7 @@ class AssistantsClient:
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
+            assistant_name: The name of the assistant. Defaults to 'Untitled' under the hood.
 
         Returns:
             Assistant: The created assistant.
@@ -441,7 +442,8 @@ class AssistantsClient:
                 config={"configurable": {"model_name": "openai"}},
                 metadata={"number":1},
                 assistant_id="my-assistant-id",
-                if_exists="do_nothing"
+                if_exists="do_nothing",
+                assistant_name="my_assistant_name"
             )
         """  # noqa: E501
         payload: Dict[str, Any] = {
