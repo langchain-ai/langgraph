@@ -36,6 +36,7 @@ redis = "^5.0.8"
 pymongo = "^4.8.0"
 motor = "^3.5.1"
 langchain-community = "^0.2.16"
+grandalf = "^0.8"
 
 [tool.poetry.group.test]
 optional = true
