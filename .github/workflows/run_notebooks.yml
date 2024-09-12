@@ -29,6 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           poetry install --with docs
+          poetry run pip install jupyter
           if [[ "${{ matrix.core-version }}" != "latest" && "${{ matrix.core-version }}" != "development" ]]; then
             poetry run pip install "langchain-core${{ matrix.core-version }}"
           fi
