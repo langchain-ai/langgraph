@@ -71,4 +71,7 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Annotation
-        run: echo "::notice file=libs/langgraph/bench/__main__.py::${{ steps.compare.outputs.OUTPUT }}"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.notice(`${{ steps.compare.outputs.OUTPUT }}`)
