@@ -1,4 +1,4 @@
-from hashlib import sha1
+import random
 from typing import Any, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
@@ -8,7 +8,6 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     Checkpoint,
-    EmptyChannelError,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -244,11 +243,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        try:
-            next_h = sha1(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"
 
     def _search_where(
         self,

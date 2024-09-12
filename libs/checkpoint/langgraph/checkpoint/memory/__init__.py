@@ -1,8 +1,8 @@
 import asyncio
+import random
 from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
-from hashlib import sha1
 from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
@@ -15,7 +15,6 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    EmptyChannelError,
     SerializerProtocol,
     get_checkpoint_id,
 )
@@ -468,8 +467,5 @@ class MemorySaver(
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        try:
-            next_h = sha1(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"

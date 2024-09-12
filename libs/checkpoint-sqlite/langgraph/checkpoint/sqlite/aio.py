@@ -1,6 +1,6 @@
 import asyncio
+import random
 from contextlib import asynccontextmanager
-from hashlib import sha1
 from typing import (
     Any,
     AsyncIterator,
@@ -23,7 +23,6 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    EmptyChannelError,
     SerializerProtocol,
     get_checkpoint_id,
 )
@@ -519,8 +518,5 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        try:
-            next_h = sha1(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"
