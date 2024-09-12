@@ -1,0 +1,53 @@
+name: Run notebooks
+
+on:
+  workflow_call:
+  schedule:
+    - cron:  '0 13 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lib-version:
+          - "development"
+          - "latest"
+
+    name: "test (langgraph: ${{ matrix.lib-version }})"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python + Poetry
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: 3.11
+          poetry-version: 1.7.1
+          cache-key: test-langgraph-notebooks
+
+      - name: Install dependencies
+        run: |
+          poetry install --with test
+          poetry run pip install jupyter
+
+      - name: Start services
+        run: make start-services
+
+      - name: Prepare notebooks
+        if: ${{ matrix.lib-version == 'development' }}
+        run: poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+
+      - name: Run notebooks
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          for file in $(find docs/docs/how-tos -name "*.ipynb")
+          do
+            echo "Executing $file"
+            PIP_PRE=1 poetry run jupyter execute "$file"
+          done
+
+      - name: Stop services
+        run: make stop-services
