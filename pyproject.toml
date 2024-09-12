@@ -36,6 +36,9 @@ redis = "^5.0.8"
 pymongo = "^4.8.0"
 motor = "^3.5.1"
 
+[tool.poetry.group.test]
+optional = true
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
