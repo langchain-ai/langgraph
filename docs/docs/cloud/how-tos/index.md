@@ -82,3 +82,4 @@ Other guides that may prove helpful!
 - [How to copy threads](./copy_threads.md)
 - [How to check status of your threads](./check_thread_status.md)
 - [How to share state between threads](./shared_state.md)
+- [How to add authentication to your LangGraph apps](./auth.md)
