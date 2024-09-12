@@ -114,6 +114,8 @@ def test_serde_jsonplus() -> None:
         "an_int": 1,
         "a_float": 1.1,
         "runnable_map": RunnableMap({}),
+        "a_bytes": b"my bytes",
+        "a_bytearray": bytearray([42]),
     }
 
     serde = JsonPlusSerializer()
@@ -128,7 +130,20 @@ def test_serde_jsonplus() -> None:
     assert serde.loads_typed(dumped) == {
         **to_serialize,
         "text": [v.encode("utf-8", "ignore").decode() for v in to_serialize["text"]],
+        "uid": str(uid),
     }
+
+    for key, value in to_serialize.items():
+        if key == "uid":
+            assert serde.loads_typed(serde.dumps_typed(value)) == str(value)
+        elif key == "my_enum":
+            assert serde.loads_typed(serde.dumps_typed(value)) == value.value
+        elif key == "text":
+            assert serde.loads_typed(serde.dumps_typed(value)) == [
+                v.encode("utf-8", "ignore").decode() for v in value
+            ]
+        else:
+            assert serde.loads_typed(serde.dumps_typed(value)) == value
 
 
 def test_serde_jsonplus_bytes() -> None:
