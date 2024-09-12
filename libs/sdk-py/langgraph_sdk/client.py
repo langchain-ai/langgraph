@@ -458,7 +458,7 @@ class AssistantsClient:
         if if_exists:
             payload["if_exists"] = if_exists
         if assistant_name:
-            payload['assistant_name'] = assistant_name
+            payload["assistant_name"] = assistant_name
         return await self.http.post("/assistants", json=payload)
 
     async def update(
@@ -586,10 +586,10 @@ class AssistantsClient:
         """  # noqa: E501
 
         return await self.http.get(f"/assistants/{assistant_id}/versions")
-    
+
     async def change_version(self, assistant_id: str, version: int) -> Assistant:
         """Change the version of an assistant.
-        
+
         Args:
             assistant_id: The assistant ID to delete.
             version: The version to change to.
@@ -603,18 +603,14 @@ class AssistantsClient:
                 assistant_id="my_assistant_id",
                 version=3
             )
-        
-        """ # noqa: E501
 
-        payload: Dict[str, Any] = {
-            "version": version
-        }
+        """  # noqa: E501
+
+        payload: Dict[str, Any] = {"version": version}
 
         return await self.http.post(
-            f"/assistants/{assistant_id}/change_version",
-            json=payload
+            f"/assistants/{assistant_id}/change_version", json=payload
         )
-        
 
 
 class ThreadsClient:
