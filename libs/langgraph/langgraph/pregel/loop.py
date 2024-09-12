@@ -659,7 +659,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -777,7 +777,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
