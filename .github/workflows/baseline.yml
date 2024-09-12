@@ -1,0 +1,35 @@
+name: baseline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "libs/**"
+
+env:
+  POETRY_VERSION: "1.7.1"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/langgraph
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.11"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: bench
+      - name: Install dependencies
+        run: poetry install --with dev
+      - name: Run benchmarks
+        run: OUTPUT=out/benchmark-baseline.json make -s benchmark
+      - name: Save outputs
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ runner.os }}-benchmark-baseline
+          path: |
+            libs/langgraph/out/benchmark-baseline.json
