@@ -50,6 +50,7 @@ from langgraph.constants import (
     INTERRUPT,
     SCHEDULED,
     TAG_HIDDEN,
+    TASKS,
 )
 from langgraph.errors import (
     CheckpointNotLatest,
@@ -220,6 +221,19 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        # adjust task_writes_left
+        first_channel = writes[0][0]
+        any_channel_is_send = any(k == TASKS for k, _ in writes)
+        always_save = any_channel_is_send or first_channel in (ERROR, INTERRUPT)
+        if not always_save and not self.task_writes_left:
+            return self._output_writes(task_id, writes)
+        elif first_channel == INTERRUPT:
+            # INTERRUPT makes us want to save the last task's writes
+            # so we don't decrement task_writes_left
+            pass
+        else:
+            self.task_writes_left -= 1
+        # save writes
         self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
         if self.checkpointer_put_writes is not None:
             self.submit(
@@ -237,6 +251,7 @@ class PregelLoop:
                 writes,
                 task_id,
             )
+        # output writes
         self._output_writes(task_id, writes)
 
     def tick(
@@ -321,6 +336,9 @@ class PregelLoop:
             manager=manager,
             checkpointer=self.checkpointer,
         )
+        # we don't need to save the writes for the last task that completes
+        # unless in special conditions handled by self.put_writes()
+        self.task_writes_left = len(self.tasks) - 1
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
