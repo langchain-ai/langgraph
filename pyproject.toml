@@ -37,6 +37,7 @@ pymongo = "^4.8.0"
 motor = "^3.5.1"
 langchain-community = "^0.2.16"
 grandalf = "^0.8"
+pyppeteer = "^2.0.0"
 
 [tool.poetry.group.test]
 optional = true
