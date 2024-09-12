@@ -16,8 +16,8 @@ jobs:
         working-directory: libs/langgraph
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
+        # with:
+        #   ref: main
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
@@ -56,6 +56,9 @@ jobs:
         with:
           path: libs/langgraph/out
           merge-multiple: true
+      - run: ls -R out
+      - run: poetry run pyperf compare_to out/benchmark.json out/benchmark.json --table --group-by-speed
+      - run: poetry run pyperf compare_to out/benchmark.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
       - name: Compare benchmarks
         run: poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
       - name: Annotation
