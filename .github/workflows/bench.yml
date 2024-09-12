@@ -9,30 +9,6 @@ env:
   POETRY_VERSION: "1.7.1"
 
 jobs:
-  baseline:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: libs/langgraph
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
-        with:
-          python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: bench
-      - name: Install dependencies
-        run: poetry install --with dev
-      - name: Run benchmarks
-        run: OUTPUT=out/benchmark-baseline.json make -s benchmark
-      - name: Upload benchmark baseline
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-baseline
-          path: libs/langgraph/out/benchmark-baseline.json
   benchmark:
     runs-on: ubuntu-latest
     defaults:
@@ -54,6 +30,13 @@ jobs:
           cache-key: bench
       - name: Install dependencies
         run: poetry install --with dev
+      - name: Download baseline
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ runner.os }}-benchmark-baseline
+          fail-on-cache-miss: true
+          path: |
+            libs/langgraph/out/benchmark-baseline.json
       - name: Run benchmarks
         id: benchmark
         run: |
@@ -62,17 +45,14 @@ jobs:
             make -s benchmark
             echo EOF
           } >> "$GITHUB_OUTPUT"
-      - name: Download benchmark baseline
-        uses: actions/download-artifact@v4
-        with:
-          path: libs/langgraph/out
-          merge-multiple: true
       - name: Compare benchmarks
         id: compare
         run: |
           {
             echo 'OUTPUT<<EOF'
-            poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed
+            mv out/benchmark-baseline.json out/main.json
+            mv out/benchmark.json out/changes.json
+            poetry run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Annotation
