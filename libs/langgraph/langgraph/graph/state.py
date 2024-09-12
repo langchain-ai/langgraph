@@ -23,6 +23,7 @@ from langchain_core.runnables.utils import create_model
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 
+from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
@@ -139,6 +140,12 @@ class StateGraph(Graph):
             if input is None or output is None:
                 raise ValueError("Must provide state_schema or input and output")
             state_schema = input
+            warnings.warn(
+                "Initializing StateGraph without state_schema is deprecated. "
+                "Please pass in an explicit state_schema instead of just an input and output schema.",
+                LangGraphDeprecationWarning,
+                stacklevel=2,
+            )
         else:
             if input is None:
                 input = state_schema
