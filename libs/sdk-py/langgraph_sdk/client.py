@@ -606,7 +606,14 @@ class AssistantsClient:
         
         """ # noqa: E501
 
-        return await self.http.post(f"/assistants/{assistant_id}/change_version/{version}")
+        payload: Dict[str, Any] = {
+            "version": version
+        }
+
+        return await self.http.post(
+            f"/assistants/{assistant_id}/change_version",
+            json=payload
+        )
         
 
 
