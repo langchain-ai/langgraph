@@ -39,6 +39,9 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_DEDUPE_TASKS,
+    CONFIG_KEY_DELEGATE,
+    CONFIG_KEY_ENSURE_LATEST,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -48,7 +51,12 @@ from langgraph.constants import (
     SCHEDULED,
     TAG_HIDDEN,
 )
-from langgraph.errors import EmptyInputError, GraphInterrupt
+from langgraph.errors import (
+    CheckpointNotLatest,
+    EmptyInputError,
+    GraphDelegate,
+    GraphInterrupt,
+)
 from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
@@ -179,7 +187,10 @@ class PregelLoop:
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get("configurable", {})
-        self.skip_done_tasks = "checkpoint_id" not in config["configurable"]
+        self.skip_done_tasks = (
+            "checkpoint_id" not in config["configurable"]
+            or CONFIG_KEY_DEDUPE_TASKS in config["configurable"]
+        )
         self.debug = debug
         if CONFIG_KEY_STREAM in config["configurable"]:
             self.stream = DuplexStream(
@@ -187,7 +198,7 @@ class PregelLoop:
             )
         if not self.is_nested and config["configurable"].get("checkpoint_ns"):
             self.config = patch_configurable(
-                config, {"checkpoint_ns": "", "checkpoint_id": None}
+                self.config, {"checkpoint_ns": "", "checkpoint_id": None}
             )
         if (
             CONFIG_KEY_CHECKPOINT_MAP in self.config["configurable"]
@@ -238,7 +249,6 @@ class PregelLoop:
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
         Returns True if more iterations are needed."""
-
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
@@ -310,7 +320,6 @@ class PregelLoop:
             for_execution=True,
             manager=manager,
             checkpointer=self.checkpointer,
-            is_resuming=self.input is INPUT_RESUMING,
         )
 
         # produce debug output
@@ -334,6 +343,18 @@ class PregelLoop:
             self.status = "done"
             return False
 
+        # check if we should delegate (used by subgraphs in distributed mode)
+        if self.config["configurable"].get(CONFIG_KEY_DELEGATE):
+            assert self.input is INPUT_RESUMING
+            raise GraphDelegate(
+                {
+                    "config": patch_configurable(
+                        self.config, {CONFIG_KEY_DELEGATE: False}
+                    ),
+                    "input": None,
+                }
+            )
+
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
@@ -341,7 +362,13 @@ class PregelLoop:
                     continue
                 if task := self.tasks.get(tid):
                     if k == SCHEDULED:
-                        self.tasks[tid] = task._replace(scheduled=True)
+                        if v == max(
+                            self.checkpoint["versions_seen"]
+                            .get(INTERRUPT, {})
+                            .values(),
+                            default=None,
+                        ):
+                            self.tasks[tid] = task._replace(scheduled=True)
                     else:
                         task.writes.append((k, v))
             # print output for any tasks we applied previous writes to
@@ -384,9 +411,9 @@ class PregelLoop:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
+        configurable = self.config.get("configurable", {})
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
-            self.config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
-            or self.input is None
+            configurable.get(CONFIG_KEY_RESUMING, self.input is None)
         )
 
         # proceed past previous checkpoint
@@ -403,6 +430,16 @@ class PregelLoop:
             )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # check if we should delegate (used by subgraphs in distributed mode)
+            if self.config["configurable"].get(CONFIG_KEY_DELEGATE):
+                raise GraphDelegate(
+                    {
+                        "config": patch_configurable(
+                            self.config, {CONFIG_KEY_DELEGATE: False}
+                        ),
+                        "input": self.input,
+                    }
+                )
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
@@ -423,10 +460,15 @@ class PregelLoop:
             ), "Can't write to SharedValues in graph input"
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
-        else:
+        elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # done with input
         self.input = INPUT_RESUMING if is_resuming else INPUT_DONE
+        # update config
+        if not self.is_nested:
+            self.config = patch_configurable(
+                self.config, {CONFIG_KEY_RESUMING: is_resuming}
+            )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step
@@ -512,7 +554,9 @@ class PregelLoop:
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
         if task := self.tasks.get(task_id):
-            if task.config is not None and TAG_HIDDEN in task.config.get("tags"):
+            if task.config is not None and TAG_HIDDEN in task.config.get(
+                "tags", EMPTY_SEQ
+            ):
                 return
             if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
                 self._emit(
@@ -586,20 +630,36 @@ class SyncPregelLoop(PregelLoop, ContextManager):
     # context manager
 
     def __enter__(self) -> Self:
-        saved = (
-            self.checkpointer.get_tuple(self.checkpoint_config)
-            if self.checkpointer
-            else None
-        ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
+        if self.config.get("configurable", {}).get(
+            CONFIG_KEY_ENSURE_LATEST
+        ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            saved = self.checkpointer.get_tuple(
+                patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
+            )
+            if (
+                saved is None
+                or saved.checkpoint["id"]
+                != self.checkpoint_config["configurable"]["checkpoint_id"]
+            ):
+                raise CheckpointNotLatest
+        elif self.checkpointer:
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+        else:
+            saved = None
+        if saved is None:
+            saved = CheckpointTuple(
+                self.config, empty_checkpoint(), {"step": -2}, None, []
+            )
         self.checkpoint_config = {
             **self.config,
             **saved.config,
             "configurable": {
+                "checkpoint_ns": "",
                 **self.config.get("configurable", {}),
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -688,20 +748,36 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
-        saved = (
-            await self.checkpointer.aget_tuple(self.checkpoint_config)
-            if self.checkpointer
-            else None
-        ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
+        if self.config.get("configurable", {}).get(
+            CONFIG_KEY_ENSURE_LATEST
+        ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            saved = await self.checkpointer.aget_tuple(
+                patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
+            )
+            if (
+                saved is None
+                or saved.checkpoint["id"]
+                != self.checkpoint_config["configurable"]["checkpoint_id"]
+            ):
+                raise CheckpointNotLatest
+        elif self.checkpointer:
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+        else:
+            saved = None
+        if saved is None:
+            saved = CheckpointTuple(
+                self.config, empty_checkpoint(), {"step": -2}, None, []
+            )
         self.checkpoint_config = {
             **self.config,
             **saved.config,
             "configurable": {
+                "checkpoint_ns": "",
                 **self.config.get("configurable", {}),
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -732,3 +808,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         return await asyncio.shield(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
+
+
+EMPTY_SEQ = tuple()

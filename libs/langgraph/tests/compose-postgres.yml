@@ -1,3 +1,4 @@
+name: langgraph-tests
 services:
   postgres-test:
     image: postgres:16

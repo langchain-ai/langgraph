@@ -37,7 +37,7 @@ export interface AsyncCallerParams {
    *
    * By default we expect the `fetch` is available in the global scope.
    */
-  fetch?: typeof fetch;
+  fetch?: typeof fetch | ((...args: any[]) => any);
 }
 
 export interface AsyncCallerCallOptions {

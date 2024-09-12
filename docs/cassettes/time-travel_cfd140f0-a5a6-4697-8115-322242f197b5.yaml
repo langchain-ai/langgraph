@@ -1,0 +1,212 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "Can you play Taylor Swift''s most popular song?",
+      "role": "user"}], "model": "gpt-4o-mini", "n": 1, "parallel_tool_calls": false,
+      "stream": false, "temperature": 0.7, "tools": [{"type": "function", "function":
+      {"name": "play_song_on_apple", "description": "Play a song on Apple Music",
+      "parameters": {"type": "object", "properties": {"song": {"type": "string"}},
+      "required": ["song"]}}}, {"type": "function", "function": {"name": "play_song_on_spotify",
+      "description": "Play a song on Spotify", "parameters": {"type": "object", "properties":
+      {"song": {"type": "string"}}, "required": ["song"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '623'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//bFLBjtowEL3nK6w5kwoCBZIbUkW3vbTbbdV2SxWZZBK82B7Ldgop4t+r
+        hECyqD5Y1nt+b8ZvfAoYA5FDwiDbcZ8pI8PV/OX4Zb6o/swO35/f4zezerfeP4qPhw/5578wahS0
+        fcHMX1VvMlJGohekL3RmkXtsXCeLaD6Zx3E8bQlFOcpGVhofzihUQoswGkezcLwIJ8tOvSORoYOE
+        /QoYY+zU7k2fOscjJGw8uiIKneMlQnK7xBhYkg0C3DnhPNceRj2Zkfaom9Z1JeWA8EQyzbiUfeHL
+        Og3OfVhcyrR+xOkxfsjVp59ivR/b5x/5k+RrN6h3sa5N21BR6ewW0oC/4cldMcZAc9VqjeR16kiX
+        KemUGyPxzoUx4LasFGrfvABOG2iubyDZwEp7ET6gJbat2VdeS7Ls6SAKv4EzvHI5B/87/x7kZLGo
+        HJddgB1+vk1EUmksbd1dwFAILdwutchd+9Bh3sG1WlsHqlcjBWNJGZ962qNubJfd+KH/dT0ZRR3p
+        yXPZ45NxFHRtgqudR5UWQpdojRXtb4DCpLPlNJ/G+fLtAoJz8A8AAP//AwBjFNeAGwMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225db7fe098c47-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:39:53 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=Rzf2rVVfHEOpzNIPq.G1Iyh2oSLmg1dPV6s97vPME1A-1726169993-1.0.1.1-CPmfyyuaZUOGb3d6TVNci7v9PV0hRhDgXpmMYC2HNJrj.pBCu5_OsyvY0ehwXKStb1HZqW_pRMPRr_d7cztaeA;
+        path=/; expires=Thu, 12-Sep-24 20:09:53 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=xGs1PCdUFEr3IuPiNOm1lr7WnOqAxAiaAqdlKMTQB2A-1726169993506-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '353'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999970'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_b47da6c3066f43b2d43c760b6419dae9
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Can you play Taylor Swift''s most popular song?",
+      "role": "user"}, {"content": null, "role": "assistant", "tool_calls": [{"type":
+      "function", "id": "call_yQe3x9HdmOYiFk0rZXdSlaFs", "function": {"name": "play_song_on_apple",
+      "arguments": "{\"song\": \"Anti-Hero by Taylor Swift\"}"}}]}, {"content": "Successfully
+      played Anti-Hero by Taylor Swift on Apple Music!", "role": "tool", "tool_call_id":
+      "call_yQe3x9HdmOYiFk0rZXdSlaFs"}], "model": "gpt-4o-mini", "n": 1, "parallel_tool_calls":
+      false, "stream": false, "temperature": 0.7, "tools": [{"type": "function", "function":
+      {"name": "play_song_on_apple", "description": "Play a song on Apple Music",
+      "parameters": {"type": "object", "properties": {"song": {"type": "string"}},
+      "required": ["song"]}}}, {"type": "function", "function": {"name": "play_song_on_spotify",
+      "description": "Play a song on Spotify", "parameters": {"type": "object", "properties":
+      {"song": {"type": "string"}}, "required": ["song"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '985'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=Rzf2rVVfHEOpzNIPq.G1Iyh2oSLmg1dPV6s97vPME1A-1726169993-1.0.1.1-CPmfyyuaZUOGb3d6TVNci7v9PV0hRhDgXpmMYC2HNJrj.pBCu5_OsyvY0ehwXKStb1HZqW_pRMPRr_d7cztaeA;
+        _cfuvid=xGs1PCdUFEr3IuPiNOm1lr7WnOqAxAiaAqdlKMTQB2A-1726169993506-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA1SRzW7bMBCE73qKzV56sQJb/vfNAVy0aIIATQsUaQqDplY2bYrLcKkmQuB3LyQr
+        dnrhYT7Ocnb4lgCgyXEBqHcq6tLbdDnZv34Ph5/f9vXNmA7V55vV8P7x9vn59mH1C3uNgzd70vHd
+        da259JaiYXfCOpCK1EwdTLPJYDKfz4ctKDkn29i2PqYjTkvjTJr1s1Han6aDWefesdEkuIDfCQDA
+        W3s2OV1Or7iAfu9dKUlEbQkX50sAGNg2CioRI1G5iL0L1OwiuTb6109/CaTSmkSKytoavFU15fCE
+        SxdN+oUCPyFsavihassBHl5MEYEdLL23BHeVGH0FK7fnGuKOoGyFj68FKipRzcausrbTj+f4lrc+
+        8EY6ftYL44zs1oGUsGuiSmSPLT0mAH/amqr/NkcfuPRxHflArhk4yManeXj5nQvNug4xclT2g2s0
+        TrqEKLVEKteFcVsKPphTa4Vfj2bDfDjPZ+MpJsfkHwAAAP//AwCjD2L7QwIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225dbbb9ea8c47-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:39:54 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '239'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999954'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_2592b0584deab3b1e42a43aaa97d6485
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -559,7 +559,9 @@ class CompiledStateGraph(CompiledGraph):
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
-                    None if is_single_input else partial(_coerce_state, input_schema)
+                    None
+                    if is_single_input or issubclass(input_schema, dict)
+                    else partial(_coerce_state, input_schema)
                 ),
                 writers=[
                     # publish to this channel and state keys
@@ -669,7 +671,11 @@ def _get_state_reader(
         select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=(None if state_keys == ["__root__"] else partial(_coerce_state, schema)),
+        mapper=(
+            None
+            if state_keys == ["__root__"] or issubclass(schema, dict)
+            else partial(_coerce_state, schema)
+        ),
     )
 
 

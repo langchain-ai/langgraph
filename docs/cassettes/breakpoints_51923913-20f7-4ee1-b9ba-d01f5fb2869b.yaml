@@ -1,0 +1,98 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "search for
+      the weather in sf now"}, {"role": "assistant", "content": [{"text": "Certainly!
+      I''ll search for the current weather in San Francisco for you. Let me use the
+      search function to find this information.", "type": "text"}, {"type": "tool_use",
+      "name": "search", "input": {"query": "current weather in San Francisco"}, "id":
+      "toolu_01PFmZuxV6jVycnZRgGf3wMU"}]}, {"role": "user", "content": [{"type": "tool_result",
+      "content": "[\"It''s sunny in San Francisco, but you better look out if you''re
+      a Gemini \ud83d\ude08.\"]", "tool_use_id": "toolu_01PFmZuxV6jVycnZRgGf3wMU",
+      "is_error": false}]}], "model": "claude-3-5-sonnet-20240620", "tools": [{"name":
+      "search", "description": "Call to surf the web.", "input_schema": {"type": "object",
+      "properties": {"query": {"type": "string"}}, "required": ["query"]}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '874'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3xSTW8TMRD9K8NcctlUaWhp2QsSB6JW4lDKjaLIsSdZK96Z4Bln2Ub578gLSEUg
+        TpZm3rwv+YQxYIu97taLy098v7q/XD0u9fmYb8PDx4fhul9hgzYeqKJI1e0IG8yS6sCpRjXHhg32
+        Eihhiz65Emj+en49V2Emmy8Xy6vFm+UCG/TCRmzYfjn9JjX6Xs+np8X3TimAMFhHoOSy7yCTlmTa
+        wB14x3DIcoyBYJQCQ7RugvqSM7HBQM46yhB5K7l3FoVhKxkeHcOH7NhH9dI+8RN/7ugF+k8A5Ljr
+        DFgGiApamMcLuLOZgoMNuWJxWxIEN9bLST7a+KqyTqBBsnXAYpF3YJ2zv9NAZJ9KoACOoXDR4hJ4
+        6fsawm2kGKyojxzhWUJ0HjTuWBvYFJsYZ1r5IVOio2MDk0njX/FrT5m+FVKjcDGZ1ArOBI5H66pJ
+        SjoVOguQ4p4q3b6m/+nE/leV5EoDMm2T+En0HZ6/Nqgmh3Ump8LYInFYW8mMvxZaPbEnbLmk1GCZ
+        /lZ7wsiHYmuTPbFie3Vz26AUezl7e3M+/wAAAP//AwDowNOkugIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225d98b8c9c339-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:39:50 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      anthropic-ratelimit-requests-limit:
+      - '4000'
+      anthropic-ratelimit-requests-remaining:
+      - '3999'
+      anthropic-ratelimit-requests-reset:
+      - '2024-09-12T19:39:54Z'
+      anthropic-ratelimit-tokens-limit:
+      - '400000'
+      anthropic-ratelimit-tokens-remaining:
+      - '400000'
+      anthropic-ratelimit-tokens-reset:
+      - '2024-09-12T19:39:50Z'
+      request-id:
+      - req_01G5MwNEMNDAenXcu2PMrzLo
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 69dbdcece2255ac03363afc455c12f76
+    status:
+      code: 200
+      message: OK
+version: 1
