@@ -1,10 +1,9 @@
 name: Run notebooks
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_call:
+  schedule:
+    - cron:  '0 13 * * *'
 
 jobs:
   build:
