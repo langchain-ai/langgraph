@@ -1,0 +1,267 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "what''s the weather in nyc", "role": "user"},
+      {"content": null, "role": "assistant", "tool_calls": [{"type": "function", "id":
+      "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function": {"name": "get_weather", "arguments":
+      "{\"city\": \"nyc\"}"}}]}, {"content": "It might be cloudy in nyc", "role":
+      "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"}, {"content": "The weather
+      in NYC might be cloudy.", "role": "assistant"}, {"content": "what''s the weather
+      in nyc", "role": "user"}, {"content": null, "role": "assistant", "tool_calls":
+      [{"type": "function", "id": "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function": {"name":
+      "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content": "It might
+      be cloudy in nyc", "role": "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_ar5xBPEQEEfqjQyAunMfZCkk", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_ar5xBPEQEEfqjQyAunMfZCkk"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_kDbZSKOyVAzyXjItYKl3NjaA", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_kDbZSKOyVAzyXjItYKl3NjaA"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}], "model": "gpt-4o-mini", "n":
+      1, "stream": false, "temperature": 0.0, "tools": [{"type": "function", "function":
+      {"name": "get_weather", "description": "Use this to get weather information.",
+      "parameters": {"type": "object", "properties": {"city": {"enum": ["nyc", "sf"],
+      "type": "string"}}, "required": ["city"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2957'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - AsyncOpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//bFLZbtswEHzXVxD7bBWSfMjWW4G0OYq0SGMUPVwIDLWSmPAKSSFxDP97
+        IVm2FKN8IIgdzs5wlruAEOAFZARYTT2TRoQfF0/R9ytZ08+Jv/wmfr2tH69/fJ1J8yV5foNJy9AP
+        j8j8kfWBaWkEeq7VAWYWqce2a5wmiziN4nTVAVIXKFpaZXw406HkiodJlMzCKA3jZc+uNWfoICN/
+        AkII2XV761MV+AoZiSbHikTnaIWQnS4RAlaLtgLUOe48VR4mA8i08qha66oRYgR4rUXOqBCD8GHt
+        RuchLCpELu7mt8lrcnE3vVlfvFT60/3v9e3zTzXSO7Tems5Q2Sh2CmmEn+rZmRghoKjsuBX6/AWp
+        r9Ge0QkBaqtGovKtddhtgHG/3UC2AbVlG9jDu/v74H/nv6MoLJaNo6LPqK/vT6ELXRmrH9xZhlBy
+        xV2dW6Sue8s40uCo1ulA825qYKyWxudeP6Fq207TxaErDD9rQON5D3rtqRixVnHQ+wS3dR5lXnJV
+        oTWWdxOH0uSz5bSYrorlPIVgH/wDAAD//wMADZxoof8CAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c226243cb119e05-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:59 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=ebo9u1FDZT_ZrXbIeg1nTRbKcf1T.AEFpUUB3IsiZSw-1726170179-1.0.1.1-EzcjLI8HhMy2Dearm53S3MFNxdLL2nfQFnN603Ea_7esdVkqPf.B0KQqeJyfoUsuofOzI8mYeJ.lw0vGY2GMLQ;
+        path=/; expires=Thu, 12-Sep-24 20:12:59 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=enlBVFWbdVJ6wQEtDr.8SUTSWF45AJ80QNlepEeJMRc-1726170179667-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '278'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999824'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_a437a536e45f23211dcb6e8745cd358a
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "what''s the weather in nyc", "role": "user"},
+      {"content": null, "role": "assistant", "tool_calls": [{"type": "function", "id":
+      "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function": {"name": "get_weather", "arguments":
+      "{\"city\": \"nyc\"}"}}]}, {"content": "It might be cloudy in nyc", "role":
+      "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"}, {"content": "The weather
+      in NYC might be cloudy.", "role": "assistant"}, {"content": "what''s the weather
+      in nyc", "role": "user"}, {"content": null, "role": "assistant", "tool_calls":
+      [{"type": "function", "id": "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function": {"name":
+      "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content": "It might
+      be cloudy in nyc", "role": "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_ar5xBPEQEEfqjQyAunMfZCkk", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_ar5xBPEQEEfqjQyAunMfZCkk"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_HcljZ01GavsCZjuc4Zr4D1Cw", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_HcljZ01GavsCZjuc4Zr4D1Cw"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_kDbZSKOyVAzyXjItYKl3NjaA", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_kDbZSKOyVAzyXjItYKl3NjaA"},
+      {"content": "The weather in NYC might be cloudy.", "role": "assistant"}, {"content":
+      "what''s the weather in nyc", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_lQ5M2x2DQ3JTDwgoESZTMqXn", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"nyc\"}"}}]}, {"content":
+      "It might be cloudy in nyc", "role": "tool", "tool_call_id": "call_lQ5M2x2DQ3JTDwgoESZTMqXn"}],
+      "model": "gpt-4o-mini", "n": 1, "stream": false, "temperature": 0.0, "tools":
+      [{"type": "function", "function": {"name": "get_weather", "description": "Use
+      this to get weather information.", "parameters": {"type": "object", "properties":
+      {"city": {"enum": ["nyc", "sf"], "type": "string"}}, "required": ["city"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '3254'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=ebo9u1FDZT_ZrXbIeg1nTRbKcf1T.AEFpUUB3IsiZSw-1726170179-1.0.1.1-EzcjLI8HhMy2Dearm53S3MFNxdLL2nfQFnN603Ea_7esdVkqPf.B0KQqeJyfoUsuofOzI8mYeJ.lw0vGY2GMLQ;
+        _cfuvid=enlBVFWbdVJ6wQEtDr.8SUTSWF45AJ80QNlepEeJMRc-1726170179667-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - AsyncOpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA1SQzW7CMBCE73mKlc8EJRAIcKO9VG1BVVVVaqsKGWeTuDhey3YKCPHuVUL46cWH
+        +XbGs3sIAJjM2AyYKLkXlVHhfLyJXj9/x3eLDzV52T7u5mpB9LwUT+/zB9ZrHLT+QeHPrr6gyij0
+        kvQJC4vcY5Map4NxnEZxOm1BRRmqxlYYHyYUVlLLcBANkjBKw3jSuUuSAh2bwVcAAHBo36anznDH
+        ZhD1zkqFzvEC2ewyBMAsqUZh3DnpPNee9a5QkPao2+pvJcIWuS/RgtSw/LiHShalhzWCUFRn+/6t
+        02JeO96017VSnX68VFFUGEtr1/GLnkstXbmyyB3p5lvnybCWHgOA73bl+t8WzFiqjF952qBuApNo
+        fMpj10tf6bRjnjxXN6Z4FHQFmds7j9Uql7pAa6w8HSA3q2QyzIbTbDJKWXAM/gAAAP//AwBiEI7u
+        DgIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22624738619e05-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:43:00 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '205'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999816'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_a9f76a329ab7fe24e584664ed59eceef
+    status:
+      code: 200
+      message: OK
+version: 1

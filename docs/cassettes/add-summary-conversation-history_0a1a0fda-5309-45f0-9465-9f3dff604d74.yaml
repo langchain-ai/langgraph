@@ -1,0 +1,233 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "i like how
+      much they win"}, {"role": "assistant", "content": "I can understand the appeal
+      of rooting for a successful team like the Boston Celtics. They have been one
+      of the most dominant franchises in NBA history, with 17 championship titles.
+      Seeing your favorite team consistently win and compete for championships can
+      be very satisfying as a fan. The Celtics'' winning tradition and sustained excellence
+      over the decades is certainly part of what makes them such an iconic team in
+      the league. Do you have a favorite Celtics player or season you particularly
+      enjoyed watching them win?"}, {"role": "user", "content": "what''s my name?"},
+      {"role": "assistant", "content": "I''m afraid I don''t actually know your name.
+      Earlier in our conversation, you had told me your name is Bob, but I don''t
+      have any other prior information about you stored. I''m an AI assistant created
+      by Anthropic, and I only know what has been directly communicated to me during
+      our conversation. If you''d like, you can remind me of your name again and I''ll
+      be happy to refer to you by it going forward."}, {"role": "user", "content":
+      "what NFL team do you think I like?"}, {"role": "assistant", "content": "I don''t
+      have any information about which NFL team you might like. As an AI assistant,
+      I don''t have any prior assumptions or knowledge about your personal preferences
+      for sports teams. Without you directly telling me which NFL team you support,
+      I don''t have enough information to guess or speculate about that. If you''d
+      like, you can share which NFL team you''re a fan of, and I''ll be happy to discuss
+      that with you."}, {"role": "user", "content": "i like the patriots!"}], "model":
+      "claude-3-haiku-20240307", "system": "Summary of conversation earlier: Here
+      is a summary of the conversation so far:\n\nThe conversation began with me introducing
+      myself as an AI assistant created by Anthropic. You then told me your name is
+      Bob.\n\nWhen you asked what your name is, I clarified that I didn''t have any
+      prior knowledge about you, and only knew what you had directly told me, which
+      was that your name is Bob.\n\nYou then expressed that you like the Boston Celtics
+      basketball team, and you said you like how much they win. I acknowledged the
+      Celtics'' rich history and sustained success, noting their 17 NBA championships,
+      and asked if you had a favorite Celtics player or season you especially enjoyed.\n\nThe
+      overall conversation has focused on getting to know each other, with you sharing
+      your interest in the Celtics, and me responding by discussing the team''s accomplishments
+      and legacy."}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '2628'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA0ySUU/dMAyF/4qXF156UbnAkPqCNGlIIMTQhjZpY7ryTdw20Npd7HBXIf77lG6M
+        +xQpsY/P55NnF4Nr3Kjdpj66+k4Xn6/b69vp64Oeyfxw1V+cnLjK2TxRqSJV7MhVLslQLlA1qiGb
+        q9wogQbXOD9gDrQ6XvUYH/NqXa9P6uP6zFXOCxuxuebH86ui0e/SuxyN+/SIcwWdGESDFcySDxIB
+        QosM0oL1BDe0g4/cDcgBbtFSFNN3cNejHSggdInQ4ObiGoxwBBPQPE2S7BDuevrfAT0+EfQYABki
+        +0QhbocZNHtPqm0eIGUGeaK0TJ1QDbzkaaBiJJDHQFrBLjJH7uA9fMkTJfgguwF8j+MUhbWPk4JG
+        9gTruj5aLMyFSJheeUZRgyBjZGSDQuWFy1KJDdqE7PuopBB5KR8Iu0yHcM/3/K3H0lrWBMQPMv8V
+        w61kgy0VX/hG3CKfw6UWlWWnEyaLPg+YYBpwplSBF/R9BZL2aXbLZDQoOQeFIo66hPIkKRrBSKOk
+        GVpJxco5XB4E2BJENkqkRqHE0BMmGKWMXvzNklPxFGRcqHcLTKLdgvOWW6GwveQO3cvPyqnJtEmE
+        KuwaRxw2lhO7fw9KvzKxJ9dwHobK5eXTNs8u8pRtY/JIrK45XdeVk2z7d0fr05eXPwAAAP//AwAk
+        eFJmFAMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225efcb95c8c3b-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:46 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01571NQXmpbQxTo8jY1FyZXY
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 967e985d1c329b8bbe877019a4e63955
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "i like how
+      much they win"}, {"role": "assistant", "content": "I can understand the appeal
+      of rooting for a successful team like the Boston Celtics. They have been one
+      of the most dominant franchises in NBA history, with 17 championship titles.
+      Seeing your favorite team consistently win and compete for championships can
+      be very satisfying as a fan. The Celtics'' winning tradition and sustained excellence
+      over the decades is certainly part of what makes them such an iconic team in
+      the league. Do you have a favorite Celtics player or season you particularly
+      enjoyed watching them win?"}, {"role": "user", "content": "what''s my name?"},
+      {"role": "assistant", "content": "I''m afraid I don''t actually know your name.
+      Earlier in our conversation, you had told me your name is Bob, but I don''t
+      have any other prior information about you stored. I''m an AI assistant created
+      by Anthropic, and I only know what has been directly communicated to me during
+      our conversation. If you''d like, you can remind me of your name again and I''ll
+      be happy to refer to you by it going forward."}, {"role": "user", "content":
+      "what NFL team do you think I like?"}, {"role": "assistant", "content": "I don''t
+      have any information about which NFL team you might like. As an AI assistant,
+      I don''t have any prior assumptions or knowledge about your personal preferences
+      for sports teams. Without you directly telling me which NFL team you support,
+      I don''t have enough information to guess or speculate about that. If you''d
+      like, you can share which NFL team you''re a fan of, and I''ll be happy to discuss
+      that with you."}, {"role": "user", "content": "i like the patriots!"}, {"role":
+      "assistant", "content": "Okay, got it - you''re a fan of the New England Patriots!
+      That''s a great NFL team to support. The Patriots have had an incredibly successful
+      run over the past couple of decades, winning 6 Super Bowl championships since
+      2001. They''re one of the most dominant and consistent franchises in the league.
+      \n\nWhat do you enjoy most about being a Patriots fan? Is there a particular
+      player, coach, or Super Bowl win that stands out as a favorite memory for you?
+      I''d be interested to hear more about your fandom and what drew you to supporting
+      the Patriots."}, {"role": "user", "content": "This is summary of the conversation
+      to date: Here is a summary of the conversation so far:\n\nThe conversation began
+      with me introducing myself as an AI assistant created by Anthropic. You then
+      told me your name is Bob.\n\nWhen you asked what your name is, I clarified that
+      I didn''t have any prior knowledge about you, and only knew what you had directly
+      told me, which was that your name is Bob.\n\nYou then expressed that you like
+      the Boston Celtics basketball team, and you said you like how much they win.
+      I acknowledged the Celtics'' rich history and sustained success, noting their
+      17 NBA championships, and asked if you had a favorite Celtics player or season
+      you especially enjoyed.\n\nThe overall conversation has focused on getting to
+      know each other, with you sharing your interest in the Celtics, and me responding
+      by discussing the team''s accomplishments and legacy.\n\nExtend the summary
+      by taking into account the new messages above:"}], "model": "claude-3-haiku-20240307"}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '3314'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3SUXW/dNgyG/wqhm9w4B1napcC5a4plPUCRdliAoViHgLFoSzsy6YrUcbwg/32Q
+        ffJRYLsyQFPk+z6k9OCid1s3aH979tNN+fjH26tf+8Fuvn8M+cNv++ubS3SNs3mkmkWq2JNrXJZU
+        A6ga1ZDNNW4QT8ltXZuweDp9cxow7svp+dn527M3Z+9c41phIza3/fPhqaLRfT27fLbu8x7nBhIZ
+        DAR0b8QeLBBoGQbMM5hA5DYVT0s4oZEajJgNpAMpGVrhA2VFi8Lbb/yN33dGefnlo7ZFNQoD3kmx
+        pcSlqAnDB0oWW21glgKoe/IwBTS4vvoERjjADixI6YMtGSnuyW9gB23CHLtIVSYa7MBHzycGAQ8E
+        yDOMOUqGyJ3kYRF17D1XRc/Vx0wdZeKWtAFkf5RQW5mABswEU4htWNNrXMs4SrZN9fi15gViyHQg
+        TE9qFi+ZAKFDroCq4Wua4BfuU+3yBS1HMa1O6H7MpEoehhkKe8p1rj5yX09OYV5rTlKSh7tqDnAc
+        CVPNWFRVpauoBvp4IK79YgYtahiZPNB9SylVm4vJoSSLYyL4vYyU4VKmBFNkBTlQXsSOqAY2CXhq
+        0ZNuoNrdvcIzPRkl/ltmGETtSPiOqjJ8NlkhrHCnQBbWDpVOPk4Ks8W2JMwwJpwpawOtYBvqTCS/
+        FnmIrUmOpCuTBRTUnli7HCRHI4VOclVW4Ub2sUUjD7uThV5ko0xaIyYQCDMMUoW8LEeH7GU4CkYD
+        n2l63oiV84I+0MscK53PB8qYUgMWov5wHyCgwh0RQydtqaMWhp5srSOwZ5mAsA0gFc2JgtYu+qxW
+        FzWvlnUDX6WcHGhd0Ze1O3m9dXdi4T/uGkReF/Ly/VL2/5bzOe/q0wZ2tZnluHIj7rEnmKKFpcTx
+        hq/81BbgL9ojA/7AAxMMyEx54fYlESo9PT4Li9itDbFtS0ajNB9fovgPrYL3NMMokU2fHiAfMUlf
+        CFSgw7xxj381Tk3G20yowm7riP2tlczu+EPpe6k43ZZLSo0ryxu7fXCRx2K3JntidduLi4vGSbHX
+        sfOf3z0+/gsAAP//AwD4rCGzwwUAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225f056ae18c3b-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:48 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01PFsJ6MigKHLeYfWa9Fx6as
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 979e58fa4be1afad93733227cad381e1
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -27,6 +27,8 @@ mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
 markdown-include = "^0.8.1"
 markdown-callouts = "^0.4.0"
 mkdocs-exclude = "^1.0.2"
+vcrpy = "^6.0.1"
+click = "^8.1.7"
 
 [tool.poetry.group.test.dependencies]
 langchain-openai = "^0.1.23"

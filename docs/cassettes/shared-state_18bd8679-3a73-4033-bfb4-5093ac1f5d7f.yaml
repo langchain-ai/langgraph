@@ -1,0 +1,331 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "You are helpful assistant.\n    \n    Here is
+      what you know about the user:\n    \n    <info>\n    \n    </info>\n    \n    Help
+      out the user. If the user tells you any information about themselves, save the
+      information using the `Info` tool.\n    \n    This means if the user provides
+      any sort of fact about themselves, be it an opinion they have, a fact about
+      themselves, etc. SAVE IT!\n    ", "role": "system"}, {"content": "hi", "role":
+      "user"}], "model": "gpt-3.5-turbo", "n": 1, "stream": false, "temperature":
+      0.7, "tools": [{"type": "function", "function": {"name": "Info", "description":
+      "This tool should be called when you want to save a new fact about the user.
+      Attributes:\nfact (str): A fact about the user.\ntopic (str): The topic related
+      the fact is about, i.e. Food, Location, Movies, etc.", "parameters": {"type":
+      "object", "properties": {"fact": {"type": "string"}, "topic": {"type": "string"}},
+      "required": ["fact", "topic"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '976'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA1RQy27CMBC85yu2PhOUpAJKLlVfElD1UFVqD1WFjLMJBscb2RvRCPHvVUJ49OLD
+        zM54ZvYBgNCZSEGotWRVViZ8GG+aj6+3xdPjbou8eH1pnifT96bMk8+5FINWQasNKj6phorKyiBr
+        skdaOZSMrWs8ScbxJIpG444oKUPTyoqKw9vhKOTarSiM4mTUK9ekFXqRwncAALDv3jajzfBXpBAN
+        TkiJ3ssCRXo+AhCOTIsI6b32LC2LwYVUZBltF3uGxtANzGgHSlqYw1EADdXAlMnm/lroMK+9bIPb
+        2pgeP5yTGCoqRyvf82c811b79dKh9GTbXz1TJTr2EAD8dI3rfyVE5aiseMm0RdsaxnfJ0U9cRr5i
+        +zkEE0tzhU+ToE8ofOMZy2WubYGucroboOtxCP4AAAD//wMAwLqzE/8BAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225f453f14c33a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:56 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=qcGxQy.91.rE2jq29Y6aSj6AWfHyfHBw6J3h65j31X4-1726170056-1.0.1.1-C4dN1w8CZ1nvkqO2eOmNtpy2Qqi5ZbIgEBAhMeF_MVnqsDO2RAN6szOlHpnF62pytOKJdvcher8ZJT5aRxqFgA;
+        path=/; expires=Thu, 12-Sep-24 20:10:56 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=WGnbU2kN9kcJL.xcrJStyQfiubn7icgg6QQXvc3gdmU-1726170056992-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '236'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999886'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_185bdc3e70300b9acadd31525ea91c96
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are helpful assistant.\n    \n    Here is
+      what you know about the user:\n    \n    <info>\n    \n    </info>\n    \n    Help
+      out the user. If the user tells you any information about themselves, save the
+      information using the `Info` tool.\n    \n    This means if the user provides
+      any sort of fact about themselves, be it an opinion they have, a fact about
+      themselves, etc. SAVE IT!\n    ", "role": "system"}, {"content": "hi", "role":
+      "user"}, {"content": "Hello! How can I assist you today?", "role": "assistant"},
+      {"content": "i like pepperoni pizza", "role": "user"}], "model": "gpt-3.5-turbo",
+      "n": 1, "stream": false, "temperature": 0.7, "tools": [{"type": "function",
+      "function": {"name": "Info", "description": "This tool should be called when
+      you want to save a new fact about the user. Attributes:\nfact (str): A fact
+      about the user.\ntopic (str): The topic related the fact is about, i.e. Food,
+      Location, Movies, etc.", "parameters": {"type": "object", "properties": {"fact":
+      {"type": "string"}, "topic": {"type": "string"}}, "required": ["fact", "topic"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1103'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=qcGxQy.91.rE2jq29Y6aSj6AWfHyfHBw6J3h65j31X4-1726170056-1.0.1.1-C4dN1w8CZ1nvkqO2eOmNtpy2Qqi5ZbIgEBAhMeF_MVnqsDO2RAN6szOlHpnF62pytOKJdvcher8ZJT5aRxqFgA;
+        _cfuvid=WGnbU2kN9kcJL.xcrJStyQfiubn7icgg6QQXvc3gdmU-1726170056992-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2xSwW6jMBS88xXWOycVSUuy5VZtxCpd9bR72qVCjvMgbh9+lm2k0ij/voIQQqPl
+        gKwZz7zx2MdICNB7SAWogwyqtjR/Wr21v7+phLaxppa/Ez29hHaVUfOxYZh1Ct69oQoX1Z3i2hIG
+        zeZMK4cyYOe6WC9Xi3UcJ+ueqHmP1MkqG+b3d8k8NG7H83ixTAblgbVCD6n4GwkhxLH/dxnNHj8g
+        FfHsgtTovawQ0nGTEOCYOgSk99oHaQLMrqRiE9B0sU1DNCECMxVKEl0Hn7/jZH0tShIVj5tfL212
+        v3n4kz3+cD+fn6s6k1LVk3ln69b2gcrGqLGgCT/i6c0wIcDIutduTck3OiFAuqqp0YQuMxxzKKUK
+        OaQ5bAXpdxQWrUXHRgurPz9lDrMcAlut+k0Z8z6HE3xxPUX/W79OmnJYNl7SUOGAn8Y7Ia6s452/
+        qRhKbbQ/FA6l7486bTy6TOvnQPPlUsE6rm0oAr+j6WyX8cPZFa6PbsIuBjJwkDTBl0k05ATf+oB1
+        UWpTobNOjw8iOkX/AAAA//8DAF//KcYPAwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225f487af2c33a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:57 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '350'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999869'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_4e4b626529d2c6f64d0908fcb9dd5461
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are helpful assistant.\n    \n    Here is
+      what you know about the user:\n    \n    <info>\n    I like pepperoni pizza\n    </info>\n    \n    Help
+      out the user. If the user tells you any information about themselves, save the
+      information using the `Info` tool.\n    \n    This means if the user provides
+      any sort of fact about themselves, be it an opinion they have, a fact about
+      themselves, etc. SAVE IT!\n    ", "role": "system"}, {"content": "hi", "role":
+      "user"}, {"content": "Hello! How can I assist you today?", "role": "assistant"},
+      {"content": "i like pepperoni pizza", "role": "user"}, {"content": null, "role":
+      "assistant", "tool_calls": [{"type": "function", "id": "call_9DSMyF3D4ZF9GrKJJgmFaacm",
+      "function": {"name": "Info", "arguments": "{\"fact\": \"I like pepperoni pizza\",
+      \"topic\": \"Food\"}"}}]}, {"content": "Saved!", "role": "tool", "tool_call_id":
+      "call_9DSMyF3D4ZF9GrKJJgmFaacm"}, {"content": "i also just moved to SF", "role":
+      "user"}], "model": "gpt-3.5-turbo", "n": 1, "stream": false, "temperature":
+      0.7, "tools": [{"type": "function", "function": {"name": "Info", "description":
+      "This tool should be called when you want to save a new fact about the user.
+      Attributes:\nfact (str): A fact about the user.\ntopic (str): The topic related
+      the fact is about, i.e. Food, Location, Movies, etc.", "parameters": {"type":
+      "object", "properties": {"fact": {"type": "string"}, "topic": {"type": "string"}},
+      "required": ["fact", "topic"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1492'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=qcGxQy.91.rE2jq29Y6aSj6AWfHyfHBw6J3h65j31X4-1726170056-1.0.1.1-C4dN1w8CZ1nvkqO2eOmNtpy2Qqi5ZbIgEBAhMeF_MVnqsDO2RAN6szOlHpnF62pytOKJdvcher8ZJT5aRxqFgA;
+        _cfuvid=WGnbU2kN9kcJL.xcrJStyQfiubn7icgg6QQXvc3gdmU-1726170056992-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//bFLRjtMwEHzPV6z2uT01PbWFvHFIhyr1QAfo4ERQ5DhOmmJ7jb0Bqqr/
+        jpKmaa46P1jWjGdnPd5DBIB1gQmg3AqWxunpu+Vu/1Ws9+bhWTwuN/7zUyif386/P9x9M484aRWU
+        75Tks+pGknFacU32REuvBKu2aryaL+PVbLZYdYShQulWVjme3t4sptz4nKazeL7olVuqpQqYwI8I
+        AODQ7W2PtlD/MIHZ5IwYFYKoFCbDJQD0pFsERQh1YGEZJxdSkmVl27Zto/WIYCKdSaH1xfi0DqPz
+        JSihdabWn/Tfzf3v/I0rPvr3T7dVyEPTfBj5nUrvXddQ2Vg5BDTiBzy5MgNAK0ynXduSrnQAKHzV
+        GGW57RkPKZZCcopJimvYNYHB0B9VABN8uU9xkiKTq2V3YUNStJ4pHvFF1WP02vnnKCmvyiYI3UfY
+        48fhTzRVzlMeriLGsrZ12GZeidA9dZx4dHbrfLB58anoPBnHGdMvZduy80U/AXgZuhEb9yQTCz3C
+        V3HU94lhH1iZrKxtpbzz9TAQ0TH6DwAA//8DAOu3kwkPAwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225f4c7f7dc33a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:58 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '435'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999853'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_f024d61e17544f6a18eed330004335c1
+    status:
+      code: 200
+      message: OK
+version: 1
