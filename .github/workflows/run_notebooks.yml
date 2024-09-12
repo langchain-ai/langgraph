@@ -44,12 +44,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
-          if [ "${{ matrix.lib-version }}" == "development" ]; then
-            notebook_files=$(find docs/docs/how-tos -name "*.ipynb" | grep -v -e "mongo" -e "redis")
-          else
-            notebook_files=$(find docs/docs/how-tos -name "*.ipynb")
-          fi
-          for file in $notebook_files
+          for file in $(find docs/docs/how-tos -name "*.ipynb")
           do
             echo "Executing $file"
             PIP_PRE=1 poetry run jupyter execute "$file"
