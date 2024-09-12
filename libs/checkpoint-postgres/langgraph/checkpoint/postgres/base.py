@@ -11,6 +11,7 @@ from langgraph.checkpoint.base import (
     EmptyChannelError,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 MetadataInput = Optional[dict[str, Any]]
@@ -129,6 +130,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
+
+    jsonplus_serde = JsonPlusSerializer()
 
     def _load_checkpoint(
         self,
