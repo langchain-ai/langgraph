@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run benchmarks
-        run: OUTPUT=out/benchmark-baseline.json make benchmark
+        run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Upload benchmark baseline
         uses: actions/upload-artifact@v4
         with:
@@ -59,7 +59,7 @@ jobs:
         run: |
           {
             echo 'OUTPUT<<EOF'
-            make benchmark
+            make -s benchmark
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Download benchmark baseline
@@ -79,7 +79,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const file = JSON.parse(`{{ steps.files.outputs.added_modified_renamed }}`)[0]
+            const file = JSON.parse(`${{ steps.files.outputs.added_modified_renamed }}`)[0]
             core.notice(`${{ steps.benchmark.outputs.OUTPUT }}`, {
               title: 'Benchmark results',
               file,
