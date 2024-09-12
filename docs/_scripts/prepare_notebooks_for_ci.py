@@ -1,22 +1,24 @@
 """Preprocess notebooks for CI. Currently removes pip install cells."""
 
+import os
 import json
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 NOTEBOOK_DIRS = ("docs/docs/how-tos",)
-
 
 def remove_install_cells(notebook_path: str) -> None:
     with open(notebook_path, "r") as file:
         notebook = json.load(file)
 
+    indices_to_delete = []
     for index, cell in enumerate(notebook["cells"]):
         if cell["cell_type"] == "code":
             if any("pip install" in line for line in cell["source"]):
-                notebook["cells"].pop(index)
-                break  # Exit the loop after removing the cell
+                indices_to_delete.append(index)
+
+    for index in reversed(indices_to_delete):
+        notebook["cells"].pop(index)
 
     with open(notebook_path, "w") as file:
         json.dump(notebook, file, indent=2)
