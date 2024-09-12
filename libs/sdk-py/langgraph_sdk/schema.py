@@ -72,6 +72,10 @@ class Assistant(TypedDict):
     """The last time the assistant was updated."""
     metadata: Json
     """The assistant metadata."""
+    version: int
+    """The version of the assistant"""
+    name: str
+    """The name of the assistant"""
 
 
 class Thread(TypedDict):

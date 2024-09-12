@@ -313,6 +313,30 @@ export class AssistantsClient extends BaseClient {
       },
     });
   }
+
+  /**
+   * List all versions of an assistant.
+   * 
+   * @param assistantId ID of the assistant.
+   * @returns List of assistant versions.
+   */
+  async getVersions(assistantId: string): Promise<Assistant[]> {
+    return this.fetch<Assistant[]>(`/assistants/${assistantId}/versions`);
+  }
+
+  /**
+   * Change the version of an assistant.
+   * 
+   * @param assistantId ID of the assistant.
+   * @param version The version to change to.
+   * @returns The updated assistant.
+   */
+  async changeVersion(assistantId: string, version: number): Promise<Assistant> {
+    return this.fetch<Assistant>(`/assistants/${assistantId}/change_version`, {
+      method: "POST",
+      json: { version },
+    });
+  }
 }
 
 export class ThreadsClient extends BaseClient {
