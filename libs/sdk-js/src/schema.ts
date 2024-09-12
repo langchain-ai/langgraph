@@ -83,7 +83,7 @@ export interface Assistant {
   updated_at: string;
   metadata: Metadata;
   version: number;
-  name: string;
+  assistant_name: string;
 }
 export type AssistantGraph = Record<string, Array<Record<string, unknown>>>;
 

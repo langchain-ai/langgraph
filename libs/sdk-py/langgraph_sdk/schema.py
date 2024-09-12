@@ -74,7 +74,7 @@ class Assistant(TypedDict):
     """The assistant metadata."""
     version: int
     """The version of the assistant"""
-    name: str
+    assistant_name: str
     """The name of the assistant"""
 
 
