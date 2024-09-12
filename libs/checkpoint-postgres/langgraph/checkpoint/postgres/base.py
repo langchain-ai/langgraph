@@ -224,7 +224,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
         ]
 
     def _load_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
+        return self.serde.loads(self.serde.dumps(metadata))
 
     def _dump_metadata(self, metadata) -> str:
         serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
