@@ -58,8 +58,8 @@ jobs:
           merge-multiple: true
       - run: ls -R out
       - run: poetry run pyperf compare_to out/benchmark.json out/benchmark.json --table --group-by-speed
-      - run: poetry run pyperf compare_to out/benchmark.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
+      - run: poetry run pyperf compare_to out/benchmark.json out/benchmark.json --table --group-by-speed >> "$GITHUB_OUTPUT"
       - name: Compare benchmarks
-        run: poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
+        run: poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed >> "$GITHUB_OUTPUT"
       - name: Annotation
         run: echo "::notice file=libs/langgraph/bench/__main__.py::$GITHUB_OUTPUT"
