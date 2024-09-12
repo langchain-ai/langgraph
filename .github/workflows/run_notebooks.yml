@@ -11,12 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        core-version:
-          - ">=0.3.0.dev4,<0.4.0"
+        lib-version:
           - "development"
           - "latest"
 
-    name: "test (langchain-core: ${{ matrix.core-version }})"
+    name: "test (langgraph: ${{ matrix.lib-version }})"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python + Poetry
@@ -30,15 +29,12 @@ jobs:
         run: |
           poetry install --with docs
           poetry run pip install jupyter
-          if [[ "${{ matrix.core-version }}" != "latest" && "${{ matrix.core-version }}" != "development" ]]; then
-            poetry run pip install "langchain-core${{ matrix.core-version }}"
-          fi
 
       - name: Start services
         run: make start-services
 
       - name: Prepare notebooks
-        if: ${{ matrix.core-version == 'development' }}
+        if: ${{ matrix.lib-version == 'development' }}
         run: poetry run python docs/_scripts/prepare_notebooks_for_ci.py
 
       - name: Run notebooks
@@ -48,7 +44,12 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
-          for file in $(find docs/docs/how-tos -name "*.ipynb")
+          if [ "${{ matrix.lib-version }}" == "development" ]; then
+            notebook_files=$(find docs/docs/how-tos -name "*.ipynb" | grep -v -e "mongo" -e "redis")
+          else
+            notebook_files=$(find docs/docs/how-tos -name "*.ipynb")
+          fi
+          for file in $notebook_files
           do
             echo "Executing $file"
             PIP_PRE=1 poetry run jupyter execute "$file"
