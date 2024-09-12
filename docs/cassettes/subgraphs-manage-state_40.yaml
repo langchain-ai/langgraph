@@ -1,0 +1,208 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "Classify the incoming query as either about
+      weather or not.", "role": "system"}, {"content": "what''s the weather in sf",
+      "role": "user"}], "model": "gpt-3.5-turbo", "n": 1, "parallel_tool_calls": false,
+      "stream": false, "temperature": 0.7, "tool_choice": {"type": "function", "function":
+      {"name": "Router"}}, "tools": [{"type": "function", "function": {"name": "Router",
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary
+      initialized from a mapping object''s\n    (key, value) pairs\ndict(iterable)
+      -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k]
+      = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in
+      the keyword argument list.  For example:  dict(one=1, two=2)", "parameters":
+      {"type": "object", "properties": {"route": {"enum": ["weather", "other"], "type":
+      "string"}}, "required": ["route"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '929'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=__HrWVTLTx.t4tbrqsTxDicE1OWxxA.2YjHdW0gx_Iw-1726170159-1.0.1.1-LDzmFS8BQSlHoNsEEpLGPkI5GsQiSVZ1yzwQK1jrkiOtzEqPWvhNP5gPPLYj6daTzRUZsYLAAe8jMuj7flrHVA;
+        _cfuvid=FUua0q3JL4e3jhQbXLZjsob9gj.Jx8TbULlYnwmZEVw-1726170159712-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//bFLLbtswELzrK4g924GVQHKhm5Ea6Qto0RwKIy4Eml7LaiguQS6buob/
+        vaCkSIpRHghih7MznOU5EQLqPRQC1FGyaqyer/LnxfvHT1/p9G61Wf/2VUjvv3348kN/ftwEmEUG
+        7X6h4lfWjaLGauSaTAcrh5Ixdk2Xt3m6XKR51gIN7VFHWmV5fneTzTm4Hc0X6W3WM49UK/RQiKdE
+        CCHO7R49mj3+gUIsZq+VBr2XFUIxXBICHOlYAel97VkahtkIKjKMJto2QesJwES6VFLrUbhb58l5
+        DEpqXap6Y9Xq7uPfF94/VJaycL9erO3DRK9rfbKtoUMwaghogg/14kpMCDCyabnfKTC6K6YQIF0V
+        GjQcXcN5Cy7e20KxhReUfES3hQu8IV2S/51/TqJweAhe6j6jvn4ZQtdUWUc7f5UhHGpT+2PpUPr2
+        LeCZbKcddVoFCG/mBdZRY7lkekYTG6Z53vWD8T+NaNZjTCz1hLRMk94g+JNnbMpDbSp01tXDqJNL
+        8g8AAP//AwAzejyS6QIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2261ef7dbc0ca9-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:46 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '181'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999961'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_2e8c13bf55204ee377606d972a38bfbd
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "what''s the weather in sf", "role": "user"}],
+      "model": "gpt-3.5-turbo", "n": 1, "parallel_tool_calls": false, "stream": false,
+      "temperature": 0.7, "tool_choice": {"type": "function", "function": {"name":
+      "get_weather"}}, "tools": [{"type": "function", "function": {"name": "get_weather",
+      "description": "Get the weather for a specific city", "parameters": {"type":
+      "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '470'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=__HrWVTLTx.t4tbrqsTxDicE1OWxxA.2YjHdW0gx_Iw-1726170159-1.0.1.1-LDzmFS8BQSlHoNsEEpLGPkI5GsQiSVZ1yzwQK1jrkiOtzEqPWvhNP5gPPLYj6daTzRUZsYLAAe8jMuj7flrHVA;
+        _cfuvid=FUua0q3JL4e3jhQbXLZjsob9gj.Jx8TbULlYnwmZEVw-1726170159712-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//bFLBitswFLz7K8Q7J4udxQ71rd1uaWmhLYF2oSlGVp5tbWRJkZ5JQ8i/
+        F9lexxvWByFmNG9GI58jxkDuIGcgGk6itWr5PtvHjzYp33398e1omrTy5ePpMx02h6cqgUVQmPIZ
+        Bb2o7oRprUKSRg+0cMgJw9RkvcqSdZxkWU+0ZocqyGpLy/u7dEmdK80yTlbpqGyMFOghZ38ixhg7
+        92vIqHf4D3IWL16QFr3nNUI+HWIMnFEBAe699MQ1weJKCqMJdYitO6VmBBmjCsGVuhoP33m2vxbF
+        lSrSwz7R37/E96vNjh6enz6q48/fvz6kM79h9Mn2gapOi6mgGT/h+Y0ZY6B522trpOKInBp0N3LG
+        gLu6a1FTiA7nLQhJpy3kW9hwzT45roX0wmzhAq+Ul+it/d9ZKQ6rznM1tjXil6l+ZWrrTOlv2oRK
+        aumbwiH3/a3Ak7GDd/DpHaB79XJgnWktFWT2qMPALBnGwfXHmpEjR4a4msHraIwH/uQJ26KSukZn
+        nZyePLpE/wEAAP//AwCVqs/P8QIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2261f2383e0ca9-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:46 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '169'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999977'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_c48ba8abc7b472a122ed0b95a587e787
+    status:
+      code: 200
+      message: OK
+version: 1

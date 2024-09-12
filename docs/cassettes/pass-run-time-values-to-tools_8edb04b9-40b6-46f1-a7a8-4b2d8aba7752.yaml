@@ -1,0 +1,217 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "what''s the latest news about FooBar", "role":
+      "user"}], "model": "gpt-4o", "n": 1, "stream": false, "temperature": 0.0, "tools":
+      [{"type": "function", "function": {"name": "get_context", "description": "Get
+      context on the question.", "parameters": {"type": "object", "properties": {"question":
+      {"description": "The user question", "type": "array", "items": {"type": "string"}}},
+      "required": ["question"]}}}, {"type": "function", "function": {"name": "cite_context_sources",
+      "description": "Cite which source a claim was based on.", "parameters": {"type":
+      "object", "properties": {"claim": {"description": "The claim that was made.",
+      "type": "string"}}, "required": ["claim"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '706'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2xSXW+bMBR951dY9zlMQIB0vK2q1imatGnTplZNhYxzISTGdu3L1jbKf68gJNCo
+        fkDWPT4fHHvvMQb1GjIGYsNJNEb6X9Jd4NLtTbK8+/26vf8WzX9Wy7sy3BS7f39h1jF0sUVBJ9Yn
+        oRsjkWqtjrCwyAk71XARpeEiiIK0Bxq9RtnRKkN+rP0oiGI/SPxwPhA3uhboIGMPHmOM7ftvF1Gt
+        8RkyFsxOkwad4xVCdj7EGFgtuwlw52pHXBHMRlBoRai61KqVcgKQ1jIXXMrR+Lj2k/3YE5cyL+IF
+        qevg/tcrr358j9yf29skvlo+TfyO0i+mD1S2Spz7meDneXZhxhgo3vTcCinvsz/TBZ0x4LZqG1TU
+        RYf9Cp5adJ3gCrKHFUhO6Igp/O8YL3RL7KvW19yu4PEA76QO3kf7x0lLFsvWcTnUN8wP5/uQujJW
+        F+6iXihrVbtNbpG7/jenbXsnt94H2ncXCsbqxlBOeoeqk71aHEVhfG4jGH4eQNLE5WQepN4QE9yL
+        I2zyslYVWmPr/i1AafIoSaOY45wn4B28NwAAAP//AwDk57NQFAMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2262ef2ca60cb1-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:43:27 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=Tz_qn4bMHzZFOVKvVDbp7pA5VM4B7BBRm8wa7utNqPQ-1726170207-1.0.1.1-RNP7_oHO0FBTWSavAMHruTlPMr6yVCDfUPmSPLGFvV50qtMENgl1p1Qji31akivRTmXnsQpoYfbQGgjCQ11oWA;
+        path=/; expires=Thu, 12-Sep-24 20:13:27 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=qeXoTr657dgxNQwDR9bArBa0WbGWlzqohXaSFo4oOJ4-1726170207171-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '458'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999973'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_4af23b8ea4d360003d484c754ada1839
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "what''s the latest news about FooBar", "role":
+      "user"}, {"content": null, "role": "assistant", "tool_calls": [{"type": "function",
+      "id": "call_b47tnB0YRzagOL2sUGG548Jq", "function": {"name": "get_context", "arguments":
+      "{\"question\": [\"latest news about FooBar\"]}"}}]}, {"content": "FooBar company
+      just raised 1 Billion dollars!\n\nFooBar company is now only hiring AI''s\n\nFooBar
+      company was founded in 2019\n\nFooBar company makes friendly robots", "role":
+      "tool", "tool_call_id": "call_b47tnB0YRzagOL2sUGG548Jq"}], "model": "gpt-4o",
+      "n": 1, "stream": false, "temperature": 0.0, "tools": [{"type": "function",
+      "function": {"name": "get_context", "description": "Get context on the question.",
+      "parameters": {"type": "object", "properties": {"question": {"description":
+      "The user question", "type": "array", "items": {"type": "string"}}}, "required":
+      ["question"]}}}, {"type": "function", "function": {"name": "cite_context_sources",
+      "description": "Cite which source a claim was based on.", "parameters": {"type":
+      "object", "properties": {"claim": {"description": "The claim that was made.",
+      "type": "string"}}, "required": ["claim"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1170'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=Tz_qn4bMHzZFOVKvVDbp7pA5VM4B7BBRm8wa7utNqPQ-1726170207-1.0.1.1-RNP7_oHO0FBTWSavAMHruTlPMr6yVCDfUPmSPLGFvV50qtMENgl1p1Qji31akivRTmXnsQpoYfbQGgjCQ11oWA;
+        _cfuvid=qeXoTr657dgxNQwDR9bArBa0WbGWlzqohXaSFo4oOJ4-1726170207171-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//bFJNa9tAEL3rV0z3UjB2kBR/YF9KEigp/SAkhxLiYtbSWF57NSN2RqRu
+        8H8va8t2Cr0szHvzhjdv9i0BMK40MzDF2mpRN35wM96mevdY3n992uDdw9MP++e5eijEfSvtd9OP
+        Cl5usNCT6qrguvGojulIFwGtYpyaTfJxNknzdHIgai7RR1nV6GDIgzzNh4N0NMiuO+GaXYFiZvCS
+        AAC8Hd5okUr8bWaQ9k9IjSK2QjM7NwGYwD4ixoo4UUtq+heyYFKkg+t7DAg2IOgawVtFUSB8FWib
+        MlZgl9wqfGa+tWE2pzllV9DrHWuI61rawaYVhWCdYAkZ3DrvHROU7L0N8qHXm1P+H5UTIH4FJr+D
+        tQuOKrj58lFi+5x+cutL2HEL3m0Rag4IJap1XoAJop5X0bXgyeun9zsGXLViY8TUet/h+3Nonqsm
+        8FI6/oyvHDlZLwJaYYoBiXJjDuw+Afh1OE77T96mCVw3ulDeIsWB2ag7jrl8hws7nHakslr/TjWd
+        Jp1DIztRrBcrRxWGJrjjrVbNIh+N86HFazsyyT75CwAA//8DADG+trG0AgAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2262f32f950cb1-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:43:27 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '597'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999932'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_5d6f1d017b2ce8d0392b2a215844ba3b
+    status:
+      code: 200
+      message: OK
+version: 1

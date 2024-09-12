@@ -1,0 +1,107 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "Can you play Taylor Swift''s most popular song?",
+      "role": "user"}, {"content": null, "role": "assistant", "tool_calls": [{"type":
+      "function", "id": "call_yQe3x9HdmOYiFk0rZXdSlaFs", "function": {"name": "play_song_on_spotify",
+      "arguments": "{\"song\": \"Anti-Hero by Taylor Swift\"}"}}]}, {"content": "Successfully
+      played Anti-Hero by Taylor Swift on Spotify!", "role": "tool", "tool_call_id":
+      "call_yQe3x9HdmOYiFk0rZXdSlaFs"}], "model": "gpt-4o-mini", "n": 1, "parallel_tool_calls":
+      false, "stream": false, "temperature": 0.7, "tools": [{"type": "function", "function":
+      {"name": "play_song_on_apple", "description": "Play a song on Apple Music",
+      "parameters": {"type": "object", "properties": {"song": {"type": "string"}},
+      "required": ["song"]}}}, {"type": "function", "function": {"name": "play_song_on_spotify",
+      "description": "Play a song on Spotify", "parameters": {"type": "object", "properties":
+      {"song": {"type": "string"}}, "required": ["song"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '983'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=Rzf2rVVfHEOpzNIPq.G1Iyh2oSLmg1dPV6s97vPME1A-1726169993-1.0.1.1-CPmfyyuaZUOGb3d6TVNci7v9PV0hRhDgXpmMYC2HNJrj.pBCu5_OsyvY0ehwXKStb1HZqW_pRMPRr_d7cztaeA;
+        _cfuvid=xGs1PCdUFEr3IuPiNOm1lr7WnOqAxAiaAqdlKMTQB2A-1726169993506-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//VJHBbtswEETv+orNXnqxCstWbcu3IAjSFggQNEV7aAqDllYyXZLLkOtW
+        QuB/LyQrjnPhYR5nOLt8SQBQV7gGLHdKSutNer3Ytz9u7h4enrdf7+7b7OdNbe8lb+ff2meFk97B
+        2z2V8ur6WLL1hkSzO+EykBLqU7PlbJEtiqJYDsByRaa3NV7SnFOrnU5n01meTpdpthrdO9YlRVzD
+        rwQA4GU4+56uohbXMJ28KpZiVA3h+nwJAAObXkEVo46inODkDZbshNxQ/cuHvwRRVBCqwBvVadfA
+        E1470elnCvyEsO3gu+oMB3j8p2sBdvDoWXTdXcGt23MHsiOwh6jLq8tXAtWHqPpJ3cGYUT+eaxtu
+        fOBtHPlZr7XTcbcJpCK7vmIU9jjQYwLwe1jP4d3E6ANbLxvhP+T6wGyWn/Lw7VcuaDFCYVHmQs/n
+        ydgQYxeF7KbWrqHggz5tq/abfDWv5kW1+rTE5Jj8BwAA//8DAFJYJHA7AgAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225dc46c758c47-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:39:58 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1039'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999954'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_b2987e1c9035d5c7ab3b1c8b5d95693d
+    status:
+      code: 200
+      message: OK
+version: 1
