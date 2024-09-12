@@ -11061,12 +11061,15 @@ def test_subgraph_retries():
 
     parent = StateGraph(State)
     parent.add_node("parent_node", parent_node)
-    parent.add_node("child_graph", child.compile())
+    parent.add_node(
+        "child_graph",
+        child.compile(),
+        retry=RetryPolicy(max_attempts=3, retry_on=(RandomError,)),
+    )
     parent.add_edge("parent_node", "child_graph")
     parent.set_entry_point("parent_node")
 
     checkpointer = MemorySaver()
     app = parent.compile(checkpointer=checkpointer)
-    app.retry_policy = RetryPolicy(max_attempts=3, retry_on=(RandomError,))
 
-    result = app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
+    app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
