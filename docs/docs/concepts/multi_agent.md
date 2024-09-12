@@ -1,6 +1,6 @@
 # What is a multi-agent architecture?
 
-A multi-agent architecture is a system with multiple LLM-based components. These components can be as simple as a prompt and an LLM call, or as complex as a ReAct agent.
+A multi-agent architecture is a system with multiple independent actors powered by LLMs that are connected in a specific way. These actors can be as simple as a prompt and an LLM call, or as complex as a ReAct agent.
 
 The primary advantages of this architecture are:
 
@@ -41,3 +41,37 @@ LangGraph provides multiple methods to control agent communication sequence:
 * **Explicit control flow (graph edges)**: LangGraph allows you to define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via graph edges.
 * **Implicitly control flow (tool calling)**: if the orchestrator agent treats subordinate agents as tools, the tool-calling LLM powering the orchestrator will make decisions about the order in which the tools (agents) are being called
 * **Dynamic control flow (conditional edges)**: LangGraph also allows you to define conditional edges, where the control flow is dependent on satisfying a given condition. In such cases, you can use an LLM to decide which subordinate agent to call next.
+
+## Example architectures
+
+Below are several examples of complex multi-agent architectures that can be implemented in LangGraph.
+
+### Multi-Agent Collaboration
+
+In this example, different agents collaborate on a **shared** scratchpad of messages (i.e. shared graph state). This means that all the work any of them do is visible to the other ones. The benefit is that the other agents can see all the individual steps done. The downside is that sometimes is it overly verbose and unnecessary to pass ALL this information along, and sometimes only the final answer from an agent is needed. We call this **collaboration** because of the shared nature the scratchpad.
+
+In this case, the independent agents are actually just a single LLM call with a custom system message.
+
+Here is a visualization of how these agents are connected:
+
+![](./img/multi_agent_collaboration.png)
+
+See full code example in this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/).
+
+### Agent Supervisor
+
+In this example, multiple agents are connected, but compared to above they do NOT share a shared scratchpad. Rather, they have their own independent scratchpads (i.e. their own state), and then their final responses are appended to a global scratchpad.
+
+In this case, the independent agents are a LangGraph ReAct agent (graph). This means they have their own individual prompt, LLM, and tools. When called, it's not just a single LLM call, but rather an invocation of the graph powering the ReAct agent.
+
+![](./img/multi_agent_supervisor.png)
+
+See full code example in this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/).
+
+### Hierarchical Agent Teams
+
+What if the job for a single worker in agent supervisor example becomes too complex? What if the number of workers becomes too large? For some applications, the system may be more effective if work is distributed hierarchically. You can do this by creating additional level of subgraphs and creating a top-level supervisor, along with mid-level supervisors:
+
+![](./img/multi_agent_hierarchical.png)
+
+See full code example in this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/hierarchical_agent_teams/).
