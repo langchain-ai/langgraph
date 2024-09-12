@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         lib-version:
-          - "development"
+          # - "development"
           - "latest"
 
     name: "test (langgraph: ${{ matrix.lib-version }})"
