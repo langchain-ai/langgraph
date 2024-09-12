@@ -97,6 +97,9 @@ class AddableUpdatesDict(AddableDict):
         raise TypeError("AddableUpdatesDict does not support right-side addition")
 
 
+EMPTY_SEQ = tuple()
+
+
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
@@ -106,7 +109,7 @@ def map_output_updates(
     output_tasks = [
         (t, ww)
         for t, ww in tasks
-        if (not t.config or TAG_HIDDEN not in t.config.get("tags"))
+        if (not t.config or TAG_HIDDEN not in t.config.get("tags", EMPTY_SEQ))
         and ww[0][0] != ERROR
         and ww[0][0] != INTERRUPT
     ]

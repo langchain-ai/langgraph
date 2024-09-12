@@ -120,7 +120,9 @@ class PregelNode(Runnable):
 
     retry_policy: Optional[RetryPolicy]
 
-    config: RunnableConfig
+    tags: Optional[Sequence[str]]
+
+    metadata: Optional[Mapping[str, Any]]
 
     def __init__(
         self,
@@ -133,7 +135,6 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
-        config: Optional[RunnableConfig] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -141,9 +142,8 @@ class PregelNode(Runnable):
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         self.retry_policy = retry_policy
-        self.config = merge_configs(
-            config, {"tags": tags or [], "metadata": metadata or {}}
-        )
+        self.tags = tags
+        self.metadata = metadata
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
@@ -162,7 +162,7 @@ class PregelNode(Runnable):
             # careful to not modify the original writers list or ChannelWrite
             writers[-2] = ChannelWrite(
                 writes=writers[-2].writes + writers[-1].writes,
-                tags=writers[-2].config["tags"] if writers[-2].config else None,
+                tags=writers[-2].tags,
                 require_at_least_one_of=writers[-2].require_at_least_one_of,
             )
             writers.pop()
@@ -238,7 +238,11 @@ class PregelNode(Runnable):
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
     ) -> Output:
-        return self.bound.invoke(input, merge_configs(self.config, config), **kwargs)
+        return self.bound.invoke(
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
+        )
 
     async def ainvoke(
         self,
@@ -247,7 +251,9 @@ class PregelNode(Runnable):
         **kwargs: Optional[Any],
     ) -> Output:
         return await self.bound.ainvoke(
-            input, merge_configs(self.config, config), **kwargs
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
         )
 
     def stream(
@@ -257,7 +263,9 @@ class PregelNode(Runnable):
         **kwargs: Optional[Any],
     ) -> Iterator[Output]:
         yield from self.bound.stream(
-            input, merge_configs(self.config, config), **kwargs
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
         )
 
     async def astream(
@@ -267,6 +275,8 @@ class PregelNode(Runnable):
         **kwargs: Optional[Any],
     ) -> AsyncIterator[Output]:
         async for item in self.bound.astream(
-            input, merge_configs(self.config, config), **kwargs
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
         ):
             yield item

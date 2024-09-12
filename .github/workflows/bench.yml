@@ -27,13 +27,13 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run benchmarks
-        run: make benchmark
+        run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Upload benchmark baseline
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-baseline.json
-          path: libs/langgraph/out/benchmark.json
-  compare:
+          name: benchmark-baseline
+          path: libs/langgraph/out/benchmark-baseline.json
+  benchmark:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,6 +41,11 @@ jobs:
     needs: [baseline]
     steps:
       - uses: actions/checkout@v4
+      - id: files
+        name: Get changed files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          format: json
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
@@ -50,13 +55,36 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run benchmarks
-        run: make benchmark
+        id: benchmark
+        run: |
+          {
+            echo 'OUTPUT<<EOF'
+            make -s benchmark
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: Download benchmark baseline
         uses: actions/download-artifact@v4
         with:
-          name: benchmark-baseline.json
           path: libs/langgraph/out
+          merge-multiple: true
       - name: Compare benchmarks
-        run: poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
+        id: compare
+        run: |
+          {
+            echo 'OUTPUT<<EOF'
+            poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: Annotation
-        run: echo "::notice file=libs/langgraph/bench/__main__.py::$GITHUB_OUTPUT"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const file = JSON.parse(`${{ steps.files.outputs.added_modified_renamed }}`)[0]
+            core.notice(`${{ steps.benchmark.outputs.OUTPUT }}`, {
+              title: 'Benchmark results',
+              file,
+            })
+            core.notice(`${{ steps.compare.outputs.OUTPUT }}`, {
+              title: 'Comparison against main',
+              file,
+            })
