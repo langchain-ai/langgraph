@@ -33,7 +33,7 @@ jobs:
         with:
           name: benchmark-baseline
           path: libs/langgraph/out/benchmark-baseline.json
-  compare:
+  benchmark:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,6 +41,11 @@ jobs:
     needs: [baseline]
     steps:
       - uses: actions/checkout@v4
+      - id: files
+        name: Get changed files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          format: json
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
@@ -70,16 +75,16 @@ jobs:
             poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed
             echo EOF
           } >> "$GITHUB_OUTPUT"
-      - name: Summary
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.summary.addRaw(`${{ steps.benchmark.outputs.OUTPUT }}`, true)
       - name: Annotation
         uses: actions/github-script@v7
         with:
           script: |
+            const file = JSON.parse(`{{ steps.files.outputs.added_modified_renamed }}`)[0]
+            core.notice(`${{ steps.benchmark.outputs.OUTPUT }}`, {
+              title: 'Benchmark results',
+              file,
+            })
             core.notice(`${{ steps.compare.outputs.OUTPUT }}`, {
-              title: 'Benchmark comparison to main',
-              file: 'README.md',
+              title: 'Comparison against main',
+              file,
             })
