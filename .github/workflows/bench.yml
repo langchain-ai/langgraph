@@ -27,12 +27,12 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - name: Run benchmarks
-        run: make benchmark
+        run: OUTPUT=out/benchmark-baseline.json make benchmark
       - name: Upload benchmark baseline
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-baseline.json
-          path: libs/langgraph/out/benchmark.json
+          name: benchmark-baseline
+          path: libs/langgraph/out/benchmark-baseline.json
   compare:
     runs-on: ubuntu-latest
     defaults:
