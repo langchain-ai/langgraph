@@ -212,41 +212,41 @@ class JsonPlusSerializer(SerializerProtocol):
 EXT_CONSTRUCTOR_SINGLE_ARG = 0
 EXT_CONSTRUCTOR_POS_ARGS = 1
 EXT_CONSTRUCTOR_KW_ARGS = 2
+EXT_METHOD_SINGLE_ARG = 3
+EXT_PYDANTIC_V1 = 4
 
 
 def _msgpack_default(obj):
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):
+    if hasattr(obj, "model_dump_json") and callable(obj.model_dump_json):  # pydantic v2
         return msgpack.ExtType(
-            EXT_CONSTRUCTOR_KW_ARGS,
+            EXT_METHOD_SINGLE_ARG,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    (None, "model_construct"),
-                    obj.model_dump(),
+                    obj.model_dump_json(),
+                    "model_validate_json",
                 ),
             ),
         )
-    elif hasattr(obj, "dict") and callable(obj.dict):
+    elif hasattr(obj, "dict") and callable(obj.dict):  # pydantic v1
         return msgpack.ExtType(
-            EXT_CONSTRUCTOR_KW_ARGS,
+            EXT_PYDANTIC_V1,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    (None, "construct"),
                     obj.dict(),
                 ),
             ),
         )
-    elif hasattr(obj, "_asdict") and callable(obj._asdict):
+    elif hasattr(obj, "_asdict") and callable(obj._asdict):  # namedtuple
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    None,
                     obj._asdict(),
                 ),
             ),
@@ -255,95 +255,60 @@ def _msgpack_default(obj):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    obj.parts,
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, obj.parts),
             ),
         )
     elif isinstance(obj, re.Pattern):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (
-                    "re",
-                    "compile",
-                    None,
-                    (obj.pattern, obj.flags),
-                ),
+                ("re", "compile", (obj.pattern, obj.flags)),
             ),
         )
     elif isinstance(obj, UUID):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    obj.hex,
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
             ),
         )
     elif isinstance(obj, decimal.Decimal):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    str(obj),
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
     elif isinstance(obj, (set, frozenset, deque)):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    tuple(obj),
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, tuple(obj)),
             ),
         )
     elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    str(obj),
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
     elif isinstance(obj, (IPv6Address, IPv6Interface, IPv6Network)):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    str(obj),
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
     elif isinstance(obj, datetime):
         return msgpack.ExtType(
-            EXT_CONSTRUCTOR_SINGLE_ARG,
+            EXT_METHOD_SINGLE_ARG,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    "fromisoformat",
                     obj.isoformat(),
+                    "fromisoformat",
                 ),
             ),
         )
@@ -354,7 +319,6 @@ def _msgpack_default(obj):
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    None,
                     (obj.days, obj.seconds, obj.microseconds),
                 ),
             ),
@@ -366,7 +330,6 @@ def _msgpack_default(obj):
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    None,
                     (obj.year, obj.month, obj.day),
                 ),
             ),
@@ -378,7 +341,6 @@ def _msgpack_default(obj):
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    None,
                     {
                         "hour": obj.hour,
                         "minute": obj.minute,
@@ -397,7 +359,6 @@ def _msgpack_default(obj):
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    None,
                     obj.__getinitargs__(),
                 ),
             ),
@@ -406,41 +367,31 @@ def _msgpack_default(obj):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, None, obj.key),
+                (obj.__class__.__module__, obj.__class__.__name__, obj.key),
             ),
         )
     elif isinstance(obj, Enum):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    obj.value,
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, obj.value),
             ),
         )
     elif isinstance(obj, SendProtocol):
         return msgpack.ExtType(
-            EXT_CONSTRUCTOR_KW_ARGS,
+            EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    None,
-                    {"node": obj.node, "arg": obj.arg},
-                ),
+                (obj.__class__.__module__, obj.__class__.__name__, (obj.node, obj.arg)),
             ),
         )
     elif dataclasses.is_dataclass(obj):
+        # doesn't use dataclasses.asdict to avoid deepcopy and recursion
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    None,
                     {
                         field.name: getattr(obj, field.name)
                         for field in dataclasses.fields(obj)
@@ -456,66 +407,44 @@ def _msgpack_default(obj):
 
 def _msgpack_ext_hook(code: int, data: bytes):
     if code == EXT_CONSTRUCTOR_SINGLE_ARG:
-        module, name, method, arg = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
         try:
-            # Import module
-            mod = importlib.import_module(module)
-            # Import class
-            cls = getattr(mod, name)
-            if method is None:
-                # Instantiate class
-                return cls(arg)
-            elif isinstance(method, str):
-                # Call method
-                return getattr(cls, method)(arg)
-            elif isinstance(method, list):
-                for m in method:
-                    try:
-                        return getattr(cls, m)(arg)
-                    except Exception:
-                        continue
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            # module, name, arg
+            return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
         except Exception:
             return
     elif code == EXT_CONSTRUCTOR_POS_ARGS:
-        module, name, method, args = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
         try:
-            # Import module
-            mod = importlib.import_module(module)
-            # Import class
-            cls = getattr(mod, name)
-            if method is None:
-                # Instantiate class
-                return cls(*args)
-            elif isinstance(method, str):
-                # Call method
-                return getattr(cls, method)(*args)
-            elif isinstance(method, list):
-                for m in method:
-                    try:
-                        return getattr(cls, m)(*args)
-                    except Exception:
-                        continue
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            # module, name, args
+            return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
         except Exception:
             return
     elif code == EXT_CONSTRUCTOR_KW_ARGS:
-        module, name, method, kwargs = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
         try:
-            # Import module
-            mod = importlib.import_module(module)
-            # Import class
-            cls = getattr(mod, name)
-            if method is None:
-                # Instantiate class
-                return cls(**kwargs)
-            elif isinstance(method, str):
-                # Call method
-                return getattr(cls, method)(**kwargs)
-            elif isinstance(method, list):
-                for m in method:
-                    try:
-                        return getattr(cls, m)(**kwargs)
-                    except Exception:
-                        continue
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            # module, name, args
+            return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+        except Exception:
+            return
+    elif code == EXT_METHOD_SINGLE_ARG:
+        try:
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            # module, name, arg, method
+            return getattr(getattr(importlib.import_module(tup[0]), tup[1]), tup[3])(
+                tup[2]
+            )
+        except Exception:
+            return
+    elif code == EXT_PYDANTIC_V1:
+        try:
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            # module, name, kwargs
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            try:
+                return cls(**tup[2])
+            except Exception:
+                return cls.construct(**tup[2])
         except Exception:
             return
 
