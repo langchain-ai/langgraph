@@ -48,7 +48,27 @@ The main documented way to specify the schema of a graph is by using `TypedDict`
 
 By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [notebook here](../how-tos/input_output_schema.ipynb) for how to use.
 
-By default, all nodes in the graph will share the same state. This means that they will read and write to the same state channels. It is possible to have nodes write to private state channels inside the graph for internal node communication - see [this notebook](../how-tos/pass_private_state.ipynb) for how to do that.
+#### Multiple schemas
+
+Typically, all graph nodes communicate with a single schema. This means that they will read and write to the same state channels. But, there are cases where we may want a bit more control over this:
+
+* Internal nodes may pass information that is not required in the graph's input / output.
+* We may also want to use different input / output schemas for the graph. The output might, for example, only contain a single relevant output key.
+
+It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema and use a type hint -- e.g., `state: PrivateState` as shown below -- to specify it as the node input schema. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail. 
+
+```
+class OverallState(TypedDict):
+    foo: int
+
+class PrivateState(TypedDict):
+    baz: int
+
+def node_1(state: PrivateState) -> OverallState:
+    ...
+```
+
+It is also possible to define explicit input and output schemas for a graph. Often, in these cases, we define an "internal" schema that contains *all* keys relevant to graph operations. But, we use specific `input` and `output` schemas to constrain the input and output. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
 
 ### Reducers
 
