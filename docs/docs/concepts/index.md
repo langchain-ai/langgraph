@@ -7,13 +7,13 @@ These conceptual guides are arranged in the following way:
 * first, we'll discuss at a very high level the challenges that arise when building agents and [how LangGraph addresses them](high_level.md)
 * next, we'll look at a list of [core LangGraph concepts](low_level.md) that are key for understanding how to build your own agentic systems
 * then, we'll discuss [common agentic patterns](agentic_concepts.md) and how you can achieve those with LangGraph
-* finally, we'll take an in-depth look at several concepts -- [human-in-the-loop](human_in_the_loop.md), [multi-agent systems](multi_agent.md), [persistence](persistence.md) and [streaming](streaming.md)
+* finally, we'll take an in-depth look at several concepts - [human-in-the-loop](human_in_the_loop.md), [multi-agent systems](multi_agent.md), [persistence](persistence.md) and [streaming](streaming.md)
 
 For more technical, hands-on guides see our [how-to guides](../how-tos/index.md) and [tutorials](../tutorials/index.md).
 
 ## [Why LangGraph?](high_level.md)
 
-- [Core Principles](high_level.md#langgraph-core-principles)
+- [Core Principles](high_level.md#core-principles)
 - [Debugging](high_level.md#debugging)
 - [Deployment](high_level.md#deployment)
 
