@@ -1,51 +1,12 @@
 # Persistence
 
-LangGraph has a built-in persistence layer, implemented through [checkpointers][basecheckpointsaver]. When you use a checkpointer with a graph, you can interact with and manage the graph's state after the execution. The checkpointer saves a _checkpoint_ (a snapshot) of the graph state at every superstep, enabling several powerful capabilities, including human-in-the-loop, memory and fault-tolerance.
+LangGraph has a built-in persistence layer, implemented through checkpointers. When you compile graph with a checkpointer, the checkpointer saves a `checkpoint` of the graph state at every super-step. Those checkpoints are saved to a `thread`, which can be accessed after graph execution. Because `threads` allow access to graph's state after execution, several powerful capabilities including human-in-the-loop, memory, time travel, and fault-tolerance are all possible. See [this how-to guide](../how-tos/persistence.ipynb) for an end-to-end example on how to add and use checkpointers with your graph. Below, we'll discuss each of these concepts in more detail. 
 
-See [this how-to guide](../how-tos/persistence.ipynb) for an end-to-end example on how to add and use checkpointers with your graph.
-
-## Capabilities
-
-### Human-in-the-loop
-
-First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
-
-See [these how-to guides](../how-tos/human_in_the_loop/breakpoints.ipynb) for concrete examples.
-
-### Memory
-
-Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads ("sessions") and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones.
-
-See [this how-to guide](../how-tos/memory/manage-conversation-history.ipynb) for an end-to-end example on how to add and manage conversation memory using checkpointers.
-
-### Fault-tolerance
-
-Lastly, checkpointing also provides fault-tolerance and error recovery: if one or more nodes fail at a given superstep, you can restart your graph from the last successful step. 
-
-#### Pending writes
-
-Additionally, when a graph node fails mid-execution at a given superstep, LangGraph stores pending checkpoint writes from any other nodes that completed successfully at that superstep, so that whenever we resume graph execution from that superstep we don't re-run the successful nodes.
+![Checkpoints](img/checkpoints.jpg)
 
 ## Threads
 
-Threads enable the checkpointing of multiple different graph runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When invoking graph with a checkpointer, you **must** specify a `thread_id` and optionally a `checkpoint_id`.
-
-* `thread_id` is simply the ID of a thread. This is always required
-* `checkpoint_id` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
-
-You must pass these when invoking the graph as part of the `configurable` portion of the config:
-
-```python
-# {"configurable": {"thread_id": "1"}}  # valid config
-# {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
-
-config = {"configurable": {"thread_id": "1"}}
-graph.invoke(inputs, config=config)
-```
-
-## Checkpointer state
-
-When interacting with the saved graph state, you **must** specify a [thread identifier](#threads) and optionally a checkpoint ID. Each checkpoint saved by the checkpointer is accessible from the graph via a `StateSnapshot` object that has the following key properties:
+ A thread is a unique ID or [thread identifier](#threads) assigned to a series of checkpoints saved by a checkpointer. Each checkpoint saved by the checkpointer is a `StateSnapshot` object. `StateSnapshots` have the following key properties:
 
 - `config`: Config associated with this checkpoint. 
 - `metadata`: Metadata associated with this checkpoint.
@@ -99,7 +60,7 @@ Note that we `bar` channel values contain outputs from both nodes as we have a r
 
 ### Get state
 
-You can view the latest state of the graph by calling `graph.get_state(config)`. This will return a `StateSnapshot` object that corresponds to the latest checkpoint associated with the thread ID provided in the config, or a checkpoint associated with a checkpoint ID for the thread, if provided.
+When interacting with the saved graph state, you **must** specify a [thread identifier](#threads). You can view the *latest* state of the graph by calling `graph.get_state(config)`. This will return a `StateSnapshot` object that corresponds to the latest checkpoint associated with the thread ID provided in the config or a checkpoint associated with a checkpoint ID for the thread, if provided.
 
 ```python
 # get the latest state snapshot
@@ -126,7 +87,7 @@ StateSnapshot(
 
 ### Get state history
 
-You can get the full history of the graph execution for a given thread by calling `graph.get_state_history(config)`. This will return a list of `StateSnapshot` objects (i.e. list of the checkpoints) associated with the thread ID provided in the config. Importantly, the checkpoints will be ordered chronologically with the most recent checkpoint / `StateSnapshot` being the first in the list.
+You can get the full history of the graph execution for a given thread by calling `graph.get_state_history(config)`. This will return a list of `StateSnapshot` objects associated with the thread ID provided in the config. Importantly, the checkpoints will be ordered chronologically with the most recent checkpoint / `StateSnapshot` being the first in the list.
 
 ```python
 config = {"configurable": {"thread_id": "1"}}
@@ -175,13 +136,38 @@ In our example, the output of `get_state_history` will look like this:
 ]
 ```
 
+![State](img/get_state.jpg)
+
+### Replay
+
+With access to state, it's possible to play-back a prior graph execution. When invoking graph with a checkpointer, you **must** specify a `thread_id` and optionally a `checkpoint_id`.
+
+* `thread_id` is simply the ID of a thread. This is always required.
+* `checkpoint_id` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to start of a run of a graph from some point halfway through a thread.
+
+You must pass these when invoking the graph as part of the `configurable` portion of the config:
+
+```python
+# {"configurable": {"thread_id": "1"}}  # valid config
+# {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
+
+config = {"configurable": {"thread_id": "1"}}
+graph.invoke(inputs, config=config)
+```
+
+If we `invoke` or `stream` a graph with a `thread_id` specified, the graph will execute from the current (most recent) checkpoint. Alternatively, if we supply a `checkpoint_id`, then we will re-play the graph from that checkpoint.
+
+Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
+
+![Replay](img/re_play.jpg)
+
 ### Update state
 
-You can also interact with the state directly and update it using `graph.update_state()`. This method three different arguments:
+In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method three different arguments:
 
 #### `config`
 
-The config should contain `thread_id` specifying which thread to update, and can optionally include `checkpoint_id` field.
+The config should contain `thread_id` specifying which thread to update. When only the `thread_id` is passed, we update (or fork) the current state. Optionally, if we include `checkpoint_id` field, then we fork that selected checkpoint.
 
 #### `values`
 
@@ -220,9 +206,9 @@ The `foo` key (channel) is completely changed (because there is no reducer speci
 
 #### `as_node`
 
-The final thing you can optionally specify when calling `update_state` is `as_node`. If you provided it, the update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous.
+The final thing you can optionally specify when calling `update_state` is `as_node`. If you provided it, the update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous. The reason this matters is that the next steps to execute depend on the last node to have given an update, so this can be used to control which node executes next. See this [how to guide on time-travel to learn more about forking state](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-The reason this matters is that the next steps to execute depend on the last node to have given an update, so this can be used to control which node executes next.
+![Update](img/checkpoints_full_story.jpg)
 
 ## Checkpointer libraries
 
@@ -246,7 +232,25 @@ If the checkpointer is used with asynchronous graph execution (i.e. executing th
 !!! note Note
     For running your graph asynchronously, you can use `MemorySaver`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
 
-### Serde
+### Serializer
 
 When checkpointers save the graph state, they need to serialize the channel values in the state. This is done using serializer objects. 
 `langgraph_checkpoint` defines [protocol][serializerprotocol] for implementing serializers provides a default implementation ([JsonPlusSerializer][jsonplusserializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+
+## Capabilities
+
+### Human-in-the-loop
+
+First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state. See [these how-to guides](../how-tos/human_in_the_loop/breakpoints.ipynb) for concrete examples.
+
+### Memory
+
+Second, checkpointers allow for ["memory"](agentic_concepts.md#memory) between interactions.  In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones. See [this how-to guide](../how-tos/memory/manage-conversation-history.ipynb) for an end-to-end example on how to add and manage conversation memory using checkpointers.
+
+### Time Travel
+
+Third, checkpointers allow for ["time travel"](../how-tos/human_in_the_loop/time-travel.ipynb), allowing users to replay prior graph executions to review and / or debug specific graph steps. In addition, checkpointers make it possible to fork the graph state at arbitrary checkpoints to explore alternative trajectories.
+
+### Fault-tolerance
+
+Lastly, checkpointing also provides fault-tolerance and error recovery: if one or more nodes fail at a given superstep, you can restart your graph from the last successful step. Additionally, when a graph node fails mid-execution at a given superstep, LangGraph stores pending checkpoint writes from any other nodes that completed successfully at that superstep, so that whenever we resume graph execution from that superstep we don't re-run the successful nodes.
