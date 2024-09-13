@@ -31,6 +31,6 @@ jobs:
       - name: Save outputs
         uses: actions/cache/save@v4
         with:
-          key: ${{ runner.os }}-benchmark-baseline
+          key: ${{ runner.os }}-benchmark-baseline-${{ env.GITHUB_SHA }}
           path: |
             libs/langgraph/out/benchmark-baseline.json
