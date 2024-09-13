@@ -363,6 +363,18 @@ graph.invoke(None, config=config)
 
 See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
 
+### Dynamic Breakpoints
+
+It may be helpful to **dynamically** interrupt the graph from inside a given node based on some condition. In `LangGraph` you can do so by using `NodeInterrupt` -- a special exception that can be raised from inside a node.
+
+```python
+def my_node(state: State) -> State:
+    if len(state['input']) > 5:
+        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
+
+    return state
+```
+
 ## Visualization
 
 It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.ipynb) for more info.
