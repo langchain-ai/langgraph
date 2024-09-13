@@ -214,17 +214,18 @@ EXT_CONSTRUCTOR_POS_ARGS = 1
 EXT_CONSTRUCTOR_KW_ARGS = 2
 EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
+EXT_PYDANTIC_V2 = 5
 
 
 def _msgpack_default(obj):
-    if hasattr(obj, "model_dump_json") and callable(obj.model_dump_json):  # pydantic v2
+    if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return msgpack.ExtType(
-            EXT_METHOD_SINGLE_ARG,
+            EXT_PYDANTIC_V2,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    obj.model_dump_json(),
+                    obj.model_dump(),
                     "model_validate_json",
                 ),
             ),
@@ -445,6 +446,17 @@ def _msgpack_ext_hook(code: int, data: bytes):
                 return cls(**tup[2])
             except Exception:
                 return cls.construct(**tup[2])
+        except Exception:
+            return
+    elif code == EXT_PYDANTIC_V2:
+        try:
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            # module, name, kwargs, method
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            try:
+                return cls(**tup[2])
+            except Exception:
+                return cls.model_construct(**tup[2])
         except Exception:
             return
 
