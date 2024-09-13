@@ -53,3 +53,9 @@ Once the notebook is executed, you should see the new VCR cassettes recorded in 
 ## Updating existing notebooks
 
 If you are updating an existing notebook, please make sure to remove any existing cassettes for the notebook in `docs/cassettes` directory (each cassette is prefixed with the notebook name), and then run the steps from the "Adding new notebooks" section above.
+
+To delete cassettes for a notebook, you can run:
+
+```bash
+rm docs/cassettes/<notebook_name>*
+```
