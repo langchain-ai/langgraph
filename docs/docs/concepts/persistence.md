@@ -2,11 +2,15 @@
 
 LangGraph has a built-in persistence layer, implemented through checkpointers. When you compile graph with a checkpointer, the checkpointer saves a `checkpoint` of the graph state at every super-step. Those checkpoints are saved to a `thread`, which can be accessed after graph execution. Because `threads` allow access to graph's state after execution, several powerful capabilities including human-in-the-loop, memory, time travel, and fault-tolerance are all possible. See [this how-to guide](../how-tos/persistence.ipynb) for an end-to-end example on how to add and use checkpointers with your graph. Below, we'll discuss each of these concepts in more detail. 
 
-![Checkpoints](img/checkpoints.jpg)
+![Checkpoints](img/persistence/checkpoints.jpg)
 
 ## Threads
 
-A thread is a unique ID or [thread identifier](#threads) assigned to each checkpoint saved by a checkpointer.
+A thread is a unique ID or [thread identifier](#threads) assigned to each checkpoint saved by a checkpointer. When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
+
+``python
+{"configurable": {"thread_id": "1"}}
+```
 
 ### Checkpoints
 
@@ -138,15 +142,11 @@ In our example, the output of `get_state_history` will look like this:
 ]
 ```
 
-![State](img/get_state.jpg)
-
-### Execution 
-
-When invoking graph with a checkpointer, you **must** specify a `thread_id`. The graph will execute from the current (most recent) checkpoint in the `thread`.
+![State](img/persistence/get_state.jpg)
 
 ### Replay
 
-It's also possible to play-back a prior graph execution. If we `invoking` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the graph from that checkpoint. 
+It's also possible to play-back a prior graph execution. If we `invoking` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the graph from a checkpoint that corresponds to the `checkpoint_id`.
 
 * `thread_id` is simply the ID of a thread. This is always required.
 * `checkpoint_id` This identifier refers to a specific checkpoint within a thread. 
@@ -163,7 +163,7 @@ graph.invoke(inputs, config=config)
 
 Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-![Replay](img/re_play.jpg)
+![Replay](img/persistence/re_play.jpg)
 
 ### Update state
 
@@ -212,7 +212,7 @@ The `foo` key (channel) is completely changed (because there is no reducer speci
 
 The final thing you can optionally specify when calling `update_state` is `as_node`. If you provided it, the update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous. The reason this matters is that the next steps to execute depend on the last node to have given an update, so this can be used to control which node executes next. See this [how to guide on time-travel to learn more about forking state](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-![Update](img/checkpoints_full_story.jpg)
+![Update](img/persistence/checkpoints_full_story.jpg)
 
 ## Checkpointer libraries
 
