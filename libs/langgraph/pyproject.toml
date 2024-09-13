@@ -12,7 +12,6 @@ python = ">=3.9.0,<4.0"
 langchain-core = ">=0.2.39,<0.4"
 langgraph-checkpoint = "^1.0.2"
 
-
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
 pytest-cov = "^4.0.0"
@@ -21,7 +20,6 @@ pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.4.1"
-grandalf = "^0.8"
 mypy = "^1.6.0"
 ruff = "^0.6.2"
 jupyter = "^1.0.0"
@@ -53,7 +51,6 @@ docstring-code-line-length = "dynamic"
 [tool.mypy]
 ignore_missing_imports = "True"
 disallow_untyped_defs = "True"
-exclude = ["notebooks", "examples", "example_data"]
 
 [tool.coverage.run]
 omit = ["tests/*"]

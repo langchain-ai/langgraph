@@ -6213,8 +6213,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
-
     assert await app.ainvoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
         "docs": ["doc1", "doc2", "doc3", "doc4"],
@@ -6351,8 +6349,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     workflow.set_finish_point("qa")
 
     app = workflow.compile()
-
-    assert app.get_graph().draw_ascii() == snapshot
 
     async with assert_ctx_once():
         with pytest.raises(ValidationError):
@@ -6873,7 +6869,6 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
     assert await app.ainvoke({"my_key": "my value", "never_called": never_called}) == {
         "my_key": "my value there and back again",
         "never_called": never_called,
