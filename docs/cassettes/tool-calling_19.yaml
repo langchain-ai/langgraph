@@ -1,0 +1,80 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "what''s
+      the weather in sf?"}], "model": "claude-3-haiku-20240307", "temperature": 0.0,
+      "tools": [{"name": "get_weather", "description": "Call to get the current weather.",
+      "input_schema": {"type": "object", "properties": {"location": {"type": "string"}},
+      "required": ["location"]}}, {"name": "get_coolest_cities", "description": "Get
+      a list of coolest cities", "input_schema": {"type": "object", "properties":
+      {}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '478'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA1RQTU/DMAz9K5EvXDKpXVErcoMhLkwDqewACFUhNWtpmoza0TZV/e8oBQScLD+/
+        D9sjtDUo6GlXJen66eptc6jvV4/H5XXH6S2ZbZODBD7tMbKQSO8QJAzeRkATtcTaMUjofY0WFBir
+        Q42LbNHotguLZbI8T7KkAAnGO0bHoJ7HH0fGY9TORcFdp09SWOQzEqZB0wluUBxQc4ODaJ0otRM3
+        g3amJeMVTPLXyHtbBYq7zQfFPlRJuinKsr8ssnKddunF+/bhtV41R5DgdB91O+TqOyBK3T4wqBGs
+        N5pb70DBv0yYphcJxH5fDahpJvyJngeEHwGdQVAuWCshzD9T45d7xb5DR6CyIpfgA//F8nyaPgEA
+        AP//AwCQCuOYkgEAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2263c1c9745e60-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:44:00 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01Bj9k7o9kD9Lpa54SxnDN8P
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - eac1714d02cde3c8811077ea74a8e148
+    status:
+      code: 200
+      message: OK
+version: 1

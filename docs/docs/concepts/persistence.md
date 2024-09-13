@@ -6,15 +6,17 @@ LangGraph has a built-in persistence layer, implemented through checkpointers. W
 
 ## Threads
 
- A thread is a unique ID or [thread identifier](#threads) assigned to a series of checkpoints saved by a checkpointer. Each checkpoint saved by the checkpointer is a `StateSnapshot` object. `StateSnapshots` have the following key properties:
+A thread is a unique ID or [thread identifier](#threads) assigned to each checkpoint saved by a checkpointer.
+
+### Checkpoints
+
+Checkpoint is a snapshot of the graph state saved at each super-step and is represented by `StateSnapshot` object with the following key properties:
 
 - `config`: Config associated with this checkpoint. 
 - `metadata`: Metadata associated with this checkpoint.
 - `values`: Values of the state channels at this point in time.
 - `next` A tuple of the node names to execute next in the graph.
 - `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) from within a node, tasks will contain additional data associated with interrupts.
-
-### Checkpoints 
 
 Let's see what checkpoints are saved when a simple graph is invoked as follows:
 

@@ -66,6 +66,7 @@ class CachePolicy(NamedTuple):
 class PregelTask(NamedTuple):
     id: str
     name: str
+    path: tuple[str, ...]
     error: Optional[Exception] = None
     interrupts: tuple[Interrupt, ...] = ()
     state: Union[None, RunnableConfig, "StateSnapshot"] = None

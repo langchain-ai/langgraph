@@ -1,0 +1,117 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "hi! I''m bob", "role": "user"}, {"content":
+      "Hello Bob! How can I assist you today?", "role": "assistant"}, {"content":
+      "what is my name?", "role": "user"}], "model": "gpt-3.5-turbo", "n": 1, "stream":
+      true, "temperature": 0.0}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '253'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=k5514X5CEewq0l02QJsXCZpSVUU8xc5n6NStlbyThdw-1726170169-1.0.1.1-41XOKNUnYVIg.15B8vru6H8o3gSQ8eMqU055fK9zNgP2fPnwNN5PbVB9tQgq1flNha0dn7z6k0V3ssJg9K9DoQ;
+        _cfuvid=PI651aVbxqzJ4dJwBUTZY.669ADPFlLVlsBupHiUbuA-1726170169589-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"Your"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        name"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        is"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        Bob"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A6k0HoFJbTj3zjCMNTq0eWDcLrqPS","object":"chat.completion.chunk","created":1726170169,"model":"gpt-3.5-turbo-0125","system_fingerprint":null,"choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}]}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22620919994211-EWR
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Thu, 12 Sep 2024 19:42:50 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '81'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999963'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_f38be054aa3ae604e4cbc7b7409bd0f2
+    status:
+      code: 200
+      message: OK
+version: 1

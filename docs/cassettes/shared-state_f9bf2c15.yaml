@@ -1,0 +1,110 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "You are helpful assistant.\n    \n    Here is
+      what you know about the user:\n    \n    <info>\n    \n    </info>\n    \n    Help
+      out the user. If the user tells you any information about themselves, save the
+      information using the `Info` tool.\n    \n    This means if the user provides
+      any sort of fact about themselves, be it an opinion they have, a fact about
+      themselves, etc. SAVE IT!\n    ", "role": "system"}, {"content": "where and
+      what should i eat for dinner? Can you list some restaurants?", "role": "user"}],
+      "model": "gpt-3.5-turbo", "n": 1, "stream": false, "temperature": 0.7, "tools":
+      [{"type": "function", "function": {"name": "Info", "description": "This tool
+      should be called when you want to save a new fact about the user. Attributes:\nfact
+      (str): A fact about the user.\ntopic (str): The topic related the fact is about,
+      i.e. Food, Location, Movies, etc.", "parameters": {"type": "object", "properties":
+      {"fact": {"type": "string"}, "topic": {"type": "string"}}, "required": ["fact",
+      "topic"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1044'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=qcGxQy.91.rE2jq29Y6aSj6AWfHyfHBw6J3h65j31X4-1726170056-1.0.1.1-C4dN1w8CZ1nvkqO2eOmNtpy2Qqi5ZbIgEBAhMeF_MVnqsDO2RAN6szOlHpnF62pytOKJdvcher8ZJT5aRxqFgA;
+        _cfuvid=WGnbU2kN9kcJL.xcrJStyQfiubn7icgg6QQXvc3gdmU-1726170056992-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//VJFBb9swDIXv/hWczkmRuEi65jK06GHZqRiwAdswBIpE22plUaDorEaR
+        /z5IdePtosP7+Ai+p9cKQDmrdqBMp8X00S/vtk/j98eH0/2Xx3b/eYwtvfwYf377+jz4zqpFdtDx
+        CY28u64M9dGjOApv2DBqwbx1fVNv1zer1ea2gJ4s+mxroyyvrzZLGfhIy9W63kzOjpzBpHbwqwIA
+        eC1vvjFYfFE7WC3elR5T0i2q3WUIQDH5rCidkkuig6jFDA0FwVDO3oPRASw2LjhBP0KHPsJIA/xx
+        0oF0Wj7APTbECHuITCdnceaJegTGJHpgHQQYDfU9BqtzCWkBhgZvy3z0qBNC6jSXBQyeTBkDYtBh
+        hMjYIGMwmIqj0yeEhhisCwH5078RGJsh6VxhGLyf9POlE09tZDqmiV/0HDN1B0adKOT8SSiqQs8V
+        wO/S/fBfnSoy9VEOQs8Y8sL17fZtn5q/e6bX9QSFRPtZr+uP1XShSmMS7A+NCy1yZFe+ouQ4V38B
+        AAD//wMA21hUZ4kCAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225f565af1c33a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:41:00 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '639'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999868'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_a732b15d5d2950e924e6648634839537
+    status:
+      code: 200
+      message: OK
+version: 1

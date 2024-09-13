@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 
 [tool.poetry.group.docs.dependencies]
 langgraph = { path = "libs/langgraph/", develop = true }
@@ -26,6 +26,23 @@ mkdocs-git-committers-plugin-2 = "^2.3.0"
 mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
 markdown-include = "^0.8.1"
 markdown-callouts = "^0.4.0"
+mkdocs-exclude = "^1.0.2"
+vcrpy = "^6.0.1"
+click = "^8.1.7"
+
+[tool.poetry.group.test.dependencies]
+langchain-openai = "^0.1.23"
+langchain-anthropic = "^0.1.23"
+numpy = "^1.26.4"
+redis = "^5.0.8"
+pymongo = "^4.8.0"
+motor = "^3.5.1"
+langchain-community = "^0.2.16"
+grandalf = "^0.8"
+pyppeteer = "^2.0.0"
+
+[tool.poetry.group.test]
+optional = true
 
 [build-system]
 requires = ["poetry-core"]

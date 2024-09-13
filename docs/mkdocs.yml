@@ -79,6 +79,10 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
+  - exclude:
+      glob:
+        - tutorials/llm-compiler/math_tools.py
+        - tutorials/llm-compiler/output_parser.py
 nav:
   - Home:
       - "index.md"
@@ -190,7 +194,7 @@ nav:
       - LangGraph Glossary: concepts/low_level.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
       - Human-in-the-Loop: concepts/human_in_the_loop.md
-      - Multi-Agent: concepts/multi_agent.md
+      - Multi-Agent Systems: concepts/multi_agent.md
       - Persistence: concepts/persistence.md
       - Streaming: concepts/streaming.md
       - FAQ: concepts/faq.md
@@ -244,7 +248,7 @@ nav:
               - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
               - Configure Agents: "cloud/how-tos/configuration_cloud.md"
-              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
+              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'
               - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
