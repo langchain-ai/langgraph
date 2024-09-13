@@ -1,7 +1,5 @@
-from contextlib import contextmanager
-from typing import Generator, Generic, Optional, Sequence, Type
+from typing import Generic, Optional, Sequence, Type
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -32,18 +30,12 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     def checkpoint(self) -> set[Value]:
         return self.seen
 
-    @contextmanager
-    def from_checkpoint(
-        self, checkpoint: Optional[set[Value]], config: RunnableConfig
-    ) -> Generator[Self, None, None]:
+    def from_checkpoint(self, checkpoint: Optional[set[Value]]) -> Self:
         empty = self.__class__(self.typ, self.names)
+        empty.key = self.key
         if checkpoint is not None:
-            empty.seen = checkpoint.copy()
-
-        try:
-            yield empty
-        finally:
-            pass
+            empty.seen = checkpoint
+        return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         updated = False

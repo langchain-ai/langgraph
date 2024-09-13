@@ -1,7 +1,5 @@
-from contextlib import contextmanager
-from typing import Generator, Generic, Optional, Sequence, Type
+from typing import Generic, Optional, Sequence, Type
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -28,20 +26,12 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    @contextmanager
-    def from_checkpoint(
-        self, checkpoint: Optional[Value], config: RunnableConfig
-    ) -> Generator[Self, None, None]:
+    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
         empty = self.__class__(self.typ)
+        empty.key = self.key
         if checkpoint is not None:
             empty.value = checkpoint
-        try:
-            yield empty
-        finally:
-            try:
-                del empty.value
-            except AttributeError:
-                pass
+        return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
