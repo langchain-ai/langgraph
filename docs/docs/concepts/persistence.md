@@ -138,12 +138,16 @@ In our example, the output of `get_state_history` will look like this:
 
 ![State](img/get_state.jpg)
 
+### Execution 
+
+When invoking graph with a checkpointer, you **must** specify a `thread_id`. The graph will execute from the current (most recent) checkpoint in the `thread`.
+
 ### Replay
 
-With access to state, it's possible to play-back a prior graph execution. When invoking graph with a checkpointer, you **must** specify a `thread_id` and optionally a `checkpoint_id`.
+It's also possible to play-back a prior graph execution. If we `invoking` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the graph from that checkpoint. 
 
 * `thread_id` is simply the ID of a thread. This is always required.
-* `checkpoint_id` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to start of a run of a graph from some point halfway through a thread.
+* `checkpoint_id` This identifier refers to a specific checkpoint within a thread. 
 
 You must pass these when invoking the graph as part of the `configurable` portion of the config:
 
@@ -154,8 +158,6 @@ You must pass these when invoking the graph as part of the `configurable` portio
 config = {"configurable": {"thread_id": "1"}}
 graph.invoke(inputs, config=config)
 ```
-
-If we `invoke` or `stream` a graph with a `thread_id` specified, the graph will execute from the current (most recent) checkpoint. Alternatively, if we supply a `checkpoint_id`, then we will re-play the graph from that checkpoint.
 
 Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
