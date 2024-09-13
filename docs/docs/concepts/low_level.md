@@ -68,7 +68,7 @@ def node_1(state: PrivateState) -> OverallState:
     ...
 ```
 
-It is also possible to define explicit input and output schemas for a graph. Often, in these cases, we define an "internal" schema that contains *all* keys relevant to graph operations. But, we use specific `input` and `output` schemas to constrain the input and output. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
+It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains *all* keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
 
 ### Reducers
 
