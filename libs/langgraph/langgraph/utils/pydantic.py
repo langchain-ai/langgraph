@@ -34,4 +34,4 @@ def create_model(
         if root is not None:
             v1_kwargs["__root__"] = root
 
-        return create_model(model_name, **v1_kwargs, **field_definitions)
+        return create_model(model_name, **v1_kwargs, **(field_definitions or {}))
