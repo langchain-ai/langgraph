@@ -34,7 +34,6 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
-    create_model,
     get_function_nonlocals,
     get_unique_config_specs,
 )
@@ -91,6 +90,7 @@ from langgraph.utils.config import (
     patch_config,
     patch_configurable,
 )
+from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -309,7 +309,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Input"),
-                **{
+                field_definitions={
                     k: (self.channels[k].UpdateType, None)
                     for k in self.input_channels or self.channels.keys()
                 },
@@ -329,7 +329,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Output"),
-                **{k: (self.channels[k].ValueType, None) for k in self.output_channels},
+                field_definitions={
+                    k: (self.channels[k].ValueType, None) for k in self.output_channels
+                },
             )
 
     @property
