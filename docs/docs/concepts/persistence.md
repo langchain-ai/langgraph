@@ -8,11 +8,11 @@ LangGraph has a built-in persistence layer, implemented through checkpointers. W
 
 A thread is a unique ID or [thread identifier](#threads) assigned to each checkpoint saved by a checkpointer. When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
 
-``python
+```python
 {"configurable": {"thread_id": "1"}}
 ```
 
-### Checkpoints
+## Checkpoints
 
 Checkpoint is a snapshot of the graph state saved at each super-step and is represented by `StateSnapshot` object with the following key properties:
 

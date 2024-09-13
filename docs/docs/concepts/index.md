@@ -67,6 +67,15 @@ For more technical, hands-on guides see our [how-to guides](../how-tos/index.md)
 
 ## [Persistence](persistence.md)
 
+ - [Threads](persistence.md#threads)
+ - [Checkpoints](persistence.md#checkpoints)
+  - [Get state](persistence.md#get-state)
+  - [Get state history](persistence.md#get-state-history)
+  - [Replay](persistence.md#replay)
+  - [Update state](persistence.md#update-state)
+ - [Checkpointer libraries](persistence.md#checkpointer-libraries)
+ - [Capabilities](persistence.md#capabilities)
+
 ## [Streaming](streaming.md)
 
  - [Streaming graph outputs](streaming.md#streaming-graph-outputs-stream-and-astream)
