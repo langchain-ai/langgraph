@@ -102,6 +102,7 @@ V = TypeVar("V")
 INPUT_DONE = object()
 INPUT_RESUMING = object()
 EMPTY_SEQ = ()
+SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
 
 
 class StreamProtocol(Protocol):
@@ -224,7 +225,7 @@ class PregelLoop:
         # adjust task_writes_left
         first_channel = writes[0][0]
         any_channel_is_send = any(k == TASKS for k, _ in writes)
-        always_save = any_channel_is_send or first_channel in (ERROR, INTERRUPT)
+        always_save = any_channel_is_send or first_channel in SPECIAL_CHANNELS
         if not always_save and not self.task_writes_left:
             return self._output_writes(task_id, writes)
         elif first_channel == INTERRUPT:
