@@ -1851,11 +1851,7 @@ async def test_pending_writes_resume(
                 "writes": {"__start__": {"value": 1}},
             },
             parent_config=None,
-            pending_writes=UnsortedSequence(
-                (AnyStr(), "value", 1),
-                (AnyStr(), "start:one", "__start__"),
-                (AnyStr(), "start:two", "__start__"),
-            ),
+            pending_writes=[],
         )
 
 

@@ -42,9 +42,7 @@ def ChannelsManager(
     with ExitStack() as stack:
         yield (
             {
-                k: stack.enter_context(
-                    v.from_checkpoint_named(checkpoint["channel_values"].get(k), config)
-                )
+                k: v.from_checkpoint(checkpoint["channel_values"].get(k))
                 for k, v in channel_specs.items()
             },
             ManagedValueMapping(
@@ -100,11 +98,7 @@ async def AsyncChannelsManager(
         yield (
             # channels: enter each channel with checkpoint
             {
-                k: await stack.enter_async_context(
-                    v.afrom_checkpoint_named(
-                        checkpoint["channel_values"].get(k), config
-                    )
-                )
+                k: v.from_checkpoint(checkpoint["channel_values"].get(k))
                 for k, v in channel_specs.items()
             },
             # managed: build mapping from spec to result

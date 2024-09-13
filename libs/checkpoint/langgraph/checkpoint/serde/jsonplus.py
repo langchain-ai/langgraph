@@ -62,6 +62,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(
                 obj.__class__, method=(None, "construct"), kwargs=obj.dict()
             )
+        elif hasattr(obj, "_asdict") and callable(obj._asdict):
+            return self._encode_constructor_args(obj.__class__, kwargs=obj._asdict())
         elif isinstance(obj, pathlib.Path):
             return self._encode_constructor_args(pathlib.Path, args=obj.parts)
         elif isinstance(obj, re.Pattern):

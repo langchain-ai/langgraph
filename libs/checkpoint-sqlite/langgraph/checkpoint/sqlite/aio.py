@@ -1,4 +1,5 @@
 import asyncio
+import random
 from contextlib import asynccontextmanager
 from typing import (
     Any,
@@ -26,6 +27,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=callable)
@@ -498,3 +500,23 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                     for idx, (channel, value) in enumerate(writes)
                 ],
             )
+
+    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+        """Generate the next version ID for a channel.
+
+        This method creates a new version identifier for a channel based on its current version.
+
+        Args:
+            current (Optional[str]): The current version identifier of the channel.
+            channel (BaseChannel): The channel being versioned.
+
+        Returns:
+            str: The next version identifier, which is guaranteed to be monotonically increasing.
+        """
+        if current is None:
+            current_v = 0
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"
