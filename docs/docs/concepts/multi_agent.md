@@ -17,6 +17,8 @@ Agents can be defined as nodes in LangGraph. As any other node in the LangGraph,
 * Simple **LLM nodes**: single LLMs with custom prompts
 * **Subgraph nodes**: complex graphs called inside the orchestrator graph node
 
+![](./img/multi_agent/subgraph.png)
+
 ### Agents as tools
 
 Agents can also be defined as tools. In this case, the orchestrator agent (e.g. ReAct agent) would use a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.

@@ -57,14 +57,17 @@ Typically, all graph nodes communicate with a single schema. This means that the
 
 It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema and use a type hint -- e.g., `state: PrivateState` as shown below -- to specify it as the node input schema. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail. 
 
-```
+```python
 class OverallState(TypedDict):
     foo: int
 
 class PrivateState(TypedDict):
     baz: int
 
-def node_1(state: PrivateState) -> OverallState:
+def node_1(state: OverallState) -> PrivateState:
+    ...
+
+def node_2(state: PrivateState) -> OverallState:
     ...
 ```
 
