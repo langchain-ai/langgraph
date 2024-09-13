@@ -226,13 +226,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
         return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
 
     def _dump_metadata(self, metadata) -> str:
-        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
-            metadata
-        )
-        if serialized_metadata_type != "json":
-            raise TypeError(
-                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
-            )
+        serialized_metadata = self.jsonplus_serde.dumps(metadata)
         return serialized_metadata.decode()
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
