@@ -1,10 +1,10 @@
 # Streaming
 
-LangGraph is built with first class support for streaming. There are several different ways to stream back results
+LangGraph is built with first class support for streaming. There are several different ways to stream back outputs from a graph run
 
-## `.stream` and `.astream`
+## Streaming graph outputs (`.stream` and `.astream`)
 
-`.stream` and `.astream` are sync and async methods for streaming back results.
+`.stream` and `.astream` are sync and async methods for streaming back outputs from a graph run.
 There are several different modes you can specify when calling these methods (e.g. `graph.stream(..., mode="...")):
 
 - [`"values"`](../how-tos/stream-values.ipynb): This streams the full value of the state after each step of the graph.
@@ -16,7 +16,7 @@ The below visualization shows the difference between the `values` and `updates` 
 ![values vs updates](../static/values_vs_updates.png)
 
 
-## `.astream_events` (for streaming tokens of LLM calls)
+## Streaming LLM tokens and events (`.astream_events`)
 
 In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb).
 
@@ -42,7 +42,7 @@ To make this more concrete and to see what this looks like, let's see what event
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 
-model = ChatOpenAI(model="gpt-3.5-turbo")
+model = ChatOpenAI(model="gpt-4o-mini")
 
 
 def call_model(state: MessagesState):
@@ -109,7 +109,7 @@ These events look like:
   'checkpoint_id': '1ef657a0-0f9d-61b8-bffe-0c39e4f9ad6c',
   'checkpoint_ns': 'call_model',
   'ls_provider': 'openai',
-  'ls_model_name': 'gpt-3.5-turbo',
+  'ls_model_name': 'gpt-4o-mini',
   'ls_model_type': 'chat',
   'ls_temperature': 0.7},
  'data': {'chunk': AIMessageChunk(content='Hello', id='run-3fdbf494-acce-402e-9b50-4eab46403859')},

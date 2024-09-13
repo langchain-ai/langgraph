@@ -194,7 +194,7 @@ nav:
       - LangGraph Glossary: concepts/low_level.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
       - Human-in-the-Loop: concepts/human_in_the_loop.md
-      - Multi-Agent: concepts/multi_agent.md
+      - Multi-Agent Systems: concepts/multi_agent.md
       - Persistence: concepts/persistence.md
       - Streaming: concepts/streaming.md
       - FAQ: concepts/faq.md

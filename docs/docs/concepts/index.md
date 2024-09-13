@@ -1,17 +1,23 @@
 # Conceptual Guides
 
-In this guide we will explore the concepts behind build agentic and multi-agent systems with LangGraph. We assume you have already learned the basic covered in the [introduction tutorial](../tutorials/introduction.ipynb) and want to deepen your understanding of LangGraph's underlying design and inner workings.
+In these guides we will explore the concepts behind build agentic and multi-agent systems with LangGraph. We assume you have already learned the basic covered in the [introduction tutorial](../tutorials/introduction.ipynb) and want to deepen your understanding of LangGraph's underlying design and inner workings.
 
-There are three main parts to this concept guide. First, we'll discuss at a very high level what it means to be agentic. Next, we'll look at lower-level concepts in LangGraph that are core for understanding how to build your own agentic systems. Finally, we'll discuss common agentic patterns and how you can achieve those with LangGraph. These will be mostly conceptual guides - for more technical, hands-on guides see our [how-to guides](../how-tos/index.md)
+These conceptual guides are arranged in the following way:
 
+* first, we'll discuss at a very high level the challenges that arise when building agents and [how LangGraph addresses them](high_level.md)
+* next, we'll look at a list of [core LangGraph concepts](low_level.md) that are key for understanding how to build your own agentic systems
+* then, we'll discuss [common agentic patterns](agentic_concepts.md) and how you can achieve those with LangGraph
+* finally, we'll take an in-depth look at several concepts -- [human-in-the-loop](human_in_the_loop.md), [multi-agent systems](multi_agent.md), [persistence](persistence.md) and [streaming](streaming.md)
 
-Why LangGraph?
+For more technical, hands-on guides see our [how-to guides](../how-tos/index.md) and [tutorials](../tutorials/index.md).
 
-- [What does it mean to be agentic?](high_level.md#what-does-it-mean-to-be-agentic)
-- [LangGraph Core Principles](high_level.md#langgraph-core-principles)
+## [Why LangGraph?](high_level.md)
+
+- [Core Principles](high_level.md#langgraph-core-principles)
+- [Debugging](high_level.md#debugging)
 - [Deployment](high_level.md#deployment)
 
-LangGraph Glossary
+## [LangGraph Glossary](low_level.md)
 
 - [Graphs](low_level.md#graphs)
     - [StateGraph](low_level.md#stategraph)
@@ -30,31 +36,38 @@ LangGraph Glossary
     - [Entry Point](low_level.md#entry-point)
     - [Conditional Entry Point](low_level.md#conditional-entry-point)
 - [Send](low_level.md#send)
+- [Persistence](low_level.md#persistence)
+- [Graph Migrations](low_level.md#graph-migrations)
 - [Configuration](low_level.md#configuration)
+- [Breakpoints](low_level.md#breakpoints)
 - [Visualization](low_level.md#visualization)
 - [Streaming](low_level.md#streaming)
 
-Human-in-the-Loop
-# TODO: populate this
-
-Persistence
-# TODO: populate this
-
-Streaming
-# TODO: populate this
-
-Common Agentic Patterns
+## [Common Agentic Patterns](agentic_concepts.md)
 
 - [Structured output](agentic_concepts.md#structured-output)
 - [Tool calling](agentic_concepts.md#tool-calling)
 - [Memory](agentic_concepts.md#memory)
 - [Human in the loop](agentic_concepts.md#human-in-the-loop)
-    - [Approval](agentic_concepts.md#approval)
-    - [Wait for input](agentic_concepts.md#wait-for-input)
-    - [Edit agent actions](agentic_concepts.md#edit-agent-actions)
-    - [Time travel](agentic_concepts.md#time-travel)
 - [Map-Reduce](agentic_concepts.md#map-reduce)
 - [Multi-agent](agentic_concepts.md#multi-agent)
 - [Planning](agentic_concepts.md#planning)
 - [Reflection](agentic_concepts.md#reflection)
 - [Off-the-shelf ReAct Agent](agentic_concepts.md#react-agent)
+
+## [Human-in-the-Loop](human_in_the_loop.md)
+
+ - [Approval](human_in_the_loop.md#approval)
+ - [Wait for input](human_in_the_loop.md#wait-for-input)
+ - [Edit agent actions](human_in_the_loop.md#edit-agent-actions)
+ - [Time travel](human_in_the_loop.md#time-travel)
+ - [Review tool calls](human_in_the_loop.md#review-tool-calls)
+
+## [Multi-Agent Systems](multi_agent.md)
+
+## [Persistence](persistence.md)
+
+## [Streaming](streaming.md)
+
+ - [Streaming graph outputs](streaming.md#streaming-graph-outputs-stream-and-astream)
+ - [Streaming LLM tokens and events](streaming.md#streaming-llm-tokens-and-events-astream_events)
