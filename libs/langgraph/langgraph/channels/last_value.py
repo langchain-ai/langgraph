@@ -9,8 +9,7 @@ from langgraph.errors import EmptyChannelError, InvalidUpdateError
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, can receive at most one value per step."""
 
-    def __init__(self, typ: Type[Value]) -> None:
-        self.typ = typ
+    __slots__ = ("value",)
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, LastValue)

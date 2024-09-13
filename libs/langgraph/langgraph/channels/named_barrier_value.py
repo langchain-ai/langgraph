@@ -9,8 +9,10 @@ from langgraph.errors import EmptyChannelError, InvalidUpdateError
 class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     """A channel that waits until all named values are received before making the value available."""
 
+    __slots__ = ("names", "seen")
+
     def __init__(self, typ: Type[Value], names: set[Value]) -> None:
-        self.typ = typ
+        super().__init__(typ)
         self.names = names
         self.seen = set()
 

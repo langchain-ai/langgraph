@@ -9,8 +9,10 @@ from langgraph.errors import EmptyChannelError, InvalidUpdateError
 class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the value received in the step immediately preceding, clears after."""
 
+    __slots__ = ("value", "guard")
+
     def __init__(self, typ: Type[Value], guard: bool = True) -> None:
-        self.typ = typ
+        super().__init__(typ)
         self.guard = guard
 
     def __eq__(self, value: object) -> bool:

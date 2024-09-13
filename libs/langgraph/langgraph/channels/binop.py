@@ -34,10 +34,11 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
+    __slots__ = ("value", "operator")
+
     def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
+        super().__init__(typ)
         self.operator = operator
-        # keep the type exposed by ValueType/UpdateType as-is
-        self.typ = typ
         # special forms from typing or collections.abc are not instantiable
         # so we need to replace them with their concrete counterparts
         typ = _strip_extras(typ)

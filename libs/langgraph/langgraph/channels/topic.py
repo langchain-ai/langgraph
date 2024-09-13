@@ -28,9 +28,11 @@ class Topic(
         accumulate: Whether to accumulate values across steps. If False, the channel will be emptied after each step.
     """
 
+    __slots__ = ("values", "accumulate")
+
     def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
+        super().__init__(typ)
         # attrs
-        self.typ = typ
         self.accumulate = accumulate
         # state
         self.values = list[Value]()

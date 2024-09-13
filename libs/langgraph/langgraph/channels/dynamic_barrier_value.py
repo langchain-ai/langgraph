@@ -22,11 +22,13 @@ class DynamicBarrierValue(
           back to the "priming" state.
     """
 
+    __slots__ = ("names", "seen")
+
     names: Optional[set[Value]]
     seen: set[Value]
 
     def __init__(self, typ: Type[Value]) -> None:
-        self.typ = typ
+        super().__init__(typ)
         self.names = None
         self.seen = set()
 
