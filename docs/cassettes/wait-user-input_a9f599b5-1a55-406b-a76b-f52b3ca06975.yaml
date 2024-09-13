@@ -1,0 +1,218 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "Use the search tool to ask the user where they
+      are, then look up the weather there", "role": "user"}, {"content": null, "role":
+      "assistant", "tool_calls": [{"type": "function", "id": "call_bI7P7D9VQb1xNWVcNtP8YViO",
+      "function": {"name": "AskHuman", "arguments": "{\"question\": \"Where are you
+      located?\"}"}}]}, {"content": "san francisco", "role": "tool", "tool_call_id":
+      "call_bI7P7D9VQb1xNWVcNtP8YViO"}], "model": "gpt-4o", "n": 1, "stream": false,
+      "temperature": 0.7, "tools": [{"type": "function", "function": {"name": "search",
+      "description": "Call to surf the web.", "parameters": {"type": "object", "properties":
+      {"query": {"type": "string"}}, "required": ["query"]}}}, {"type": "function",
+      "function": {"name": "AskHuman", "description": "Ask the human a question",
+      "parameters": {"type": "object", "properties": {"question": {"type": "string"}},
+      "required": ["question"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '912'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=N204PYIELheOUGKDMMaA0PmhA5p7BHfmwcM7sp6ZbmA-1726170028-1.0.1.1-jrw8z0N0uibTVSHkaRNYcagTGPy9Xd82XGd1Hk2MhXynFStIhjJVfzV14HNagSxniMkY8.MHcOWmsb3c5nNrbw;
+        _cfuvid=rjcRiznqCYDzcwAAcKgogW18QVdWRn_w4ygYphSeKvw-1726170028792-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2xSwY6bMBS88xVP7xwqTBKicttqld3TVt1Wq0ZNhRznAd41tmsbtTTKv1cQkrBR
+        OSBrhnkzzPMhAkC5xxxQ1DyIxqr4Lnvt2OfnO7b+u/ke5m+L+5cX97z5xtTmscJZrzC7VxLhrPog
+        TGMVBWn0iRaOeKB+KlulGVslSfpxIBqzJ9XLKhvihYnTJF3EyTJm81FYGynIYw4/IgCAw/DuI+o9
+        /cEcktkZach7XhHml48A0BnVI8i9lz5wHXB2JYXRgXSfWrdKTYhgjCoEV+pqfHoOk/O1J65UIR/W
+        zUrvuifWPTyVn7zNvmSCcT/xO43u7BCobLW49DPhL3h+YwaAmjeD1hN3or5RAiB3VduQDn1qPGzx
+        V0uu22K+RdE6RzrAb+KhJgdSw1euYe24FtILs8Ujvpt2jP53/jnpyFHZeq7G8kb8eNmGMpV1Zudv
+        ysVSaunrwhH3w09Ou47OboMPtu/WidaZxoYimDfS/VjGxt3j9bZN2NVIBhO4muDpKhpzou98oKYo
+        pa7IWSeHq4ClLdJlli44zfkSo2P0DwAA//8DAOauAGMTAwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225e986fc7c47c-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:29 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '343'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999957'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_7ba6ccf8393e18c4a6874f7d22328d71
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Use the search tool to ask the user where they
+      are, then look up the weather there", "role": "user"}, {"content": null, "role":
+      "assistant", "tool_calls": [{"type": "function", "id": "call_bI7P7D9VQb1xNWVcNtP8YViO",
+      "function": {"name": "AskHuman", "arguments": "{\"question\": \"Where are you
+      located?\"}"}}]}, {"content": "san francisco", "role": "tool", "tool_call_id":
+      "call_bI7P7D9VQb1xNWVcNtP8YViO"}, {"content": null, "role": "assistant", "tool_calls":
+      [{"type": "function", "id": "call_iGFm7nbyN1yGNfBsp6Q6c1as", "function": {"name":
+      "search", "arguments": "{\"query\": \"current weather in San Francisco\"}"}}]},
+      {"content": "I looked up: current weather in San Francisco. Result: It''s sunny
+      in San Francisco, but you better look out if you''re a Gemini \ud83d\ude08.",
+      "role": "tool", "tool_call_id": "call_iGFm7nbyN1yGNfBsp6Q6c1as"}], "model":
+      "gpt-4o", "n": 1, "stream": false, "temperature": 0.7, "tools": [{"type": "function",
+      "function": {"name": "search", "description": "Call to surf the web.", "parameters":
+      {"type": "object", "properties": {"query": {"type": "string"}}, "required":
+      ["query"]}}}, {"type": "function", "function": {"name": "AskHuman", "description":
+      "Ask the human a question", "parameters": {"type": "object", "properties": {"question":
+      {"type": "string"}}, "required": ["question"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1349'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=N204PYIELheOUGKDMMaA0PmhA5p7BHfmwcM7sp6ZbmA-1726170028-1.0.1.1-jrw8z0N0uibTVSHkaRNYcagTGPy9Xd82XGd1Hk2MhXynFStIhjJVfzV14HNagSxniMkY8.MHcOWmsb3c5nNrbw;
+        _cfuvid=rjcRiznqCYDzcwAAcKgogW18QVdWRn_w4ygYphSeKvw-1726170028792-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//VJAxb8IwFIT3/IonzwQlIQklWyuVoUORSreqQsZ5SUwd27Jf1CLEf68c
+        AqWLh/t8p7t3igCYrFkFTHScRG9V/Fgejunq4YnX25etSOSmL9Z1/py/5a8bxWbBYfYHFHR1zYXp
+        rUKSRl+wcMgJQ2q6zMp0mSTZagS9qVEFW2spzk2cJVkeJ0WcLiZjZ6RAzyr4iAAATuMbKuoaf1gF
+        yeyq9Og9b5FVt08AzBkVFMa9l564Jjb7g8JoQj22fu8QxOAcaoJv5NShA6lhyzWsHddCemFAevCD
+        1sf5fYjDZvA8bNCDUpN+vrVSprXO7P3Eb3ojtfTdziH3RocGnoxlIz1HAJ/j+uHfIGad6S3tyHyh
+        DoFpmV/y2N+97+h0GkaGuLrTl3k0NWT+6An7XSN1i846eTlGY3dZUWY5xwUvWHSOfgEAAP//AwDt
+        btvzFQIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225e9b9b38c47c-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:29 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '234'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999921'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_d7e5258e8cb88fe08037ed03c6d79581
+    status:
+      code: 200
+      message: OK
+version: 1

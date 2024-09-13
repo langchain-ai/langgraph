@@ -46,6 +46,8 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
+EMPTY_SEQ = tuple()
+
 
 class WritesProtocol(Protocol):
     name: str
@@ -78,7 +80,10 @@ def should_interrupt(
             task
             for task in tasks
             if (
-                (not task.config or TAG_HIDDEN not in task.config.get("tags"))
+                (
+                    not task.config
+                    or TAG_HIDDEN not in task.config.get("tags", EMPTY_SEQ)
+                )
                 if interrupt_nodes == "*"
                 else task.name in interrupt_nodes
             )
@@ -182,11 +187,10 @@ def apply_writes(
         for chan in task.triggers
         if chan not in RESERVED and chan in channels
     }:
-        if channels[chan].consume():
-            if get_next_version is not None:
-                checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
-                )
+        if channels[chan].consume() and get_next_version is not None:
+            checkpoint["channel_versions"][chan] = get_next_version(
+                max_version, channels[chan]
+            )
 
     # clear pending sends
     if checkpoint["pending_sends"]:
@@ -216,8 +220,7 @@ def apply_writes(
     updated_channels: set[str] = set()
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
-            updated = channels[chan].update(vals)
-            if updated and get_next_version is not None:
+            if channels[chan].update(vals) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
                     max_version, channels[chan]
                 )
@@ -370,6 +373,8 @@ def prepare_single_task(
             proc = processes[packet.node]
             if node := proc.node:
                 managed.replace_runtime_placeholders(step, packet.arg)
+                if proc.metadata:
+                    metadata.update(proc.metadata)
                 writes = deque()
                 task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                 return PregelExecutableTask(
@@ -379,9 +384,7 @@ def prepare_single_task(
                     writes,
                     patch_config(
                         merge_configs(
-                            config,
-                            processes[packet.node].config,
-                            {"metadata": metadata},
+                            config, {"metadata": metadata, "tags": proc.tags}
                         ),
                         run_name=packet.node,
                         callbacks=(
@@ -478,6 +481,8 @@ def prepare_single_task(
 
             if for_execution:
                 if node := proc.node:
+                    if proc.metadata:
+                        metadata.update(proc.metadata)
                     writes = deque()
                     task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     return PregelExecutableTask(
@@ -487,9 +492,7 @@ def prepare_single_task(
                         writes,
                         patch_config(
                             merge_configs(
-                                config,
-                                proc.config,
-                                {"metadata": metadata},
+                                config, {"metadata": metadata, "tags": proc.tags}
                             ),
                             run_name=name,
                             callbacks=(

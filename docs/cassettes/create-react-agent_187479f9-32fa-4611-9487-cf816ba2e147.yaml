@@ -1,0 +1,100 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "who built you?", "role": "user"}], "model":
+      "gpt-4o", "n": 1, "stream": false, "temperature": 0.0, "tools": [{"type": "function",
+      "function": {"name": "get_weather", "description": "Use this to get weather
+      information.", "parameters": {"type": "object", "properties": {"city": {"enum":
+      ["nyc", "sf"], "type": "string"}}, "required": ["city"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '373'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=cxHvMQphoeBQ46L39OoVqW2irhwAXLl.gvPdMDXBjFE-1726170100-1.0.1.1-zvpj5RwfZFxUBlzy1BQH7QbvFZd7BjkVMu6DrmpeXj_zWKH1yzYJDsq_Y6OTsS3rG6Ta5MrRaV8e27lehtAIaw;
+        _cfuvid=pMKtPMh03mk4K4n1PFfRAitrCZjlFPSHvFsqhiJ8Mik-1726170100484-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//VFHLbtswELzrKxY8W4HEWDbgWxogQA5FUfRxaFEYa2olMaF2GZJO6gT+
+        94KyYqcXApzhDGaGbwWAsq3agDIDJjN6V96sHl4/8fe7X99evuqG9NMtrSr9c/jx+dY/qUVWyO6B
+        THpXXRkZvaNkhU+0CYSJsmu91qt6XdVVPRGjtOSyrPepXEqpK70sq6asr2fhINZQVBv4XQAAvE1n
+        jsgt/VUbqBbvyEgxYk9qc34EoIK4jCiM0caEnNTiQhrhRDylvocXjDDHhN0Bvnjim/sFIASKhMEM
+        IKFHtq+Ya0EnZh+pBWFo6ZmceMs9ILeA7TOymW4h2c4aiw4sJ3LO9sSGIJEZWJz0h6uPcQJ1+4h5
+        Dd47N+PHcz8nvQ+yizN/xjvLNg7bQBiFc5eYxKuJPRYAf6Yd9/9No3yQ0adtkkfibNg0Jzt1+bgL
+        qeeNVZKE7oKvm2LOp+IhJhq3neWegg/2NGrnt7pZ6SXSNTaqOBb/AAAA//8DAMOG0MpdAgAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22605c090942c0-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:41:41 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '367'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999979'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_a53318a63eb648c4d294383e844a2882
+    status:
+      code: 200
+      message: OK
+version: 1

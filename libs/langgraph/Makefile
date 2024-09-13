@@ -13,7 +13,13 @@ OUTPUT ?= out/benchmark.json
 
 benchmark:
 	mkdir -p out
+	rm -f $(OUTPUT)
 	poetry run python -m bench -o $(OUTPUT) --rigorous
+
+benchmark-fast:
+	mkdir -p out
+	rm -f $(OUTPUT)
+	poetry run python -m bench -o $(OUTPUT) --fast
 
 GRAPH ?= bench/fanout_to_subgraph.py
 

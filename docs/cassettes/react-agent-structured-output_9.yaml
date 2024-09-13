@@ -1,0 +1,168 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "what''s
+      the weather in SF?"}], "model": "claude-3-opus-20240229", "tool_choice": {"type":
+      "any"}, "tools": [{"name": "get_weather", "description": "Use this to get weather
+      information.", "input_schema": {"type": "object", "properties": {"city": {"enum":
+      ["nyc", "sf"], "type": "string"}}, "required": ["city"]}}, {"name": "WeatherResponse",
+      "description": "Respond to the user with this", "input_schema": {"properties":
+      {"temperature": {"description": "The temperature in fahrenheit", "type": "number"},
+      "wind_directon": {"description": "The direction of the wind in abbreviated form",
+      "type": "string"}, "wind_speed": {"description": "The speed of the wind in km/h",
+      "type": "number"}}, "required": ["temperature", "wind_directon", "wind_speed"],
+      "type": "object"}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '830'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA1SPQUvDQBCF/8s7byDdtqB7NEUF6aEHQSoS1mSahCa7a2YWiSH/XTYi6HHem/ne
+        mxldDYOBmzLf6HN3eg9TWxxt2zSXs3uQ/dcIBZkCpS1itg1BYfR9Eixzx2KdQGHwNfUwqHoba8q2
+        mQ+RM53rXa71LRQq74ScwLzOv0Dxvi8jJ+JaI82xzDePzck9xZch3B2uu6Lj53A8FPdQcHZIdw1J
+        +UlWWkrtOheiwMyoOplgwBcsy5sCiw/lSJa9+5+1GkwfkVxFMC72vUJcXzPzD64UfyXHMPtcK/go
+        f7XtzbJ8AwAA//8DAJo93fU5AQAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22646588cf7d06-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:44:28 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_018FcoLAnhiqc6JjEhkteWxi
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 63d7590271838e6a0463c0abeeb6e130
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "what''s
+      the weather in SF?"}, {"role": "assistant", "content": [{"type": "tool_use",
+      "name": "get_weather", "input": {"city": "sf"}, "id": "toolu_01HgQnKuXmpBDk4CisUpMDCF"}]},
+      {"role": "user", "content": [{"type": "tool_result", "content": "It is 75 degrees
+      and sunny in SF, with 3 mph winds in the South-East direction", "tool_use_id":
+      "toolu_01HgQnKuXmpBDk4CisUpMDCF", "is_error": false}]}], "model": "claude-3-opus-20240229",
+      "tool_choice": {"type": "any"}, "tools": [{"name": "get_weather", "description":
+      "Use this to get weather information.", "input_schema": {"type": "object", "properties":
+      {"city": {"enum": ["nyc", "sf"], "type": "string"}}, "required": ["city"]}},
+      {"name": "WeatherResponse", "description": "Respond to the user with this",
+      "input_schema": {"properties": {"temperature": {"description": "The temperature
+      in fahrenheit", "type": "number"}, "wind_directon": {"description": "The direction
+      of the wind in abbreviated form", "type": "string"}, "wind_speed": {"description":
+      "The speed of the wind in km/h", "type": "number"}}, "required": ["temperature",
+      "wind_directon", "wind_speed"], "type": "object"}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '1193'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA0yQUUvDQBCE/8s8XyFJU2rvtfoiVbBSVETCednWYHJ33u61aMh/l6QKfdxvZ2aH
+        7dHU0Oj4UGX5Om+u36PdyLE7rs32Kty6+FJCQb4DjSpiNgeCQvTtCAxzw2KcQKHzNbXQsK1JNc3m
+        Mx8Sz4qsKLOiWEHBeifkBPq1/w8U79sq8Zg41RjnVGX5Yi/xeWfs/d1+t/mh04Mtm90cCs50o++J
+        jHxQ3BIH7852F5JA9xDqAkUjKRL0cqFwalxd1U0kK95B4/EGf5ADUQ09H4Y3BRYfqkiGJ9FFsWnB
+        9JXIWYJ2qW0V0vQH3Z/vVuI/yTH0YpUr+CSXbLkchl8AAAD//wMA5b12uWYBAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2264741f497d06-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:44:32 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01GpcMvrnN9EKVSEq7TgPouw
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 2119484aea548993e14d33ff509b9c3b
+    status:
+      code: 200
+      message: OK
+version: 1

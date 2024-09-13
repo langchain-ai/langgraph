@@ -1,0 +1,90 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "search for
+      the weather in sf now"}], "model": "claude-3-5-sonnet-20240620", "tools": [{"name":
+      "search", "description": "Call to surf the web.", "input_schema": {"type": "object",
+      "properties": {"query": {"type": "string"}}, "required": ["query"]}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '313'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA4RRwU4bQQz9lakvXCZoSQqUvSEEBbWRqkBAAqHVaOJNpp21w9ijsIr239EsQm1P
+        nCzb79nPz3sIK6ihk3VTHS0eLtv59Wle3C15eT7/EXZBlh4saL/FgkIRt0awkDiWghMJoo4ULHS8
+        wgg1+OjyCiezyfFEmAh1Mq2mX6uTaQUWPJMiKdRP+4+hiq+FPoYaLjCpCxT7L+bmIEYj6JLfmJaT
+        0Q0an1NCUrNDpxtMJpC5dWSukiMfxPMI7Dkfmp+opkOTBUfix5xMXgOTUTZtoJXRTRATqOXUudI4
+        hMH+lcYcmyzl4NGlkuemOvp11T3m1/uT3/e9p8fF+ns7282XYIFcV3jvywqLtlmh3sNLxtQXcz7R
+        D8PwbEGUt01CJ0z/qxgbgi8ZySPUlGO0kMef1Pv3bY3yHySBenZ8ZoGz/lv7Nh2GNwAAAP//AwAs
+        R6Mi8gEAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225d8c2d3bc339-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:39:47 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      anthropic-ratelimit-requests-limit:
+      - '4000'
+      anthropic-ratelimit-requests-remaining:
+      - '3999'
+      anthropic-ratelimit-requests-reset:
+      - '2024-09-12T19:39:54Z'
+      anthropic-ratelimit-tokens-limit:
+      - '400000'
+      anthropic-ratelimit-tokens-remaining:
+      - '400000'
+      anthropic-ratelimit-tokens-reset:
+      - '2024-09-12T19:39:47Z'
+      request-id:
+      - req_01MPSqFi1rVNrN5UJJ12Dvn5
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - cbf58ac792cd37a460636899a9d56c50
+    status:
+      code: 200
+      message: OK
+version: 1

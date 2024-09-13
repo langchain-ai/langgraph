@@ -554,7 +554,9 @@ class PregelLoop:
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
         if task := self.tasks.get(task_id):
-            if task.config is not None and TAG_HIDDEN in task.config.get("tags"):
+            if task.config is not None and TAG_HIDDEN in task.config.get(
+                "tags", EMPTY_SEQ
+            ):
                 return
             if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
                 self._emit(
@@ -657,7 +659,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -775,7 +777,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -806,3 +808,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         return await asyncio.shield(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
+
+
+EMPTY_SEQ = tuple()

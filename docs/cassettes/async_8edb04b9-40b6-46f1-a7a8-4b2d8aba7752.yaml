@@ -1,0 +1,158 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "what is
+      the weather in sf"}], "model": "claude-3-haiku-20240307", "tools": [{"name":
+      "search", "description": "Call to surf the web.", "input_schema": {"type": "object",
+      "properties": {"query": {"type": "string"}}, "required": ["query"]}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '303'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - AsyncAnthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA1RPTUvDQBT8K2XOG8hHRdmjJ1GUVpQeRMK6eUnWbt+mebtKDfnvkoqgx5l58/Em
+        uAYaB+nqvNim4b3dlA+3tnh67nq6t2Z3w1CIp4GWKxIxHUFhDH4hjIiTaDhC4RAa8tCw3qSGsirr
+        jdunrMzLdV7ll1CwgSNxhH6ZfhNjCL5OskSedyw41Xmx2wz2bn/Nm69H1zVu+/bRd20BBTaHxSdk
+        RtsvLh5ShJ5wTDSeoPFJJvY0rhyvxPCqHQ1bJzZgnl8VJIahHslI4P/tZ0HomIgtQXPyXiGdv9XT
+        T0sdw55YoKvySiGk+Je7WM/zNwAAAP//AwACi3jnTAEAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c2261878c5e0c7a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:29 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01W76T9Cto5JsfRmCJXAdhsA
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 6fef8a0d62bcdbdc81ff1203f6a013ea
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "what is
+      the weather in sf"}, {"role": "assistant", "content": [{"type": "tool_use",
+      "name": "search", "input": {"query": "weather in san francisco"}, "id": "toolu_01WPpcKkBnPzRigdiQbvhgf1"}]},
+      {"role": "user", "content": [{"type": "tool_result", "content": "[\"The answer
+      to your question lies within.\"]", "tool_use_id": "toolu_01WPpcKkBnPzRigdiQbvhgf1",
+      "is_error": false}]}], "model": "claude-3-haiku-20240307", "tools": [{"name":
+      "search", "description": "Call to surf the web.", "input_schema": {"type": "object",
+      "properties": {"query": {"type": "string"}}, "required": ["query"]}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '652'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - AsyncAnthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2RSXW/UMBD8Kys/tVKuXO6upcorUl/gAImCEBSdFnsTm3N2g73pEar+p/6G/jLk
+        HIivJ0s7s6OZHd+Z4Exj+tztlnV9eXj+dhO26fz6w7b98v3l61uP701ldBqosChn7MhUJkksA8w5
+        ZEVWU5leHEXTGBtxdLRYLzyG/bhYLVeb5Xr51FTGCiuxmubj3S9FpW9ld34ac5Wkh0yYrA/cQSsJ
+        AreSetQgDMKgnuBAqJ4KBG+Q4Soh25CtVBAUosg+Qwx7mrl2TIlYf+/k5oZveAFbyRonyCPzBIeg
+        HhB86DxICxfnjw9XcFJfPj48OwVkBwhRDgU6Xx2hukBF50XovMIhsMuASUZ2UC+hHzyc1Bew75/4
+        Uyi8d5QmiEE1EliPbKnIJQxc/PyVAzpiShjjBB4zIPQhugq25IJSSsiEDDaGHpWO1q1IrMClkqfv
+        KeXZ9HHtQLM9pZTP4NoTKPUDJdQxUbFMUIpLqOTg83Q8mmBWjBDFHg9f1ArQSgfqUUFaJYYkMWYI
+        XAHlgWyYLYdjSdgqJRbhfAavbuc4//aDMETCjKzgcPqvTlBxOJ2Z+0+VySrDLhFmYdMYYrfTMbH5
+        CWT6OhJbMg2PMVZmnD9pc2cCD6PuVPbE2TSb5aYyMuqfs3q9ub//AQAA//8DAE9V97MEAwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22618bb8c50c7a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:30 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01VzwhMh7Eapcz1FtWYh7gjt
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 014df6eddd3863250c2a269fde2ebaca
+    status:
+      code: 200
+      message: OK
+version: 1

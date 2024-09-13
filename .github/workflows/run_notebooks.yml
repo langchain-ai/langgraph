@@ -3,7 +3,7 @@ name: Run notebooks
 on:
   workflow_dispatch:
   schedule:
-    - cron:  '0 13 * * *'
+    - cron: '0 13 * * *'
 
 jobs:
   build:
@@ -33,11 +33,17 @@ jobs:
         run: make start-services
 
       - name: Prepare notebooks
-        if: ${{ matrix.lib-version == 'development' }}
-        run: poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+        run: |
+          if [ "${{ matrix.lib-version }}" = "development" ]; then
+            poetry run python docs/_scripts/prepare_notebooks_for_ci.py --comment-install-cells
+          else
+            poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+          fi
 
       - name: Run notebooks
         env:
+          # these won't actually be used because of the VCR cassettes
+          # but need to set them to avoid triggering getpass()
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}

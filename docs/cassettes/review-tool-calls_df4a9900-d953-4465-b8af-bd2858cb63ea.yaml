@@ -1,0 +1,96 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "what''s
+      the weather in sf?"}, {"role": "assistant", "content": [{"text": "Certainly!
+      I can help you check the weather in San Francisco. To get this information,
+      I''ll use the weather search tool. Let me do that for you right away.", "type":
+      "text"}, {"type": "tool_use", "name": "weather_search", "input": {"city": "San
+      Francisco, USA"}, "id": "toolu_01Wwx3AaEQXKZEiJkot5f1oM"}]}, {"role": "user",
+      "content": [{"type": "tool_result", "content": "Sunny!", "tool_use_id": "toolu_01Wwx3AaEQXKZEiJkot5f1oM",
+      "is_error": false}]}], "model": "claude-3-5-sonnet-20240620", "tools": [{"name":
+      "weather_search", "description": "Search for the weather", "input_schema": {"type":
+      "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '808'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2SRQWsbQQyF/4qqSy/r4G4TF/ZSAqFxyCm0t1KMOiN7p56VNiNN7K3xfy/rpqXQ
+        k+A9fQ89dMIUscPBdpvlu9un47odfvbrVvfr2/7xWJ/v+u/YoE8jz1tsRjvGBovmWSCzZE7i2OCg
+        kTN2GDLVyIv3i5uFqQj7ol2218tVu8QGg4qzOHZfT39CnY8zfhkd3hcmB+GDvYEvPcOByXsukAQ+
+        k8CnQhKSBYVkYFVkAtdI0xU8+FsDgpHLloNDpNkBlh86gVaPqgUoeHpJnthAC/BxzFoYvGcIyacr
+        uFOYtEJPLwwkE9jIIW1TgDGTGGy1XJbnbC1w0JrjBchp/xsoHHQYWCJ50r9Ekp3Nx0T9v4YK0GuR
+        SNNHPH9r0FzHTWEyFeyQJW68FsFXw/i5sgTGTmrODdbLS7oTJhmrb1z3LIbd9WrVoFb/V7v5cD7/
+        AgAA//8DAJ21Ky3xAQAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c225e56fa0a5e7a-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:40:20 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      anthropic-ratelimit-requests-limit:
+      - '4000'
+      anthropic-ratelimit-requests-remaining:
+      - '3999'
+      anthropic-ratelimit-requests-reset:
+      - '2024-09-12T19:40:54Z'
+      anthropic-ratelimit-tokens-limit:
+      - '400000'
+      anthropic-ratelimit-tokens-remaining:
+      - '400000'
+      anthropic-ratelimit-tokens-reset:
+      - '2024-09-12T19:40:20Z'
+      request-id:
+      - req_01S9DFb7qJeSf1jpAC3m7NLo
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - c43a70ac415ff94bc8811142f69fa68d
+    status:
+      code: 200
+      message: OK
+version: 1

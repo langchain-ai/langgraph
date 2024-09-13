@@ -9,15 +9,18 @@ env:
   POETRY_VERSION: "1.7.1"
 
 jobs:
-  baseline:
+  benchmark:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: libs/langgraph
     steps:
       - uses: actions/checkout@v4
+      - id: files
+        name: Get changed files
+        uses: Ana06/get-changed-files@v2.3.0
         with:
-          ref: main
+          format: json
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
@@ -26,37 +29,41 @@ jobs:
           cache-key: bench
       - name: Install dependencies
         run: poetry install --with dev
+      - name: Download baseline
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ runner.os }}-benchmark-baseline
+          fail-on-cache-miss: true
+          path: |
+            libs/langgraph/out/benchmark-baseline.json
       - name: Run benchmarks
-        run: make benchmark
-      - name: Upload benchmark baseline
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-baseline.json
-          path: libs/langgraph/out/benchmark.json
-  compare:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: libs/langgraph
-    needs: [baseline]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
-        with:
-          python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: bench
-      - name: Install dependencies
-        run: poetry install --with dev
-      - name: Run benchmarks
-        run: make benchmark
-      - name: Download benchmark baseline
-        uses: actions/download-artifact@v4
-        with:
-          name: benchmark-baseline.json
-          path: libs/langgraph/out
+        id: benchmark
+        run: |
+          {
+            echo 'OUTPUT<<EOF'
+            make -s benchmark
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: Compare benchmarks
-        run: poetry run pyperf compare_to out/benchmark-baseline.json out/benchmark.json --table --group-by-speed >> $GITHUB_OUTPUT
+        id: compare
+        run: |
+          {
+            echo 'OUTPUT<<EOF'
+            mv out/benchmark-baseline.json out/main.json
+            mv out/benchmark.json out/changes.json
+            poetry run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: Annotation
-        run: echo "::notice file=libs/langgraph/bench/__main__.py::$GITHUB_OUTPUT"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const file = JSON.parse(`${{ steps.files.outputs.added_modified_renamed }}`)[0]
+            core.notice(`${{ steps.benchmark.outputs.OUTPUT }}`, {
+              title: 'Benchmark results',
+              file,
+            })
+            core.notice(`${{ steps.compare.outputs.OUTPUT }}`, {
+              title: 'Comparison against main',
+              file,
+            })
