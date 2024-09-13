@@ -30,7 +30,7 @@ def create_model(
         # for langchain-core < 0.3.0
         from langchain_core.runnables.utils import create_model
 
-        v1_kwargs = {**field_definitions}
+        v1_kwargs = {**field_definitions} if field_definitions else {}
         if root is not None:
             v1_kwargs["__root__"] = root
 
