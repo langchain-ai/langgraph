@@ -139,6 +139,7 @@ def create_react_agent(
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
     debug: bool = False,
+    disable_parallel_tool_calls: bool = False
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -426,7 +427,11 @@ def create_react_agent(
     else:
         tool_classes = tools
         tool_node = ToolNode(tool_classes)
-    model = model.bind_tools(tool_classes)
+        
+    if disable_parallel_tool_calls:
+        model = model.bind_tools(tool_classes, parallel_tool_calls=False)
+    else:
+        model = model.bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState):
