@@ -15,7 +15,7 @@ from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from tests.any import AnyDict, AnyStr
+from tests.any import AnyDict
 from tests.drain import drain_topics_async
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
@@ -210,21 +210,7 @@ async def test_subgraph_w_interrupt(
                     },
                     "input": {
                         "messages": [
-                            {
-                                "id": [
-                                    "langchain",
-                                    "schema",
-                                    "messages",
-                                    "HumanMessage",
-                                ],
-                                "kwargs": {
-                                    "content": "what's the weather in sf",
-                                    "id": AnyStr(),
-                                    "type": "human",
-                                },
-                                "lc": 1,
-                                "type": "constructor",
-                            }
+                            _AnyIdHumanMessage(content="what's the weather in sf")
                         ],
                         "route": "weather",
                     },
