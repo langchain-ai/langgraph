@@ -1,7 +1,5 @@
-from contextlib import contextmanager
-from typing import Generator, Generic, NamedTuple, Optional, Sequence, Type, Union
+from typing import Generic, NamedTuple, Optional, Sequence, Type, Union
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -24,11 +22,13 @@ class DynamicBarrierValue(
           back to the "priming" state.
     """
 
+    __slots__ = ("names", "seen")
+
     names: Optional[set[Value]]
     seen: set[Value]
 
     def __init__(self, typ: Type[Value]) -> None:
-        self.typ = typ
+        super().__init__(typ)
         self.names = None
         self.seen = set()
 
@@ -48,22 +48,17 @@ class DynamicBarrierValue(
     def checkpoint(self) -> tuple[Optional[set[Value]], set[Value]]:
         return (self.names, self.seen)
 
-    @contextmanager
     def from_checkpoint(
         self,
         checkpoint: Optional[tuple[Optional[set[Value]], set[Value]]],
-        config: RunnableConfig,
-    ) -> Generator[Self, None, None]:
+    ) -> Self:
         empty = self.__class__(self.typ)
+        empty.key = self.key
         if checkpoint is not None:
             names, seen = checkpoint
-            empty.names = names.copy() if names is not None else None
-            empty.seen = seen.copy()
-
-        try:
-            yield empty
-        finally:
-            pass
+            empty.names = names if names is not None else None
+            empty.seen = seen
+        return empty
 
     def update(self, values: Sequence[Union[Value, WaitForNames]]) -> bool:
         if wait_for_names := [v for v in values if isinstance(v, WaitForNames)]:

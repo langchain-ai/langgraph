@@ -5,7 +5,7 @@ import sys
 from contextlib import AsyncExitStack
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Optional, Sequence
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -16,9 +16,6 @@ from langchain_core.runnables.base import (
     RunnableSequence,
 )
 from langchain_core.runnables.config import (
-    ensure_config,
-    get_async_callback_manager_for_config,
-    get_callback_manager_for_config,
     run_in_executor,
     var_child_runnable_config,
 )
@@ -26,7 +23,12 @@ from langchain_core.runnables.utils import Input, Output, accepts_config
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
-from langgraph.utils.config import merge_configs, patch_config
+from langgraph.utils.config import (
+    ensure_config,
+    get_async_callback_manager_for_config,
+    get_callback_manager_for_config,
+    patch_config,
+)
 
 try:
     from langchain_core.runnables.config import _set_config_context
@@ -54,7 +56,7 @@ class RunnableCallable(Runnable):
         afunc: Optional[Callable[..., Awaitable[Optional[Runnable]]]] = None,
         *,
         name: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        tags: Optional[Sequence[str]] = None,
         trace: bool = True,
         recurse: bool = True,
         **kwargs: Any,
@@ -78,7 +80,7 @@ class RunnableCallable(Runnable):
         self.afunc = afunc
         if afunc is not None:
             self.afunc_accepts_config = accepts_config(afunc)
-        self.config: Optional[RunnableConfig] = {"tags": tags} if tags else None
+        self.tags = tags
         self.kwargs = kwargs
         self.trace = trace
         self.recurse = recurse
@@ -103,11 +105,11 @@ class RunnableCallable(Runnable):
         kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
-        config = ensure_config(merge_configs(self.config, config))
+        if config is None:
+            config = ensure_config()
         context = copy_context()
         if self.trace:
-            config = ensure_config(config)
-            callback_manager = get_callback_manager_for_config(config)
+            callback_manager = get_callback_manager_for_config(config, self.tags)
             run_manager = callback_manager.on_chain_start(
                 None,
                 input,
@@ -139,10 +141,11 @@ class RunnableCallable(Runnable):
         kwargs = {**self.kwargs, **kwargs}
         if self.afunc_accepts_config:
             kwargs["config"] = config
-        config = ensure_config(merge_configs(self.config, config))
+        if config is None:
+            config = ensure_config()
         context = copy_context()
         if self.trace:
-            callback_manager = get_async_callback_manager_for_config(config)
+            callback_manager = get_async_callback_manager_for_config(config, self.tags)
             run_manager = await callback_manager.on_chain_start(
                 None,
                 input,
@@ -318,7 +321,6 @@ class RunnableSeq(Runnable):
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Output:
         # setup callbacks and context
-        config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
         run_manager = callback_manager.on_chain_start(
@@ -356,7 +358,6 @@ class RunnableSeq(Runnable):
         **kwargs: Optional[Any],
     ) -> Output:
         # setup callbacks
-        config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
         run_manager = await callback_manager.on_chain_start(
@@ -398,7 +399,6 @@ class RunnableSeq(Runnable):
         **kwargs: Optional[Any],
     ) -> Iterator[Output]:
         # setup callbacks
-        config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
         run_manager = callback_manager.on_chain_start(
@@ -460,7 +460,6 @@ class RunnableSeq(Runnable):
         **kwargs: Optional[Any],
     ) -> AsyncIterator[Output]:
         # setup callbacks
-        config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
         run_manager = await callback_manager.on_chain_start(

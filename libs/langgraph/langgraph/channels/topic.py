@@ -1,7 +1,5 @@
-from contextlib import contextmanager
-from typing import Any, Generator, Generic, Iterator, Optional, Sequence, Type, Union
+from typing import Any, Generic, Iterator, Optional, Sequence, Type, Union
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -30,9 +28,11 @@ class Topic(
         accumulate: Whether to accumulate values across steps. If False, the channel will be emptied after each step.
     """
 
+    __slots__ = ("values", "accumulate")
+
     def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
+        super().__init__(typ)
         # attrs
-        self.typ = typ
         self.accumulate = accumulate
         # state
         self.values = list[Value]()
@@ -53,22 +53,15 @@ class Topic(
     def checkpoint(self) -> tuple[set[Value], list[Value]]:
         return self.values
 
-    @contextmanager
-    def from_checkpoint(
-        self,
-        checkpoint: Optional[list[Value]],
-        config: RunnableConfig,
-    ) -> Generator[Self, None, None]:
+    def from_checkpoint(self, checkpoint: Optional[list[Value]]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
+        empty.key = self.key
         if checkpoint is not None:
             if isinstance(checkpoint, tuple):
-                empty.values = checkpoint[1].copy()
+                empty.values = checkpoint[1]
             else:
-                empty.values = checkpoint.copy()
-        try:
-            yield empty
-        finally:
-            pass
+                empty.values = checkpoint
+        return empty
 
     def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
         current = list(self.values)

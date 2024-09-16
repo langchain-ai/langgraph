@@ -1,0 +1,267 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "what''s the weather in sf", "role": "user"},
+      {"content": null, "role": "assistant", "tool_calls": [{"type": "function", "id":
+      "call_kXyvMVB8bMcbv79tvheZFusU", "function": {"name": "get_weather", "arguments":
+      "{\"city\": \"sf\"}"}}]}, {"content": "It''s always sunny in sf", "role": "tool",
+      "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"}, {"content": "The weather in
+      San Francisco is always sunny!", "role": "assistant"}, {"content": "what''s
+      the weather in sf", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_kXyvMVB8bMcbv79tvheZFusU", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content": "It''s
+      always sunny in sf", "role": "tool", "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_kXyvMVB8bMcbv79tvheZFusU",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_XIdxlz6bow47glxsY0UzLnyR",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_XIdxlz6bow47glxsY0UzLnyR"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_kXyvMVB8bMcbv79tvheZFusU",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_yx4YzAgpfOzpF8gHCKBhnJB0",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_yx4YzAgpfOzpF8gHCKBhnJB0"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}], "model": "gpt-4o-mini",
+      "n": 1, "stream": false, "temperature": 0.0, "tools": [{"type": "function",
+      "function": {"name": "get_weather", "description": "Use this to get weather
+      information.", "parameters": {"type": "object", "properties": {"city": {"enum":
+      ["nyc", "sf"], "type": "string"}}, "required": ["city"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2992'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA2xSy27bMBC86yuIPVuFXo5U3QIkhwZogBYx0qIuBIZaykz4Akm1dQ3/eyFZthSj
+        PBDEDmdnOMtDRAiIFmoCbEcDU1bGtzdvyZdvT+s8ETzdPPPHv5++5jwvs82vp++wGhjm5RVZOLM+
+        MKOsxCCMPsHMIQ04dE3L7CYtk7SsRkCZFuVA62yICxMroUWcJVkRJ2WcVhN7ZwRDDzX5ERFCyGHc
+        B5+6xT9Qk2R1rij0nnYI9eUSIeCMHCpAvRc+UB1gNYPM6IB6sK57KRdAMEY2jEo5C5/WYXGew6JS
+        No8oC/b68Pl+o3qb9Q93z7cdrQJf6J1a7+1oiPeaXUJa4Jd6fSVGCGiqRm6HofmNNOzQXdEJAeq6
+        XqEOg3U4bIGJsN9CvQXPt3CEd9eP0f/OPxdJOOS9p3KKaKofL5lL01lnXvxVhMCFFn7XOKR+fMoy
+        0eisNupA/25oYJ1RNjTBvKEe2ubr8tQV5o81o2kxgcEEKhesMo0mn+D3PqBquNAdOuvEOHDgtimq
+        vM0/ttW6hOgY/QMAAP//AwBCbpGJ/gIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22623d6e027283-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:58 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=l502kkCBLQzOH7GyJl3eAgI8EUL70N7434sgp.F__QQ-1726170178-1.0.1.1-BjqB8cAFKRAbunyJyEt4rm8TGb2XUJhrvwQ6p14fU5UIWAvN3E.j.5Ffrn9MZFQd760OygLgpQGCZWW02t8.8A;
+        path=/; expires=Thu, 12-Sep-24 20:12:58 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=EjPUYM1ZRkPryT1RqK3SnTkdpipZWX.kCZj1KLRX4aU-1726170178536-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '180'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999815'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_4f8babf0a500128bf8c4c283738e4bc2
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "what''s the weather in sf", "role": "user"},
+      {"content": null, "role": "assistant", "tool_calls": [{"type": "function", "id":
+      "call_kXyvMVB8bMcbv79tvheZFusU", "function": {"name": "get_weather", "arguments":
+      "{\"city\": \"sf\"}"}}]}, {"content": "It''s always sunny in sf", "role": "tool",
+      "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"}, {"content": "The weather in
+      San Francisco is always sunny!", "role": "assistant"}, {"content": "what''s
+      the weather in sf", "role": "user"}, {"content": null, "role": "assistant",
+      "tool_calls": [{"type": "function", "id": "call_kXyvMVB8bMcbv79tvheZFusU", "function":
+      {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content": "It''s
+      always sunny in sf", "role": "tool", "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_kXyvMVB8bMcbv79tvheZFusU",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_XIdxlz6bow47glxsY0UzLnyR",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_XIdxlz6bow47glxsY0UzLnyR"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_kXyvMVB8bMcbv79tvheZFusU",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_kXyvMVB8bMcbv79tvheZFusU"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_yx4YzAgpfOzpF8gHCKBhnJB0",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_yx4YzAgpfOzpF8gHCKBhnJB0"},
+      {"content": "The weather in San Francisco is always sunny!", "role": "assistant"},
+      {"content": "what''s the weather in sf", "role": "user"}, {"content": null,
+      "role": "assistant", "tool_calls": [{"type": "function", "id": "call_Nel4cjJMEUmup2uJDWAga8tf",
+      "function": {"name": "get_weather", "arguments": "{\"city\": \"sf\"}"}}]}, {"content":
+      "It''s always sunny in sf", "role": "tool", "tool_call_id": "call_Nel4cjJMEUmup2uJDWAga8tf"}],
+      "model": "gpt-4o-mini", "n": 1, "stream": false, "temperature": 0.0, "tools":
+      [{"type": "function", "function": {"name": "get_weather", "description": "Use
+      this to get weather information.", "parameters": {"type": "object", "properties":
+      {"city": {"enum": ["nyc", "sf"], "type": "string"}}, "required": ["city"]}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '3286'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=l502kkCBLQzOH7GyJl3eAgI8EUL70N7434sgp.F__QQ-1726170178-1.0.1.1-BjqB8cAFKRAbunyJyEt4rm8TGb2XUJhrvwQ6p14fU5UIWAvN3E.j.5Ffrn9MZFQd760OygLgpQGCZWW02t8.8A;
+        _cfuvid=EjPUYM1ZRkPryT1RqK3SnTkdpipZWX.kCZj1KLRX4aU-1726170178536-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.45.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.45.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.11.9
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//VJBLa8MwEITv/hVbneNiJ27s5FYKoRBI6RNCKUaR17YSWRJapWko+e/F
+        jvPoRYf5NMPM/gYATBZsCkzU3IvGqvB+vIme582Sv08ev9ezeP60nDxgXH0sXhY7NmgdZrVG4U+u
+        W2Eaq9BLo49YOOQe29Q4HY7jNIrTrAONKVC1tsr6MDFhI7UMh9EwCaM0jLPeXRspkNgUPgMAgN/u
+        bXvqAn/YFKLBSWmQiFfIpudPAMwZ1SqME0nyXHs2uEBhtEfdVX+rEXbIfY0OpIZXrmHmuBaShAFJ
+        wNWO7wloq/X+5jrDYbkl3u7QW6V6/XAupUxlnVlRz896KbWkOnfIyei2AHljWUcPAcBXN377bw+z
+        zjTW595sULeBoyw55rHLzS807i/DvPFcXbkmSdA3ZLQnj01eSl2hs04eb1HaPMlGxWhSZHcpCw7B
+        HwAAAP//AwDd1Bt6GQIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c22624029247283-EWR
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 12 Sep 2024 19:42:59 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '227'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999807'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_a9442b6cf3ef3893e24c3cb93fc8a712
+    status:
+      code: 200
+      message: OK
+version: 1

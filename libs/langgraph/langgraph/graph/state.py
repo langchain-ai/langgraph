@@ -19,10 +19,10 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
-from langchain_core.runnables.utils import create_model
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 
+from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
@@ -46,6 +46,7 @@ from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.utils.fields import get_field_default
+from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import coerce_to_runnable
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,12 @@ class StateGraph(Graph):
             if input is None or output is None:
                 raise ValueError("Must provide state_schema or input and output")
             state_schema = input
+            warnings.warn(
+                "Initializing StateGraph without state_schema is deprecated. "
+                "Please pass in an explicit state_schema instead of just an input and output schema.",
+                LangGraphDeprecationWarning,
+                stacklevel=2,
+            )
         else:
             if input is None:
                 input = state_schema
@@ -559,7 +566,9 @@ class CompiledStateGraph(CompiledGraph):
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
-                    None if is_single_input else partial(_coerce_state, input_schema)
+                    None
+                    if is_single_input or issubclass(input_schema, dict)
+                    else partial(_coerce_state, input_schema)
                 ),
                 writers=[
                     # publish to this channel and state keys
@@ -669,7 +678,11 @@ def _get_state_reader(
         select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=(None if state_keys == ["__root__"] else partial(_coerce_state, schema)),
+        mapper=(
+            None
+            if state_keys == ["__root__"] or issubclass(schema, dict)
+            else partial(_coerce_state, schema)
+        ),
     )
 
 
@@ -771,12 +784,12 @@ def _get_schema(
         if len(keys) == 1 and keys[0] == "__root__":
             return create_model(  # type: ignore[call-overload]
                 name,
-                __root__=(channels[keys[0]].UpdateType, None),
+                root=(channels[keys[0]].UpdateType, None),
             )
         else:
             return create_model(  # type: ignore[call-overload]
                 name,
-                **{
+                field_definitions={
                     k: (
                         channels[k].UpdateType,
                         (

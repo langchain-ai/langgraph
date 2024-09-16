@@ -1,15 +1,12 @@
 import collections.abc
-from contextlib import contextmanager
 from typing import (
     Callable,
-    Generator,
     Generic,
     Optional,
     Sequence,
     Type,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -37,10 +34,11 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
+    __slots__ = ("value", "operator")
+
     def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
+        super().__init__(typ)
         self.operator = operator
-        # keep the type exposed by ValueType/UpdateType as-is
-        self.typ = typ
         # special forms from typing or collections.abc are not instantiable
         # so we need to replace them with their concrete counterparts
         typ = _strip_extras(typ)
@@ -73,20 +71,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    @contextmanager
-    def from_checkpoint(
-        self, checkpoint: Optional[Value], config: RunnableConfig
-    ) -> Generator[Self, None, None]:
+    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
         empty = self.__class__(self.typ, self.operator)
+        empty.key = self.key
         if checkpoint is not None:
             empty.value = checkpoint
-        try:
-            yield empty
-        finally:
-            try:
-                del empty.value
-            except AttributeError:
-                pass
+        return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if not values:

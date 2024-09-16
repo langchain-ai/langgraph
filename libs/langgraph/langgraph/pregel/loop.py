@@ -50,6 +50,7 @@ from langgraph.constants import (
     INTERRUPT,
     SCHEDULED,
     TAG_HIDDEN,
+    TASKS,
 )
 from langgraph.errors import (
     CheckpointNotLatest,
@@ -101,6 +102,7 @@ V = TypeVar("V")
 INPUT_DONE = object()
 INPUT_RESUMING = object()
 EMPTY_SEQ = ()
+SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
 
 
 class StreamProtocol(Protocol):
@@ -220,6 +222,19 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        # adjust task_writes_left
+        first_channel = writes[0][0]
+        any_channel_is_send = any(k == TASKS for k, _ in writes)
+        always_save = any_channel_is_send or first_channel in SPECIAL_CHANNELS
+        if not always_save and not self.task_writes_left:
+            return self._output_writes(task_id, writes)
+        elif first_channel == INTERRUPT:
+            # INTERRUPT makes us want to save the last task's writes
+            # so we don't decrement task_writes_left
+            pass
+        else:
+            self.task_writes_left -= 1
+        # save writes
         self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
         if self.checkpointer_put_writes is not None:
             self.submit(
@@ -237,6 +252,7 @@ class PregelLoop:
                 writes,
                 task_id,
             )
+        # output writes
         self._output_writes(task_id, writes)
 
     def tick(
@@ -321,6 +337,9 @@ class PregelLoop:
             manager=manager,
             checkpointer=self.checkpointer,
         )
+        # we don't need to save the writes for the last task that completes
+        # unless in special conditions handled by self.put_writes()
+        self.task_writes_left = len(self.tasks) - 1
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
@@ -554,7 +573,9 @@ class PregelLoop:
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
         if task := self.tasks.get(task_id):
-            if task.config is not None and TAG_HIDDEN in task.config.get("tags"):
+            if task.config is not None and TAG_HIDDEN in task.config.get(
+                "tags", EMPTY_SEQ
+            ):
                 return
             if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
                 self._emit(
@@ -657,7 +678,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -775,7 +796,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
                 **saved.config.get("configurable", {}),
             },
         }
-        self.checkpoint = copy_checkpoint(saved.checkpoint)
+        self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
@@ -806,3 +827,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         return await asyncio.shield(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
+
+
+EMPTY_SEQ = tuple()

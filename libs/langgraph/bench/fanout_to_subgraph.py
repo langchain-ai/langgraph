@@ -1,4 +1,3 @@
-import asyncio
 import operator
 from typing import Annotated, TypedDict
 
@@ -55,6 +54,7 @@ def fanout_to_subgraph() -> StateGraph:
 
 
 if __name__ == "__main__":
+    import asyncio
     import random
 
     import uvloop

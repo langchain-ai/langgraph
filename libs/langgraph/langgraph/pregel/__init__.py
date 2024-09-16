@@ -29,13 +29,11 @@ from langchain_core.runnables import (
 from langchain_core.runnables.base import Input, Output
 from langchain_core.runnables.config import (
     RunnableConfig,
-    ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
-    create_model,
     get_function_nonlocals,
     get_unique_config_specs,
 )
@@ -86,11 +84,13 @@ from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.utils.config import (
+    ensure_config,
     merge_configs,
     patch_checkpoint_map,
     patch_config,
     patch_configurable,
 )
+from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -309,7 +309,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Input"),
-                **{
+                field_definitions={
                     k: (self.channels[k].UpdateType, None)
                     for k in self.input_channels or self.channels.keys()
                 },
@@ -329,7 +329,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Output"),
-                **{k: (self.channels[k].ValueType, None) for k in self.output_channels},
+                field_definitions={
+                    k: (self.channels[k].ValueType, None) for k in self.output_channels
+                },
             )
 
     @property
@@ -1156,7 +1158,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     else:
                         yield payload
 
-        config = ensure_config(merge_configs(self.config, config))
+        config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             None,
@@ -1337,7 +1339,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     else:
                         yield payload
 
-        config = ensure_config(merge_configs(self.config, config))
+        config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
             None,
@@ -1402,8 +1404,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while await asyncio.to_thread(
-                    loop.tick,
+                while loop.tick(
                     input_keys=self.input_channels,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
