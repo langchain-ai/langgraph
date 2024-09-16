@@ -21,13 +21,13 @@ Several concepts are utilized in many agent architectures:
 
 ## Challenges
 
-In practice, there is often a trade-off between control and reliability. As we give LLMs more control, the application often become less reliable due to factors such as LLM non-determinism and / or LLM errors in selecting tools (or steps) to use (take).
+In practice, there is often a trade-off between control and reliability. As we give LLMs more control, the application often become less reliable. This can be due to factors such as LLM non-determinism and / or errors in selecting tools (or steps) that the agent uses (takes).
 
 ![Agent Challenge](img/challenge.png)
 
 ## Core Principles
 
-The motivation of LangGraph is to help bend the reliability curve, preserving high reliability as we give LLMs more control over the application. We'll outline a few specific pillars of LangGraph in the below sections that make it ideally suited for building reliable agents. 
+The motivation of LangGraph is to help bend the curve, preserving higher reliability as we give the agent more control over the application. We'll outline a few specific pillars of LangGraph that make it well suited for building reliable agents. 
 
 ![Langgraph](img/langgraph.png)
 
