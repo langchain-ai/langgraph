@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "libs/**"
+    # paths:
+    #   - "libs/**"
 
 env:
   POETRY_VERSION: "1.7.1"
