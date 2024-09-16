@@ -91,7 +91,7 @@ class StateGraph(Graph):
         >>> from langgraph.checkpoint.memory import MemorySaver
         >>> from langgraph.graph import StateGraph
         >>>
-        >>> def reducer(a: list, b: int | None) -> int:
+        >>> def reducer(a: list, b: int | None) -> list:
         ...     if b is not None:
         ...         return a + [b]
         ...     return a
