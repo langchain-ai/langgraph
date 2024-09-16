@@ -11032,6 +11032,8 @@ def test_subgraph_retries():
     class ChildState(State):
         some_list: Annotated[list, operator.add]
 
+    called_times = 0
+
     class RandomError(ValueError):
         """This will be retried on."""
 
@@ -11039,15 +11041,15 @@ def test_subgraph_retries():
         return {"count": state["count"] + 1}
 
     def child_node_a(state: ChildState):
-        assert not state.get(
-            "some_list"
-        ), f"State shouldn't accomulate on retries. Got: {state['some_list']}"
+        nonlocal called_times
+        # We want it to retry only on node_b
+        # NOT re-compute the whole graph.
+        assert not called_times
+        called_times += 1
         return {"some_list": ["val"]}
 
     def child_node_b(state: ChildState):
-        if state["count"] == 1:
-            raise RandomError("First attempt fails")
-        return {"count": state["count"] + 1}
+        raise RandomError("First attempt fails")
 
     child = StateGraph(ChildState)
     child.add_node(child_node_a)
@@ -11060,12 +11062,17 @@ def test_subgraph_retries():
     parent.add_node(
         "child_graph",
         child.compile(),
-        retry=RetryPolicy(max_attempts=3, retry_on=(RandomError,)),
+        retry=RetryPolicy(
+            max_attempts=3,
+            retry_on=(RandomError,),
+            backoff_factor=0.0001,
+            initial_interval=0.0001,
+        ),
     )
     parent.add_edge("parent_node", "child_graph")
     parent.set_entry_point("parent_node")
 
     checkpointer = MemorySaver()
     app = parent.compile(checkpointer=checkpointer)
-
-    app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
+    with pytest.raises(RandomError):
+        app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
