@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    # paths:
-    #   - "libs/**"
+    paths:
+      - "libs/**"
 
 env:
   POETRY_VERSION: "1.7.1"
@@ -27,8 +27,8 @@ jobs:
           cache-key: bench
       - name: Install dependencies
         run: poetry install --with dev
-      # - name: Run benchmarks
-      #   run: OUTPUT=out/benchmark-baseline.json make -s benchmark
+      - name: Run benchmarks
+        run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs
         uses: actions/cache/save@v4
         with:
