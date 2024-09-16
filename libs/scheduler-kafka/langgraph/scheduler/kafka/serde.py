@@ -2,9 +2,13 @@ from typing import Any
 
 import orjson
 
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+SERIALIZER = JsonPlusSerializer()
+
 
 def loads(v: bytes) -> Any:
-    return orjson.loads(v)
+    return SERIALIZER.loads(v)
 
 
 def dumps(v: Any) -> bytes:

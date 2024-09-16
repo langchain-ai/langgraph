@@ -33,6 +33,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           key: ${{ runner.os }}-benchmark-baseline
+          restore-keys: |
+            ${{ runner.os }}-benchmark-baseline-
           fail-on-cache-miss: true
           path: |
             libs/langgraph/out/benchmark-baseline.json

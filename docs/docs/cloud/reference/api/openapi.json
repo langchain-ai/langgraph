@@ -504,61 +504,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Config"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "threads/state"
-        ],
-        "summary": "Patch Thread State",
-        "description": "Patch state for a thread.",
-        "operationId": "patch_thread_state_threads__thread_id__state_patch",
-        "parameters": [
-          {
-            "description": "The ID of the thread.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Thread Id",
-              "description": "The ID of the thread."
-            },
-            "name": "thread_id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ThreadStatePatch"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Config"
+                  "$ref": "#/components/schemas/ThreadStateUpdateResponse"
                 }
               }
             }
@@ -905,8 +851,8 @@
         "tags": [
           "runs/manage"
         ],
-        "summary": "List Runs Http",
-        "description": "List all runs for a thread.",
+        "summary": "List Runs",
+        "description": "List runs for a thread.",
         "operationId": "list_runs_http_threads__thread_id__runs_get",
         "parameters": [
           {
@@ -951,8 +897,7 @@
                   "items": {
                     "$ref": "#/components/schemas/Run"
                   },
-                  "type": "array",
-                  "title": "Response List Runs Http Threads  Thread Id  Runs Get"
+                  "type": "array"
                 }
               }
             }
@@ -973,8 +918,8 @@
         "tags": [
           "runs/create"
         ],
-        "summary": "Create Run",
-        "description": "Create a run.",
+        "summary": "Create Background Run",
+        "description": "Create a run, return immediately.",
         "operationId": "create_run_threads__thread_id__runs_post",
         "parameters": [
           {
@@ -994,7 +939,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunCreate"
+                "$ref": "#/components/schemas/RunCreateStateful"
               }
             }
           },
@@ -1030,7 +975,7 @@
           "runs/create"
         ],
         "summary": "Create Thread Cron",
-        "description": "Create a thread specific cron.",
+        "description": "Create a cron to schedule runs on a thread.",
         "operationId": "create_thread_cron_threads__thread_id__runs_crons_post",
         "parameters": [
           {
@@ -1085,8 +1030,8 @@
         "tags": [
           "runs/create"
         ],
-        "summary": "Stream Run",
-        "description": "Create a run.",
+        "summary": "Create Streaming Run",
+        "description": "Create a run, stream the output.",
         "operationId": "stream_run_threads__thread_id__runs_stream_post",
         "parameters": [
           {
@@ -1106,7 +1051,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunStream"
+                "$ref": "#/components/schemas/RunCreateStateful"
               }
             }
           },
@@ -1139,8 +1084,8 @@
         "tags": [
           "runs/create"
         ],
-        "summary": "Wait Run",
-        "description": "Create a run, wait for the output.",
+        "summary": "Create Run and Get Output",
+        "description": "Create a run, return the final output.",
         "operationId": "wait_run_threads__thread_id__runs_wait_post",
         "parameters": [
           {
@@ -1160,7 +1105,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunCreate"
+                "$ref": "#/components/schemas/RunCreateStateful"
               }
             }
           },
@@ -1193,7 +1138,7 @@
         "tags": [
           "runs/manage"
         ],
-        "summary": "Get Run Http",
+        "summary": "Get Run",
         "description": "Get a run by ID.",
         "operationId": "get_run_http_threads__thread_id__runs__run_id__get",
         "parameters": [
@@ -1305,9 +1250,65 @@
         "tags": [
           "runs/manage"
         ],
-        "summary": "Join Run Http",
+        "summary": "Join Run",
         "description": "Wait for a run to finish.",
         "operationId": "join_run_http_threads__thread_id__runs__run_id__join_get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          },
+          {
+            "description": "The ID of the run.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id",
+              "description": "The ID of the run."
+            },
+            "name": "run_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/runs/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "runs/manage"
+        ],
+        "summary": "Join Run Stream",
+        "description": "Join a run stream. This endpoint streams output in real-time from a run similar to the /threads/__THREAD_ID__/runs/stream endpoint. Only output produced after this endpoint is called will be streamed.",
+        "operationId": "stream_run_http_threads__thread_id__runs__run_id__join_get",
         "parameters": [
           {
             "description": "The ID of the thread.",
@@ -1361,7 +1362,7 @@
         "tags": [
           "runs/manage"
         ],
-        "summary": "Cancel Run Http",
+        "summary": "Cancel Run",
         "operationId": "cancel_run_http_threads__thread_id__runs__run_id__cancel_post",
         "parameters": [
           {
@@ -1427,7 +1428,7 @@
           "runs/create"
         ],
         "summary": "Create Cron",
-        "description": "Create a cron with new thread.",
+        "description": "Create a cron to schedule runs on new threads.",
         "operationId": "create_cron_runs_crons_post",
         "requestBody": {
           "content": {
@@ -1514,14 +1515,14 @@
         "tags": [
           "runs/create"
         ],
-        "summary": "Stream Run Stateless",
-        "description": "Create a stateless run.",
+        "summary": "Stream Run in new Thread",
+        "description": "Create a run in a new thread, stream the output.",
         "operationId": "stream_run_stateless_runs_stream_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunStream"
+                "$ref": "#/components/schemas/RunCreateStateless"
               }
             }
           },
@@ -1554,14 +1555,14 @@
         "tags": [
           "runs/create"
         ],
-        "summary": "Wait Run Stateless",
-        "description": "Create a stateless run, wait for the output.",
+        "summary": "Create Run in new Thread and Get Output",
+        "description": "Create a run in a new thread, return the final output.",
         "operationId": "wait_run_stateless_runs_wait_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunCreate"
+                "$ref": "#/components/schemas/RunCreateStateless"
               }
             }
           },
@@ -1594,14 +1595,54 @@
         "tags": [
           "runs/create"
         ],
-        "summary": "Run Stateless",
-        "description": "Create a stateless run that will run in the background.",
+        "summary": "Create Background Run in new Thread",
+        "description": "Create a run in a new thread, return immediately.",
         "operationId": "run_stateless_runs_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunCreate"
+                "$ref": "#/components/schemas/RunCreateStateless"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/batch": {
+      "post": {
+        "tags": [
+          "runs/create"
+        ],
+        "summary": "Create Run Batch",
+        "description": "Create a batch of runs in new threads, return immediately.",
+        "operationId": "run_batch_stateless_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBatchCreate"
               }
             }
           },
@@ -1966,7 +2007,7 @@
         "title": "CronCreate",
         "description": "Payload for creating a cron."
       },
-      "CronSearch" : {
+      "CronSearch": {
         "properties": {
           "assistant_id": {
             "type": "string",
@@ -1995,7 +2036,7 @@
           }
         },
         "type": "object",
-        "required" : [],
+        "required": [],
         "title": "CronSearch",
         "description": "Payload for listing crons"
       },
@@ -2004,6 +2045,14 @@
           "graph_id": {
             "type": "string",
             "title": "Graph Id"
+          },
+          "input_schema": {
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "type": "object",
+            "title": "Input Schema"
           },
           "state_schema": {
             "type": "object",
@@ -2066,7 +2115,6 @@
             "type": "string",
             "enum": [
               "pending",
-              "running",
               "error",
               "success",
               "timeout",
@@ -2107,7 +2155,7 @@
         ],
         "title": "Run"
       },
-      "RunCreate": {
+      "RunCreateStateful": {
         "properties": {
           "assistant_id": {
             "anyOf": [
@@ -2209,6 +2257,53 @@
               }
             ],
             "title": "Interrupt After"
+          },
+          "stream_mode": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "values",
+                    "messages",
+                    "updates",
+                    "events",
+                    "debug"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "values",
+                  "messages",
+                  "updates",
+                  "events",
+                  "debug"
+                ]
+              }
+            ],
+            "title": "Stream Mode",
+            "default": [
+              "values"
+            ]
+          },
+          "on_disconnect": {
+            "type": "string",
+            "enum": [
+              "cancel",
+              "continue"
+            ],
+            "title": "On Disconnect",
+            "default": "cancel"
+          },
+          "feedback_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Feedback Keys"
           },
           "multitask_strategy": {
             "type": "string",
@@ -2226,10 +2321,19 @@
         "required": [
           "assistant_id"
         ],
-        "title": "RunCreate",
+        "title": "RunCreateStateful",
         "description": "Payload for creating a run."
       },
-      "RunStream": {
+      "RunBatchCreate": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RunCreateStateless"
+        },
+        "minItems": 1,
+        "title": "RunBatchCreate",
+        "description": "Payload for creating a batch of runs."
+      },
+      "RunCreateStateless": {
         "properties": {
           "assistant_id": {
             "anyOf": [
@@ -2243,10 +2347,6 @@
                 "title": "Graph Id"
               }
             ]
-          },
-          "checkpoint_id": {
-            "type": "string",
-            "title": "Checkpoint Id"
           },
           "input": {
             "anyOf": [
@@ -2331,17 +2431,6 @@
               }
             ],
             "title": "Interrupt After"
-          },
-          "multitask_strategy": {
-            "type": "string",
-            "enum": [
-              "reject",
-              "rollback",
-              "interrupt",
-              "enqueue"
-            ],
-            "title": "Multitask Strategy",
-            "default": "reject"
           },
           "stream_mode": {
             "anyOf": [
@@ -2380,13 +2469,31 @@
             },
             "type": "array",
             "title": "Feedback Keys"
+          },
+          "on_completion": {
+            "type": "string",
+            "enum": [
+              "delete",
+              "keep"
+            ],
+            "title": "On Completion",
+            "default": "delete"
+          },
+          "on_disconnect": {
+            "type": "string",
+            "enum": [
+              "cancel",
+              "continue"
+            ],
+            "title": "On Disconnect",
+            "default": "cancel"
           }
         },
         "type": "object",
         "required": [
           "assistant_id"
         ],
-        "title": "RunStream",
+        "title": "RunCreateStateless",
         "description": "Payload for creating a streaming run."
       },
       "SearchRequest": {
@@ -2453,14 +2560,20 @@
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata to search for."
+            "description": "Metadata to filter on."
+          },
+          "values": {
+            "type": "object",
+            "title": "Values",
+            "description": "State values to filter on."
           },
           "status": {
             "type": "string",
             "enum": [
               "idle",
               "busy",
-              "interrupted"
+              "interrupted",
+              "error"
             ],
             "title": "Status",
             "description": "Filter by thread status."
@@ -2511,9 +2624,14 @@
             "enum": [
               "idle",
               "busy",
-              "interrupted"
+              "interrupted",
+              "error"
             ],
             "title": "Status"
+          },
+          "values": {
+            "type": "object",
+            "title": "Values"
           }
         },
         "type": "object",
@@ -2521,7 +2639,8 @@
           "thread_id",
           "created_at",
           "updated_at",
-          "metadata"
+          "metadata",
+          "status"
         ],
         "title": "Thread"
       },
@@ -2578,6 +2697,35 @@
             "type": "array",
             "title": "Next"
           },
+          "tasks": {
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "title": "Task Id"
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Node Name"
+                },
+                "error": {
+                  "type": "string",
+                  "title": "Error"
+                },
+                "interrupts": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
           "checkpoint_id": {
             "type": "string",
             "title": "Checkpoint Id"
@@ -2601,24 +2749,9 @@
           "next",
           "checkpoint_id",
           "metadata",
-          "created_at",
-          "parent_checkpoint_id"
+          "created_at"
         ],
         "title": "ThreadState"
-      },
-      "ThreadStatePatch": {
-        "properties": {
-          "metadata": {
-            "type": "object",
-            "title": "Metadata"
-          }
-        },
-        "type": "object",
-        "required": [
-          "metadata"
-        ],
-        "title": "ThreadStatePatch",
-        "description": "Payload for patching state of a thread."
       },
       "ThreadStateSearch": {
         "properties": {
@@ -2656,6 +2789,9 @@
               },
               {
                 "type": "object"
+              },
+              {
+                "type": "null"
               }
             ],
             "title": "Values"
@@ -2670,9 +2806,21 @@
           }
         },
         "type": "object",
-        "required": [
-          "values"
-        ],
+        "title": "ThreadStateUpdate",
+        "description": "Payload for adding state to a thread."
+      },
+      "ThreadStateUpdateResponse": {
+        "properties": {
+          "checkpoint_id": {
+            "type": "string",
+            "title": "Checkpoint Id"
+          },
+          "as_node": {
+            "type": "string",
+            "title": "As Node"
+          }
+        },
+        "type": "object",
         "title": "ThreadStateUpdate",
         "description": "Payload for adding state to a thread."
       },

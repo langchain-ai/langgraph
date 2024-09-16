@@ -1656,11 +1656,7 @@ def test_pending_writes_resume(
             "writes": {"__start__": {"value": 1}},
         },
         parent_config=None,
-        pending_writes=UnsortedSequence(
-            (AnyStr(), "value", 1),
-            (AnyStr(), "start:one", "__start__"),
-            (AnyStr(), "start:two", "__start__"),
-        ),
+        pending_writes=[],
     )
 
 
@@ -11027,3 +11023,56 @@ def test_xray_issue(snapshot: SnapshotAssertion) -> None:
     app = parent.compile()
 
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
+
+
+def test_subgraph_retries():
+    class State(TypedDict):
+        count: int
+
+    class ChildState(State):
+        some_list: Annotated[list, operator.add]
+
+    called_times = 0
+
+    class RandomError(ValueError):
+        """This will be retried on."""
+
+    def parent_node(state: State):
+        return {"count": state["count"] + 1}
+
+    def child_node_a(state: ChildState):
+        nonlocal called_times
+        # We want it to retry only on node_b
+        # NOT re-compute the whole graph.
+        assert not called_times
+        called_times += 1
+        return {"some_list": ["val"]}
+
+    def child_node_b(state: ChildState):
+        raise RandomError("First attempt fails")
+
+    child = StateGraph(ChildState)
+    child.add_node(child_node_a)
+    child.add_node(child_node_b)
+    child.add_edge("__start__", "child_node_a")
+    child.add_edge("child_node_a", "child_node_b")
+
+    parent = StateGraph(State)
+    parent.add_node("parent_node", parent_node)
+    parent.add_node(
+        "child_graph",
+        child.compile(),
+        retry=RetryPolicy(
+            max_attempts=3,
+            retry_on=(RandomError,),
+            backoff_factor=0.0001,
+            initial_interval=0.0001,
+        ),
+    )
+    parent.add_edge("parent_node", "child_graph")
+    parent.set_entry_point("parent_node")
+
+    checkpointer = MemorySaver()
+    app = parent.compile(checkpointer=checkpointer)
+    with pytest.raises(RandomError):
+        app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})

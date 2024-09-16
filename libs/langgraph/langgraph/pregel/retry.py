@@ -4,8 +4,10 @@ import random
 import time
 from typing import Optional
 
+from langgraph.constants import CONFIG_KEY_RESUMING
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
+from langgraph.utils.config import patch_configurable
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +20,13 @@ def run_with_retry(
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
+    config = task.config
     while True:
         try:
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            task.proc.invoke(task.input, task.config)
+            task.proc.invoke(task.input, config)
             # if successful, end
             break
         except GraphInterrupt:
@@ -56,6 +59,8 @@ def run_with_retry(
                 f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
                 exc_info=exc,
             )
+            # signal subgraphs to resume (if available)
+            config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
 
 
 async def arun_with_retry(
@@ -67,16 +72,17 @@ async def arun_with_retry(
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
+    config = task.config
     while True:
         try:
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
             if stream:
-                async for _ in task.proc.astream(task.input, task.config):
+                async for _ in task.proc.astream(task.input, config):
                     pass
             else:
-                await task.proc.ainvoke(task.input, task.config)
+                await task.proc.ainvoke(task.input, config)
             # if successful, end
             break
         except GraphInterrupt:
@@ -109,3 +115,5 @@ async def arun_with_retry(
                 f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
                 exc_info=exc,
             )
+            # signal subgraphs to resume (if available)
+            config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})

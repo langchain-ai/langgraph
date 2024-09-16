@@ -1,4 +1,4 @@
-from hashlib import md5
+import random
 from typing import Any, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
@@ -8,7 +8,6 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     Checkpoint,
-    EmptyChannelError,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -227,13 +226,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
         return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
 
     def _dump_metadata(self, metadata) -> str:
-        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
-            metadata
-        )
-        if serialized_metadata_type != "json":
-            raise TypeError(
-                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
-            )
+        serialized_metadata = self.jsonplus_serde.dumps(metadata)
         return serialized_metadata.decode()
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
@@ -244,11 +237,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        try:
-            next_h = md5(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"
 
     def _search_where(
         self,

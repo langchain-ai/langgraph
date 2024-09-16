@@ -18,6 +18,7 @@ jobs:
         working-directory: libs/langgraph
     steps:
       - uses: actions/checkout@v4
+      - run: SHA=$(git rev-parse HEAD) && echo "SHA=$SHA" >> $GITHUB_ENV
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
@@ -31,6 +32,6 @@ jobs:
       - name: Save outputs
         uses: actions/cache/save@v4
         with:
-          key: ${{ runner.os }}-benchmark-baseline
+          key: ${{ runner.os }}-benchmark-baseline-${{ env.SHA }}
           path: |
             libs/langgraph/out/benchmark-baseline.json
