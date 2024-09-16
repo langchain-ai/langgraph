@@ -16,7 +16,7 @@
 
 LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
 
-To learn more about LangGraph, check out our first LangChain Academy course, *Introduction to LangGraph*, available [here](https://academy.langchain.com/courses/intro-to-langgraph).
+To learn more about LangGraph, check out our first LangChain Academy course, *Introduction to LangGraph*, available for free [here](https://academy.langchain.com/courses/intro-to-langgraph).
 
 ### Key Features
 
