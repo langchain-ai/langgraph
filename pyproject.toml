@@ -7,11 +7,9 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 
 [tool.poetry.group.docs.dependencies]
-langchain-openai = "^0.1.23"
-langchain-anthropic = "^0.1.23"
 langgraph = { path = "libs/langgraph/", develop = true }
 langgraph-checkpoint = { path = "libs/checkpoint/", develop = true }
 langgraph-checkpoint-sqlite = { path = "libs/checkpoint-sqlite", develop = true }
@@ -29,6 +27,17 @@ mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
 markdown-include = "^0.8.1"
 markdown-callouts = "^0.4.0"
 mkdocs-exclude = "^1.0.2"
+
+[tool.poetry.group.test.dependencies]
+langchain-openai = "^0.1.23"
+langchain-anthropic = "^0.1.23"
+numpy = "^2.1.1"
+redis = "^5.0.8"
+pymongo = "^4.8.0"
+motor = "^3.5.1"
+
+[tool.poetry.group.test]
+optional = true
 
 [build-system]
 requires = ["poetry-core"]
