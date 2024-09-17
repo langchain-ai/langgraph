@@ -1417,7 +1417,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
-                        extra=lambda: aioloop.create_task(stream.wait()),
+                        get_waiter=lambda: aioloop.create_task(stream.wait()),
                     ):
                         # emit output
                         for o in output():

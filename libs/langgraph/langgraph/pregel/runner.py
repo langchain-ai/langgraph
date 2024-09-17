@@ -100,15 +100,15 @@ class PregelRunner:
         reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
-        extra: Optional[Callable[[], asyncio.Future[None]]] = None,
+        get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
         # give control back to the caller
         yield
-        # add extra task if requested
-        if extra is not None:
+        # add waiter task if requested
+        if get_waiter is not None:
             futures: dict[asyncio.Future, Optional[PregelExecutableTask]] = {
-                extra(): None
+                get_waiter(): None
             }
         else:
             futures = {}
@@ -130,7 +130,7 @@ class PregelRunner:
                 ] = task
         all_futures = futures.copy()
         end_time = timeout + loop.time() if timeout else None
-        while len(futures) > (1 if extra is not None else 0):
+        while len(futures) > (1 if get_waiter is not None else 0):
             done, _ = await asyncio.wait(
                 futures,
                 return_when=asyncio.FIRST_COMPLETED,
@@ -141,8 +141,8 @@ class PregelRunner:
             for fut in done:
                 task = futures.pop(fut)
                 if task is None:
-                    # extra task finished, schedule another
-                    futures[extra()] = None
+                    # waiter task finished, schedule another
+                    futures[get_waiter()] = None
                     continue
                 if exc := _exception(fut):
                     if isinstance(exc, GraphInterrupt):
@@ -168,7 +168,7 @@ class PregelRunner:
                 break
             # give control back to the caller
             yield
-        # cancel extra task
+        # cancel waiter task
         for fut in futures:
             fut.cancel()
         # panic on failure or timeout
