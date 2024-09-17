@@ -73,7 +73,7 @@ from langgraph.pregel.algo import (
 )
 from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
+from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
@@ -1148,15 +1148,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         def output() -> Iterator:
             while stream:
                 ns, mode, payload = stream.popleft()
-                if mode in stream_modes:
-                    if subgraphs and isinstance(stream_mode, list):
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
-                    elif isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    elif subgraphs:
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
-                    else:
-                        yield payload
+                if subgraphs and isinstance(stream_mode, list):
+                    yield (ns, mode, payload)
+                elif isinstance(stream_mode, list):
+                    yield (mode, payload)
+                elif subgraphs:
+                    yield (ns, payload)
+                else:
+                    yield payload
 
         config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
@@ -1192,7 +1191,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
             with SyncPregelLoop(
                 input,
-                stream=stream.append,
+                stream=StreamProtocol(stream.append, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1329,15 +1328,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         def output() -> Iterator:
             while stream:
                 ns, mode, payload = stream.popleft()
-                if mode in stream_modes:
-                    if subgraphs and isinstance(stream_mode, list):
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
-                    elif isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    elif subgraphs:
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
-                    else:
-                        yield payload
+                if subgraphs and isinstance(stream_mode, list):
+                    yield (ns, mode, payload)
+                elif isinstance(stream_mode, list):
+                    yield (mode, payload)
+                elif subgraphs:
+                    yield (ns, payload)
+                else:
+                    yield payload
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
@@ -1381,7 +1379,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             async with AsyncPregelLoop(
                 input,
-                stream=stream.append,
+                stream=StreamProtocol(stream.append, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
