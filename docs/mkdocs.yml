@@ -189,10 +189,13 @@ nav:
           - Add Human-in-the-loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
           - Create prebuilt ReAct agent from scratch: how-tos/react-agent-from-scratch.ipynb
   - "Conceptual Guides":
-      - "concepts/index.md"
-      - LangGraph for Agentic Applications: concepts/high_level.md
-      - Low Level LangGraph Concepts: concepts/low_level.md
+      - Why LangGraph?: concepts/high_level.md
+      - LangGraph Glossary: concepts/low_level.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
+      - Human-in-the-Loop: concepts/human_in_the_loop.md
+      - Multi-Agent Systems: concepts/multi_agent.md
+      - Persistence: concepts/persistence.md
+      - Streaming: concepts/streaming.md
       - FAQ: concepts/faq.md
   - Reference:
       - Graphs: reference/graphs.md
