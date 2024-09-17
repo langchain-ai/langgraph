@@ -83,6 +83,7 @@ from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
+from langgraph.utils.aio import Queue
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -1323,11 +1324,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
-        stream = deque()
+        stream = Queue()
 
         def output() -> Iterator:
-            while stream:
-                ns, mode, payload = stream.popleft()
+            while True:
+                try:
+                    ns, mode, payload = stream.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
                 if subgraphs and isinstance(stream_mode, list):
                     yield (ns, mode, payload)
                 elif isinstance(stream_mode, list):
@@ -1337,6 +1341,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 else:
                     yield payload
 
+        aioloop = asyncio.get_event_loop()
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1379,7 +1384,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             async with AsyncPregelLoop(
                 input,
-                stream=StreamProtocol(stream.append, stream_modes),
+                stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1412,6 +1417,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
+                        get_waiter=lambda: aioloop.create_task(stream.wait()),
                     ):
                         # emit output
                         for o in output():
