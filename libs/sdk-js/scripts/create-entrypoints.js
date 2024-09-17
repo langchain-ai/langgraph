@@ -22,8 +22,8 @@ const generateFiles = () => {
       const compiledPath = `${relativePath}dist/${value}`;
       return [
         [`${key}.cjs`, `module.exports = require('${compiledPath}.cjs');`],
-        [`${key}.js`, `export * from '${compiledPath}.mjs'`],
-        [`${key}.d.ts`, `export * from '${compiledPath}.mjs'`],
+        [`${key}.js`, `export * from '${compiledPath}.js'`],
+        [`${key}.d.ts`, `export * from '${compiledPath}.js'`],
         [`${key}.d.cts`, `export * from '${compiledPath}.cjs'`],
       ];
     },

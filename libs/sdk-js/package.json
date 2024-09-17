@@ -17,7 +17,6 @@
   "license": "MIT",
   "dependencies": {
     "@types/json-schema": "^7.0.15",
-    "eventsource-parser": "^1.1.2",
     "p-queue": "^6.6.2",
     "p-retry": "4",
     "uuid": "^9.0.0"
