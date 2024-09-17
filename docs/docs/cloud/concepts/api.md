@@ -1,6 +1,6 @@
 # API Concepts
 
-This page describes the high-level concepts of the LangGraph Cloud API. The conceptual guide of LangGraph (Python library) is [here](../../concepts/index.md).
+This page describes the high-level concepts of the LangGraph Cloud API. The conceptual guide of LangGraph (Python library) is [here](../../concepts/high_level.md).
 
 ## Data Models
 
