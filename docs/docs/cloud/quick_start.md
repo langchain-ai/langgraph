@@ -30,7 +30,7 @@ This tutorial will use:
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2.  The `agent.py`/`agent.ts` file should contain code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent. You can read more about it [here](../concepts/agentic_concepts.md#react-agent).
+2.  The `agent.py`/`agent.ts` file should contain code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent. You can read more about it [here](../concepts/agentic_concepts.md#react-implementation).
 
 === "Python"
 

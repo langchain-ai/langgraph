@@ -189,7 +189,6 @@ nav:
           - Add Human-in-the-loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
           - Create prebuilt ReAct agent from scratch: how-tos/react-agent-from-scratch.ipynb
   - "Conceptual Guides":
-      - "concepts/index.md"
       - Why LangGraph?: concepts/high_level.md
       - LangGraph Glossary: concepts/low_level.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
