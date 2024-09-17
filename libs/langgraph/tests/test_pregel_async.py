@@ -7011,6 +7011,9 @@ async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None
         config = {"configurable": {"thread_id": "2"}}
         async for c in app.astream({"my_key": ""}, config, subgraphs=True):
             chunks.append((round(perf_counter() - start, 1), c))
+        for idx in range(len(chunks)):
+            elapsed, c = chunks[idx]
+            chunks[idx] = (round(elapsed - chunks[0][0], 1), c)
 
         assert chunks == [
             # arrives before "inner" finishes
