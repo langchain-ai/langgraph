@@ -105,6 +105,7 @@ class PregelRunner:
         loop = asyncio.get_event_loop()
         # give control back to the caller
         yield
+        # add extra task if requested
         if extra is not None:
             futures: dict[asyncio.Future, Optional[PregelExecutableTask]] = {
                 extra(): None
