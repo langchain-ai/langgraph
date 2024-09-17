@@ -601,7 +601,7 @@ async def test_node_schemas_custom_output() -> None:
         "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
-    builder = StateGraph(input=State, output=Output)
+    builder = StateGraph(State, output=Output)
     builder.add_node("a", node_a)
     builder.add_node("b", node_b)
     builder.add_node("c", node_c)
@@ -3179,10 +3179,7 @@ async def test_conditional_graph_state(
             setup.reset_mock()
             teardown.reset_mock()
 
-    class MyPydanticContextModel(BaseModel):
-        class Config:
-            arbitrary_types_allowed = True
-
+    class MyPydanticContextModel(BaseModel, arbitrary_types_allowed=True):
         session: httpx.AsyncClient
         something_else: str
 
@@ -8603,7 +8600,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
         return {"subject": f"{subject} - hohoho"}
 
     # subgraph
-    subgraph = StateGraph(input=JokeState, output=OverallState)
+    subgraph = StateGraph(JokeState, output=OverallState)
     subgraph.add_node("edit", edit)
     subgraph.add_node(
         "generate", lambda state: {"jokes": [f"Joke about {state['subject']}"]}

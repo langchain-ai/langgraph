@@ -316,6 +316,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 },
             )
 
+    def get_input_jsonschema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Dict[All, Any]:
+        schema = self.get_input_schema(config)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
+
     @property
     def OutputType(self) -> Any:
         if isinstance(self.output_channels, str):
@@ -334,6 +343,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     k: (self.channels[k].ValueType, None) for k in self.output_channels
                 },
             )
+
+    def get_output_jsonschema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Dict[All, Any]:
+        schema = self.get_output_schema(config)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
 
     @property
     def stream_channels_list(self) -> Sequence[str]:
