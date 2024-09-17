@@ -1,11 +1,17 @@
 import asyncio
+import sys
+
+PY_310 = sys.version_info >= (3, 10)
 
 
 class Queue(asyncio.Queue):
     async def wait(self):
         """If queue is empty, wait until an item is available."""
         while self.empty():
-            getter = self._get_loop().create_future()
+            if PY_310:
+                getter = self._get_loop().create_future()
+            else:
+                getter = self._loop.create_future()
             self._getters.append(getter)
             try:
                 await getter
