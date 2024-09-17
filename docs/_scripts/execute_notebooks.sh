@@ -5,6 +5,7 @@ do
   echo "Executing $file"
   if ! output=$(poetry run jupyter execute "$file" 2>&1); then
     errors+=("$file: $output")  # Add a tuple of the file and error message to the errors list
+    printf '%s\n' "${errors[@]}"
     exit 1
   fi
 done
