@@ -7,7 +7,7 @@ import click
 import nbformat
 
 logger = logging.getLogger(__name__)
-NOTEBOOK_DIRS = ("docs/docs/how-tos",)
+NOTEBOOK_DIRS = ("docs/docs/how-tos","docs/docs/tutorials")
 DOCS_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
