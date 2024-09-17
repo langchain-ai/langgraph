@@ -32,7 +32,7 @@
   "includeVersion": true,
   "typedocOptions": {
     "entryPoints": [
-      "src/client.mts"
+      "src/client.ts"
     ],
     "readme": "none",
     "out": "docs",

@@ -4,6 +4,7 @@ import re
 import sys
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
+from time import perf_counter
 from typing import (
     Annotated,
     Any,
@@ -363,6 +364,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         assert awhiles == 2
 
 
+@pytest.mark.repeat(10)
 async def test_step_timeout_on_stream_hang() -> None:
     inner_task_cancelled = False
 
@@ -599,7 +601,7 @@ async def test_node_schemas_custom_output() -> None:
         "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
-    builder = StateGraph(input=State, output=Output)
+    builder = StateGraph(State, output=Output)
     builder.add_node("a", node_a)
     builder.add_node("b", node_b)
     builder.add_node("c", node_c)
@@ -3177,10 +3179,7 @@ async def test_conditional_graph_state(
             setup.reset_mock()
             teardown.reset_mock()
 
-    class MyPydanticContextModel(BaseModel):
-        class Config:
-            arbitrary_types_allowed = True
-
+    class MyPydanticContextModel(BaseModel, arbitrary_types_allowed=True):
         session: httpx.AsyncClient
         something_else: str
 
@@ -6959,6 +6958,83 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None:
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    async def inner_1(state: InnerState):
+        return {"my_key": "got here", "my_other_key": state["my_key"]}
+
+    async def inner_2(state: InnerState):
+        await asyncio.sleep(0.5)
+        return {
+            "my_key": " and there",
+            "my_other_key": state["my_key"],
+        }
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    async def outer_1(state: State):
+        await asyncio.sleep(0.2)
+        return {"my_key": " and parallel"}
+
+    async def outer_2(state: State):
+        return {"my_key": " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile())
+    graph.add_node("outer_1", outer_1)
+    graph.add_node("outer_2", outer_2)
+
+    graph.add_edge(START, "inner")
+    graph.add_edge(START, "outer_1")
+    graph.add_edge(["inner", "outer_1"], "outer_2")
+    graph.add_edge("outer_2", END)
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        app = graph.compile(checkpointer=checkpointer)
+
+        start = perf_counter()
+        chunks: list[tuple[float, Any]] = []
+        config = {"configurable": {"thread_id": "2"}}
+        async for c in app.astream({"my_key": ""}, config, subgraphs=True):
+            chunks.append((round(perf_counter() - start, 1), c))
+        for idx in range(len(chunks)):
+            elapsed, c = chunks[idx]
+            chunks[idx] = (round(elapsed - chunks[0][0], 1), c)
+
+        assert chunks == [
+            # arrives before "inner" finishes
+            (
+                0.0,
+                (
+                    (AnyStr("inner:"),),
+                    {"inner_1": {"my_key": "got here", "my_other_key": ""}},
+                ),
+            ),
+            (0.2, ((), {"outer_1": {"my_key": " and parallel"}})),
+            (
+                0.5,
+                (
+                    (AnyStr("inner:"),),
+                    {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
+                ),
+            ),
+            (0.5, ((), {"inner": {"my_key": "got here and there"}})),
+            (0.5, ((), {"outer_2": {"my_key": " and back again"}})),
+        ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -8527,7 +8603,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
         return {"subject": f"{subject} - hohoho"}
 
     # subgraph
-    subgraph = StateGraph(input=JokeState, output=OverallState)
+    subgraph = StateGraph(JokeState, output=OverallState)
     subgraph.add_node("edit", edit)
     subgraph.add_node(
         "generate", lambda state: {"jokes": [f"Joke about {state['subject']}"]}

@@ -10,9 +10,12 @@ import {
   ThreadState,
   Cron,
 } from "./schema.js";
-import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.mjs";
-import { EventSourceParser, createParser } from "eventsource-parser";
-import { IterableReadableStream } from "./utils/stream.mjs";
+import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
+import {
+  EventSourceParser,
+  createParser,
+} from "./utils/eventsource-parser/index.js";
+import { IterableReadableStream } from "./utils/stream.js";
 import {
   RunsCreatePayload,
   RunsStreamPayload,
@@ -20,7 +23,7 @@ import {
   StreamEvent,
   CronsCreatePayload,
   OnConflictBehavior,
-} from "./types.mjs";
+} from "./types.js";
 
 interface ClientConfig {
   apiUrl?: string;

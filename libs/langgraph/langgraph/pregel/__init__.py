@@ -83,6 +83,7 @@ from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
+from langgraph.utils.aio import Queue
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -315,6 +316,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 },
             )
 
+    def get_input_jsonschema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Dict[All, Any]:
+        schema = self.get_input_schema(config)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
+
     @property
     def OutputType(self) -> Any:
         if isinstance(self.output_channels, str):
@@ -333,6 +343,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     k: (self.channels[k].ValueType, None) for k in self.output_channels
                 },
             )
+
+    def get_output_jsonschema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Dict[All, Any]:
+        schema = self.get_output_schema(config)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
 
     @property
     def stream_channels_list(self) -> Sequence[str]:
@@ -1323,11 +1342,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
-        stream = deque()
+        stream = Queue()
+        aioloop = asyncio.get_running_loop()
 
         def output() -> Iterator:
-            while stream:
-                ns, mode, payload = stream.popleft()
+            while True:
+                try:
+                    ns, mode, payload = stream.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
                 if subgraphs and isinstance(stream_mode, list):
                     yield (ns, mode, payload)
                 elif isinstance(stream_mode, list):
@@ -1336,6 +1359,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     yield (ns, payload)
                 else:
                     yield payload
+
+        if subgraphs:
+
+            def get_waiter() -> asyncio.Task[None]:
+                return aioloop.create_task(stream.wait())
+        else:
+            get_waiter = None
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
@@ -1379,7 +1409,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             async with AsyncPregelLoop(
                 input,
-                stream=StreamProtocol(stream.append, stream_modes),
+                stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1412,6 +1442,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
+                        get_waiter=get_waiter,
                     ):
                         # emit output
                         for o in output():

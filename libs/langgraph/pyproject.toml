@@ -28,7 +28,7 @@ pytest-repeat = "^0.9.3"
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
 langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
-psycopg = {extras = ["binary"], version = ">=3.0.0"}
+psycopg = {extras = ["binary"], version = ">=3.0.0", python = ">=3.10"}
 uvloop = "^0.20.0"
 pyperf = "^2.7.0"
 py-spy = "^0.3.14"

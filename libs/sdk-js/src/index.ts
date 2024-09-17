@@ -1,4 +1,4 @@
-export { Client } from "./client.mjs";
+export { Client } from "./client.js";
 
 export type {
   Assistant,

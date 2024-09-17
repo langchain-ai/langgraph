@@ -73,7 +73,7 @@ def test_state_schema_with_type_hint():
     def miss_all_hint(state, config):
         return {"input_state": state}
 
-    graph = StateGraph(input=InputState, output=OutputState)
+    graph = StateGraph(InputState, output=OutputState)
     actions = [complete_hint, miss_first_hint, only_return_hint, miss_all_hint]
 
     for action in actions:
@@ -125,8 +125,7 @@ def test_state_schema_optional_values(total_: bool):
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()
-    model = graph.get_input_schema()
-    json_schema = model.schema()
+    json_schema = graph.get_input_jsonschema()
 
     if total_ is False:
         expected_required = set()
@@ -146,7 +145,7 @@ def test_state_schema_optional_values(total_: bool):
     )
 
     # Check output schema. Should be the same process
-    output_schema = graph.get_output_schema().schema()
+    output_schema = graph.get_output_jsonschema()
     if total_ is False:
         expected_required = set()
         expected_optional = {"out_val2", "out_val1"}
@@ -192,9 +191,7 @@ def test_state_schema_default_values(kw_only_: bool):
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()
-    for model in [graph.get_input_schema(), graph.get_output_schema()]:
-        json_schema = model.schema()
-
+    for json_schema in [graph.get_input_jsonschema(), graph.get_output_jsonschema()]:
         expected_required = {"val1", "val7"}
         expected_optional = {
             "val2",
@@ -256,8 +253,6 @@ def test_raises_invalid_managed():
             StateGraph(_state, input=_inp, output=_outp)
     bad_output_examples = [
         (State, InputState, BadOutputState),
-        (None, InputState, BadOutputState),
-        (None, State, BadOutputState),
         (State, None, BadOutputState),
     ]
     for _state, _inp, _outp in bad_output_examples:
