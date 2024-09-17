@@ -15,6 +15,7 @@ from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
 )
+from langchain_core.prompts import BasePromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 
@@ -114,15 +115,23 @@ def _convert_messages_modifier_to_state_modifier(
 def _get_model_preprocessing_runnable(
     state_modifier: Optional[StateModifier],
     messages_modifier: Optional[MessagesModifier],
+    prompt: Optional[BasePromptTemplate],
 ) -> Runnable:
     # Add the state or message modifier, if exists
-    if state_modifier is not None and messages_modifier is not None:
+    if sum([x is not None for x in (state_modifier, messages_modifier, prompt)]) > 1:
         raise ValueError(
-            "Expected value for either state_modifier or messages_modifier, got values for both"
+            "Expected value for at most one of state_modifier, messages_modifier, "
+            "prompt. Received multiple."
         )
 
-    if state_modifier is None and messages_modifier is not None:
+    if state_modifier is not None:
+        pass
+    if messages_modifier is not None:
         state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
+    elif prompt is not None:
+        state_modifier = prompt
+    else:
+        pass
 
     return _get_state_modifier_runnable(state_modifier)
 
@@ -132,6 +141,7 @@ def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
+    prompt: Optional[BasePromptTemplate] = None,
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
@@ -148,6 +158,9 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
+        prompt: Prompt to use whenever invoking model. Should contain only input
+            variables which are in the graph state. Most commonly this will be a
+            MessagesPlaceholder corresponding to input 'messages'.
         messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.
 
@@ -290,16 +303,13 @@ def create_react_agent(
 
         ```pycon
         >>> from langchain_core.prompts import ChatPromptTemplate
-        >>> prompt = ChatPromptTemplate.from_messages([
-        ...     ("system", "You are a helpful bot named Fred."),
-        ...     ("placeholder", "{messages}"),
-        ...     ("user", "Remember, always be polite!"),
-        ... ])
-        >>> def modify_state_messages(state: AgentState):
-        ...     # You can do more complex modifications here
-        ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, state_modifier=modify_state_messages)
+        >>> prompt = ChatPromptTemplate([
+        ...     ("system", "You are a helpful bot named Fred."),
+        ...     ("user", "Remember, always be polite!"),
+        ...     ("placeholder", "{messages}"),
+        ... ])
+        >>> graph = create_react_agent(model, tools, prompt=prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -325,7 +335,7 @@ def create_react_agent(
         ...     messages: Annotated[list[BaseMessage], add_messages]
         ...     is_last_step: str
         >>>
-        >>> graph = create_react_agent(model, tools, state_schema=CustomState, state_modifier=prompt)
+        >>> graph = create_react_agent(model, tools, state_schema=CustomState, prompt=prompt)
         >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -439,7 +449,9 @@ def create_react_agent(
         else:
             return "continue"
 
-    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier)
+    preprocessor = _get_model_preprocessing_runnable(
+        state_modifier, messages_modifier, prompt
+    )
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
