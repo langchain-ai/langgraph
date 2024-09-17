@@ -40,6 +40,9 @@ motor = "^3.5.1"
 langchain-community = "^0.3"
 grandalf = "^0.8"
 pyppeteer = "^2.0.0"
+chromadb = "^0.5"
+pandas = "^2.2"
+langchain_nomic = "^0.1.3"
 
 [tool.poetry.group.test]
 optional = true
