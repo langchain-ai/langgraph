@@ -1325,6 +1325,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         """
 
         stream = Queue()
+        aioloop = asyncio.get_running_loop()
 
         def output() -> Iterator:
             while True:
@@ -1341,7 +1342,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 else:
                     yield payload
 
-        aioloop = asyncio.get_event_loop()
+        if subgraphs:
+
+            def get_waiter() -> asyncio.Task[None]:
+                return aioloop.create_task(stream.wait())
+        else:
+            get_waiter = None
+
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1417,7 +1424,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
-                        get_waiter=lambda: aioloop.create_task(stream.wait()),
+                        get_waiter=get_waiter,
                     ):
                         # emit output
                         for o in output():

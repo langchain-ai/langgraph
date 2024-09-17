@@ -33,14 +33,26 @@ class PregelRunner:
 
     def tick(
         self,
-        tasks: list[PregelExecutableTask],
+        tasks: Sequence[PregelExecutableTask],
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
     ) -> Iterator[None]:
+        tasks = tuple(tasks)
         # give control back to the caller
         yield
+        # fast path if single task with no timeout
+        if len(tasks) == 1 and timeout is None:
+            task = tasks[0]
+            try:
+                run_with_retry(task, retry_policy)
+                self.commit(task, None)
+            except Exception as exc:
+                self.commit(task, exc)
+                if reraise:
+                    raise
+            return
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -66,22 +78,8 @@ class PregelRunner:
                 break  # timed out
             for fut in done:
                 task = futures.pop(fut)
-                if exc := _exception(fut):
-                    if isinstance(exc, GraphInterrupt):
-                        # save interrupt to checkpointer
-                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
-                            self.put_writes(task.id, interrupts)
-                    elif isinstance(exc, GraphDelegate):
-                        raise exc
-                    else:
-                        # save error to checkpointer
-                        self.put_writes(task.id, [(ERROR, exc)])
-                else:
-                    if not task.writes:
-                        # add no writes marker
-                        task.writes.append((NO_WRITES, None))
-                    # save task writes to checkpointer
-                    self.put_writes(task.id, task.writes)
+                # task finished, commit writes
+                self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -95,7 +93,7 @@ class PregelRunner:
 
     async def atick(
         self,
-        tasks: list[PregelExecutableTask],
+        tasks: Sequence[PregelExecutableTask],
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
@@ -103,8 +101,20 @@ class PregelRunner:
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
+        tasks = tuple(tasks)
         # give control back to the caller
         yield
+        # fast path if single task with no waiter and no timeout
+        if len(tasks) == 1 and get_waiter is None and timeout is None:
+            task = tasks[0]
+            try:
+                await arun_with_retry(task, retry_policy, stream=self.use_astream)
+                self.commit(task, None)
+            except Exception as exc:
+                self.commit(task, exc)
+                if reraise:
+                    raise
+            return
         # add waiter task if requested
         if get_waiter is not None:
             futures: dict[asyncio.Future, Optional[PregelExecutableTask]] = {
@@ -143,23 +153,9 @@ class PregelRunner:
                 if task is None:
                     # waiter task finished, schedule another
                     futures[get_waiter()] = None
-                    continue
-                if exc := _exception(fut):
-                    if isinstance(exc, GraphInterrupt):
-                        # save interrupt to checkpointer
-                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
-                            self.put_writes(task.id, interrupts)
-                    elif isinstance(exc, GraphDelegate):
-                        raise exc
-                    else:
-                        # save error to checkpointer
-                        self.put_writes(task.id, [(ERROR, exc)])
                 else:
-                    if not task.writes:
-                        # add no writes marker
-                        task.writes.append((NO_WRITES, None))
-                    # save task writes to checkpointer
-                    self.put_writes(task.id, task.writes)
+                    # task finished, commit writes
+                    self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -175,6 +171,26 @@ class PregelRunner:
         _panic_or_proceed(
             all_futures, timeout_exc_cls=asyncio.TimeoutError, panic=reraise
         )
+
+    def commit(
+        self, task: PregelExecutableTask, exception: Optional[BaseException]
+    ) -> None:
+        if exception:
+            if isinstance(exception, GraphInterrupt):
+                # save interrupt to checkpointer
+                if interrupts := [(INTERRUPT, i) for i in exception.args[0]]:
+                    self.put_writes(task.id, interrupts)
+            elif isinstance(exception, GraphDelegate):
+                raise exception
+            else:
+                # save error to checkpointer
+                self.put_writes(task.id, [(ERROR, exception)])
+        else:
+            if not task.writes:
+                # add no writes marker
+                task.writes.append((NO_WRITES, None))
+            # save task writes to checkpointer
+            self.put_writes(task.id, task.writes)
 
 
 def _should_stop_others(
