@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent
+import concurrent.futures
+import queue
 from collections import deque
 from functools import partial
 from typing import (
@@ -83,7 +86,6 @@ from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils.aio import Queue
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -92,6 +94,7 @@ from langgraph.utils.config import (
     patch_configurable,
 )
 from langgraph.utils.pydantic import create_model
+from langgraph.utils.queue import AsyncQueue, SyncQueue
 from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -1162,11 +1165,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
-        stream = deque()
+        stream = SyncQueue()
 
         def output() -> Iterator:
-            while stream:
-                ns, mode, payload = stream.popleft()
+            while True:
+                try:
+                    ns, mode, payload = stream.get(block=False)
+                except queue.Empty:
+                    break
                 if subgraphs and isinstance(stream_mode, list):
                     yield (ns, mode, payload)
                 elif isinstance(stream_mode, list):
@@ -1210,7 +1216,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
             with SyncPregelLoop(
                 input,
-                stream=StreamProtocol(stream.append, stream_modes),
+                stream=StreamProtocol(stream.put, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1228,6 +1234,22 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
+                    # we are careful to have a single waiter live at any one time
+                    # because on exit we increment semaphore count by exactly 1
+                    waiter: Optional[concurrent.futures.Future] = None
+                    # because sync futures cannot be cancelled, we instead
+                    # release the stream semaphore on exit, which will cause
+                    # a pending waiter to return immediately
+                    loop.stack.callback(stream._count.release)
+
+                    def get_waiter() -> asyncio.Task[None]:
+                        nonlocal waiter
+                        if waiter is None or waiter.done():
+                            return (waiter := loop.submit(stream.wait))
+                        else:
+                            return waiter
+                else:
+                    get_waiter = None
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1243,10 +1265,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
+                        get_waiter=get_waiter,
                     ):
                         # emit output
-                        for o in output():
-                            yield o
+                        yield from output()
             # emit output
             yield from output()
             # handle exit
@@ -1342,7 +1364,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
-        stream = Queue()
+        stream = AsyncQueue()
         aioloop = asyncio.get_running_loop()
 
         def output() -> Iterator:

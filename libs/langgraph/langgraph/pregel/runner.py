@@ -38,6 +38,7 @@ class PregelRunner:
         reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
         tasks = tuple(tasks)
         # give control back to the caller
@@ -53,23 +54,30 @@ class PregelRunner:
                 if reraise:
                     raise
             return
+        # add waiter task if requested
+        if get_waiter is not None:
+            futures: dict[concurrent.futures.Future, Optional[PregelExecutableTask]] = {
+                get_waiter(): None
+            }
+        else:
+            futures = {}
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
-        futures = {
-            self.submit(
-                run_with_retry,
-                task,
-                retry_policy,
-                __reraise_on_exit__=reraise,
-            ): task
-            for task in tasks
-            if not task.writes
-        }
+        for task in tasks:
+            if not task.writes:
+                futures[
+                    self.submit(
+                        run_with_retry,
+                        task,
+                        retry_policy,
+                        __reraise_on_exit__=reraise,
+                    )
+                ] = task
         all_futures = futures.copy()
         end_time = timeout + time.monotonic() if timeout else None
-        while futures:
-            done, _ = concurrent.futures.wait(
+        while len(futures) > (1 if get_waiter is not None else 0):
+            done, inflight = concurrent.futures.wait(
                 futures,
                 return_when=concurrent.futures.FIRST_COMPLETED,
                 timeout=(max(0, end_time - time.monotonic()) if end_time else None),
@@ -78,8 +86,13 @@ class PregelRunner:
                 break  # timed out
             for fut in done:
                 task = futures.pop(fut)
-                # task finished, commit writes
-                self.commit(task, _exception(fut))
+                if task is None:
+                    # waiter task finished, schedule another
+                    if inflight:
+                        futures[get_waiter()] = None
+                else:
+                    # task finished, commit writes
+                    self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -141,7 +154,7 @@ class PregelRunner:
         all_futures = futures.copy()
         end_time = timeout + loop.time() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
-            done, _ = await asyncio.wait(
+            done, inflight = await asyncio.wait(
                 futures,
                 return_when=asyncio.FIRST_COMPLETED,
                 timeout=(max(0, end_time - loop.time()) if end_time else None),
@@ -152,7 +165,8 @@ class PregelRunner:
                 task = futures.pop(fut)
                 if task is None:
                     # waiter task finished, schedule another
-                    futures[get_waiter()] = None
+                    if inflight:
+                        futures[get_waiter()] = None
                 else:
                     # task finished, commit writes
                     self.commit(task, _exception(fut))
