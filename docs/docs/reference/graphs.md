@@ -19,6 +19,10 @@ handler: python
 
 ::: langgraph.graph.message.MessageGraph
 
+## `add_messages`
+
+::: langgraph.graph.message.add_messages
+
 ## CompiledGraph
 
 ::: langgraph.graph.graph.CompiledGraph
