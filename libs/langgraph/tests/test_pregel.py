@@ -8363,6 +8363,86 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_stream_subgraphs_during_execution(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    def inner_1(state: InnerState):
+        return {"my_key": "got here", "my_other_key": state["my_key"]}
+
+    def inner_2(state: InnerState):
+        time.sleep(0.5)
+        return {
+            "my_key": " and there",
+            "my_other_key": state["my_key"],
+        }
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    def outer_1(state: State):
+        time.sleep(0.2)
+        return {"my_key": " and parallel"}
+
+    def outer_2(state: State):
+        return {"my_key": " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile())
+    graph.add_node("outer_1", outer_1)
+    graph.add_node("outer_2", outer_2)
+
+    graph.add_edge(START, "inner")
+    graph.add_edge(START, "outer_1")
+    graph.add_edge(["inner", "outer_1"], "outer_2")
+    graph.add_edge("outer_2", END)
+
+    app = graph.compile(checkpointer=checkpointer)
+
+    start = time.perf_counter()
+    chunks: list[tuple[float, Any]] = []
+    config = {"configurable": {"thread_id": "2"}}
+    for c in app.stream({"my_key": ""}, config, subgraphs=True):
+        chunks.append((round(time.perf_counter() - start, 1), c))
+    for idx in range(len(chunks)):
+        elapsed, c = chunks[idx]
+        chunks[idx] = (round(elapsed - chunks[0][0], 1), c)
+
+    assert chunks == [
+        # arrives before "inner" finishes
+        (
+            0.0,
+            (
+                (AnyStr("inner:"),),
+                {"inner_1": {"my_key": "got here", "my_other_key": ""}},
+            ),
+        ),
+        (0.2, ((), {"outer_1": {"my_key": " and parallel"}})),
+        (
+            0.5,
+            (
+                (AnyStr("inner:"),),
+                {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
+            ),
+        ),
+        (0.5, ((), {"inner": {"my_key": "got here and there"}})),
+        (0.5, ((), {"outer_2": {"my_key": " and back again"}})),
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_nested_graph_interrupts_parallel(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
