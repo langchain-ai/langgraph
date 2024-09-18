@@ -30,7 +30,10 @@ class FakeChatModel(GenericFakeChatModel):
         if isinstance(message, str):
             message_ = AIMessage(content=message)
         else:
-            message_ = message
+            if hasattr(message, "model_copy"):
+                message_ = message.model_copy()
+            else:
+                message_ = message.copy()
         generation = ChatGeneration(message=message_)
         return ChatResult(generations=[generation])
 

@@ -25,14 +25,23 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.metadata: dict[str, tuple[str, dict[str, Any]]] = {}
         self.seen = set()
 
-    def _emit(self, meta: Tuple[str, dict[str, Any]], message: BaseMessage):
+    def _emit(
+        self,
+        meta: Tuple[str, dict[str, Any]],
+        message: BaseMessage,
+        *,
+        dedupe: bool = False,
+    ):
         ident = id(message)
-        if ident in self.seen:
+        if dedupe and message.id in self.seen:
+            return
+        elif ident in self.seen:
             return
         else:
             if message.id is None:
                 message.id = str(uuid4())
             self.seen.add(ident)
+            self.seen.add(message.id)
             self.stream((meta[0], "messages", (message, meta[1])))
 
     def tap_output_aiter(
@@ -121,29 +130,29 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
             if isinstance(response, BaseMessage):
-                self._emit(meta, response)
+                self._emit(meta, response, dedupe=True)
             elif isinstance(response, Sequence):
                 for value in response:
                     if isinstance(value, BaseMessage):
-                        self._emit(meta, value)
+                        self._emit(meta, value, dedupe=True)
             elif isinstance(response, dict):
                 for value in response.values():
                     if isinstance(value, BaseMessage):
-                        self._emit(meta, value)
+                        self._emit(meta, value, dedupe=True)
                     elif isinstance(value, Sequence):
                         for item in value:
                             if isinstance(item, BaseMessage):
-                                self._emit(meta, item)
+                                self._emit(meta, item, dedupe=True)
             elif hasattr(response, "__dir__") and callable(response.__dir__):
                 for key in dir(response):
                     try:
                         value = getattr(response, key)
                         if isinstance(value, BaseMessage):
-                            self._emit(meta, value)
+                            self._emit(meta, value, dedupe=True)
                         elif isinstance(value, Sequence):
                             for item in value:
                                 if isinstance(item, BaseMessage):
-                                    self._emit(meta, item)
+                                    self._emit(meta, item, dedupe=True)
                     except AttributeError:
                         pass
 
