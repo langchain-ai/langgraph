@@ -105,7 +105,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         metadata: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Any:
-        if metadata:
+        if metadata and kwargs.get("name") == metadata.get("langgraph_node"):
             self.metadata[run_id] = (
                 tuple(metadata["langgraph_checkpoint_ns"].split(NS_SEP)),
                 metadata,
