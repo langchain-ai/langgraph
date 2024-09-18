@@ -8,7 +8,6 @@ from typing import (
     AsyncContextManager,
     Callable,
     ContextManager,
-    Iterable,
     Iterator,
     List,
     Literal,
@@ -112,11 +111,11 @@ class StreamProtocol:
 
     modes: Sequence[Literal["values", "updates", "debug"]]
 
-    __call__: Callable[[Iterable[Tuple[str, str, Any]]], None]
+    __call__: Callable[[Tuple[str, str, Any]], None]
 
     def __init__(
         self,
-        __call__: Callable[[Iterable[Tuple[str, str, Any]]], None],
+        __call__: Callable[[Tuple[str, str, Any]], None],
         modes: Sequence[Literal["values", "updates", "debug"]],
     ) -> None:
         self.__call__ = __call__

@@ -107,11 +107,12 @@ class StateSnapshot(NamedTuple):
 
 All = Literal["*"]
 
-StreamMode = Literal["values", "updates", "debug"]
+StreamMode = Literal["values", "updates", "debug", "messages"]
 """How the stream method should emit outputs.
 
 - 'values': Emit all values of the state for each step.
 - 'updates': Emit only the node name(s) and updates
     that were returned by the node(s) **after** each step.
 - 'debug': Emit debug events for each step.
+- 'messages': Emit LLM messages token-by-token.
 """
