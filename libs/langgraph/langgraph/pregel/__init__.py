@@ -1245,7 +1245,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     def get_waiter() -> asyncio.Task[None]:
                         nonlocal waiter
                         if waiter is None or waiter.done():
-                            return (waiter := loop.submit(stream.wait))
+                            waiter = loop.submit(stream.wait)
+                            return waiter
                         else:
                             return waiter
                 else:
