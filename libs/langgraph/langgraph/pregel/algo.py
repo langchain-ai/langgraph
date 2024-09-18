@@ -350,12 +350,6 @@ def prepare_single_task(
             return
         # create task id
         triggers = [PUSH]
-        metadata = {
-            "langgraph_step": step,
-            "langgraph_node": packet.node,
-            "langgraph_triggers": triggers,
-            "langgraph_path": task_path,
-        }
         checkpoint_ns = (
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
@@ -367,6 +361,14 @@ def prepare_single_task(
             PUSH,
             str(idx),
         )
+        task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        metadata = {
+            "langgraph_step": step,
+            "langgraph_node": packet.node,
+            "langgraph_triggers": triggers,
+            "langgraph_path": task_path,
+            "langgraph_checkpoint_ns": task_checkpoint_ns,
+        }
         if task_id_checksum is not None:
             assert task_id == task_id_checksum
         if for_execution:
@@ -376,7 +378,6 @@ def prepare_single_task(
                 if proc.metadata:
                     metadata.update(proc.metadata)
                 writes = deque()
-                task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                 return PregelExecutableTask(
                     packet.node,
                     packet.arg,
@@ -461,12 +462,6 @@ def prepare_single_task(
                 return
 
             # create task id
-            metadata = {
-                "langgraph_step": step,
-                "langgraph_node": name,
-                "langgraph_triggers": triggers,
-                "langgraph_path": task_path,
-            }
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = _uuid5_str(
                 checkpoint_id,
@@ -476,15 +471,21 @@ def prepare_single_task(
                 PULL,
                 *triggers,
             )
+            task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+            metadata = {
+                "langgraph_step": step,
+                "langgraph_node": name,
+                "langgraph_triggers": triggers,
+                "langgraph_path": task_path,
+                "langgraph_checkpoint_ns": task_checkpoint_ns,
+            }
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum
-
             if for_execution:
                 if node := proc.node:
                     if proc.metadata:
                         metadata.update(proc.metadata)
                     writes = deque()
-                    task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     return PregelExecutableTask(
                         name,
                         val,
