@@ -41,7 +41,9 @@ def run_with_retry(
             if isinstance(retry_policy.retry_on, Sequence):
                 if not isinstance(exc, tuple(retry_policy.retry_on)):
                     raise
-            elif isinstance(retry_policy.retry_on, type) and issubclass(retry_policy.retry_on, Exception):
+            elif isinstance(retry_policy.retry_on, type) and issubclass(
+                retry_policy.retry_on, Exception
+            ):
                 if not isinstance(exc, retry_policy.retry_on):
                     raise
             elif callable(retry_policy.retry_on):
@@ -105,7 +107,9 @@ async def arun_with_retry(
             if isinstance(retry_policy.retry_on, Sequence):
                 if not isinstance(exc, tuple(retry_policy.retry_on)):
                     raise
-            elif isinstance(retry_policy.retry_on, type) and issubclass(retry_policy.retry_on, Exception):
+            elif isinstance(retry_policy.retry_on, type) and issubclass(
+                retry_policy.retry_on, Exception
+            ):
                 if not isinstance(exc, retry_policy.retry_on):
                     raise
             elif callable(retry_policy.retry_on):
