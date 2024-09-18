@@ -223,6 +223,25 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     assert inner_task_cancelled
 
 
+async def test_node_cancellation_on_other_node_exception_two() -> None:
+    async def awhile(input: Any) -> None:
+        await asyncio.sleep(1)
+
+    async def iambad(input: Any) -> None:
+        raise ValueError("I am bad")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.add_node("bad", iambad)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+
+    graph = builder.compile()
+
+    with pytest.raises(ValueError, match="I am bad"):
+        # This will raise ValueError, not CancelledError
+        await graph.ainvoke(1)
+
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt(checkpointer_name: str) -> None:
     class State(TypedDict):
