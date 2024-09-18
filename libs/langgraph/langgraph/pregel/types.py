@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
+from typing import Any, Callable, Literal, NamedTuple, Optional, Sequence, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -52,7 +52,7 @@ class RetryPolicy(NamedTuple):
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
     retry_on: Union[
-        Type[Exception], tuple[Type[Exception], ...], Callable[[Exception], bool]
+        Type[Exception], Sequence[Type[Exception]], Callable[[Exception], bool]
     ] = default_retry_on
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
