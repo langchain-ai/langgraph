@@ -1,6 +1,6 @@
 # How to add authentication to your LangGraph apps
 
-Adding authentication to your LangGraph apps can be an important step to getting them ready for production. Once you have succesfully deployed a LangGraph application, you can add authentication by sending custom headers along with every request you make to the LangGraph API - whether you are using the SDK or not.
+Adding authentication to your LangGraph apps can be an important step to getting them ready for production. Once you have successfully deployed a LangGraph application, you can add authentication by sending custom headers along with every request you make to the LangGraph API - whether you are using the SDK or not.
 
 When using the SDK you can initialize your client with the parameter `headers` and pass in the custom headers you would like. If you are sending in raw cURL commands, you can simply add in extra headers alongisde your existing ones.
 
