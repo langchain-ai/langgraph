@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Read the list of notebooks to skip from the JSON file
-SKIP_NOTEBOOKS=$(python -c "import json; print(' '.join(json.load(open('docs/notebooks_no_execution.json'))))")
+SKIP_NOTEBOOKS=$(python -c "import json; print('\n'.join(json.load(open('docs/notebooks_no_execution.json'))))")
 
 # Function to execute a single notebook
 execute_notebook() {
