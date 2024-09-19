@@ -16,8 +16,8 @@ ERROR = "__error__"
 SCHEDULED = "__scheduled__"
 TASKS = "__pregel_tasks"
 
-Value = TypeVar("Value")
-Update = TypeVar("Update")
+Value = TypeVar("Value", covariant=True)
+Update = TypeVar("Update", contravariant=True)
 C = TypeVar("C")
 
 

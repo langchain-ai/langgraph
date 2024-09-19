@@ -22,7 +22,7 @@ from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 
 class MemorySaver(
-    BaseCheckpointSaver, AbstractContextManager, AbstractAsyncContextManager
+    BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
 
@@ -54,9 +54,14 @@ class MemorySaver(
     """
 
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
-    storage: defaultdict[str, dict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]]
+    storage: defaultdict[
+        str,
+        dict[
+            str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], Optional[str]]]
+        ],
+    ]
     writes: defaultdict[
-        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, bytes]]
+        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, tuple[str, bytes]]]
     ]
 
     def __init__(
@@ -316,7 +321,7 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         c = checkpoint.copy()
-        c.pop("pending_sends")
+        c.pop("pending_sends")  # type: ignore[misc]
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         self.storage[thread_id][checkpoint_ns].update(
@@ -341,7 +346,7 @@ class MemorySaver(
         config: RunnableConfig,
         writes: List[Tuple[str, Any]],
         task_id: str,
-    ) -> RunnableConfig:
+    ) -> None:
         """Save a list of writes to the in-memory storage.
 
         This method saves a list of writes to the in-memory storage. The writes are associated
@@ -444,7 +449,7 @@ class MemorySaver(
         config: RunnableConfig,
         writes: List[Tuple[str, Any]],
         task_id: str,
-    ) -> RunnableConfig:
+    ) -> None:
         """Asynchronous version of put_writes.
 
         This method is an asynchronous wrapper around put_writes that runs the synchronous

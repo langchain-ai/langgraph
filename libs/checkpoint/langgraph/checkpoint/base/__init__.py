@@ -3,6 +3,7 @@ from typing import (
     Any,
     AsyncIterator,
     Dict,
+    Generic,
     Iterator,
     List,
     Literal,
@@ -11,11 +12,11 @@ from typing import (
     Optional,
     Tuple,
     TypedDict,
-    TypeVar,
     Union,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
+from typing_extensions import TypeVar
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
@@ -27,7 +28,7 @@ from langgraph.checkpoint.serde.types import (
     SendProtocol,
 )
 
-V = TypeVar("V", int, float, str)
+V = TypeVar("V", int, float, str, default=int)
 PendingWrite = Tuple[str, str, Any]
 
 
@@ -135,7 +136,7 @@ def create_checkpoint(
     if channels is None:
         values = checkpoint["channel_values"]
     else:
-        values: dict[str, Any] = {}
+        values = {}
         for k, v in channels.items():
             if k not in checkpoint["channel_versions"]:
                 continue
@@ -192,7 +193,7 @@ CheckpointId = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver:
+class BaseCheckpointSaver(Generic[V]):
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
@@ -420,7 +421,12 @@ class BaseCheckpointSaver:
         Returns:
             V: The next version identifier, which must be increasing.
         """
-        return current + 1 if current is not None else 1
+        if isinstance(current, str):
+            raise NotImplementedError
+        elif current is None:
+            return 1
+        else:
+            return current + 1
 
 
 class EmptyChannelError(Exception):

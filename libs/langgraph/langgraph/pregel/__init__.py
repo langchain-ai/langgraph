@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent
+import concurrent.futures
+import queue
 from collections import deque
 from functools import partial
 from typing import (
@@ -73,8 +76,9 @@ from langgraph.pregel.algo import (
 )
 from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
+from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
+from langgraph.pregel.messages import StreamMessagesHandler
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
@@ -91,6 +95,7 @@ from langgraph.utils.config import (
     patch_configurable,
 )
 from langgraph.utils.pydantic import create_model
+from langgraph.utils.queue import AsyncQueue, SyncQueue
 from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -315,6 +320,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 },
             )
 
+    def get_input_jsonschema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Dict[All, Any]:
+        schema = self.get_input_schema(config)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
+
     @property
     def OutputType(self) -> Any:
         if isinstance(self.output_channels, str):
@@ -333,6 +347,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     k: (self.channels[k].ValueType, None) for k in self.output_channels
                 },
             )
+
+    def get_output_jsonschema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Dict[All, Any]:
+        schema = self.get_output_schema(config)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
 
     @property
     def stream_channels_list(self) -> Sequence[str]:
@@ -1143,20 +1166,22 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
-        stream = deque()
+        stream = SyncQueue()
 
         def output() -> Iterator:
-            while stream:
-                ns, mode, payload = stream.popleft()
-                if mode in stream_modes:
-                    if subgraphs and isinstance(stream_mode, list):
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
-                    elif isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    elif subgraphs:
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
-                    else:
-                        yield payload
+            while True:
+                try:
+                    ns, mode, payload = stream.get(block=False)
+                except queue.Empty:
+                    break
+                if subgraphs and isinstance(stream_mode, list):
+                    yield (ns, mode, payload)
+                elif isinstance(stream_mode, list):
+                    yield (mode, payload)
+                elif subgraphs:
+                    yield (ns, payload)
+                else:
+                    yield payload
 
         config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
@@ -1189,10 +1214,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
-
+            # set up messages stream mode
+            if "messages" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamMessagesHandler(stream.put)
+                )
             with SyncPregelLoop(
                 input,
-                stream=stream.append,
+                stream=StreamProtocol(stream.put, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1210,6 +1239,25 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
+                # enable concurrent streaming
+                if subgraphs or "messages" in stream_modes:
+                    # we are careful to have a single waiter live at any one time
+                    # because on exit we increment semaphore count by exactly 1
+                    waiter: Optional[concurrent.futures.Future] = None
+                    # because sync futures cannot be cancelled, we instead
+                    # release the stream semaphore on exit, which will cause
+                    # a pending waiter to return immediately
+                    loop.stack.callback(stream._count.release)
+
+                    def get_waiter() -> asyncio.Task[None]:
+                        nonlocal waiter
+                        if waiter is None or waiter.done():
+                            waiter = loop.submit(stream.wait)
+                            return waiter
+                        else:
+                            return waiter
+                else:
+                    get_waiter = None
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1225,10 +1273,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
+                        get_waiter=get_waiter,
                     ):
                         # emit output
-                        for o in output():
-                            yield o
+                        yield from output()
             # emit output
             yield from output()
             # handle exit
@@ -1324,20 +1372,30 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
-        stream = deque()
+        stream = AsyncQueue()
+        aioloop = asyncio.get_running_loop()
 
         def output() -> Iterator:
-            while stream:
-                ns, mode, payload = stream.popleft()
-                if mode in stream_modes:
-                    if subgraphs and isinstance(stream_mode, list):
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
-                    elif isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    elif subgraphs:
-                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
-                    else:
-                        yield payload
+            while True:
+                try:
+                    ns, mode, payload = stream.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if subgraphs and isinstance(stream_mode, list):
+                    yield (ns, mode, payload)
+                elif isinstance(stream_mode, list):
+                    yield (mode, payload)
+                elif subgraphs:
+                    yield (ns, payload)
+                else:
+                    yield payload
+
+        if subgraphs:
+
+            def get_waiter() -> asyncio.Task[None]:
+                return aioloop.create_task(stream.wait())
+        else:
+            get_waiter = None
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
@@ -1381,7 +1439,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             async with AsyncPregelLoop(
                 input,
-                stream=stream.append,
+                stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1414,6 +1472,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
+                        get_waiter=get_waiter,
                     ):
                         # emit output
                         for o in output():

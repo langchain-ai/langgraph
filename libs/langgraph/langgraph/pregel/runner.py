@@ -33,31 +33,51 @@ class PregelRunner:
 
     def tick(
         self,
-        tasks: list[PregelExecutableTask],
+        tasks: Sequence[PregelExecutableTask],
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
+        tasks = tuple(tasks)
         # give control back to the caller
         yield
+        # fast path if single task with no timeout
+        if len(tasks) == 1 and timeout is None:
+            task = tasks[0]
+            try:
+                run_with_retry(task, retry_policy)
+                self.commit(task, None)
+            except Exception as exc:
+                self.commit(task, exc)
+                if reraise:
+                    raise
+            return
+        # add waiter task if requested
+        if get_waiter is not None:
+            futures: dict[concurrent.futures.Future, Optional[PregelExecutableTask]] = {
+                get_waiter(): None
+            }
+        else:
+            futures = {}
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
-        futures = {
-            self.submit(
-                run_with_retry,
-                task,
-                retry_policy,
-                __reraise_on_exit__=reraise,
-            ): task
-            for task in tasks
-            if not task.writes
-        }
+        for task in tasks:
+            if not task.writes:
+                futures[
+                    self.submit(
+                        run_with_retry,
+                        task,
+                        retry_policy,
+                        __reraise_on_exit__=reraise,
+                    )
+                ] = task
         all_futures = futures.copy()
         end_time = timeout + time.monotonic() if timeout else None
-        while futures:
-            done, _ = concurrent.futures.wait(
+        while len(futures) > (1 if get_waiter is not None else 0):
+            done, inflight = concurrent.futures.wait(
                 futures,
                 return_when=concurrent.futures.FIRST_COMPLETED,
                 timeout=(max(0, end_time - time.monotonic()) if end_time else None),
@@ -66,22 +86,13 @@ class PregelRunner:
                 break  # timed out
             for fut in done:
                 task = futures.pop(fut)
-                if exc := _exception(fut):
-                    if isinstance(exc, GraphInterrupt):
-                        # save interrupt to checkpointer
-                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
-                            self.put_writes(task.id, interrupts)
-                    elif isinstance(exc, GraphDelegate):
-                        raise exc
-                    else:
-                        # save error to checkpointer
-                        self.put_writes(task.id, [(ERROR, exc)])
+                if task is None:
+                    # waiter task finished, schedule another
+                    if inflight:
+                        futures[get_waiter()] = None
                 else:
-                    if not task.writes:
-                        # add no writes marker
-                        task.writes.append((NO_WRITES, None))
-                    # save task writes to checkpointer
-                    self.put_writes(task.id, task.writes)
+                    # task finished, commit writes
+                    self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -95,35 +106,55 @@ class PregelRunner:
 
     async def atick(
         self,
-        tasks: list[PregelExecutableTask],
+        tasks: Sequence[PregelExecutableTask],
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
+        tasks = tuple(tasks)
         # give control back to the caller
         yield
+        # fast path if single task with no waiter and no timeout
+        if len(tasks) == 1 and get_waiter is None and timeout is None:
+            task = tasks[0]
+            try:
+                await arun_with_retry(task, retry_policy, stream=self.use_astream)
+                self.commit(task, None)
+            except Exception as exc:
+                self.commit(task, exc)
+                if reraise:
+                    raise
+            return
+        # add waiter task if requested
+        if get_waiter is not None:
+            futures: dict[asyncio.Future, Optional[PregelExecutableTask]] = {
+                get_waiter(): None
+            }
+        else:
+            futures = {}
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
-        futures = {
-            self.submit(
-                arun_with_retry,
-                task,
-                retry_policy,
-                stream=self.use_astream,
-                __name__=task.name,
-                __cancel_on_exit__=True,
-                __reraise_on_exit__=reraise,
-            ): task
-            for task in tasks
-            if not task.writes
-        }
+        for task in tasks:
+            if not task.writes:
+                futures[
+                    self.submit(
+                        arun_with_retry,
+                        task,
+                        retry_policy,
+                        stream=self.use_astream,
+                        __name__=task.name,
+                        __cancel_on_exit__=True,
+                        __reraise_on_exit__=reraise,
+                    )
+                ] = task
         all_futures = futures.copy()
         end_time = timeout + loop.time() if timeout else None
-        while futures:
-            done, _ = await asyncio.wait(
+        while len(futures) > (1 if get_waiter is not None else 0):
+            done, inflight = await asyncio.wait(
                 futures,
                 return_when=asyncio.FIRST_COMPLETED,
                 timeout=(max(0, end_time - loop.time()) if end_time else None),
@@ -132,22 +163,13 @@ class PregelRunner:
                 break  # timed out
             for fut in done:
                 task = futures.pop(fut)
-                if exc := _exception(fut):
-                    if isinstance(exc, GraphInterrupt):
-                        # save interrupt to checkpointer
-                        if interrupts := [(INTERRUPT, i) for i in exc.args[0]]:
-                            self.put_writes(task.id, interrupts)
-                    elif isinstance(exc, GraphDelegate):
-                        raise exc
-                    else:
-                        # save error to checkpointer
-                        self.put_writes(task.id, [(ERROR, exc)])
+                if task is None:
+                    # waiter task finished, schedule another
+                    if inflight:
+                        futures[get_waiter()] = None
                 else:
-                    if not task.writes:
-                        # add no writes marker
-                        task.writes.append((NO_WRITES, None))
-                    # save task writes to checkpointer
-                    self.put_writes(task.id, task.writes)
+                    # task finished, commit writes
+                    self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -156,10 +178,33 @@ class PregelRunner:
                 break
             # give control back to the caller
             yield
+        # cancel waiter task
+        for fut in futures:
+            fut.cancel()
         # panic on failure or timeout
         _panic_or_proceed(
             all_futures, timeout_exc_cls=asyncio.TimeoutError, panic=reraise
         )
+
+    def commit(
+        self, task: PregelExecutableTask, exception: Optional[BaseException]
+    ) -> None:
+        if exception:
+            if isinstance(exception, GraphInterrupt):
+                # save interrupt to checkpointer
+                if interrupts := [(INTERRUPT, i) for i in exception.args[0]]:
+                    self.put_writes(task.id, interrupts)
+            elif isinstance(exception, GraphDelegate):
+                raise exception
+            else:
+                # save error to checkpointer
+                self.put_writes(task.id, [(ERROR, exception)])
+        else:
+            if not task.writes:
+                # add no writes marker
+                task.writes.append((NO_WRITES, None))
+            # save task writes to checkpointer
+            self.put_writes(task.id, task.writes)
 
 
 def _should_stop_others(
@@ -187,15 +232,20 @@ def _exception(
 
 
 def _panic_or_proceed(
-    futs: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
+    futs: Union[
+        dict[concurrent.futures.Future, Optional[PregelExecutableTask]],
+        dict[asyncio.Future, Optional[PregelExecutableTask]],
+    ],
     *,
     timeout_exc_cls: Type[Exception] = TimeoutError,
     panic: bool = True,
 ) -> None:
     done: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
     inflight: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
-    for fut in futs:
-        if fut.done():
+    for fut, val in futs.items():
+        if val is None:
+            continue
+        elif fut.done():
             done.add(fut)
         else:
             inflight.add(fut)
