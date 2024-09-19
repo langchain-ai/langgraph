@@ -4,7 +4,7 @@ from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
@@ -344,7 +344,7 @@ class MemorySaver(
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Save a list of writes to the in-memory storage.
@@ -447,7 +447,7 @@ class MemorySaver(
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Asynchronous version of put_writes.

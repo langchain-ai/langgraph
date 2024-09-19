@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Iterator, List, Optional, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
@@ -291,7 +291,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: list[tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint asynchronously.
@@ -424,7 +424,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint.

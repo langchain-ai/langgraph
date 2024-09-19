@@ -1,5 +1,5 @@
 import random
-from typing import Any, List, Optional, Tuple, cast
+from typing import Any, List, Optional, Sequence, Tuple, cast
 
 from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
@@ -209,7 +209,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         checkpoint_id: str,
         task_id: str,
-        writes: list[tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
     ) -> list[tuple[str, str, str, str, int, str, str, bytes]]:
         return [
             (
