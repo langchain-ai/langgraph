@@ -15,13 +15,9 @@ do
 
   echo "Executing $file"
   if ! output=$(poetry run jupyter execute --allow-errors "$file" 2>&1); then
-    if grep -q '"tags": \["no_execution"\]' "$file"; then
-      echo "Notebook $file has no_execution tag, skipping error"
-    else
-      errors+=("$file: $output")  # Add a tuple of the file and error message to the errors list
-      printf '%s\n' "${errors[@]}"
-      exit 1
-    fi
+    errors+=("$file: $output")  # Add a tuple of the file and error message to the errors list
+    printf '%s\n' "${errors[@]}"
+    exit 1
   fi
 done
 
