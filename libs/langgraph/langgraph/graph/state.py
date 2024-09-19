@@ -453,6 +453,7 @@ class StateGraph(Graph):
         )
 
         compiled = CompiledStateGraph(
+            builder=self,
             config_type=self.config_schema,
             nodes={},
             channels={
@@ -471,7 +472,6 @@ class StateGraph(Graph):
             debug=debug,
             store=store,
         )
-        compiled.builder = self
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():

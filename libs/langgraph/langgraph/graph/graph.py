@@ -268,13 +268,15 @@ class Graph:
                 path_map_ = path_map.copy()
             elif isinstance(path_map, list):
                 path_map_ = {name: name for name in path_map}
-            elif callable(path) and (
-                rtn_type := get_type_hints(path.__call__).get("return")
-                if hasattr(path, "__call__")
-                else get_type_hints(path).get("return")
-            ):
+            elif isinstance(path, Runnable):
+                path_map_ = None
+            elif rtn_type := get_type_hints(path.__call__).get(  # type: ignore[operator]
+                "return"
+            ) or get_type_hints(path).get("return"):
                 if get_origin(rtn_type) is Literal:
                     path_map_ = {name: name for name in get_args(rtn_type)}
+                else:
+                    path_map_ = None
             else:
                 path_map_ = None
         except Exception:
@@ -417,6 +419,7 @@ class Graph:
 
         # create empty compiled graph
         compiled = CompiledGraph(
+            builder=self,
             nodes={},
             channels={START: EphemeralValue(Any), END: EphemeralValue(Any)},
             input_channels=START,
@@ -429,7 +432,6 @@ class Graph:
             auto_validate=False,
             debug=debug,
         )
-        compiled.builder = self
 
         # attach nodes, edges, and branches
         for key, node in self.nodes.items():
@@ -448,6 +450,10 @@ class Graph:
 
 class CompiledGraph(Pregel):
     builder: Graph
+
+    def __init__(self, *, builder: Graph, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.builder = builder
 
     def attach_node(self, key: str, node: NodeSpec) -> None:
         self.channels[key] = EphemeralValue(Any)
