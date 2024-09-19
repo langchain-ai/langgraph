@@ -271,6 +271,7 @@ export class AssistantsClient extends BaseClient {
       graphId?: string;
       config?: Config;
       metadata?: Metadata;
+      assistantName?: string;
     },
   ): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}`, {
@@ -279,6 +280,7 @@ export class AssistantsClient extends BaseClient {
         graph_id: payload.graphId,
         config: payload.config,
         metadata: payload.metadata,
+        assistant_name: payload.assistantName
       },
     });
   }

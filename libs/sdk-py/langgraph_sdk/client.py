@@ -468,6 +468,7 @@ class AssistantsClient:
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
         metadata: Json = None,
+        assistant_name: Optional[str] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -500,6 +501,8 @@ class AssistantsClient:
             payload["config"] = config
         if metadata:
             payload["metadata"] = metadata
+        if assistant_name:
+            payload["assistant_name"] = assistant_name
         return await self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
