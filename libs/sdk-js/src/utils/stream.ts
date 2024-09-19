@@ -61,6 +61,12 @@ export class IterableReadableStream<T>
     throw e;
   }
 
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore Not present in Node 18 types, required in latest Node 22
+  async [Symbol.asyncDispose]() {
+    await this.return();
+  }
+
   [Symbol.asyncIterator]() {
     return this;
   }

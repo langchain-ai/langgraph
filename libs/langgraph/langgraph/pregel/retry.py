@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from typing import Optional
+from typing import Optional, Sequence
 
 from langgraph.constants import CONFIG_KEY_RESUMING
 from langgraph.errors import GraphInterrupt
@@ -38,11 +38,21 @@ def run_with_retry(
             # increment attempts
             attempts += 1
             # check if we should retry
-            if callable(retry_policy.retry_on):
+            if isinstance(retry_policy.retry_on, Sequence):
+                if not isinstance(exc, tuple(retry_policy.retry_on)):
+                    raise
+            elif isinstance(retry_policy.retry_on, type) and issubclass(
+                retry_policy.retry_on, Exception
+            ):
+                if not isinstance(exc, retry_policy.retry_on):
+                    raise
+            elif callable(retry_policy.retry_on):
                 if not retry_policy.retry_on(exc):
                     raise
-            elif not isinstance(exc, retry_policy.retry_on):
-                raise
+            else:
+                raise TypeError(
+                    "retry_on must be an Exception class, a list or tuple of Exception classes, or a callable"
+                )
             # check if we should give up
             if attempts >= retry_policy.max_attempts:
                 raise
@@ -94,11 +104,21 @@ async def arun_with_retry(
             # increment attempts
             attempts += 1
             # check if we should retry
-            if callable(retry_policy.retry_on):
+            if isinstance(retry_policy.retry_on, Sequence):
+                if not isinstance(exc, tuple(retry_policy.retry_on)):
+                    raise
+            elif isinstance(retry_policy.retry_on, type) and issubclass(
+                retry_policy.retry_on, Exception
+            ):
+                if not isinstance(exc, retry_policy.retry_on):
+                    raise
+            elif callable(retry_policy.retry_on):
                 if not retry_policy.retry_on(exc):
                     raise
-            elif not isinstance(exc, retry_policy.retry_on):
-                raise
+            else:
+                raise TypeError(
+                    "retry_on must be an Exception class, a list or tuple of Exception classes, or a callable"
+                )
             # check if we should give up
             if attempts >= retry_policy.max_attempts:
                 raise

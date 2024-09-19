@@ -515,6 +515,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         """
         if current is None:
             current_v = 0
+        elif isinstance(current, int):
+            current_v = current
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
