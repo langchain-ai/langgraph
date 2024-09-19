@@ -18,6 +18,8 @@ NOTEBOOKS_NO_CASSETTES = (
 
 NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/customer-support/customer-support.ipynb",
+    "docs/docs/tutorials/multi_agent/multi-agent-collaboration.ipynb",
+    "docs/docs/tutorials/usaco/usaco.ipynb",
 ]
 
 
