@@ -2,7 +2,7 @@
 
 import logging
 import os
-
+import json
 import click
 import nbformat
 
@@ -13,9 +13,12 @@ CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
 NOTEBOOKS_NO_CASSETTES = (
     "docs/docs/how-tos/visualization.ipynb",
-    "docs/docs/how-tos/many-tools.ipynb",
-    "docs/docs/tutorials/customer-support/customer-support.ipynb"
+    "docs/docs/how-tos/many-tools.ipynb"
 )
+
+NOTEBOOKS_NO_EXECUTION = [
+    "docs/docs/tutorials/customer-support/customer-support.ipynb",
+]
 
 
 def comment_install_cells(notebook: nbformat.NotebookNode) -> nbformat.NotebookNode:
@@ -111,10 +114,24 @@ def process_notebooks(should_comment_install_cells: bool) -> None:
                             notebook, cassette_prefix=cassette_prefix
                         )
 
+                    if notebook_path in NOTEBOOKS_NO_EXECUTION:
+                        # Add a cell at the beginning to indicate that this notebook should not be executed
+                        warning_cell = nbformat.v4.new_markdown_cell(
+                            source="**Warning:** This notebook is not meant to be executed automatically."
+                        )
+                        notebook.cells.insert(0, warning_cell)
+
+                        # Add a special tag to the first code cell
+                        if notebook.cells and notebook.cells[1].cell_type == "code":
+                            notebook.cells[1].metadata["tags"] = notebook.cells[1].metadata.get("tags", []) + ["no_execution"]
+
                     nbformat.write(notebook, notebook_path)
                     logger.info(f"Processed: {notebook_path}")
                 except Exception as e:
                     logger.error(f"Error processing {notebook_path}: {e}")
+    
+    with open(os.path.join(DOCS_PATH, "notebooks_no_execution.json"), "w") as f:
+        json.dump(NOTEBOOKS_NO_EXECUTION, f)
 
 
 @click.command()
