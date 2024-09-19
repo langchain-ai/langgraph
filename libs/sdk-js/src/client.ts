@@ -331,8 +331,8 @@ export class AssistantsClient extends BaseClient {
       limit?: number;
       offset?: number;
     }
-  ): Promise<AssistantVersion[]> {
-    return this.fetch<AssistantVersion[]>(`/assistants/${assistantId}/versions`, {
+  ): Promise<Assistant[]> {
+    return this.fetch<Assistant[]>(`/assistants/${assistantId}/versions`, {
       method: "POST",
       json: {
         metadata: payload?.metadata ?? undefined,
