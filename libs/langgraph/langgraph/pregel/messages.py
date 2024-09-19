@@ -7,7 +7,6 @@ from typing import (
     List,
     Optional,
     Sequence,
-    Tuple,
     Union,
     cast,
 )
@@ -21,20 +20,16 @@ from langchain_core.tracers._streaming import T, _StreamingCallbackHandler
 from langgraph.constants import NS_SEP
 from langgraph.pregel.loop import StreamChunk
 
+Meta = tuple[tuple[str, ...], dict[str, Any]]
+
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     def __init__(self, stream: Callable[[StreamChunk], None]):
         self.stream = stream
-        self.metadata: dict[UUID, tuple[tuple[str, ...], dict[str, Any]]] = {}
+        self.metadata: dict[UUID, Meta] = {}
         self.seen: set[Union[int, str]] = set()
 
-    def _emit(
-        self,
-        meta: Tuple[str, dict[str, Any]],
-        message: BaseMessage,
-        *,
-        dedupe: bool = False,
-    ) -> None:
+    def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         ident = id(message)
         if dedupe and message.id in self.seen:
             return

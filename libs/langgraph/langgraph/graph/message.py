@@ -63,9 +63,9 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     """
     # coerce to list
     if not isinstance(left, list):
-        left = [left]
+        left = [left]  # type: ignore[assignment]
     if not isinstance(right, list):
-        right = [right]
+        right = [right]  # type: ignore[assignment]
     # coerce to message
     left = [
         message_chunk_to_message(cast(BaseMessageChunk, m))

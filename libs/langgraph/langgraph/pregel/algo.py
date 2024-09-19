@@ -52,6 +52,8 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
+GetNextVersion = Callable[[Optional[V], BaseChannel], V]
+
 EMPTY_SEQ: tuple[str, ...] = tuple()
 
 
@@ -173,7 +175,7 @@ def apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
-    get_next_version: Optional[Callable[[Optional[V], BaseChannel], V]],
+    get_next_version: Optional[GetNextVersion],
 ) -> dict[str, list[Any]]:
     # update seen versions
     for task in tasks:
@@ -200,7 +202,7 @@ def apply_writes(
     }:
         if channels[chan].consume() and get_next_version is not None:
             checkpoint["channel_versions"][chan] = get_next_version(
-                max_version,  # type: ignore[arg-type]
+                max_version,
                 channels[chan],
             )
 
@@ -234,7 +236,7 @@ def apply_writes(
         if chan in channels:
             if channels[chan].update(vals) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version,  # type: ignore[arg-type]
+                    max_version,
                     channels[chan],
                 )
             updated_channels.add(chan)
@@ -244,7 +246,7 @@ def apply_writes(
         if chan not in updated_channels:
             if channels[chan].update([]) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version,  # type: ignore[arg-type]
+                    max_version,
                     channels[chan],
                 )
 

@@ -18,7 +18,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnableSerializable,
 )
-from langchain_core.runnables.base import Input, Other, Output, coerce_to_runnable
+from langchain_core.runnables.base import Input, Other, coerce_to_runnable
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
@@ -206,7 +206,7 @@ class PregelNode(Runnable):
             Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
         ],
     ) -> PregelNode:
-        if ChannelWrite.is_writer(other):
+        if isinstance(other, Runnable) and ChannelWrite.is_writer(other):
             return self.copy(update=dict(writers=[*self.writers, other]))
         elif self.bound is DEFAULT_BOUND:
             return self.copy(update=dict(bound=coerce_to_runnable(other)))
@@ -237,7 +237,7 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Output:
+    ) -> Any:
         return self.bound.invoke(
             input,
             merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
@@ -249,7 +249,7 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Output:
+    ) -> Any:
         return await self.bound.ainvoke(
             input,
             merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
@@ -261,7 +261,7 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Iterator[Output]:
+    ) -> Iterator[Any]:
         yield from self.bound.stream(
             input,
             merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
@@ -273,7 +273,7 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> AsyncIterator[Output]:
+    ) -> AsyncIterator[Any]:
         async for item in self.bound.astream(
             input,
             merge_configs({"metadata": self.metadata, "tags": self.tags}, config),

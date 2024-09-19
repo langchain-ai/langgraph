@@ -82,7 +82,7 @@ TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
 
 def map_debug_tasks(
-    step: int, tasks: list[PregelExecutableTask]
+    step: int, tasks: Iterable[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
     for task in tasks:
@@ -132,7 +132,7 @@ def map_debug_checkpoint(
     stream_channels: Union[str, Sequence[str]],
     metadata: CheckpointMetadata,
     checkpoint: Checkpoint,
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
 ) -> Iterator[DebugOutputCheckpoint]:
     yield {

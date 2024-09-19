@@ -269,7 +269,7 @@ class RunnableSeq(Runnable):
             if isinstance(step, RunnableSequence):
                 steps_flat.extend(step.steps)
             elif isinstance(step, RunnableSeq):
-                steps_flat.extend(step.steps)  # type: ignore[has-type]
+                steps_flat.extend(step.steps)
             else:
                 steps_flat.append(coerce_to_runnable(step, name=None, trace=True))
         if len(steps_flat) < 2:

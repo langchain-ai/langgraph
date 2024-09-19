@@ -6,7 +6,7 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
-class WaitForNames(NamedTuple):
+class WaitForNames(NamedTuple, Generic[Value]):
     names: set[Value]
 
 

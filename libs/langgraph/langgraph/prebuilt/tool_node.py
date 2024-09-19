@@ -382,7 +382,7 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
 
-    def _is_injection(type_arg: Any):
+    def _is_injection(type_arg: Any) -> bool:
         if isinstance(type_arg, InjectedState) or (
             isinstance(type_arg, type) and issubclass(type_arg, InjectedState)
         ):

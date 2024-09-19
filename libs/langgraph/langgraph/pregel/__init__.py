@@ -138,7 +138,7 @@ class Channel:
             )
         return PregelNode(
             channels=cast(
-                Union[Mapping[None, str], Mapping[str, str]],
+                Union[list[str], Mapping[str, str]],
                 (
                     {key: channels}
                     if isinstance(channels, str) and key is not None
@@ -305,7 +305,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     @property
     def InputType(self) -> Any:
         if isinstance(self.input_channels, str):
-            return self.channels[self.input_channels].UpdateType
+            channel = self.channels[self.input_channels]
+            if isinstance(channel, BaseChannel):
+                return channel.UpdateType
 
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
@@ -317,9 +319,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             return create_model(
                 self.get_name("Input"),
                 field_definitions={
-                    k: (self.channels[k].UpdateType, None)
+                    k: (c.UpdateType, None)
                     for k in self.input_channels or self.channels.keys()
-                    if isinstance(self.channels[k], BaseChannel)
+                    if (c := self.channels[k]) and isinstance(c, BaseChannel)
                 },
             )
 
@@ -335,7 +337,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     @property
     def OutputType(self) -> Any:
         if isinstance(self.output_channels, str):
-            return self.channels[self.output_channels].ValueType
+            channel = self.channels[self.output_channels]
+            if isinstance(channel, BaseChannel):
+                return channel.ValueType
 
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
@@ -347,9 +351,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             return create_model(
                 self.get_name("Output"),
                 field_definitions={
-                    k: (self.channels[k].ValueType, None)
+                    k: (c.ValueType, None)
                     for k in self.output_channels
-                    if isinstance(self.channels[k], BaseChannel)
+                    if (c := self.channels[k]) and isinstance(c, BaseChannel)
                 },
             )
 
@@ -1050,8 +1054,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         bool,
         set[StreamMode],
         Union[str, Sequence[str]],
-        Optional[Sequence[str]],
-        Optional[Sequence[str]],
+        Union[All, Sequence[str]],
+        Union[All, Sequence[str]],
         Optional[BaseCheckpointSaver],
     ]:
         debug = debug if debug is not None else self.debug
@@ -1199,8 +1203,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 debug,
                 stream_modes,
                 output_keys,
-                interrupt_before,
-                interrupt_after,
+                interrupt_before_,
+                interrupt_after_,
                 checkpointer,
             ) = self._defaults(
                 config,
@@ -1253,7 +1257,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         else:
                             return waiter
                 else:
-                    get_waiter = None
+                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1261,8 +1265,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
+                    interrupt_before=interrupt_before_,
+                    interrupt_after=interrupt_after_,
                     manager=run_manager,
                 ):
                     for _ in runner.tick(
@@ -1397,7 +1401,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         # if running from astream_log() run each proc with streaming
         do_stream = next(
             (
-                h
+                cast(_StreamingCallbackHandler, h)
                 for h in run_manager.handlers
                 if isinstance(h, _StreamingCallbackHandler)
             ),
@@ -1415,8 +1419,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 debug,
                 stream_modes,
                 output_keys,
-                interrupt_before,
-                interrupt_after,
+                interrupt_before_,
+                interrupt_after_,
                 checkpointer,
             ) = self._defaults(
                 config,
@@ -1457,7 +1461,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())
                 else:
-                    get_waiter = None
+                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1465,8 +1469,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
+                    interrupt_before=interrupt_before_,
+                    interrupt_after=interrupt_after_,
                     manager=run_manager,
                 ):
                     async for _ in runner.atick(

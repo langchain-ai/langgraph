@@ -13,11 +13,11 @@ from typing import (
     Sequence,
     Tuple,
     TypedDict,
+    TypeVar,
     Union,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
-from typing_extensions import TypeVar
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
@@ -29,7 +29,7 @@ from langgraph.checkpoint.serde.types import (
     SendProtocol,
 )
 
-V = TypeVar("V", int, float, str, default=int)
+V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
 
 

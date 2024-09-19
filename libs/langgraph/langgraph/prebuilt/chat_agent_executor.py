@@ -419,7 +419,7 @@ def create_react_agent(
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if isinstance(tools, ToolExecutor):
-        tool_classes = tools.tools
+        tool_classes: Sequence[BaseTool] = tools.tools
         tool_node = ToolNode(tool_classes)
     elif isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())

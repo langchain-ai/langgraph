@@ -5,11 +5,13 @@ from typing import (
     Any,
     AsyncIterator,
     Callable,
+    Iterable,
     Iterator,
     Optional,
     Sequence,
     Type,
     Union,
+    cast,
 )
 
 from langgraph.constants import ERROR, INTERRUPT, NO_WRITES
@@ -33,7 +35,7 @@ class PregelRunner:
 
     def tick(
         self,
-        tasks: Sequence[PregelExecutableTask],
+        tasks: Iterable[PregelExecutableTask],
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
@@ -106,7 +108,7 @@ class PregelRunner:
 
     async def atick(
         self,
-        tasks: Sequence[PregelExecutableTask],
+        tasks: Iterable[PregelExecutableTask],
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
@@ -141,14 +143,17 @@ class PregelRunner:
         for t in tasks:
             if not t.writes:
                 futures[
-                    self.submit(
-                        arun_with_retry,
-                        t,
-                        retry_policy,
-                        stream=self.use_astream,
-                        __name__=t.name,
-                        __cancel_on_exit__=True,
-                        __reraise_on_exit__=reraise,
+                    cast(
+                        asyncio.Future,
+                        self.submit(
+                            arun_with_retry,
+                            t,
+                            retry_policy,
+                            stream=self.use_astream,
+                            __name__=t.name,
+                            __cancel_on_exit__=True,
+                            __reraise_on_exit__=reraise,
+                        ),
                     )
                 ] = t
         all_futures = futures.copy()

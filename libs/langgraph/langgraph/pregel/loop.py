@@ -64,6 +64,7 @@ from langgraph.managed.base import (
     WritableManagedValue,
 )
 from langgraph.pregel.algo import (
+    GetNextVersion,
     PregelTaskWrites,
     apply_writes,
     increment,
@@ -92,7 +93,7 @@ from langgraph.pregel.io import (
 )
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import PregelExecutableTask, StreamMode
+from langgraph.pregel.types import All, PregelExecutableTask, StreamMode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
 from langgraph.store.batch import AsyncBatchedStore
@@ -146,7 +147,7 @@ class PregelLoop:
     skip_done_tasks: bool
     is_nested: bool
 
-    checkpointer_get_next_version: Callable[[Optional[V]], V]
+    checkpointer_get_next_version: GetNextVersion
     checkpointer_put_writes: Optional[
         Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
     ]
@@ -281,8 +282,8 @@ class PregelLoop:
         self,
         *,
         input_keys: Union[str, Sequence[str]],
-        interrupt_after: Sequence[str] = EMPTY_SEQ,
-        interrupt_before: Sequence[str] = EMPTY_SEQ,
+        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
+        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
@@ -681,6 +682,10 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         if self.config.get("configurable", {}).get(
             CONFIG_KEY_ENSURE_LATEST
         ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            if self.checkpointer is None:
+                raise RuntimeError(
+                    "Cannot ensure latest checkpoint without checkpointer"
+                )
             saved = self.checkpointer.get_tuple(
                 patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
             )
@@ -771,7 +776,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             self.checkpointer_put_writes = checkpointer.aput_writes
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None  # type: ignore[method-assign]
+            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
 
     async def _checkpointer_put_after_previous(
@@ -801,6 +806,10 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         if self.config.get("configurable", {}).get(
             CONFIG_KEY_ENSURE_LATEST
         ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            if self.checkpointer is None:
+                raise RuntimeError(
+                    "Cannot ensure latest checkpoint without checkpointer"
+                )
             saved = await self.checkpointer.aget_tuple(
                 patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
             )
@@ -858,6 +867,3 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         return await asyncio.shield(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
-
-
-EMPTY_SEQ = tuple()

@@ -7,11 +7,13 @@ from inspect import isclass, isfunction, signature
 from typing import (
     Any,
     Callable,
+    Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
     Union,
+    cast,
     get_origin,
     get_type_hints,
     overload,
@@ -122,7 +124,7 @@ class StateGraph(Graph):
         >>> print(step1)
         {'x': [0.5, 0.75]}"""
 
-    nodes: dict[str, StateNodeSpec]
+    nodes: dict[str, StateNodeSpec]  # type: ignore[assignment]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
     schemas: dict[Type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
@@ -302,7 +304,7 @@ class StateGraph(Graph):
         if not isinstance(node, str):
             action = node
             if isinstance(action, Runnable):
-                node = action.name
+                node = action.get_name()
             else:
                 node = getattr(action, "__name__", action.__class__.__name__)
             if node is None:
@@ -323,13 +325,15 @@ class StateGraph(Graph):
                 raise ValueError(
                     "Node name must be provided if action is not a function"
                 )
+        if action is None:
+            raise RuntimeError
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
 
         for character in (NS_SEP, NS_END):
-            if character in node:
+            if character in cast(str, node):
                 raise ValueError(
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
@@ -349,8 +353,8 @@ class StateGraph(Graph):
             pass
         if input is not None:
             self._add_schema(input)
-        self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
+        self.nodes[cast(str, node)] = StateNodeSpec(
+            coerce_to_runnable(action, name=cast(str, node), trace=False),
             metadata,
             input=input or self.schema,
             retry_policy=retry,
@@ -449,7 +453,6 @@ class StateGraph(Graph):
         )
 
         compiled = CompiledStateGraph(
-            builder=self,
             config_type=self.config_schema,
             nodes={},
             channels={
@@ -468,6 +471,7 @@ class StateGraph(Graph):
             debug=debug,
             store=store,
         )
+        compiled.builder = self
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
@@ -618,7 +622,7 @@ class CompiledStateGraph(CompiledGraph):
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(
-            packets: list[Union[str, Send]], config: RunnableConfig
+            packets: Sequence[Union[str, Send]], config: RunnableConfig
         ) -> None:
             if filtered := [p for p in packets if p != END]:
                 writes = [
@@ -638,7 +642,9 @@ class CompiledStateGraph(CompiledGraph):
                             ),
                         )
                     )
-                ChannelWrite.do_write(config, writes)
+                ChannelWrite.do_write(
+                    config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
+                )
 
         # attach branch publisher
         schema = (
@@ -708,9 +714,21 @@ def _get_channels(
         if name != "__slots__"
     }
     return (
-        {k: v for k, v in all_keys.items() if not is_managed_value(v)},
+        {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
     )
+
+
+@overload
+def _get_channel(
+    name: str, annotation: Any, *, allow_managed: Literal[False]
+) -> BaseChannel: ...
+
+
+@overload
+def _get_channel(
+    name: str, annotation: Any, *, allow_managed: Literal[True] = True
+) -> Union[BaseChannel, ManagedValueSpec]: ...
 
 
 def _get_channel(
@@ -728,7 +746,7 @@ def _get_channel(
         channel.key = name
         return channel
 
-    fallback = LastValue(annotation)
+    fallback: LastValue = LastValue(annotation)
     fallback.key = name
     return fallback
 
