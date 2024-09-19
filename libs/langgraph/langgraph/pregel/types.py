@@ -107,7 +107,7 @@ class StateSnapshot(NamedTuple):
 
 All = Literal["*"]
 
-StreamMode = Literal["values", "updates", "debug", "messages"]
+StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
 - 'values': Emit all values of the state for each step.
@@ -115,4 +115,9 @@ StreamMode = Literal["values", "updates", "debug", "messages"]
     that were returned by the node(s) **after** each step.
 - 'debug': Emit debug events for each step.
 - 'messages': Emit LLM messages token-by-token.
+- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
 """
+
+StreamWriter = Callable[[Any], None]
+"""Callable that accepts a single argument and writes it to the output stream.
+Only available when using stream_mode="custom"."""
