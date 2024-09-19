@@ -194,7 +194,9 @@ class Graph:
                     "Node name must be provided if action is not a function"
                 )
         if action is None:
-            raise RuntimeError("Expected a function or Runnable action in add_node. Received None.")
+            raise RuntimeError(
+                "Expected a function or Runnable action in add_node. Received None."
+            )
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
