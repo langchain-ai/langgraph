@@ -568,7 +568,13 @@ class AssistantsClient:
             json=payload,
         )
 
-    async def get_versions(self, assistant_id: str) -> list[Assistant]:
+    async def get_versions(
+            self,
+            assistant_id: str,
+            metadata: Json = None,
+            limit: int = 10,
+            offset: int = 0,
+    ) -> list[Assistant]:
         """List all versions of an assistant.
 
         Args:
@@ -585,7 +591,16 @@ class AssistantsClient:
 
         """  # noqa: E501
 
-        return await self.http.get(f"/assistants/{assistant_id}/versions")
+        payload: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+        return await self.http.post(
+            f"/assistants/{assistant_id}/versions",
+            json=payload
+        )
 
     async def change_version(self, assistant_id: str, version: int) -> Assistant:
         """Change the version of an assistant.

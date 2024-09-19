@@ -322,8 +322,21 @@ export class AssistantsClient extends BaseClient {
    * @param assistantId ID of the assistant.
    * @returns List of assistant versions.
    */
-  async getVersions(assistantId: string): Promise<Assistant[]> {
-    return this.fetch<Assistant[]>(`/assistants/${assistantId}/versions`);
+  async getVersions(assistantId: string,
+    payload?: {
+      metadata?: Metadata;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Assistant[]> {
+    return this.fetch<Assistant[]>(`/assistants/${assistantId}/versions`, {
+      method: "POST",
+      json: {
+        metadata: payload?.metadata ?? undefined,
+        limit: payload?.limit ?? 10,
+        offset: payload?.offset ?? 0,
+      }
+    });
   }
 
   /**
