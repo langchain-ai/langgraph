@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Iterator, List, Optional, Union
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
 from psycopg.errors import UndefinedTable
-from psycopg.rows import dict_row
+from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
@@ -20,11 +20,13 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
+Conn = Union[AsyncConnection[DictRow], AsyncConnectionPool[AsyncConnection[DictRow]]]
+
 
 @asynccontextmanager
 async def _get_connection(
-    conn: Union[AsyncConnection, AsyncConnectionPool],
-) -> AsyncIterator[AsyncConnection]:
+    conn: Conn,
+) -> AsyncIterator[AsyncConnection[DictRow]]:
     if isinstance(conn, AsyncConnection):
         yield conn
     elif isinstance(conn, AsyncConnectionPool):
@@ -39,7 +41,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: Union[AsyncConnection, AsyncConnectionPool],
+        conn: Conn,
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
@@ -93,7 +95,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 results = await cur.execute(
                     "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
                 )
-                version = (await results.fetchone())["v"]
+                row = await results.fetchone()
+                if row is None:
+                    version = -1
+                else:
+                    version = row["v"]
             except UndefinedTable:
                 version = -1
             for v, migration in zip(
@@ -180,7 +186,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id:
-            args = (thread_id, checkpoint_ns, checkpoint_id)
+            args: tuple[Any, ...] = (thread_id, checkpoint_ns, checkpoint_id)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
         else:
             args = (thread_id, checkpoint_ns)
@@ -265,7 +271,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     self._dump_blobs,
                     thread_id,
                     checkpoint_ns,
-                    copy.pop("channel_values"),
+                    copy.pop("channel_values"),  # type: ignore[misc]
                     new_versions,
                 ),
             )
@@ -314,7 +320,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
             await cur.executemany(query, params)
 
     @asynccontextmanager
-    async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
+    async def _cursor(
+        self, *, pipeline: bool = False
+    ) -> AsyncIterator[AsyncCursor[DictRow]]:
         async with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently

@@ -1,5 +1,5 @@
 import random
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
@@ -7,7 +7,9 @@ from psycopg.types.json import Jsonb
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
+    CheckpointMetadata,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -122,7 +124,7 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
-class BasePostgresSaver(BaseCheckpointSaver):
+class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
     MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
@@ -165,8 +167,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         thread_id: str,
         checkpoint_ns: str,
         values: dict[str, Any],
-        versions: dict[str, str],
-    ) -> list[tuple[str, str, str, str, str, bytes]]:
+        versions: ChannelVersions,
+    ) -> list[tuple[str, str, str, str, str, Optional[bytes]]]:
         if not versions:
             return []
 
@@ -175,7 +177,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
                 thread_id,
                 checkpoint_ns,
                 k,
-                ver,
+                cast(str, ver),
                 *(
                     self.serde.dumps_typed(values[k])
                     if k in values
@@ -208,7 +210,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
         checkpoint_id: str,
         task_id: str,
         writes: list[tuple[str, Any]],
-    ) -> list[tuple[str, str, str, int, str, str, bytes]]:
+    ) -> list[tuple[str, str, str, str, int, str, str, bytes]]:
         return [
             (
                 thread_id,
@@ -222,10 +224,10 @@ class BasePostgresSaver(BaseCheckpointSaver):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def _load_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+    def _load_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
         return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
 
-    def _dump_metadata(self, metadata) -> str:
+    def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
         serialized_metadata = self.jsonplus_serde.dumps(metadata)
         return serialized_metadata.decode()
 
