@@ -5,7 +5,7 @@ SKIP_NOTEBOOKS=$(python -c "import json; print(' '.join(json.load(open('docs/not
 
 errors=()  # Initialize an array to collect errors
 
-for file in $(find docs/docs/tutorials -name "*.ipynb" | grep -v ".ipynb_checkpoints")
+for file in $(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints")
 do
   # Check if the file is in the list of notebooks to skip
   if [[ $SKIP_NOTEBOOKS == *"$file"* ]]; then
