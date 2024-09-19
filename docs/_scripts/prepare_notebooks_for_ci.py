@@ -18,7 +18,6 @@ NOTEBOOKS_NO_CASSETTES = (
 
 NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/customer-support/customer-support.ipynb",
-    "docs/docs/tutorials/multi_agent/multi-agent-collaboration.ipynb",
     "docs/docs/tutorials/usaco/usaco.ipynb",
 ]
 
@@ -77,16 +76,43 @@ def add_vcr_to_notebook(
             continue
 
         cell_id = cell.get("id", idx)
-        cassette_name = f"{cassette_prefix}_{cell_id}.yaml"
-        cell.source = f"with vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once'):\n" + "\n".join(
+        cassette_name = f"{cassette_prefix}_{cell_id}.msgpack"
+        cell.source = f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='msgpack'):\n" + "\n".join(
             f"    {line}" for line in lines
         )
 
     # Add import statement
     vcr_import_lines = [
         "import vcr",
-        # this is needed for ChatAnthropic
+        "import msgpack",
         "import nest_asyncio",
+        "import base64",
+        "",
+        "custom_vcr = vcr.VCR()",
+        "",
+        "def msgpack_serializer(cassette_dict):",
+        "    packed = msgpack.packb(cassette_dict, use_bin_type=True)",
+        "    return base64.b64encode(packed).decode('utf-8')",
+        "",
+        "def msgpack_deserializer(cassette_string):",
+        "    try:",
+        "        decoded = base64.b64decode(cassette_string)",
+        "        return msgpack.unpackb(decoded, raw=False)",
+        "    except (ValueError, msgpack.exceptions.ExtraData, msgpack.exceptions.UnpackValueError):",
+        "        # If deserialization fails, return an empty dictionary",
+        "        return {\"requests\": [], \"responses\": []}",
+        "",
+        "# Create a custom serializer class",
+        "class MsgpackSerializer:",
+        "    def serialize(self, cassette_dict):",
+        "        return msgpack_serializer(cassette_dict)",
+        "",
+        "    def deserialize(self, cassette_string):",
+        "        return msgpack_deserializer(cassette_string)",
+        "",
+        "custom_vcr.register_serializer('msgpack', MsgpackSerializer())",
+        "",
+        "# Apply nest_asyncio",
         "nest_asyncio.apply()",
     ]
     import_cell = nbformat.v4.new_code_cell(source="\n".join(vcr_import_lines))
