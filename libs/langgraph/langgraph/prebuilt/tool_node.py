@@ -28,11 +28,11 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
-from langchain_core.tools import BaseTool, InjectedToolArg
+from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as create_tool
 from typing_extensions import Annotated, get_args, get_origin
-
 from langgraph.utils.runnable import RunnableCallable
+from pydantic import ValidationError
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -43,11 +43,6 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def default_handle_tool_errors(e, call):
-    content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
-    return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
-
-
 def str_output(output: Any) -> str:
     if isinstance(output, str):
         return output
@@ -56,6 +51,43 @@ def str_output(output: Any) -> str:
             return json.dumps(output, ensure_ascii=False)
         except Exception:
             return str(output)
+        
+def _handle_validation_error(
+    e: ValidationError,
+    *,
+    flag: Union[Literal[True], str, Callable[[ValidationError], str]],
+) -> str:
+    if isinstance(flag, bool):
+        content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
+    elif isinstance(flag, str):
+        content = flag
+    elif callable(flag):
+        content = flag(e)
+    else:
+        raise ValueError(
+            f"Got unexpected type of `handle_validation_error`. Expected bool, "
+            f"str or callable. Received: {flag}"
+        )
+    return content
+
+def _handle_tool_error(
+    e: ToolException,
+    *,
+    flag: Optional[Union[Literal[True], str, Callable[[ToolException], str]]],
+) -> str:
+    if isinstance(flag, bool):
+        content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
+    elif isinstance(flag, str):
+        content = flag
+    elif callable(flag):
+        content = flag(e)
+    else:
+        raise ValueError(
+            f"Got unexpected type of `handle_tool_error`. Expected bool, str "
+            f"or callable. Received: {flag}"
+        )
+    return content
+
 
 
 class ToolNode(RunnableCallable):
@@ -65,15 +97,14 @@ class ToolNode(RunnableCallable):
         tools (Sequence[Union[BaseTool, Callable]]): A sequence of tools that can be invoked.
         name (str, optional): The name of the node, defaults to "tools"
         tags (list[str], optional): Tags to associate with the node
-        handle_tool_errors (union(callable, bool), optional): If false then each tool should be
-            defined to handle errors on it's own. If true, then the default_handle_tool_errors
-            will be used. If a callable, then the callable will be applied
-            to each error that is thrown when a tool is called.
-
-            If a callable, then it must have the following attributes:
-
-            - Accepts two arguments, first the error raised and second the original tool call
-            - Must return a ToolMessage that will be passed back to the chat model
+        handle_tool_errors (union(callable, str, bool), optional): How to handle tool errors
+            raised by tools inside the node. If False then errors will be raised unless dealt with by individual
+            tools. If True, default error handler will be used. If string or callable, ToolMessage
+            will be returned with correspopnding content.
+        handle_validation_errors (union(callable, str, bool), optional): How to handle validation errors
+            raised by tools inside the node. If False then errors will be raised unless dealt with by individual
+            tools. If True, default error handler will be used. If string or callable, ToolMessage
+            will be returned with correspopnding content.
 
     Example:
 
@@ -125,11 +156,13 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
-        handle_tool_errors: Optional[Union[Callable, bool]] = True,
+        handle_tool_errors: Optional[Union[bool, str, Callable[[ToolException], str]]] = True,
+        handle_validation_errors: Optional[Union[bool, str, Callable[[ValidationError], str]]] = True
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: Dict[str, BaseTool] = {}
         self.handle_tool_errors = handle_tool_errors
+        self.handle_validation_errors = handle_validation_errors
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
@@ -171,61 +204,67 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
+        input = {**call, **{"type": "tool_call"}}
+        error_to_raise: Union[Exception, None] = None
         try:
-            input = {**call, **{"type": "tool_call"}}
-            if not self.handle_tool_errors:
-                tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                    input, config
-                )
-            else:
-                try:
-                    tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                        input, config
-                    )
-                except Exception as e:
-                    if isinstance(self.handle_tool_errors, bool):
-                        tool_message = default_handle_tool_errors(e, call)
-                    else:
-                        tool_message = self.handle_tool_errors(e, call)
+            tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
+                input, config
+            )
             # TODO: handle this properly in core
             tool_message.content = str_output(tool_message.content)
             return tool_message
-        except Exception as e:
-            if not self.handle_tool_errors:
-                raise e
+        except ValidationError as e:
+            if not self.handle_validation_errors:
+                error_to_raise = e
             else:
-                raise ValueError(f"Your handle_tool_errors function needs updating, it threw {repr(e)} when trying to call tool {call['name']} \
-                                 with the following input: {input} and configuration: {config}")
+                content = _handle_validation_error(
+                        e, flag=self.handle_validation_errors
+                    )
+        except ToolException as e:
+            if not self.handle_tool_errors:
+                error_to_raise = e
+            else:
+                content = _handle_tool_error(e, flag=self.handle_tool_errors)
+
+        if error_to_raise:
+            raise error_to_raise
+        return ToolMessage(content=content, name=call['name'], tool_call_id=call['id'], status="error")
+        
 
     async def _arun_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
+        input = {**call, **{"type": "tool_call"}}
+        error_to_raise: Union[Exception, None] = None
         try:
-            input = {**call, **{"type": "tool_call"}}
+            try:
+                tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
+                    input, config
+                )
+                # TODO: handle this properly in core
+                tool_message.content = str_output(tool_message.content)
+                return tool_message
+            except ValidationError as e:
+                if not self.handle_validation_errors:
+                    error_to_raise = e
+                else:
+                    content = _handle_validation_error(
+                            e, flag=self.handle_validation_errors
+                        )
+            except ToolException as e:
+                    raise e
+            except Exception as e:
+                raise ToolException(str(e)) from e
+        except ToolException as e:
             if not self.handle_tool_errors:
-                tool_message: ToolMessage = await self.tools_by_name[
-                    call["name"]
-                ].ainvoke(input, config)
+                error_to_raise = e
             else:
-                try:
-                    tool_message: ToolMessage = await self.tools_by_name[
-                        call["name"]
-                    ].ainvoke(input, config)
-                except Exception as e:
-                    if isinstance(self.handle_tool_errors, bool):
-                        tool_message = default_handle_tool_errors(e, call)
-                    else:
-                        tool_message = self.handle_tool_errors(e, call)
-            # TODO: handle this properly in core
-            tool_message.content = str_output(tool_message.content)
-            return tool_message
-        except Exception as e:
-            if not self.handle_tool_errors:
-                raise e
-            else:
-                raise ValueError(f"Your handle_tool_errors function needs updating, it threw {repr(e)} when trying to call tool {call['name']} \
-                                 with the following input: {input} and configuration: {config}")
+                content = _handle_tool_error(e, flag=self.handle_tool_errors)
+
+        if error_to_raise:
+            raise error_to_raise
+        return ToolMessage(content=content, name=call['name'], tool_call_id=call['id'], status="error")
 
     def _parse_input(
         self,
@@ -263,7 +302,7 @@ class ToolNode(RunnableCallable):
                 requested_tool=requested_tool,
                 available_tools=", ".join(self.tools_by_name.keys()),
             )
-            return ToolMessage(content, name=requested_tool, tool_call_id=call["id"])
+            return ToolMessage(content, name=requested_tool, tool_call_id=call["id"], status="error")
         else:
             return None
 
