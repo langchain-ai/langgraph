@@ -12,11 +12,11 @@ from typing import (
     Optional,
     Tuple,
     TypedDict,
-    TypeVar,
     Union,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
+from typing_extensions import TypeVar
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
@@ -28,7 +28,7 @@ from langgraph.checkpoint.serde.types import (
     SendProtocol,
 )
 
-V = TypeVar("V", int, float, str)
+V = TypeVar("V", int, float, str, default=int)
 PendingWrite = Tuple[str, str, Any]
 
 
@@ -424,7 +424,7 @@ class BaseCheckpointSaver(Generic[V]):
         if isinstance(current, str):
             raise NotImplementedError
         elif current is None:
-            return 1  # type: ignore[return-value]
+            return 1
         else:
             return current + 1
 
