@@ -13,7 +13,8 @@ CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
 NOTEBOOKS_NO_CASSETTES = (
     "docs/docs/how-tos/visualization.ipynb",
-    "docs/docs/how-tos/many-tools.ipynb"
+    "docs/docs/how-tos/many-tools.ipynb",
+    "docs/docs/tutorials/customer-support/customer-support.ipynb"
 )
 
 
