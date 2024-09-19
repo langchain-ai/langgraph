@@ -1,0 +1,638 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "Given a user query, create a plan to solve it
+      with the utmost parallelizability. Each plan should comprise an action from
+      the following 3 types:\n1. tavily_search_results_json(query=\"the search query\")
+      - a search engine.\n\n2. math(problem: str, context: Optional[list[str]]) ->
+      float:\n - Solves the provided math problem.\n - `problem` can be either a simple
+      math problem (e.g. \"1 + 3\") or a word problem (e.g. \"how many apples are
+      there if there are 3 apples and 2 apples\").\n - You cannot calculate multiple
+      expressions in one call. For instance, `math(''1 + 3, 2 + 4'')` does not work.
+      If you need to calculate multiple expressions, you need to call them separately
+      like `math(''1 + 3'')` and then `math(''2 + 4'')`\n - Minimize the number of
+      `math` actions as much as possible. For instance, instead of calling 2. math(\"what
+      is the 10% of $1\") and then call 3. math(\"$1 + $2\"), you MUST call 2. math(\"what
+      is the 110% of $1\") instead, which will reduce the number of math actions.\n
+      - You can optionally provide a list of strings as `context` to help the agent
+      solve the problem. If there are multiple contexts you need to answer the question,
+      you can provide them as a list of strings.\n - `math` action will not see the
+      output of the previous actions unless you provide it as `context`. You MUST
+      provide the output of the previous actions as `context` if you need to do math
+      on it.\n - You MUST NEVER provide `search` type action''s outputs as a variable
+      in the `problem` argument. This is because `search` returns a text blob that
+      contains the information about the entity, not a number or value. Therefore,
+      when you need to provide an output of `search` action, you MUST provide it as
+      a `context` argument to `math` action. For example, 1. search(\"Barack Obama\")
+      and then 2. math(\"age of $1\") is NEVER allowed. Use 2. math(\"age of Barack
+      Obama\", context=[\"$1\"]) instead.\n - When you ask a question about `context`,
+      specify the units. For instance, \"what is xx in height?\" or \"what is xx in
+      millions?\" instead of \"what is xx?\"\n\n3. join(): Collects and combines results
+      from prior actions.\n\n - An LLM agent is called upon invoking join() to either
+      finalize the user query or wait until the plans are executed.\n - join should
+      always be the last action in the plan, and will be called in two scenarios:\n   (a)
+      if the answer can be determined by gathering the outputs from tasks to generate
+      the final response.\n   (b) if the answer cannot be determined in the planning
+      phase before you execute the plans. Guidelines:\n - Each action described above
+      contains input/output types and description.\n    - You must strictly adhere
+      to the input and output types for each action.\n    - The action descriptions
+      contain the guidelines. You MUST strictly follow those guidelines when you use
+      the actions.\n - Each action in the plan should strictly be one of the above
+      types. Follow the Python conventions for each action.\n - Each action MUST have
+      a unique ID, which is strictly increasing.\n - Inputs for actions can either
+      be constants or outputs from preceding actions. In the latter case, use the
+      format $id to denote the ID of the previous action whose output will be the
+      input.\n - Always call join as the last action in the plan. Say ''<END_OF_PLAN>''
+      after you call join\n - Ensure the plan maximizes parallelizability.\n - Only
+      use the provided action types. If a query cannot be addressed using these, invoke
+      the join action for the next steps.\n - Never introduce new actions other than
+      the ones provided.", "role": "system"}, {"content": "What''s ((3*(4+5)/0.5)+3245)
+      + 8? What''s 32/4.23? What''s the sum of those two values?", "role": "user"},
+      {"content": "Remember, ONLY respond with the task list in the correct format!
+      E.g.:\nidx. tool(arg_name=args)", "role": "system"}], "model": "gpt-4-turbo-preview",
+      "n": 1, "stream": true, "temperature": 0.7}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '3911'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=DxvKOcipR504YFIyOHWGMeMx9MY70WMcWGVSKy_wMmc-1726769508-1.0.1.1-LEjvtkNS0MATEtE3CPM00d9GzfdolnYEIjr2eKQNfp5xad3zOeHBwSkJheM8af6O8gfw8FSCoaLzfelV4Qd70g;
+        _cfuvid=_YrqhyvdHQEYp8rjPEpqxVrE9zfcrbwD6yOMNtxZPiI-1726769508416-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"1"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        math"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"(problem"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"=\""},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"(("},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"3"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"*("},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"4"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"+"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"5"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":")/"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"0"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"5"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":")+"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"324"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"5"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":")"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        +"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        "},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"8"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"\")\n"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"2"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        math"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"(problem"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"=\""},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"32"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"/"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"4"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"23"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"\")\n"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"3"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        join"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"()"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        <"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"END"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_OF"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_PLAN"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":">"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvgoEnpFEohXMsQzIOoJbPgyN8Y","object":"chat.completion.chunk","created":1726769548,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}]}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8b4d09ac15e9-SJC
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Thu, 19 Sep 2024 18:12:28 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '416'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999064'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 28ms
+      x-request-id:
+      - req_a8e3c43fa6dc575cbec8ae23f32bf764
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Translate a math problem into a expression that
+      can be executed using Python''s numexpr library. Use the output of running this
+      code to answer the question.\n\nQuestion: ${Question with math problem.}\n```text\n${single
+      line mathematical expression that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n", "role": "system"}, {"content": "((3*(4+5)/0.5)+3245) +
+      8", "role": "user"}], "model": "gpt-4-turbo-preview", "n": 1, "parallel_tool_calls":
+      false, "stream": false, "temperature": 0.7, "tool_choice": {"type": "function",
+      "function": {"name": "ExecuteCode"}}, "tools": [{"type": "function", "function":
+      {"name": "ExecuteCode", "description": "The input to the numexpr.evaluate()
+      function.", "parameters": {"properties": {"reasoning": {"description": "The
+      reasoning behind the code expression, including how context is included, if
+      applicable.", "type": "string"}, "code": {"description": "The simple code expression
+      to execute by numexpr.evaluate().", "type": "string"}}, "required": ["reasoning",
+      "code"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1461'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=phmhys2A4rvsap5g0sVZupClpEAO.fF8UQzGdjXEMrA-1726769507-1.0.1.1-ds6IkFaAtk6k4jeBDBc24nGkcA21Vfz7qqqAL3JUWMajiZhn8sLAmKz2qPC3pPzqvNaPKqkwo3oQUiICqBX7Vw;
+        _cfuvid=9p3Hy7rkV2mUXjiAm9R0UlFxPI0uzx4KegwLB9kyJwo-1726769507126-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RTyW7bMBC9+ysGPNmN7HrNolsQ1OiaokvSFnVh0NRIYkqRBIfyAsP/XpB2ZSdI
+        dBCIefPemxkOty0AJjOWAhMl96Kyqnt9NV3SvfTKklvdD6c/9fvrcnFbK/os37IkMMziAYX/z+oJ
+        U1mFXhq9h4VD7jGoDi6G5xfnV5PzfgQqk6EKtML67rjbHwwnXetwKXF1YJZGCiSWwu8WAMA2/kON
+        OsM1SyHqxEiFRLxAljZJAMwZFSKME0nyXHuWHEFhtEcdyta1UieAN0bNBVfqaLz/tifn46C4UnP6
+        druij5+WN4Ppl7ui/HHzsL77+kt8OPHbS29sLCivtWgGdII38fSJGQDTvIrcN2sUtccbk+ETOgDj
+        rqgr1D6UzrYz5pCT0VIXM5bO2FQ68gm8g5VUCkhWVsl8A75EKOQSNeDaOiSSRqfQbo9etcdnk87r
+        fm/SORsNx5MOnMFlD76XkiA3SpkVRbJxGTowORiLjocGCLpguUPtSySkJCgbHQpLoKqVl1ZJETOB
+        6wwyuZTBFdq5MxUozD14A04Wpe8kMYVnmWzyqV54x+OonqX0ZiyZMWEyjH2/1MqM7dijCe5az53/
+        nCyHw7wmrg5bc4jvmjVUprDOLOjJVrFcaknlfH8d4W7IG7v3Dj7RgdWPNphZZyrr5978RR0ER/3B
+        Xo8dX9gRvRwdQG88Vyesy/FLrHmGnsu45s3LahbmqNBvyox9MtqQx2qeS12gs042b6i1a/0DAAD/
+        /wMAuFGn3kIEAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8b60784c1643-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:44 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '7001'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999809'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 5ms
+      x-request-id:
+      - req_faae563c5dc4678be46e0997d41426e4
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Translate a math problem into a expression that
+      can be executed using Python''s numexpr library. Use the output of running this
+      code to answer the question.\n\nQuestion: ${Question with math problem.}\n```text\n${single
+      line mathematical expression that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n", "role": "system"}, {"content": "32/4.23", "role": "user"}],
+      "model": "gpt-4-turbo-preview", "n": 1, "parallel_tool_calls": false, "stream":
+      false, "temperature": 0.7, "tool_choice": {"type": "function", "function": {"name":
+      "ExecuteCode"}}, "tools": [{"type": "function", "function": {"name": "ExecuteCode",
+      "description": "The input to the numexpr.evaluate() function.", "parameters":
+      {"properties": {"reasoning": {"description": "The reasoning behind the code
+      expression, including how context is included, if applicable.", "type": "string"},
+      "code": {"description": "The simple code expression to execute by numexpr.evaluate().",
+      "type": "string"}}, "required": ["reasoning", "code"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1444'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=phmhys2A4rvsap5g0sVZupClpEAO.fF8UQzGdjXEMrA-1726769507-1.0.1.1-ds6IkFaAtk6k4jeBDBc24nGkcA21Vfz7qqqAL3JUWMajiZhn8sLAmKz2qPC3pPzqvNaPKqkwo3oQUiICqBX7Vw;
+        _cfuvid=9p3Hy7rkV2mUXjiAm9R0UlFxPI0uzx4KegwLB9kyJwo-1726769507126-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSy27bMBC8+ysWe7ZdS37FuhVFGqMtECQI2qJVINDUSmJLkQRJOTYM/3shyZEU
+        I9WBIGY0O8PdPY0AUKQYAfKCeV4aOfm4+bx/+RlU5Y/VU7j++lhszBdxX9x8/3V/uMVxrdC7P8T9
+        q2rKdWkkeaFVS3NLzFNdNViHq/Vqs1wtGqLUKclalhs/WUxmQbicGEt7QS8XZaEFJ4cR/B4BAJya
+        s86oUjpgBLPxK1KScywnjLqfANBqWSPInBPOM+Vx3JNcK0+qjq0qKQeE11omnEnZG7ffaXDvG8Wk
+        TILtw9Ycjmm55Ntvd0Q6KPTD3WMx8GtLH00TKKsU7xo04Ds8ujIDQMXKRnt7IF55+qRTupIDILN5
+        VZLydXQ8xWiJOa2EymOMYnzSkAmVgi8ILLlKetAZpGIvUqFymIewO8JiGs6nMY5j5DqlRjcP4UOD
+        x3jGN5bn0Xv350E3LWWVY/LS5gt+7uYmdW6s3rmrMWAmlHBF0uavH+O8Nq137dM4YPVm5GisLo1P
+        vP5Lqi4Y3mzaetiv5IBdX0ivPZM9Pg9W/1MlKXkmmr3oVrHrcF9h1sVs3onu6DyVSSZUTtZY0S3d
+        6Dz6BwAA//8DAGmEFBZzAwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8bb16c891643-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:46 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1469'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999812'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 5ms
+      x-request-id:
+      - req_7634a27662e61fea4cd61319d7106220
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Solve a question answering task. Here are some
+      guidelines:\n - In the Assistant Scratchpad, you will be given results of a
+      plan you have executed to answer the user''s question.\n - Thought needs to
+      reason about the question based on the Observations in 1-2 sentences.\n - Ignore
+      irrelevant action results.\n - If the required information is present, give
+      a concise but complete and helpful answer to the user''s question.\n - If you
+      are unable to give a satisfactory finishing answer, replan to get the required
+      information. Respond in the following format:\n\nThought: <reason about the
+      task results and whether you have sufficient information to answer the question>\nAction:
+      <action to take>\nAvailable actions:\n (1) Finish(the final answer to return
+      to the user): returns the answer and finishes the task.\n (2) Replan(the reasoning
+      and other information that will help you plan again. Can be a line of any length):
+      instructs why we must replan", "role": "system"}, {"content": "What''s ((3*(4+5)/0.5)+3245)
+      + 8? What''s 32/4.23? What''s the sum of those two values?", "role": "user"},
+      {"content": "3307.0", "name": "math", "role": "function"}, {"content": "7.565011820330969",
+      "name": "math", "role": "function"}, {"content": "join", "name": "join", "role":
+      "function"}, {"content": "Using the above previous actions, decide whether to
+      replan or finish. If all the required information is present. You may finish.
+      If you have made many attempts to find the information without success, admit
+      so and respond with whatever information you have gathered so the user can work
+      well with you.\n\n", "role": "system"}], "model": "gpt-4-turbo-preview", "n":
+      1, "parallel_tool_calls": false, "stream": false, "temperature": 0.7, "tool_choice":
+      {"type": "function", "function": {"name": "JoinOutputs"}}, "tools": [{"type":
+      "function", "function": {"name": "JoinOutputs", "description": "Decide whether
+      to replan or whether you can return the final response.", "parameters": {"properties":
+      {"thought": {"description": "The chain of thought reasoning for the selected
+      action", "type": "string"}, "action": {"anyOf": [{"description": "The final
+      response/answer.", "properties": {"response": {"title": "Response", "type":
+      "string"}}, "required": ["response"], "title": "FinalResponse", "type": "object"},
+      {"properties": {"feedback": {"description": "Analysis of the previous attempts
+      and recommendations on what needs to be fixed.", "title": "Feedback", "type":
+      "string"}}, "required": ["feedback"], "title": "Replan", "type": "object"}]}},
+      "required": ["thought", "action"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2612'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=Uu4bOpcl2zXOpJFJ_STXy4gT_7wIFt5lF8hF4YWkY6c-1726769526-1.0.1.1-Rxh4OcmTuy0JRlwTcCMv24cdGOi6xdzpe0pUfno_AJS8Rv17SPmSfYtP23E7oi4ZgdC9HSM3qzV60mI9nlw2JA;
+        _cfuvid=Ief420O76508IGoTYURc5WT.FJYfyPR00a7._6etZFE-1726769526641-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFNNb9swDL3nVxC6rF0T14k/2uQ2DNuAAluBrt0O8xAoNm2rlSVVouMG
+        Qf77YDtx0qLTQRD4+PhIityOAJjI2AJYWnJKKyMnn+Zf1xv1ZW6iqvks0urH8+/vs9u6+Xn3QDkb
+        twy9esSUDiwv1ZWRSEKrHk4tcsI26vRqFl/F8yiOO6DSGcqWVhiahBN/OosmxuJaYLNnllqk6NgC
+        /owAALbd3eaoMnxhC/DHB0uFzvEC2WJwAmBWy9bCuHPCEVfExkcw1YpQtWmrWsoTgLSWy5RLeRTu
+        z/bkfWwUl3L5zf/+HKqbpnpo8iITj6sbXtzlv15O9PrQG9MllNcqHRp0gg/2xRsxAKZ41XFvtFC3
+        NZma3Bs6AOO2qCtU1KbOtgmjUtdFSQlbJOy+REi5TGvJWw2w6GpJDnJtYaWpBMMtOdA5UIlQO7Qf
+        HDzX6Drvkq8RVogKjNVrkWHmQRsxF9ZRRz0wB0ovgBkIBUHgX3n+GLjKOieHqVZZzzv1u/KiOPKn
+        0+uZHwT+PJ57cK+BK9eg7Yi5UFy+qzeGphRpCdw99UV1OnW193MI1GhYc1mjG+8thx6kXIETlZEb
+        WCHwLMMMSBdIJVovYeOE8e5jErbYJsyiM1o5HNq6Vzk7Cz6ehRfR+aXvRecXwSyMzuECrruqg9ll
+        6M0CEA64MVa/iIoTyg0EwTRsq/YSttuxVz+6G733/nsyrBbz2nG5n+K9fTeshdSFsXrl3kw5y4US
+        rlxa5K6bNuZIm1671ekUWP1qo5ixujK0JP2Eqg0YhnEfjx03/ohOp+EeJU1cHoEo9v9HW2ZIXHR7
+        N6x6n6JQxTGCP+TZFcrcxhFWy1yoAq2xYljq0W70DwAA//8DADXerS7TBAAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8bbcbd1d9429-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:51 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '5617'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999639'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 10ms
+      x-request-id:
+      - req_1bbb5de03c0b567718e2f44b1479c294
+    status:
+      code: 200
+      message: OK
+version: 1

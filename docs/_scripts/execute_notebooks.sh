@@ -14,13 +14,19 @@ do
   fi
 
   echo "Executing $file"
-  if ! output=$(poetry run jupyter execute --allow-errors "$file" 2>&1); then
+  start_time=$(date +%s)
+  if ! output=$(time poetry run jupyter execute --allow-errors "$file" 2>&1); then
+    end_time=$(date +%s)
+    execution_time=$((end_time - start_time))
+    echo "Execution time: $execution_time seconds"
     errors+=("$file: $output")  # Add a tuple of the file and error message to the errors list
     printf '%s\n' "${errors[@]}"
     exit 1
   fi
+  end_time=$(date +%s)
+  execution_time=$((end_time - start_time))
+  echo "Execution time: $execution_time seconds"
 done
-
 # Optionally, print the errors
 if [ ${#errors[@]} -ne 0 ]; then
   echo "Errors occurred in the following files:"

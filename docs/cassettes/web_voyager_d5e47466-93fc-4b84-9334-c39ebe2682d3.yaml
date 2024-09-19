@@ -1,0 +1,116 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/info
+  response:
+    body:
+      string: '{"version":"0.7.29","license_expiration_time":null,"batch_ingest_config":{"scale_up_qsize_trigger":1000,"scale_up_nthreads_limit":16,"scale_down_nempty_trigger":4,"size_limit":100,"size_limit_bytes":20971520},"instance_flags":{"generate_ai_query_enabled":true,"org_creation_disabled":false,"show_ttl_ui":true,"trace_tier_duration_days":{"longlived":400,"shortlived":14},"search_enabled":true,"workspace_scope_org_invites":false,"s3_storage_enabled":true}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '455'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:05:03 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/commits/wfh/web-voyager/latest
+  response:
+    body:
+      string: '{"commit_hash":"8b9276048be8aec78203e8c45c9e15bc3a46e4b3275b05ef727563a2887ebaab","manifest":{"id":["langchain","prompts","chat","ChatPromptTemplate"],"lc":1,"type":"constructor","kwargs":{"messages":[{"id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"lc":1,"type":"constructor","kwargs":{"prompt":[{"id":["langchain","prompts","prompt","PromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":"Imagine
+        you are a robot browsing the web, just like humans. Now you need to complete
+        a task. In each iteration, you will receive an Observation that includes a
+        screenshot of a webpage and some texts. This screenshot will\nfeature Numerical
+        Labels placed in the TOP LEFT corner of each Web Element. Carefully analyze
+        the visual\ninformation to identify the Numerical Label corresponding to the
+        Web Element that requires interaction, then follow\nthe guidelines and choose
+        one of the following actions:\n\n1. Click a Web Element.\n2. Delete existing
+        content in a textbox and then type content.\n3. Scroll up or down.\n4. Wait
+        \n5. Go back\n7. Return to google to start over.\n8. Respond with the final
+        answer\n\nCorrespondingly, Action should STRICTLY follow the format:\n\n-
+        Click [Numerical_Label] \n- Type [Numerical_Label]; [Content] \n- Scroll [Numerical_Label
+        or WINDOW]; [up or down] \n- Wait \n- GoBack\n- Google\n- ANSWER; [content]\n\nKey
+        Guidelines You MUST follow:\n\n* Action guidelines *\n1) Execute only one
+        action per iteration.\n2) When clicking or typing, ensure to select the correct
+        bounding box.\n3) Numeric labels lie in the top-left corner of their corresponding
+        bounding boxes and are colored the same.\n\n* Web Browsing Guidelines *\n1)
+        Don''t interact with useless web elements like Login, Sign-in, donation that
+        appear in Webpages\n2) Select strategically to minimize time wasted.\n\nYour
+        reply should strictly follow the format:\n\nThought: {{Your brief thoughts
+        (briefly summarize the info that will help ANSWER)}}\nAction: {{One Action
+        format you choose}}\nThen the User will provide:\nObservation: {{A labeled
+        screenshot Given by User}}\n","input_variables":[],"template_format":"f-string","partial_variables":{}}}]}},{"id":["langchain","prompts","chat","MessagesPlaceholder"],"lc":1,"type":"constructor","kwargs":{"optional":true,"variable_name":"scratchpad"}},{"id":["langchain","prompts","chat","HumanMessagePromptTemplate"],"lc":1,"type":"constructor","kwargs":{"prompt":[{"id":["langchain","prompts","image","ImagePromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":{"url":"data:image/png;base64,{img}"},"input_variables":["img"]}},{"id":["langchain","prompts","prompt","PromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":"{bbox_descriptions}","input_variables":["bbox_descriptions"],"template_format":"f-string","partial_variables":{}}},{"id":["langchain","prompts","prompt","PromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":"{input}","input_variables":["input"],"template_format":"f-string","partial_variables":{}}}]}}],"input_variables":["bbox_descriptions","img","input"],"partial_variables":{"scratchpad":[]}}},"examples":[]}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '3131'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:05:03 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+version: 1

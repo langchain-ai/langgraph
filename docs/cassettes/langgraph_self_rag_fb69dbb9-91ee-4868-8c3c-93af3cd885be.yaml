@@ -1,0 +1,1119 @@
+interactions:
+- request:
+    body: '{"input": [[849, 21435, 1268, 279, 2204, 4595, 315, 8479, 5044, 990, 30]],
+      "model": "text-embedding-ada-002", "encoding_format": "base64"}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '138'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=AcqgQy88m6qQBZQpQoyFbakoHggOYId_8TqvXuUOik4-1726769424-1.0.1.1-BW3akkkq4bix5eAVx13c7696IK3B2.foZBdHKeRQ3eZs9ZuPpWWA1SClwsCGM9fHjggz95aVqyhgoRAXcNlaZg;
+        _cfuvid=idRaWHwwVdP76BKl2Q1fBP_R.loYPhdAl6aZkRqLIfY-1726769424672-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/embeddings
+  response:
+    body:
+      string: !!binary |
+        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
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8864196a239d-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:29 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-model:
+      - text-embedding-ada-002
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '22'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '10000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '9999989'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_81198f767c54562b3093852a7a9651c2
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are a grader assessing relevance of a retrieved
+      document to a user question. \n \n        It does not need to be a stringent
+      test. The goal is to filter out erroneous retrievals. \n\n        If the document
+      contains keyword(s) or semantic meaning related to the user question, grade
+      it as relevant. \n\n        Give a binary score ''yes'' or ''no'' score to indicate
+      whether the document is relevant to the question.", "role": "system"}, {"content":
+      "Retrieved document: \n\n Fig. 7. Comparison of AD, ED, source policy and RL^2
+      on environments that require memory and exploration. Only binary reward is assigned.
+      The source policies are trained with A3C for \"dark\" environments and DQN for
+      watermaze.(Image source: Laskin et al. 2023)\nComponent Two: Memory#\n(Big thank
+      you to ChatGPT for helping me draft this section. I\u2019ve learned a lot about
+      the human brain and data structure for fast MIPS in my conversations with ChatGPT.)\nTypes
+      of Memory#\nMemory can be defined as the processes used to acquire, store, retain,
+      and later retrieve information. There are several types of memory in human brains.\n\n\nSensory
+      Memory: This is the earliest stage of memory, providing the ability to retain
+      impressions of sensory information (visual, auditory, etc) after the original
+      stimuli have ended. Sensory memory typically only lasts for up to a few seconds.
+      Subcategories include iconic memory (visual), echoic memory (auditory), and
+      haptic memory (touch). \n\n User question: Explain how the different types of
+      agent memory work?", "role": "user"}], "model": "gpt-3.5-turbo-0125", "n": 1,
+      "parallel_tool_calls": false, "stream": false, "temperature": 0.0, "tool_choice":
+      {"type": "function", "function": {"name": "GradeDocuments"}}, "tools": [{"type":
+      "function", "function": {"name": "GradeDocuments", "description": "Binary score
+      for relevance check on retrieved documents.", "parameters": {"properties": {"binary_score":
+      {"description": "Documents are relevant to the question, ''yes'' or ''no''",
+      "type": "string"}}, "required": ["binary_score"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2099'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=y4F4olkRNNN5Fa64RNjWyGJTPx5ATs0dpbvQBF.K1IU-1726769425-1.0.1.1-dmqTHbW7wephpZYZ_uXwYyA.m11UYjY1ix8Mwyd_e4IU8bB6PMYD9hkpyROjCyyquPDi3cuX60ryQcILpwGPEg;
+        _cfuvid=paZ0W87QyD0AlI6lRGDY7FXS0piFpgULfMaXZMkEN88-1726769425994-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSXYvbMBB8968Q+5wcOadJGr+VhguFlrZ310JpDiPLG0c5WSukNVwI+e/FH2f7
+        Qk8PQuxoZlajPUdCgM4hEaAOklXpzPTT+o4N/8zl8X6BR3wIj18fYt7++PVZfS9gUjMoO6LiV9aN
+        otIZZE22hZVHyVir3q7i5Wq5/hCvG6CkHE1NKxxP5zeLKVc+o+nsNl50zANphQES8TcSQohzs9c9
+        2hxfIBGzyWulxBBkgZD0l4QAT6augAxBB5aWYTKAiiyjrdu2lTEjgIlMqqQxg3G7zqPzEJQ0Jo23
+        m+J58/gyu9uo7FvM2fz36v4Pfhn5tdIn1zS0r6zqAxrhfT25MhMCrCwb7tbLHDekqhIthysFIUD6
+        ooMSAecdZNpKf0qDIo87SHZwwrCDC7zhXaL/nZ9GqXjcV0GaLq6ufunzN1Q4T1m4ihP22upwSD3K
+        0DwLApNrvWufxgGqN18HzlPpOGV6RlsLztdxqwfDaA3ossOYWJox6eN7pDRHlrr53n6i2ga1LQaF
+        Wd9l80wIp8BYpnttC/TO6352okv0DwAA//8DAJaILSw6AwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b88672d781742-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:30 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '201'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999613'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_1cad21dc468992797df8fbf3298fbc6d
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are a grader assessing relevance of a retrieved
+      document to a user question. \n \n        It does not need to be a stringent
+      test. The goal is to filter out erroneous retrievals. \n\n        If the document
+      contains keyword(s) or semantic meaning related to the user question, grade
+      it as relevant. \n\n        Give a binary score ''yes'' or ''no'' score to indicate
+      whether the document is relevant to the question.", "role": "system"}, {"content":
+      "Retrieved document: \n\n Short-term memory: I would consider all the in-context
+      learning (See Prompt Engineering) as utilizing short-term memory of the model
+      to learn.\nLong-term memory: This provides the agent with the capability to
+      retain and recall (infinite) information over extended periods, often by leveraging
+      an external vector store and fast retrieval.\n\n\nTool use\n\nThe agent learns
+      to call external APIs for extra information that is missing from the model weights
+      (often hard to change after pre-training), including current information, code
+      execution capability, access to proprietary information sources and more. \n\n
+      User question: Explain how the different types of agent memory work?", "role":
+      "user"}], "model": "gpt-3.5-turbo-0125", "n": 1, "parallel_tool_calls": false,
+      "stream": false, "temperature": 0.0, "tool_choice": {"type": "function", "function":
+      {"name": "GradeDocuments"}}, "tools": [{"type": "function", "function": {"name":
+      "GradeDocuments", "description": "Binary score for relevance check on retrieved
+      documents.", "parameters": {"properties": {"binary_score": {"description": "Documents
+      are relevant to the question, ''yes'' or ''no''", "type": "string"}}, "required":
+      ["binary_score"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1723'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=y4F4olkRNNN5Fa64RNjWyGJTPx5ATs0dpbvQBF.K1IU-1726769425-1.0.1.1-dmqTHbW7wephpZYZ_uXwYyA.m11UYjY1ix8Mwyd_e4IU8bB6PMYD9hkpyROjCyyquPDi3cuX60ryQcILpwGPEg;
+        _cfuvid=paZ0W87QyD0AlI6lRGDY7FXS0piFpgULfMaXZMkEN88-1726769425994-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFLLbtswELzrK4g9x4HjZ6xb27RJ0wJFmx6K1IVAUyuJLR8yuUosGP73
+        QpQiKUbLA0HscGaWwz1GjIFMIWYgCk5Cl2ryZvOB9Ofs6f7r/Z27W/j9A31cPF7fpMWnw3e4aBh2
+        9xsFvbAuhdWlQpLWtLBwyAkb1av1bLVebRbzaQC0TVE1tLykyfxyOaHK7exkejVbdszCSoEeYvYz
+        YoyxY9ibHk2KB4hZ0AkVjd7zHCHuLzEGzqqmAtx76YkbgosBFNYQmqZtUyk1AshalQiu1GDcruPo
+        PATFlUqWfLnXD89v8/rL/sf68PT+nSy+Pd/ORn6tdF2GhrLKiD6gEd7X4zMzxsBwHbi3jqd4Y0Wl
+        0ZA/U2AMuMs7KGZw3MJOGu7qxAvrcAvxFmr0WzjBK94p+tf51ygVh1nlueri6uqnPn9l89LZnT+L
+        EzJppC8Sh9yHZ4EnW7bejU9wgOrV10HprC4pIfsHTSM4u163ejCM1oCuOowscTUibeb/IyUpEpfh
+        e/uJahuUJh8Upn2X4Znga0+ok0yaHF3pZD870Sn6CwAA//8DAGo1J+c6AwAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b886a593c1742-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:30 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '167'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999704'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_80ea4dd772f0bc518fef3447602d6b25
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are a grader assessing relevance of a retrieved
+      document to a user question. \n \n        It does not need to be a stringent
+      test. The goal is to filter out erroneous retrievals. \n\n        If the document
+      contains keyword(s) or semantic meaning related to the user question, grade
+      it as relevant. \n\n        Give a binary score ''yes'' or ''no'' score to indicate
+      whether the document is relevant to the question.", "role": "system"}, {"content":
+      "Retrieved document: \n\n They also discussed the risks, especially with illicit
+      drugs and bioweapons. They developed a test set containing a list of known chemical
+      weapon agents and asked the agent to synthesize them. 4 out of 11 requests (36%)
+      were accepted to obtain a synthesis solution and the agent attempted to consult
+      documentation to execute the procedure. 7 out of 11 were rejected and among
+      these 7 rejected cases, 5 happened after a Web search while 2 were rejected
+      based on prompt only.\nGenerative Agents Simulation#\nGenerative Agents (Park,
+      et al. 2023) is super fun experiment where 25 virtual characters, each controlled
+      by a LLM-powered agent, are living and interacting in a sandbox environment,
+      inspired by The Sims. Generative agents create believable simulacra of human
+      behavior for interactive applications.\nThe design of generative agents combines
+      LLM with memory, planning and reflection mechanisms to enable agents to behave
+      conditioned on past experience, as well as to interact with other agents.\n\nMemory
+      stream: is a long-term memory module (external database) that records a comprehensive
+      list of agents\u2019 experience in natural language. \n\n User question: Explain
+      how the different types of agent memory work?", "role": "user"}], "model": "gpt-3.5-turbo-0125",
+      "n": 1, "parallel_tool_calls": false, "stream": false, "temperature": 0.0, "tool_choice":
+      {"type": "function", "function": {"name": "GradeDocuments"}}, "tools": [{"type":
+      "function", "function": {"name": "GradeDocuments", "description": "Binary score
+      for relevance check on retrieved documents.", "parameters": {"properties": {"binary_score":
+      {"description": "Documents are relevant to the question, ''yes'' or ''no''",
+      "type": "string"}}, "required": ["binary_score"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2265'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=y4F4olkRNNN5Fa64RNjWyGJTPx5ATs0dpbvQBF.K1IU-1726769425-1.0.1.1-dmqTHbW7wephpZYZ_uXwYyA.m11UYjY1ix8Mwyd_e4IU8bB6PMYD9hkpyROjCyyquPDi3cuX60ryQcILpwGPEg;
+        _cfuvid=paZ0W87QyD0AlI6lRGDY7FXS0piFpgULfMaXZMkEN88-1726769425994-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFJBbtswELzrFcSe48C2YqfWLU3bJECB9pImaBwINLWW6VBchVyhEQz/
+        PRClSorR8kAQO5yZ5XAPkRCgM0gEqJ1kVZRmcrX6xoUzv+LV/p7cJ/X4eru/fvXXv5c/d/dw1jBo
+        s0fFf1nniorSIGuyLawcSsZGdXY5X14uVxfxNAAFZWgaWl7yJD5fTLhyG5pMZ/NFx9yRVughEU+R
+        EEIcwt70aDN8g0QEnVAp0HuZIyT9JSHAkWkqIL3XnqVlOBtARZbRNm3bypgRwEQmVdKYwbhdh9F5
+        CEoak9qv8f5tVVfzuz/VVf0d41v3+cfLA478Wum6DA1tK6v6gEZ4X09OzIQAK4vAvXEywy+kqgIt
+        +xMFIUC6vIMSAYc1bLSVrk69IodrSNZgaQ1H+EA7Rv86P49CcbitvDRdWl392MdvKC8dbfxJmrDV
+        Vvtd6lD68CrwTGXr3fgEB6g+/ByUjoqSU6YXtI3gxXTR6sEwWQO67DAmlmZEms3+R0ozZKnD7/YD
+        1TaobT4oTPsuwzPB156xSLfa5uhKp/vRiY7ROwAAAP//AwCTZbC1OQMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b886d1c761742-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:30 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '179'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999569'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_e65dfee08668aa9dabd80a6b32f9d7b3
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are a grader assessing relevance of a retrieved
+      document to a user question. \n \n        It does not need to be a stringent
+      test. The goal is to filter out erroneous retrievals. \n\n        If the document
+      contains keyword(s) or semantic meaning related to the user question, grade
+      it as relevant. \n\n        Give a binary score ''yes'' or ''no'' score to indicate
+      whether the document is relevant to the question.", "role": "system"}, {"content":
+      "Retrieved document: \n\n Short-Term Memory (STM) or Working Memory: It stores
+      information that we are currently aware of and needed to carry out complex cognitive
+      tasks such as learning and reasoning. Short-term memory is believed to have
+      the capacity of about 7 items (Miller 1956) and lasts for 20-30 seconds.\n\n\nLong-Term
+      Memory (LTM): Long-term memory can store information for a remarkably long time,
+      ranging from a few days to decades, with an essentially unlimited storage capacity.
+      There are two subtypes of LTM:\n\nExplicit / declarative memory: This is memory
+      of facts and events, and refers to those memories that can be consciously recalled,
+      including episodic memory (events and experiences) and semantic memory (facts
+      and concepts).\nImplicit / procedural memory: This type of memory is unconscious
+      and involves skills and routines that are performed automatically, like riding
+      a bike or typing on a keyboard.\n\n\n\n\nFig. 8. Categorization of human memory.\nWe
+      can roughly consider the following mappings: \n\n User question: Explain how
+      the different types of agent memory work?", "role": "user"}], "model": "gpt-3.5-turbo-0125",
+      "n": 1, "parallel_tool_calls": false, "stream": false, "temperature": 0.0, "tool_choice":
+      {"type": "function", "function": {"name": "GradeDocuments"}}, "tools": [{"type":
+      "function", "function": {"name": "GradeDocuments", "description": "Binary score
+      for relevance check on retrieved documents.", "parameters": {"properties": {"binary_score":
+      {"description": "Documents are relevant to the question, ''yes'' or ''no''",
+      "type": "string"}}, "required": ["binary_score"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2114'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=y4F4olkRNNN5Fa64RNjWyGJTPx5ATs0dpbvQBF.K1IU-1726769425-1.0.1.1-dmqTHbW7wephpZYZ_uXwYyA.m11UYjY1ix8Mwyd_e4IU8bB6PMYD9hkpyROjCyyquPDi3cuX60ryQcILpwGPEg;
+        _cfuvid=paZ0W87QyD0AlI6lRGDY7FXS0piFpgULfMaXZMkEN88-1726769425994-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSW2/TMBR+z6+wzvM69ULbNW/dYIghMYRATFtR5DinqZntk9knY1XV/45yWZJV
+        kAfLOl++iz/7EAkBOoNYgNpJVrYwo/Xqmt1N9vX2092H8fTP7pL18vPk+yN9uzcMZxWD0t+o+JV1
+        rsgWBlmTa2DlUTJWqpPldLFcrN7NJjVgKUNT0fKCR7Pz+YhLn9JoPJnOW+aOtMIAsXiIhBDiUK9V
+        RpfhC8RifPY6sRiCzBHi7ichwJOpJiBD0IGla/K2oCLH6KrYrjRmADCRSZQ0pjduvsNg3xcljUmu
+        7NOVtddpun5e/8x+XD49f+Gbi9u7gV8jvS/qQNvSqa6gAd7N4xMzIcBJW3M/epnhe1KlRcfhREEI
+        kD5voVjAYQOpdtLvk6DI4wbiDewxbOAIb3jH6F/7X4NWPG7LIE1bVzs/dv0bygtPaTipE7ba6bBL
+        PMpQHwsCU9F4Vz61A5Rvrg4KT7bghOkRXSU4W64aPeifVo8uWoyJpRmQLub/IyUZstT19XYvqgmo
+        Xd4rjLuU9TEh7AOjTbba5egLr7u3Ex2jvwAAAP//AwCx+JlfOgMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b886fdf081742-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:31 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '198'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999608'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_f35c5836a683a6d214d22b146a204a4f
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are an assistant for question-answering
+      tasks. Use the following pieces of retrieved context to answer the question.
+      If you don''t know the answer, just say that you don''t know. Use three sentences
+      maximum and keep the answer concise.\nQuestion: Explain how the different types
+      of agent memory work? \nContext: [Document(metadata={''description'': ''Building
+      agents with LLM (large language model) as its core controller is a cool concept.
+      Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer and BabyAGI,
+      serve as inspiring examples. The potentiality of LLM extends beyond generating
+      well-written copies, stories, essays and programs; it can be framed as a powerful
+      general problem solver.\\nAgent System Overview In a LLM-powered autonomous
+      agent system, LLM functions as the agent\u2019s brain, complemented by several
+      key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Fig.
+      7. Comparison of AD, ED, source policy and RL^2 on environments that require
+      memory and exploration. Only binary reward is assigned. The source policies
+      are trained with A3C for \"dark\" environments and DQN for watermaze.(Image
+      source: Laskin et al. 2023)\\nComponent Two: Memory#\\n(Big thank you to ChatGPT
+      for helping me draft this section. I\u2019ve learned a lot about the human brain
+      and data structure for fast MIPS in my conversations with ChatGPT.)\\nTypes
+      of Memory#\\nMemory can be defined as the processes used to acquire, store,
+      retain, and later retrieve information. There are several types of memory in
+      human brains.\\n\\n\\nSensory Memory: This is the earliest stage of memory,
+      providing the ability to retain impressions of sensory information (visual,
+      auditory, etc) after the original stimuli have ended. Sensory memory typically
+      only lasts for up to a few seconds. Subcategories include iconic memory (visual),
+      echoic memory (auditory), and haptic memory (touch).''), Document(metadata={''description'':
+      ''Building agents with LLM (large language model) as its core controller is
+      a cool concept. Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer
+      and BabyAGI, serve as inspiring examples. The potentiality of LLM extends beyond
+      generating well-written copies, stories, essays and programs; it can be framed
+      as a powerful general problem solver.\\nAgent System Overview In a LLM-powered
+      autonomous agent system, LLM functions as the agent\u2019s brain, complemented
+      by several key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Short-term
+      memory: I would consider all the in-context learning (See Prompt Engineering)
+      as utilizing short-term memory of the model to learn.\\nLong-term memory: This
+      provides the agent with the capability to retain and recall (infinite) information
+      over extended periods, often by leveraging an external vector store and fast
+      retrieval.\\n\\n\\nTool use\\n\\nThe agent learns to call external APIs for
+      extra information that is missing from the model weights (often hard to change
+      after pre-training), including current information, code execution capability,
+      access to proprietary information sources and more.''), Document(metadata={''description'':
+      ''Building agents with LLM (large language model) as its core controller is
+      a cool concept. Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer
+      and BabyAGI, serve as inspiring examples. The potentiality of LLM extends beyond
+      generating well-written copies, stories, essays and programs; it can be framed
+      as a powerful general problem solver.\\nAgent System Overview In a LLM-powered
+      autonomous agent system, LLM functions as the agent\u2019s brain, complemented
+      by several key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Short-Term
+      Memory (STM) or Working Memory: It stores information that we are currently
+      aware of and needed to carry out complex cognitive tasks such as learning and
+      reasoning. Short-term memory is believed to have the capacity of about 7 items
+      (Miller 1956) and lasts for 20-30 seconds.\\n\\n\\nLong-Term Memory (LTM): Long-term
+      memory can store information for a remarkably long time, ranging from a few
+      days to decades, with an essentially unlimited storage capacity. There are two
+      subtypes of LTM:\\n\\nExplicit / declarative memory: This is memory of facts
+      and events, and refers to those memories that can be consciously recalled, including
+      episodic memory (events and experiences) and semantic memory (facts and concepts).\\nImplicit
+      / procedural memory: This type of memory is unconscious and involves skills
+      and routines that are performed automatically, like riding a bike or typing
+      on a keyboard.\\n\\n\\n\\n\\nFig. 8. Categorization of human memory.\\nWe can
+      roughly consider the following mappings:'')] \nAnswer:", "role": "user"}], "model":
+      "gpt-3.5-turbo", "n": 1, "stream": false, "temperature": 0.0}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '5131'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=l7rKcrdvxr_7_gxPLgm50Q4rhk7Lispv9K6TAdrJ5xc-1726769427-1.0.1.1-X8EImlury1hYTnL8T_cBthrLbnX6VqrVQ4oSaUNP.q57d20UYuAcxHi25sSasVzKh3hU3d8isOkkrS.7f4g.SQ;
+        _cfuvid=gBwrASghz9d65cAyT_D2nsp.BdpR_893Jjr_ir_gnuc-1726769427297-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSwW4aMRC98xUjnwFBKKBwS9u0h/aWS9WqQsY7uzuNPXY9swko4t8rLwskkXqx
+        5Pf8ZuaN38sIwFBlNmBca9WF5Cd3t1+UrS6fPv/4+PN+8fjtDld/M923Yfn1kxkXRdz9Qadn1dTF
+        kDwqRT7RLqNVLFXn65vVenX7YTHviRAr9EXWJJ0spsuJdnkXJ7P5zXJQtpEcitnArxEAwEt/lhm5
+        wr3ZwGx8RgKK2AbN5vIIwOToC2KsCIlaVjO+ki6yIvdjP7Qx60QxBwgYYj6AaMwoQFzHHGzxAoxY
+        YQV1zHByuAcXGyalJwS18ihguQJvRaV/dTObLGYg6CJXMoXvkZs3PZzlU583bYoS94pcmiXMFCuB
+        Z9IWUARZyXp/gI49BVKswNlkHelhDMTOdxVxA7hPnhxpPxCF4TK01UNCmcIDspTrgGZUSywgA0wh
+        ZRShyAK7TFj7wxieW/IIct1Wb/i9L5sRXO4cWT9s67ylumNXTMr09UdkrDuxJQjceT/gx8vP+tik
+        HHcy8Be8JiZptxmtRC6/KBqT6dnjCOB3n6DuTShMyjEk3Wp8RC4F57Pb1amguab2Sq/mA6lRrX8l
+        my/X/5Ntq7JJL6+SaE4zEjfXErPLoL1TIwdRDNuauMGcMvXB7PdxHP0DAAD//wMAkDQrB5cDAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8872ab1a6456-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:32 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '760'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49998742'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_08d564a115d846d3cf8629fb38308f36
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are a grader assessing whether an LLM generation
+      is grounded in / supported by a set of retrieved facts. \n \n         Give a
+      binary score ''yes'' or ''no''. ''Yes'' means that the answer is grounded in
+      / supported by the set of facts.", "role": "system"}, {"content": "Set of facts:
+      \n\n [Document(metadata={''description'': ''Building agents with LLM (large
+      language model) as its core controller is a cool concept. Several proof-of-concepts
+      demos, such as AutoGPT, GPT-Engineer and BabyAGI, serve as inspiring examples.
+      The potentiality of LLM extends beyond generating well-written copies, stories,
+      essays and programs; it can be framed as a powerful general problem solver.\\nAgent
+      System Overview In a LLM-powered autonomous agent system, LLM functions as the
+      agent\u2019s brain, complemented by several key components:'', ''language'':
+      ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Fig.
+      7. Comparison of AD, ED, source policy and RL^2 on environments that require
+      memory and exploration. Only binary reward is assigned. The source policies
+      are trained with A3C for \"dark\" environments and DQN for watermaze.(Image
+      source: Laskin et al. 2023)\\nComponent Two: Memory#\\n(Big thank you to ChatGPT
+      for helping me draft this section. I\u2019ve learned a lot about the human brain
+      and data structure for fast MIPS in my conversations with ChatGPT.)\\nTypes
+      of Memory#\\nMemory can be defined as the processes used to acquire, store,
+      retain, and later retrieve information. There are several types of memory in
+      human brains.\\n\\n\\nSensory Memory: This is the earliest stage of memory,
+      providing the ability to retain impressions of sensory information (visual,
+      auditory, etc) after the original stimuli have ended. Sensory memory typically
+      only lasts for up to a few seconds. Subcategories include iconic memory (visual),
+      echoic memory (auditory), and haptic memory (touch).''), Document(metadata={''description'':
+      ''Building agents with LLM (large language model) as its core controller is
+      a cool concept. Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer
+      and BabyAGI, serve as inspiring examples. The potentiality of LLM extends beyond
+      generating well-written copies, stories, essays and programs; it can be framed
+      as a powerful general problem solver.\\nAgent System Overview In a LLM-powered
+      autonomous agent system, LLM functions as the agent\u2019s brain, complemented
+      by several key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Short-term
+      memory: I would consider all the in-context learning (See Prompt Engineering)
+      as utilizing short-term memory of the model to learn.\\nLong-term memory: This
+      provides the agent with the capability to retain and recall (infinite) information
+      over extended periods, often by leveraging an external vector store and fast
+      retrieval.\\n\\n\\nTool use\\n\\nThe agent learns to call external APIs for
+      extra information that is missing from the model weights (often hard to change
+      after pre-training), including current information, code execution capability,
+      access to proprietary information sources and more.''), Document(metadata={''description'':
+      ''Building agents with LLM (large language model) as its core controller is
+      a cool concept. Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer
+      and BabyAGI, serve as inspiring examples. The potentiality of LLM extends beyond
+      generating well-written copies, stories, essays and programs; it can be framed
+      as a powerful general problem solver.\\nAgent System Overview In a LLM-powered
+      autonomous agent system, LLM functions as the agent\u2019s brain, complemented
+      by several key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Short-Term
+      Memory (STM) or Working Memory: It stores information that we are currently
+      aware of and needed to carry out complex cognitive tasks such as learning and
+      reasoning. Short-term memory is believed to have the capacity of about 7 items
+      (Miller 1956) and lasts for 20-30 seconds.\\n\\n\\nLong-Term Memory (LTM): Long-term
+      memory can store information for a remarkably long time, ranging from a few
+      days to decades, with an essentially unlimited storage capacity. There are two
+      subtypes of LTM:\\n\\nExplicit / declarative memory: This is memory of facts
+      and events, and refers to those memories that can be consciously recalled, including
+      episodic memory (events and experiences) and semantic memory (facts and concepts).\\nImplicit
+      / procedural memory: This type of memory is unconscious and involves skills
+      and routines that are performed automatically, like riding a bike or typing
+      on a keyboard.\\n\\n\\n\\n\\nFig. 8. Categorization of human memory.\\nWe can
+      roughly consider the following mappings:'')] \n\n LLM generation: Short-term
+      memory stores information needed for complex cognitive tasks and lasts for 20-30
+      seconds. Long-term memory can store information for extended periods with essentially
+      unlimited capacity, including explicit and implicit memory types. Sensory memory
+      retains sensory impressions briefly, while short-term and long-term memory are
+      crucial for cognitive functions.", "role": "user"}], "model": "gpt-3.5-turbo-0125",
+      "n": 1, "parallel_tool_calls": false, "stream": false, "temperature": 0.0, "tool_choice":
+      {"type": "function", "function": {"name": "GradeHallucinations"}}, "tools":
+      [{"type": "function", "function": {"name": "GradeHallucinations", "description":
+      "Binary score for hallucination present in generation answer.", "parameters":
+      {"properties": {"binary_score": {"description": "Answer is grounded in the facts,
+      ''yes'' or ''no''", "type": "string"}}, "required": ["binary_score"], "type":
+      "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '5941'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=gbPqaEJus6B8nD2cBtfP2g2BPwKfHnA9_6FUPIg5zVc-1726769427-1.0.1.1-RalIslv5lLJG0mrroEjFf70jWJLARn.SQmLnyRRhYRxpus.TOY84gseykdUBXDzy.oalPXMIEmMmZIqpcHluvg;
+        _cfuvid=NnbdmQNsKGwzUzphwZ0sglAc80q8325mSK67ocIDIyc-1726769427887-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSy27bMBC86yuIPduBJcVOrVsQIE6THlrDQBHEgUBTa5kpHyq5SusY/veAkiMp
+        RssDQexwZvZ1iBgDWUDGQOw4CV2p8fX8lmxyt/Rfb1Yr/Hnvy9dvtz++rN7idHkNo8CwmxcU9MG6
+        EFZXCkla08LCIScMqvFVMruazS/TpAG0LVAFWlnROL2Yjql2GzuexMn0xNxZKdBDxp4ixhg7NHfI
+        0RT4FzI2GX1ENHrPS4Ss+8QYOKtCBLj30hM3BKMeFNYQmpC2qZUaAGStygVXqjduz2Hw7hvFlcp/
+        P/zRy3kqyoe5K95eF3rx/bHgj27g10rvqyahbW1E16AB3sWzMzPGwHDdcBeOF3jHlaqFNDz89mcy
+        jAF3Za3RUCgBDmvYSMPdPvfCOlxDtoY9+jUc4RPvGP3r/TxojcNt7bk69ewUP3ZDULasnN34s57C
+        Vhrpd7lD7pvawJOtWu/g0zhA/Wl+UDmrK8rJ/kITBOMkmbaC0C9YD89OGFniashK4/+x8gKJy2bK
+        3WK1KUpT9hKTLs+mUPB7T6jzrTQlusrJboWiY/QOAAD//wMA3KXmCkEDAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b88791ef9f9fd-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:33 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '170'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49998662'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_610ca36b7db41063b0ef2a783bf48738
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are a grader assessing whether an answer
+      addresses / resolves a question \n \n         Give a binary score ''yes'' or
+      ''no''. Yes'' means that the answer resolves the question.", "role": "system"},
+      {"content": "User question: \n\n Explain how the different types of agent memory
+      work? \n\n LLM generation: Short-term memory stores information needed for complex
+      cognitive tasks and lasts for 20-30 seconds. Long-term memory can store information
+      for extended periods with essentially unlimited capacity, including explicit
+      and implicit memory types. Sensory memory retains sensory impressions briefly,
+      while short-term and long-term memory are crucial for cognitive functions.",
+      "role": "user"}], "model": "gpt-3.5-turbo-0125", "n": 1, "parallel_tool_calls":
+      false, "stream": false, "temperature": 0.0, "tool_choice": {"type": "function",
+      "function": {"name": "GradeAnswer"}}, "tools": [{"type": "function", "function":
+      {"name": "GradeAnswer", "description": "Binary score to assess answer addresses
+      question.", "parameters": {"properties": {"binary_score": {"description": "Answer
+      addresses the question, ''yes'' or ''no''", "type": "string"}}, "required":
+      ["binary_score"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1219'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=ECa7dvcyDXepO7wvHulNsULpdgkF2wD3DXG59MFi.3w-1726769428-1.0.1.1-2mwxG8IDaDVoAMgGVh36cvqY5A5qrUuEo1579zLe2YDOCg0xpOVSrJsc8fQ38ruSfz5gwh.IlpzP25V3ljCkcg;
+        _cfuvid=jtL93xWrAhunxZ8HDJ_ShgIRss7reGYvNwSzM9w5XT8-1726769428431-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFJNT+MwEL3nV1hzblH6QUtzq4T4uOxK7C6g3aLIdSapwbG99kSlVP3v
+        yElJQgU+WNY8v3nPz7OPGAOZQcJAbDiJ0qrhcnFFVmwf/mP8Nv15tdwqfFV/7170H3X5AIPAMOtn
+        FPTBOhOmtApJGt3AwiEnDF1H8/FsPltMJ5MaKE2GKtAKS8PJ2fmQKrc2w3g0Pj8yN0YK9JCwfxFj
+        jO3rPXjUGb5CwuLBR6VE73mBkLSXGANnVKgA91564ppg0IHCaEIdbOtKqR5AxqhUcKU64Wbte+cu
+        KK5UWsx/ZzO6uX2cj+/j25x+3f3wInbPPb2m9c7WhvJKizagHt7WkxMxxkDzsuZeO57hUvstuhM6
+        Y8BdUZWoKViH/QrWUnO3S70wDleQrGCHfgUH+MQ7RF+dn3qROMwrz9Uxq2P90IavTGGdWfuTLCGX
+        WvpN6pD7+k3gydhGO+jUClB9+jewzpSWUjIvqEPD0cVF0w+6uerQ2REjQ1z1SIvpd6Q0Q+Ky/tt2
+        nBqDUhddh7h1WT8T/M4TlmkudYHOOtkOTnSI3gEAAP//AwCicUWmNwMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b887d2a47642c-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:33 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '138'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999822'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_41ff2e192330b8c3a3063756b6db7192
+    status:
+      code: 200
+      message: OK
+version: 1

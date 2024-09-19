@@ -1,0 +1,110 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/info
+  response:
+    body:
+      string: '{"version":"0.7.29","license_expiration_time":null,"batch_ingest_config":{"scale_up_qsize_trigger":1000,"scale_up_nthreads_limit":16,"scale_down_nempty_trigger":4,"size_limit":100,"size_limit_bytes":20971520},"instance_flags":{"generate_ai_query_enabled":true,"org_creation_disabled":false,"show_ttl_ui":true,"trace_tier_duration_days":{"longlived":400,"shortlived":14},"search_enabled":true,"workspace_scope_org_invites":false,"s3_storage_enabled":true}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '455'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:11:57 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/commits/wfh/llm-compiler-joiner/latest
+  response:
+    body:
+      string: '{"commit_hash":"de0b0fcab3e90e10ee7f25c67f91890b155b48b25ed3bb1df671c7881185c7b2","manifest":{"id":["langchain","prompts","chat","ChatPromptTemplate"],"lc":1,"type":"constructor","kwargs":{"messages":[{"id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"lc":1,"type":"constructor","kwargs":{"prompt":{"id":["langchain","prompts","prompt","PromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":"Solve
+        a question answering task. Here are some guidelines:\n - In the Assistant
+        Scratchpad, you will be given results of a plan you have executed to answer
+        the user''s question.\n - Thought needs to reason about the question based
+        on the Observations in 1-2 sentences.\n - Ignore irrelevant action results.\n
+        - If the required information is present, give a concise but complete and
+        helpful answer to the user''s question.\n - If you are unable to give a satisfactory
+        finishing answer, replan to get the required information. Respond in the following
+        format:\n\nThought: <reason about the task results and whether you have sufficient
+        information to answer the question>\nAction: <action to take>\nAvailable actions:\n
+        (1) Finish(the final answer to return to the user): returns the answer and
+        finishes the task.\n (2) Replan(the reasoning and other information that will
+        help you plan again. Can be a line of any length): instructs why we must replan","input_variables":[],"template_format":"f-string"}}}},{"id":["langchain_core","prompts","chat","MessagesPlaceholder"],"lc":1,"type":"constructor","kwargs":{"variable_name":"messages"}},{"id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"lc":1,"type":"constructor","kwargs":{"prompt":{"id":["langchain","prompts","prompt","PromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":"Using
+        the above previous actions, decide whether to replan or finish. If all the
+        required information is present. You may finish. If you have made many attempts
+        to find the information without success, admit so and respond with whatever
+        information you have gathered so the user can work well with you.\n\n{examples}","input_variables":["examples"],"template_format":"f-string"}}}}],"input_variables":["messages","examples"],"partial_variables":{}}},"examples":[]}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '2240'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:11:57 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+version: 1

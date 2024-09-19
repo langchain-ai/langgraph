@@ -1,0 +1,279 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/info
+  response:
+    body:
+      string: '{"version":"0.7.29","license_expiration_time":null,"batch_ingest_config":{"scale_up_qsize_trigger":1000,"scale_up_nthreads_limit":16,"scale_down_nempty_trigger":4,"size_limit":100,"size_limit_bytes":20971520},"instance_flags":{"generate_ai_query_enabled":true,"org_creation_disabled":false,"show_ttl_ui":true,"trace_tier_duration_days":{"longlived":400,"shortlived":14},"search_enabled":true,"workspace_scope_org_invites":false,"s3_storage_enabled":true}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '455'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:10:57 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/commits/rlm/rag-prompt/latest
+  response:
+    body:
+      string: '{"commit_hash":"50442af133e61576e74536c6556cefe1fac147cad032f4377b60c436e6cdcb6e","manifest":{"id":["langchain","prompts","chat","ChatPromptTemplate"],"lc":1,"type":"constructor","kwargs":{"messages":[{"id":["langchain","prompts","chat","HumanMessagePromptTemplate"],"lc":1,"type":"constructor","kwargs":{"prompt":{"id":["langchain","prompts","prompt","PromptTemplate"],"lc":1,"type":"constructor","kwargs":{"template":"You
+        are an assistant for question-answering tasks. Use the following pieces of
+        retrieved context to answer the question. If you don''t know the answer, just
+        say that you don''t know. Use three sentences maximum and keep the answer
+        concise.\nQuestion: {question} \nContext: {context} \nAnswer:","input_variables":["question","context"],"template_format":"f-string"}}}}],"input_variables":["question","context"]}},"examples":[]}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '844'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:10:57 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are an assistant for question-answering
+      tasks. Use the following pieces of retrieved context to answer the question.
+      If you don''t know the answer, just say that you don''t know. Use three sentences
+      maximum and keep the answer concise.\nQuestion: agent memory \nContext: [Document(metadata={''description'':
+      ''Building agents with LLM (large language model) as its core controller is
+      a cool concept. Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer
+      and BabyAGI, serve as inspiring examples. The potentiality of LLM extends beyond
+      generating well-written copies, stories, essays and programs; it can be framed
+      as a powerful general problem solver.\\nAgent System Overview In a LLM-powered
+      autonomous agent system, LLM functions as the agent\u2019s brain, complemented
+      by several key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''They
+      also discussed the risks, especially with illicit drugs and bioweapons. They
+      developed a test set containing a list of known chemical weapon agents and asked
+      the agent to synthesize them. 4 out of 11 requests (36%) were accepted to obtain
+      a synthesis solution and the agent attempted to consult documentation to execute
+      the procedure. 7 out of 11 were rejected and among these 7 rejected cases, 5
+      happened after a Web search while 2 were rejected based on prompt only.\\nGenerative
+      Agents Simulation#\\nGenerative Agents (Park, et al. 2023) is super fun experiment
+      where 25 virtual characters, each controlled by a LLM-powered agent, are living
+      and interacting in a sandbox environment, inspired by The Sims. Generative agents
+      create believable simulacra of human behavior for interactive applications.\\nThe
+      design of generative agents combines LLM with memory, planning and reflection
+      mechanisms to enable agents to behave conditioned on past experience, as well
+      as to interact with other agents.\\n\\nMemory stream: is a long-term memory
+      module (external database) that records a comprehensive list of agents\u2019
+      experience in natural language.''), Document(metadata={''description'': ''Building
+      agents with LLM (large language model) as its core controller is a cool concept.
+      Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer and BabyAGI,
+      serve as inspiring examples. The potentiality of LLM extends beyond generating
+      well-written copies, stories, essays and programs; it can be framed as a powerful
+      general problem solver.\\nAgent System Overview In a LLM-powered autonomous
+      agent system, LLM functions as the agent\u2019s brain, complemented by several
+      key components:'', ''language'': ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Building
+      agents with LLM (large language model) as its core controller is a cool concept.
+      Several proof-of-concepts demos, such as AutoGPT, GPT-Engineer and BabyAGI,
+      serve as inspiring examples. The potentiality of LLM extends beyond generating
+      well-written copies, stories, essays and programs; it can be framed as a powerful
+      general problem solver.\\nAgent System Overview#\\nIn a LLM-powered autonomous
+      agent system, LLM functions as the agent\u2019s brain, complemented by several
+      key components:\\n\\nPlanning\\n\\nSubgoal and decomposition: The agent breaks
+      down large tasks into smaller, manageable subgoals, enabling efficient handling
+      of complex tasks.\\nReflection and refinement: The agent can do self-criticism
+      and self-reflection over past actions, learn from mistakes and refine them for
+      future steps, thereby improving the quality of final results.\\n\\n\\nMemory''),
+      Document(metadata={''description'': ''Building agents with LLM (large language
+      model) as its core controller is a cool concept. Several proof-of-concepts demos,
+      such as AutoGPT, GPT-Engineer and BabyAGI, serve as inspiring examples. The
+      potentiality of LLM extends beyond generating well-written copies, stories,
+      essays and programs; it can be framed as a powerful general problem solver.\\nAgent
+      System Overview In a LLM-powered autonomous agent system, LLM functions as the
+      agent\u2019s brain, complemented by several key components:'', ''language'':
+      ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Resources:\\n1.
+      Internet access for searches and information gathering.\\n2. Long Term memory
+      management.\\n3. GPT-3.5 powered Agents for delegation of simple tasks.\\n4.
+      File output.\\n\\nPerformance Evaluation:\\n1. Continuously review and analyze
+      your actions to ensure you are performing to the best of your abilities.\\n2.
+      Constructively self-criticize your big-picture behavior constantly.\\n3. Reflect
+      on past decisions and strategies to refine your approach.\\n4. Every command
+      has a cost, so be smart and efficient. Aim to complete tasks in the least number
+      of steps.''), Document(metadata={''description'': ''Building agents with LLM
+      (large language model) as its core controller is a cool concept. Several proof-of-concepts
+      demos, such as AutoGPT, GPT-Engineer and BabyAGI, serve as inspiring examples.
+      The potentiality of LLM extends beyond generating well-written copies, stories,
+      essays and programs; it can be framed as a powerful general problem solver.\\nAgent
+      System Overview In a LLM-powered autonomous agent system, LLM functions as the
+      agent\u2019s brain, complemented by several key components:'', ''language'':
+      ''en'', ''source'': ''https://lilianweng.github.io/posts/2023-06-23-agent/'',
+      ''title'': \"LLM Powered Autonomous Agents | Lil''Log\"}, page_content=''Short-term
+      memory: I would consider all the in-context learning (See Prompt Engineering)
+      as utilizing short-term memory of the model to learn.\\nLong-term memory: This
+      provides the agent with the capability to retain and recall (infinite) information
+      over extended periods, often by leveraging an external vector store and fast
+      retrieval.\\n\\n\\nTool use\\n\\nThe agent learns to call external APIs for
+      extra information that is missing from the model weights (often hard to change
+      after pre-training), including current information, code execution capability,
+      access to proprietary information sources and more.'')] \nAnswer:", "role":
+      "user"}], "model": "gpt-3.5-turbo", "n": 1, "stream": false, "temperature":
+      0.0}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '6390'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RTTWsbMRC9+1cMOtvGTuJ8+JZCW0oTUtJSKKWYWWl2V412tGjGdkzIfy/S+iM5
+        9LKgeZp5b94+vYwAjHdmCca2qLbrw+T25tP648Pu6+bX1ePDdvGBcfbzs3u8j+57fWHGuSNWf8nq
+        oWtqY9cHUh95gG0iVMpT51dnl1eXNxeL6wJ00VHIbU2vk/PpYqLrVMXJbH622He20VsSs4TfIwCA
+        l/LNGtnRs1nCbHyodCSCDZnl8RKASTHkikERL4qsZnwCbWQlLrJ/tATYECvITpQ6iBtKG09b8GzD
+        2pFAR11MO0ABhCfaQV4yMrGOYeu1hRC5mSil7nCzIs8N2LS2HgPUMUEiRc+5iuwgkcUQ8slzHVOH
+        2bBCDPSsxI4c9JR8dDKFLNCR+IYh1tAQU0L1m71qyWoqzyRwd3c/6BlUjKEPyJlzvCetA9nC1JFt
+        kb10AhqBGKtwHKcRKmpxQ1ChkIPI0KMo0HNWRGxJyjjPSgmtDpRRW0qHEVTXmWhDYTfIH/wNhIkL
+        Qd6+bJoYA9x++yLFJHTOZ30Y3vnCUaFPJHmGZ/AqUNIDW/JNqzIG4hbZFj+zIdhj5YNXTzJ9+9cT
+        1WvBnDpeh7Cvvx5jFGLTp1jJHj/Wa89e2lUilMg5MqKxNwV9HQH8KXFdv0ug6VPsel1pfCLOA+fn
+        i31ezemJnODrA6hRMbxpuzj/b9vK5UwFeRN7M2j03JxGzI5Cy6ZmSPmq9txQ6pMvr6D48Tr6BwAA
+        //8DANWYCYIEBAAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b89194cc2cf0d-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:59 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=FBX0FrtRHRx0wO91j7rGmuzXDb0VAp1g1dRX03wiNYM-1726769459-1.0.1.1-VmxwU6.Hgcz.rD2.kiihf7BIx.fqq7jCbyjR5pTmwII2et6PezlBWrhNUOsPkWm8yOh9wwwKOgX5h9er_KqOVw;
+        path=/; expires=Thu, 19-Sep-24 18:40:59 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=ZBQk7vBlaIllPaf7pvyyFeS0XYwTa.mnV7KuZk9LQEw-1726769459445-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1121'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49998430'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_6ad0a67ef0f13116376f657640bd40c9
+    status:
+      code: 200
+      message: OK
+version: 1

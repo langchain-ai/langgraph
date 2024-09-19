@@ -1,0 +1,269 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/info
+  response:
+    body:
+      string: '{"version":"0.7.29","license_expiration_time":null,"batch_ingest_config":{"scale_up_qsize_trigger":1000,"scale_up_nthreads_limit":16,"scale_down_nempty_trigger":4,"size_limit":100,"size_limit_bytes":20971520},"instance_flags":{"generate_ai_query_enabled":true,"org_creation_disabled":false,"show_ttl_ui":true,"trace_tier_duration_days":{"longlived":400,"shortlived":14},"search_enabled":true,"workspace_scope_org_invites":false,"s3_storage_enabled":true}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '455'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:11:43 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"post":[{"id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","start_time":"2024-09-19T18:11:43.796048+00:00","end_time":null,"extra":{"color":"green","runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"},"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"error":null,"events":[{"name":"start","time":"2024-09-19T18:11:43.796048+00:00"}],"reference_example_id":null,"parent_run_id":null,"tags":[],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675","outputs":null,"session_name":"default","name":"math","inputs":{"input":"{''problem'':
+      \"What''s the temp of sf + 5?\", ''context'': [''Thet empreature of sf is 32
+      degrees'']}"},"run_type":"tool"},{"id":"57abbc7b-40b0-431e-82a6-450e3fc3563f","start_time":"2024-09-19T18:11:43.800782+00:00","end_time":null,"extra":{"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"},"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"error":null,"events":[{"name":"start","time":"2024-09-19T18:11:43.800782+00:00"}],"reference_example_id":null,"parent_run_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","tags":[],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675.20240919T181143800782Z57abbc7b-40b0-431e-82a6-450e3fc3563f","outputs":null,"session_name":"default","name":"RunnableSequence","inputs":{"problem":"What''s
+      the temp of sf + 5?","context":[{"content":"The following additional context
+      is provided from other functions.    Use it to substitute into any ${#} variables
+      or other words in the problem.    \n\n$Thet empreature of sf is 32 degrees\n\nNote
+      that context variables are not defined in code yet.You must extract the relevant
+      numbers and directly put them in code.","additional_kwargs":{},"response_metadata":{},"type":"system"}]},"run_type":"chain"},{"id":"2e0928d7-6663-4f93-b372-908cf9e7f360","start_time":"2024-09-19T18:11:43.801206+00:00","end_time":"2024-09-19T18:11:43.801539+00:00","extra":{"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langsmith","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","prompts","chat","ChatPromptTemplate"],"kwargs":{"input_variables":["problem"],"optional_variables":["context"],"partial_variables":{"context":[]},"messages":[{"lc":1,"type":"constructor","id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"kwargs":{"prompt":{"lc":1,"type":"constructor","id":["langchain","prompts","prompt","PromptTemplate"],"kwargs":{"input_variables":[],"template":"Translate
+      a math problem into a expression that can be executed using Python''s numexpr
+      library. Use the output of running this code to answer the question.\n\nQuestion:
+      ${{Question with math problem.}}\n```text\n${{single line mathematical expression
+      that solves the problem}}\n```\n...numexpr.evaluate(text)...\n```output\n${{Output
+      of running the code}}\n```\nAnswer: ${{Answer}}\n\nBegin.\n\nQuestion: What
+      is 37593 * 67?\nExecuteCode({{code: \"37593 * 67\"}})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({{code:
+      \"37593**(1/5)\"}})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n","template_format":"f-string"},"name":"PromptTemplate"}}},{"lc":1,"type":"constructor","id":["langchain","prompts","chat","HumanMessagePromptTemplate"],"kwargs":{"prompt":{"lc":1,"type":"constructor","id":["langchain","prompts","prompt","PromptTemplate"],"kwargs":{"input_variables":["problem"],"template":"{problem}","template_format":"f-string"},"name":"PromptTemplate"}}},{"lc":1,"type":"constructor","id":["langchain","prompts","chat","MessagesPlaceholder"],"kwargs":{"variable_name":"context","optional":true}}]},"name":"ChatPromptTemplate"},"events":[{"name":"start","time":"2024-09-19T18:11:43.801206+00:00"},{"name":"end","time":"2024-09-19T18:11:43.801539+00:00"}],"reference_example_id":null,"parent_run_id":"57abbc7b-40b0-431e-82a6-450e3fc3563f","tags":["seq:step:1"],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675.20240919T181143800782Z57abbc7b-40b0-431e-82a6-450e3fc3563f.20240919T181143801206Z2e0928d7-6663-4f93-b372-908cf9e7f360","outputs":{"output":{"messages":[{"content":"Translate
+      a math problem into a expression that can be executed using Python''s numexpr
+      library. Use the output of running this code to answer the question.\n\nQuestion:
+      ${Question with math problem.}\n```text\n${single line mathematical expression
+      that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n","additional_kwargs":{},"response_metadata":{},"type":"system"},{"content":"What''s
+      the temp of sf + 5?","additional_kwargs":{},"response_metadata":{},"type":"human"},{"content":"The
+      following additional context is provided from other functions.    Use it to
+      substitute into any ${#} variables or other words in the problem.    \n\n$Thet
+      empreature of sf is 32 degrees\n\nNote that context variables are not defined
+      in code yet.You must extract the relevant numbers and directly put them in code.","additional_kwargs":{},"response_metadata":{},"type":"system"}]}},"session_name":"default","name":"ChatPromptTemplate","inputs":{"problem":"What''s
+      the temp of sf + 5?","context":[{"content":"The following additional context
+      is provided from other functions.    Use it to substitute into any ${#} variables
+      or other words in the problem.    \n\n$Thet empreature of sf is 32 degrees\n\nNote
+      that context variables are not defined in code yet.You must extract the relevant
+      numbers and directly put them in code.","additional_kwargs":{},"response_metadata":{},"type":"system"}]},"run_type":"prompt"},{"id":"48eccac8-3f62-4412-ba14-56adcfe7c659","start_time":"2024-09-19T18:11:43.801912+00:00","end_time":null,"extra":{"invocation_params":{"model":"gpt-4-turbo-preview","model_name":"gpt-4-turbo-preview","stream":false,"n":1,"temperature":0.7,"_type":"openai-chat","stop":null,"tools":[{"type":"function","function":{"name":"ExecuteCode","description":"The
+      input to the numexpr.evaluate() function.","parameters":{"properties":{"reasoning":{"description":"The
+      reasoning behind the code expression, including how context is included, if
+      applicable.","type":"string"},"code":{"description":"The simple code expression
+      to execute by numexpr.evaluate().","type":"string"}},"required":["reasoning","code"],"type":"object"}}}],"parallel_tool_calls":false,"tool_choice":{"type":"function","function":{"name":"ExecuteCode"}}},"options":{"stop":null},"batch_size":1,"metadata":{"ls_provider":"openai","ls_model_name":"gpt-4-turbo-preview","ls_model_type":"chat","ls_temperature":0.7,"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","chat_models","openai","ChatOpenAI"],"kwargs":{"model_name":"gpt-4-turbo-preview","temperature":0.7,"openai_api_key":{"lc":1,"type":"secret","id":["OPENAI_API_KEY"]},"max_retries":2,"n":1},"name":"ChatOpenAI"},"events":[{"name":"start","time":"2024-09-19T18:11:43.801912+00:00"}],"reference_example_id":null,"parent_run_id":"57abbc7b-40b0-431e-82a6-450e3fc3563f","tags":["seq:step:2"],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675.20240919T181143800782Z57abbc7b-40b0-431e-82a6-450e3fc3563f.20240919T181143801912Z48eccac8-3f62-4412-ba14-56adcfe7c659","outputs":null,"session_name":"default","name":"ChatOpenAI","inputs":{"messages":[[{"lc":1,"type":"constructor","id":["langchain","schema","messages","SystemMessage"],"kwargs":{"content":"Translate
+      a math problem into a expression that can be executed using Python''s numexpr
+      library. Use the output of running this code to answer the question.\n\nQuestion:
+      ${Question with math problem.}\n```text\n${single line mathematical expression
+      that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n","type":"system"}},{"lc":1,"type":"constructor","id":["langchain","schema","messages","HumanMessage"],"kwargs":{"content":"What''s
+      the temp of sf + 5?","type":"human"}},{"lc":1,"type":"constructor","id":["langchain","schema","messages","SystemMessage"],"kwargs":{"content":"The
+      following additional context is provided from other functions.    Use it to
+      substitute into any ${#} variables or other words in the problem.    \n\n$Thet
+      empreature of sf is 32 degrees\n\nNote that context variables are not defined
+      in code yet.You must extract the relevant numbers and directly put them in code.","type":"system"}}]]},"run_type":"llm"}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '10407'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: POST
+    uri: https://api.smith.langchain.com/runs/batch
+  response:
+    body:
+      string: '{"detail":"Monthly unique traces usage limit exceeded"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '55'
+      Via:
+      - 1.1 google
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:11:43 GMT
+      server:
+      - uvicorn
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"messages": [{"content": "Translate a math problem into a expression that
+      can be executed using Python''s numexpr library. Use the output of running this
+      code to answer the question.\n\nQuestion: ${Question with math problem.}\n```text\n${single
+      line mathematical expression that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n", "role": "system"}, {"content": "What''s the temp of sf
+      + 5?", "role": "user"}, {"content": "The following additional context is provided
+      from other functions.    Use it to substitute into any ${#} variables or other
+      words in the problem.    \n\n$Thet empreature of sf is 32 degrees\n\nNote that
+      context variables are not defined in code yet.You must extract the relevant
+      numbers and directly put them in code.", "role": "system"}], "model": "gpt-4-turbo-preview",
+      "n": 1, "parallel_tool_calls": false, "stream": false, "temperature": 0.7, "tool_choice":
+      {"type": "function", "function": {"name": "ExecuteCode"}}, "tools": [{"type":
+      "function", "function": {"name": "ExecuteCode", "description": "The input to
+      the numexpr.evaluate() function.", "parameters": {"properties": {"reasoning":
+      {"description": "The reasoning behind the code expression, including how context
+      is included, if applicable.", "type": "string"}, "code": {"description": "The
+      simple code expression to execute by numexpr.evaluate().", "type": "string"}},
+      "required": ["reasoning", "code"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1815'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFJNj9owEL3zK0ZzLSBIgC25bVegFrSXiqrVNlVkkknirmNbtrOAEP+9
+        SgJJFm1ziKx5fh+emfMAAHmCAWCcMxcXWowel+vyeNgevm7Wj19ezDx53rqfT+vpcv/qPeOwYqj9
+        X4rdjTWOVaEFOa5kA8eGmKNKdfrgLR4Wy/nEr4FCJSQqWqbdaDaaTL35SBt643S4MnPFY7IYwO8B
+        AMC5/lcZZUJHDGAyvFUKspZlhEF7CQCNElUFmbXcOiYdDjswVtKRrGLLUoge4JQSUcyE6Iyb79w7
+        d41iQkSbg/9j5fZ5/n2THVaft8ovXnbffqU9v0b6pOtAaSnjtkE9vK0Hd2YAKFlRc1dHiktHTyqh
+        OzoAMpOVBUlXRcdziIaYVZLLLMQgxF1O4KjQZJgrDYFKwabALWT8jSQwC74HCWWGyI5hpyDlMgH3
+        IesTzIdwILC80OIELElgDk7Vtxu5Hmcc4jDEWCVU5/C9ih7iBd/lvww+Ov/pjcZQWlomrjO71i/t
+        EgiVaaP29m6mmHLJbR41zag6Y53SjXflUztg+W5/UBtVaBc59UqyEvQXXqOH3X536OwGOuWY6NUn
+        s/+xooQc4/WStXvdjqtTmLQx63eiPVlHRZRymZHRhrcbPLgM/gEAAP//AwCGTJ6FwAMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8a378b4cf997-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:11:47 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=phmhys2A4rvsap5g0sVZupClpEAO.fF8UQzGdjXEMrA-1726769507-1.0.1.1-ds6IkFaAtk6k4jeBDBc24nGkcA21Vfz7qqqAL3JUWMajiZhn8sLAmKz2qPC3pPzqvNaPKqkwo3oQUiICqBX7Vw;
+        path=/; expires=Thu, 19-Sep-24 18:41:47 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=9p3Hy7rkV2mUXjiAm9R0UlFxPI0uzx4KegwLB9kyJwo-1726769507126-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '3079'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999729'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 8ms
+      x-request-id:
+      - req_a04fbad45926ac78403a68523d63c741
+    status:
+      code: 200
+      message: OK
+version: 1

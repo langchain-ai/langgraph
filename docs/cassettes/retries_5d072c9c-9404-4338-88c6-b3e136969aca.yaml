@@ -1,0 +1,1227 @@
+interactions:
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "Extract
+      the summary from the following conversation:\n\n<convo>\nPete: Hey Xu, Laura,
+      thanks for hopping on this call. I''ve been itching to talk about this Drake
+      and Kendrick situation.\nXu: No problem. As its my job, I''ve got some thoughts
+      on this beef.\nLaura: Yeah, I''ve got some insider info so this should be interesting.\nPete:
+      Dope. So, when do you think this whole thing started?\nPete: Definitely was
+      Kendrick''s ''Control'' verse that kicked it off.\nLaura: Truth, but Drake never
+      went after him directly. Just some subtle jabs here and there.\nXu: That''s
+      the thing with beefs like this, though. They''ve always been a a thing, pushing
+      artists to step up their game.\nPete: For sure, and this beef has got the fans
+      taking sides. Some are all about Drake''s mainstream appeal, while others are
+      digging Kendrick''s lyrical skills.\nLaura: I mean, Drake knows how to make
+      a hit that gets everyone hyped. That''s his thing.\nPete: I hear you, Laura,
+      but I gotta give it to Kendrick when it comes to straight-up bars. The man''s
+      a beast on the mic.\nXu: It''s wild how this beef is shaping fans.\nPete: do
+      you think these beefs can actually be good for hip-hop?\nXu: Hell yeah, Pete.
+      When it''s done right, a beef can push the genre forward and make artists level
+      up.\nLaura: eh\nPete: So, where do you see this beef going?\nLaura: Honestly,
+      I think it''ll stay a hot topic for the fans, but unless someone drops a straight-up
+      diss track, it''s not gonna escalate.\nLaura: ehhhhhh not sure\nPete: I feel
+      that. I just want both of them to keep dropping heat, beef or no beef.\nXu:
+      I''m curious. May influence a lot of people. Make things more competitive. Bring
+      on a whole new wave of lyricism.\nPete: Word. Hey, thanks for chopping it up
+      with me, Xu and Laura. This was dope.\nXu: Where are you going so fast?\nLaura:
+      For real, I had a good time. Nice to get different perspectives on the situation.\n</convo>"}],
+      "model": "claude-3-haiku-20240307", "system": "Respond directly using the TranscriptSummary
+      function.", "tools": [{"name": "TranscriptSummary", "description": "", "input_schema":
+      {"properties": {"metadata": {"properties": {"title": {"description": "The title
+      of the transcript.", "type": "string"}, "location": {"properties": {"sources":
+      {"description": "The raw transcript / span you could cite to justify the choice.",
+      "type": "string"}, "content": {"description": "The chosen value.", "type": "string"}},
+      "required": ["sources", "content"], "type": "object"}, "duration": {"description":
+      "The duration of the interview.", "type": "string"}}, "required": ["title",
+      "location", "duration"], "type": "object"}, "participants": {"description":
+      "A list of participants in the interview.", "items": {"properties": {"name":
+      {"properties": {"sources": {"description": "The raw transcript / span you could
+      cite to justify the choice.", "type": "string"}, "content": {"description":
+      "The chosen value.", "type": "string"}}, "required": ["sources", "content"],
+      "type": "object"}, "role": {"anyOf": [{"type": "string"}, {"type": "null"}],
+      "default": null, "description": "The role of the member."}, "age": {"anyOf":
+      [{"type": "integer"}, {"type": "null"}], "default": null, "description": "The
+      age of the member."}, "background_details": {"description": "A list of background
+      details about the member.", "items": {"properties": {"factoid": {"properties":
+      {"sources": {"description": "The raw transcript / span you could cite to justify
+      the choice.", "type": "string"}, "content": {"description": "The chosen value.",
+      "type": "string"}}, "required": ["sources", "content"], "type": "object"}, "professions":
+      {"items": {}, "type": "array"}, "why": {"description": "Why this is important.",
+      "type": "string"}}, "required": ["factoid", "professions", "why"], "type": "object"},
+      "type": "array"}}, "required": ["name", "background_details"], "type": "object"},
+      "type": "array"}, "key_moments": {"description": "A list of key moments from
+      the interview.", "items": {"properties": {"topic": {"description": "The topic
+      of the key moments.", "type": "string"}, "happy_moments": {"description": "A
+      list of key moments related to the topic.", "items": {"properties": {"quote":
+      {"description": "The relevant quote from the transcript.", "type": "string"},
+      "description": {"description": "A description of the moment.", "type": "string"},
+      "expressed_preference": {"properties": {"sources": {"description": "The raw
+      transcript / span you could cite to justify the choice.", "type": "string"},
+      "content": {"description": "The chosen value.", "type": "string"}}, "required":
+      ["sources", "content"], "type": "object"}}, "required": ["quote", "description",
+      "expressed_preference"], "type": "object"}, "type": "array"}, "tense_moments":
+      {"description": "Moments where things were a bit tense.", "items": {"properties":
+      {"quote": {"description": "The relevant quote from the transcript.", "type":
+      "string"}, "description": {"description": "A description of the moment.", "type":
+      "string"}, "expressed_preference": {"properties": {"sources": {"description":
+      "The raw transcript / span you could cite to justify the choice.", "type": "string"},
+      "content": {"description": "The chosen value.", "type": "string"}}, "required":
+      ["sources", "content"], "type": "object"}}, "required": ["quote", "description",
+      "expressed_preference"], "type": "object"}, "type": "array"}, "sad_moments":
+      {"description": "Moments where things where everyone was downtrodden.", "items":
+      {"properties": {"quote": {"description": "The relevant quote from the transcript.",
+      "type": "string"}, "description": {"description": "A description of the moment.",
+      "type": "string"}, "expressed_preference": {"properties": {"sources": {"description":
+      "The raw transcript / span you could cite to justify the choice.", "type": "string"},
+      "content": {"description": "The chosen value.", "type": "string"}}, "required":
+      ["sources", "content"], "type": "object"}}, "required": ["quote", "description",
+      "expressed_preference"], "type": "object"}, "type": "array"}, "background_info":
+      {"items": {"properties": {"factoid": {"properties": {"sources": {"description":
+      "The raw transcript / span you could cite to justify the choice.", "type": "string"},
+      "content": {"description": "The chosen value.", "type": "string"}}, "required":
+      ["sources", "content"], "type": "object"}, "professions": {"items": {}, "type":
+      "array"}, "why": {"description": "Why this is important.", "type": "string"}},
+      "required": ["factoid", "professions", "why"], "type": "object"}, "type": "array"},
+      "moments_summary": {"description": "A summary of the key moments.", "type":
+      "string"}}, "required": ["topic", "happy_moments", "tense_moments", "sad_moments",
+      "background_info", "moments_summary"], "type": "object"}, "type": "array"},
+      "insightful_quotes": {"description": "A list of insightful quotes from the interview.",
+      "items": {"properties": {"quote": {"properties": {"sources": {"description":
+      "The raw transcript / span you could cite to justify the choice.", "type": "string"},
+      "content": {"description": "The chosen value.", "type": "string"}}, "required":
+      ["sources", "content"], "type": "object"}, "speaker": {"description": "The name
+      of the speaker who said the quote.", "type": "string"}, "analysis": {"description":
+      "An analysis of the quote and its significance.", "type": "string"}}, "required":
+      ["quote", "speaker", "analysis"], "type": "object"}, "type": "array"}, "overall_summary":
+      {"description": "An overall summary of the interview.", "type": "string"}, "next_steps":
+      {"description": "A list of next steps or action items based on the interview.",
+      "items": {"type": "string"}, "type": "array"}, "other_stuff": {"items": {"properties":
+      {"sources": {"description": "The raw transcript / span you could cite to justify
+      the choice.", "type": "string"}, "content": {"description": "The chosen value.",
+      "type": "string"}}, "required": ["sources", "content"], "type": "object"}, "type":
+      "array"}}, "required": ["metadata", "participants", "key_moments", "insightful_quotes",
+      "overall_summary", "next_steps", "other_stuff"], "type": "object"}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '8132'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA8RX224bNxD9lQFf9LJ2ZceFm30rmqRukgYB4rYuLEMY7c5q2eWSDGcoeWvo3wty
+        JdnOxbnAQF+kFZdzO3Pmohula1Wqnpfz6dHp8Lz3p7//9Gp1cXr84uTXp2fnL//8WRVKBk/pFjHj
+        klShgjPpAJk1C1pRhepdTUaVqjIYazp4ctCi7uLB8fT4ZPpkeqoKVTkrZEWVlzc7jULXSTZ/leqM
+        AoFmQODY9xgGcA1IS9DRAN5pKwxNcH0+q5xdUWAU7WypNsWtTufMPHJyM8eWfsf59OioW9nz2v3o
+        44t/7Zvnb15d9H/87VWhLPZJ7jyg5SpoL+9G60mB9VFUeaM6Gua968kKq1JdzizATfoAmClxXlcz
+        VcJMPQvYEaCt4RXZOuiqg9fYY4AFUTNTxU6kRe/3CpPo5fhmr3W89j46oVHzXy1Z0DJhqJ0lCHrZ
+        SgGYFUOFFnzkNgOzJBsIGhfWGOrsS5+dCqJZGAytyED0h3t3Rls1jcFrZ0eL5y2BT1KV9pigrzVX
+        kRlat4aAPpvmbHtBsHSuTkah1f6gdR4WQ3ZJ2+XetLh0s3chZa/3JFr0aoRL9z64FaUAdAAzBF1p
+        7j/0ka59IGaq5z5QQ4FsleG5A1q6tiXaGMZbx6OZlaZ1ItTe9XvKkxy7GCriUe4iljA5I2NgIGwL
+        eEtCh/D4aZjM1K0Xm93j9uFqzxghy/RNjDlzlljMUMBvIK22XfLbGGDBARBaJ5CZm7OWPG7QcgGL
+        KBCtIWZg11OKsg7O56qUgCngg+gTGRgkYNUVIx7WCSydtQjEFRoU+n6GrVuSlkavckkd7MspA73W
+        xuzNFLDW0sJrjAFhy5DEOu7IS6YRSIsCWka5ZWLh4GwNmCpxB8NMZSASCI9Bu3ejdTQ5iI+9nqkC
+        HmBfjiYR8H9P4lfyk7H+JnZS+yV2jAllop4hWrLSRqYacOGi5FC9S3BrNOC3Nc67gZHwLkDbNCUk
+        ICeU4CJOeOw+zovuNYuucld4jHy/oSgBDfzwaV/v9f8HM07tVyK+wKpbBhdtPde2cZ9HvcFKnK6/
+        FMH5jqcsGITqsax2hTdhmPySwHRmAmnw0sPhpHZZwuQZNdpqITPAGvkBbWONdrrqqE6l6prmA+rd
+        S5EPrkl17uxIt6t7b9ftsItJM6TJomviTAa6FnA258QFvdR2R5lP9Jlb87fGvwfZcStokUGwI5tL
+        EjguxBD8gwsGlD0yY+1aWlGANVkBbITSVO2h1oEqMcPX8eg8RGlHbaP9B3UewsvI8rFnbVrJ0vBK
+        /ZgePSNY1zpVPJoPk2NRYqrU5k75fLYUto1nvl0bvzBdPpPt7RxZYRjS+PAU2FO1bSt2P5O0pBX1
+        o3XHhfv9HZoY0v1DuIipifEn25W2t+Nhty2lgzsb03YzKmDdakPbMae3jYz3U2Y33QxhncTQDpLV
+        7WfdZD8sJncnXcJwM7NXarO5KhSL8/NAyM6mhR+v5+I6sqy2r5jex9QOVWmjMYWK+Q9BeTNuyrvL
+        5fHJ9LhQLsrdw6Pp8clm8x8AAAD//wMApXrYuXIMAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b9b60a8331567-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:23:34 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_012mnX5gHjQ6i1YCdqkHu2Yg
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 05fa5bfe981f8cf07ee0c86dc73fce96
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "Extract
+      the summary from the following conversation:\n\n<convo>\nPete: Hey Xu, Laura,
+      thanks for hopping on this call. I''ve been itching to talk about this Drake
+      and Kendrick situation.\nXu: No problem. As its my job, I''ve got some thoughts
+      on this beef.\nLaura: Yeah, I''ve got some insider info so this should be interesting.\nPete:
+      Dope. So, when do you think this whole thing started?\nPete: Definitely was
+      Kendrick''s ''Control'' verse that kicked it off.\nLaura: Truth, but Drake never
+      went after him directly. Just some subtle jabs here and there.\nXu: That''s
+      the thing with beefs like this, though. They''ve always been a a thing, pushing
+      artists to step up their game.\nPete: For sure, and this beef has got the fans
+      taking sides. Some are all about Drake''s mainstream appeal, while others are
+      digging Kendrick''s lyrical skills.\nLaura: I mean, Drake knows how to make
+      a hit that gets everyone hyped. That''s his thing.\nPete: I hear you, Laura,
+      but I gotta give it to Kendrick when it comes to straight-up bars. The man''s
+      a beast on the mic.\nXu: It''s wild how this beef is shaping fans.\nPete: do
+      you think these beefs can actually be good for hip-hop?\nXu: Hell yeah, Pete.
+      When it''s done right, a beef can push the genre forward and make artists level
+      up.\nLaura: eh\nPete: So, where do you see this beef going?\nLaura: Honestly,
+      I think it''ll stay a hot topic for the fans, but unless someone drops a straight-up
+      diss track, it''s not gonna escalate.\nLaura: ehhhhhh not sure\nPete: I feel
+      that. I just want both of them to keep dropping heat, beef or no beef.\nXu:
+      I''m curious. May influence a lot of people. Make things more competitive. Bring
+      on a whole new wave of lyricism.\nPete: Word. Hey, thanks for chopping it up
+      with me, Xu and Laura. This was dope.\nXu: Where are you going so fast?\nLaura:
+      For real, I had a good time. Nice to get different perspectives on the situation.\n</convo>"},
+      {"role": "assistant", "content": [{"text": "Here is a summary of the key points
+      from the conversation:", "type": "text"}, {"type": "tool_use", "name": "TranscriptSummary",
+      "input": {"key_moments": "[\n  {\n    \"topic\": \"Drake and Kendrick Lamar
+      beef\",\n    \"happy_moments\": [\n      {\n        \"quote\": \"When it''s
+      done right, a beef can push the genre forward and make artists level up.\",\n        \"description\":
+      \"The participants discuss how rap beefs can be good for hip-hop by pushing
+      artists to be more competitive and improve their lyricism.\",\n        \"expressed_preference\":
+      {\n          \"content\": \"Positive view of rap beefs\",\n          \"sources\":
+      \"Xu: ''Hell yeah, Pete. When it''s done right, a beef can push the genre forward
+      and make artists level up.''\"\n        }\n      }\n    ],\n    \"tense_moments\":
+      [\n      {\n        \"quote\": \"Honestly, I think it''ll stay a hot topic for
+      the fans, but unless someone drops a straight-up diss track, it''s not gonna
+      escalate.\",\n        \"description\": \"The participants discuss whether the
+      Drake-Kendrick beef will escalate, with Laura expressing skepticism that it
+      will go beyond a \"hot topic\" for fans.\",\n        \"expressed_preference\":
+      {\n          \"content\": \"Skeptical the beef will escalate\", \n          \"sources\":
+      \"Laura: ''Honestly, I think it''ll stay a hot topic for the fans, but unless
+      someone drops a straight-up diss track, it''s not gonna escalate.''\"\n        }\n      }\n    ],\n    \"sad_moments\":
+      [\n      {\n        \"quote\": \"eh\",\n        \"description\": \"Laura seems
+      unenthused about the potential positives of the beef, in contrast to Xu''s more
+      optimistic view.\",\n        \"expressed_preference\": {\n          \"content\":
+      \"Neutral / unenthused about the beef\",\n          \"sources\": \"Laura: ''eh''\"\n        }\n      }\n    ],\n    \"background_info\":
+      [\n      {\n        \"factoid\": {\n          \"content\": \"The beef started
+      with Kendrick''s ''Control'' verse\",\n          \"sources\": \"Pete: ''Definitely
+      was Kendrick''s ''Control'' verse that kicked it off.''\"\n        },\n        \"professions\":
+      [],\n        \"why\": \"This provides context on the origin of the Drake-Kendrick
+      beef\"\n      },\n      {\n        \"factoid\": {\n          \"content\": \"Drake
+      has taken some subtle jabs at Kendrick, but never went after him directly\",\n          \"sources\":
+      \"Laura: ''Truth, but Drake never went after him directly. Just some subtle
+      jabs here and there.''\"\n        },\n        \"professions\": [],\n        \"why\":
+      \"This provides additional context on the nature of the beef\"\n      }\n    ],\n    \"moments_summary\":
+      \"The participants discuss the Drake-Kendrick beef, with varying perspectives
+      on whether it is good for hip-hop or will escalate further. Xu sees potential
+      positives in the beef pushing the artists to improve, while Laura is more skeptical
+      it will lead to anything beyond a ''hot topic'' for fans.\"\n  }\n]"}, "id":
+      "toolu_011kvnTdo5puFznNENKXmUYp"}]}, {"role": "user", "content": [{"type": "tool_result",
+      "content": "Error:\n\n```\n7 validation errors for TranscriptSummary\nmetadata\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nparticipants\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nkey_moments\n  Input
+      should be a valid list [type=list_type, input_value=''[\\n  {\\n    \"topic\":
+      \"Dr...ic\\'' for fans.\"\\n  }\\n]'', input_type=str]\n    For further information
+      visit https://errors.pydantic.dev/2.9/v/list_type\ninsightful_quotes\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\noverall_summary\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nnext_steps\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nother_stuff\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n```\nExpected
+      Parameter Schema:\n\n```json\n{\"$defs\": {\"BackgroundInfo\": {\"properties\":
+      {\"factoid\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\": \"Important
+      factoid about the member.\"}, \"professions\": {\"items\": {}, \"title\": \"Professions\",
+      \"type\": \"array\"}, \"why\": {\"description\": \"Why this is important.\",
+      \"title\": \"Why\", \"type\": \"string\"}}, \"required\": [\"factoid\", \"professions\",
+      \"why\"], \"title\": \"BackgroundInfo\", \"type\": \"object\"}, \"InsightfulQuote\":
+      {\"properties\": {\"quote\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"An insightful quote from the transcript.\"}, \"speaker\": {\"description\":
+      \"The name of the speaker who said the quote.\", \"title\": \"Speaker\", \"type\":
+      \"string\"}, \"analysis\": {\"description\": \"An analysis of the quote and
+      its significance.\", \"title\": \"Analysis\", \"type\": \"string\"}}, \"required\":
+      [\"quote\", \"speaker\", \"analysis\"], \"title\": \"InsightfulQuote\", \"type\":
+      \"object\"}, \"KeyMoments\": {\"properties\": {\"topic\": {\"description\":
+      \"The topic of the key moments.\", \"title\": \"Topic\", \"type\": \"string\"},
+      \"happy_moments\": {\"description\": \"A list of key moments related to the
+      topic.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Happy Moments\",
+      \"type\": \"array\"}, \"tense_moments\": {\"description\": \"Moments where things
+      were a bit tense.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Tense
+      Moments\", \"type\": \"array\"}, \"sad_moments\": {\"description\": \"Moments
+      where things where everyone was downtrodden.\", \"items\": {\"$ref\": \"#/$defs/Moment\"},
+      \"title\": \"Sad Moments\", \"type\": \"array\"}, \"background_info\": {\"items\":
+      {\"$ref\": \"#/$defs/BackgroundInfo\"}, \"title\": \"Background Info\", \"type\":
+      \"array\"}, \"moments_summary\": {\"description\": \"A summary of the key moments.\",
+      \"title\": \"Moments Summary\", \"type\": \"string\"}}, \"required\": [\"topic\",
+      \"happy_moments\", \"tense_moments\", \"sad_moments\", \"background_info\",
+      \"moments_summary\"], \"title\": \"KeyMoments\", \"type\": \"object\"}, \"Member\":
+      {\"properties\": {\"name\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"The name of the member.\"}, \"role\": {\"anyOf\": [{\"type\": \"string\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The role of the
+      member.\", \"title\": \"Role\"}, \"age\": {\"anyOf\": [{\"type\": \"integer\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The age of the
+      member.\", \"title\": \"Age\"}, \"background_details\": {\"description\": \"A
+      list of background details about the member.\", \"items\": {\"$ref\": \"#/$defs/BackgroundInfo\"},
+      \"title\": \"Background Details\", \"type\": \"array\"}}, \"required\": [\"name\",
+      \"background_details\"], \"title\": \"Member\", \"type\": \"object\"}, \"Moment\":
+      {\"properties\": {\"quote\": {\"description\": \"The relevant quote from the
+      transcript.\", \"title\": \"Quote\", \"type\": \"string\"}, \"description\":
+      {\"description\": \"A description of the moment.\", \"title\": \"Description\",
+      \"type\": \"string\"}, \"expressed_preference\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The preference expressed in the moment.\"}}, \"required\":
+      [\"quote\", \"description\", \"expressed_preference\"], \"title\": \"Moment\",
+      \"type\": \"object\"}, \"OutputFormat\": {\"properties\": {\"sources\": {\"description\":
+      \"The raw transcript / span you could cite to justify the choice.\", \"title\":
+      \"Sources\", \"type\": \"string\"}, \"content\": {\"description\": \"The chosen
+      value.\", \"title\": \"Content\", \"type\": \"string\"}}, \"required\": [\"sources\",
+      \"content\"], \"title\": \"OutputFormat\", \"type\": \"object\"}, \"TranscriptMetadata\":
+      {\"properties\": {\"title\": {\"description\": \"The title of the transcript.\",
+      \"title\": \"Title\", \"type\": \"string\"}, \"location\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The location where the interview took place.\"}, \"duration\":
+      {\"description\": \"The duration of the interview.\", \"title\": \"Duration\",
+      \"type\": \"string\"}}, \"required\": [\"title\", \"location\", \"duration\"],
+      \"title\": \"TranscriptMetadata\", \"type\": \"object\"}}, \"properties\": {\"metadata\":
+      {\"$ref\": \"#/$defs/TranscriptMetadata\", \"description\": \"Metadata about
+      the transcript.\"}, \"participants\": {\"description\": \"A list of participants
+      in the interview.\", \"items\": {\"$ref\": \"#/$defs/Member\"}, \"title\": \"Participants\",
+      \"type\": \"array\"}, \"key_moments\": {\"description\": \"A list of key moments
+      from the interview.\", \"items\": {\"$ref\": \"#/$defs/KeyMoments\"}, \"title\":
+      \"Key Moments\", \"type\": \"array\"}, \"insightful_quotes\": {\"description\":
+      \"A list of insightful quotes from the interview.\", \"items\": {\"$ref\": \"#/$defs/InsightfulQuote\"},
+      \"title\": \"Insightful Quotes\", \"type\": \"array\"}, \"overall_summary\":
+      {\"description\": \"An overall summary of the interview.\", \"title\": \"Overall
+      Summary\", \"type\": \"string\"}, \"next_steps\": {\"description\": \"A list
+      of next steps or action items based on the interview.\", \"items\": {\"type\":
+      \"string\"}, \"title\": \"Next Steps\", \"type\": \"array\"}, \"other_stuff\":
+      {\"items\": {\"$ref\": \"#/$defs/OutputFormat\"}, \"title\": \"Other Stuff\",
+      \"type\": \"array\"}}, \"required\": [\"metadata\", \"participants\", \"key_moments\",
+      \"insightful_quotes\", \"overall_summary\", \"next_steps\", \"other_stuff\"],
+      \"title\": \"TranscriptSummary\", \"type\": \"object\"}\n```\nPlease respond
+      with a JSONPatch to correct the error for tool_call_id=[toolu_011kvnTdo5puFznNENKXmUYp].",
+      "tool_use_id": "toolu_011kvnTdo5puFznNENKXmUYp", "is_error": false}]}], "model":
+      "claude-3-haiku-20240307", "system": "Respond directly using the TranscriptSummary
+      function.", "tools": [{"name": "PatchFunctionParameters", "description": "Respond
+      with all JSONPatch operation to correct validation errors caused by passing
+      in incorrect or incomplete parameters in a previous tool call.", "input_schema":
+      {"properties": {"tool_call_id": {"description": "The ID of the original tool
+      call that generated the error. Must NOT be an ID of a PatchFunctionParameters
+      tool call.", "type": "string"}, "reasoning": {"description": "Think step-by-step,
+      listing each validation error and the JSONPatch operation needed to correct
+      it. Cite the fields in the JSONSchema you referenced in developing this plan.",
+      "type": "string"}, "patches": {"description": "A list of JSONPatch operations
+      to be applied to the previous tool call''s response.", "items": {"description":
+      "A JSON Patch document represents an operation to be performed on a JSON document.\n\nNote
+      that the op and path are ALWAYS required. Value is required for ALL operations
+      except ''remove''.\nExamples:\n\n```json\n{\"op\": \"add\", \"path\": \"/a/b/c\",
+      \"patch_value\": 1}\n{\"op\": \"replace\", \"path\": \"/a/b/c\", \"patch_value\":
+      2}\n{\"op\": \"remove\", \"path\": \"/a/b/c\"}\n```", "properties": {"op": {"description":
+      "The operation to be performed. Must be one of ''add'', ''remove'', ''replace''.",
+      "enum": ["add", "remove", "replace"], "type": "string"}, "path": {"description":
+      "A JSON Pointer path that references a location within the target document where
+      the operation is performed.", "type": "string"}, "value": {"description": "The
+      value to be used within the operation. REQUIRED for ''add'', ''replace'', and
+      ''test'' operations."}}, "required": ["op", "path", "value"], "type": "object"},
+      "type": "array"}}, "required": ["tool_call_id", "reasoning", "patches"], "type":
+      "object"}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '14250'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3yTW08bMRCF/4rlF16WaHOhkH0LEtCLoNCmorSpVoM9m3Xjy2KPc2mU/155AymV
+        Vjx6fPydM7Zny5XkBTdhXub909Xky4/++dBs6moi17fy7uF+dcUzTpsGkwpDgDnyjHunUwFCUIHA
+        Es+4cRI1L7jQECUeD49rUIt4PMgHo3yYn/KMC2cJLfHi5/aFSM7pMoaEbHOkdSzz/v3HMSwuJler
+        zfhkevb+3JqzwXDMM27BpHO3QKK+jFaQcvYWPBgk9CFhbBOJF9s9WoDW5X/k/mJpp9KdNPHyj725
+        uPn03Xx7aFJLCMFZZee84NMa2RK0kpD4DL13PjDwyATEgJI9bhjVyFoz1hz8mXXETMqm7LxV4LpB
+        QShZEDUaYJXzbX3qwQbhVUNfozHgN6x67qbHknvltHarRGkSDgNbKa2ZcN6joL15CBFDMbMz2++x
+        iZRt1eNTVB4lOzJIIIHgiFUKtczYqlaiZioweGV//axi7vE3CurN7KAL1oAnJVQDlkIXUKtAzFXs
+        Gs0j+mdY6M3ssMcubIgeW+DRAjelcQb/YdL5xrulkigZJFZ78y0xay8UWCCv7Lw3s6OubMoGNa+p
+        irp8io7wzYAfDuK7pH2V9KSL7Zbo0x8K+1fqIh/CvesCWFxTGQibN1PtGSnFaWcKqtGXgWJVvUX5
+        HKmJdOm8ATo0xne7XxkP5Jpy/8XTIMO6JLdAmyam3Qr4FNEK5IWNWmc8toNebPfz9CIuRvnZIOOu
+        9TkU+/lgtNv9BQAA//8DAK6UzkNKBAAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b9b8eea0f1567-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:23:42 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_016Vn7w4SPGWZpYQpMA1A1H7
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - e9b5e0da0e78da67009b0a289f520212
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "Extract
+      the summary from the following conversation:\n\n<convo>\nPete: Hey Xu, Laura,
+      thanks for hopping on this call. I''ve been itching to talk about this Drake
+      and Kendrick situation.\nXu: No problem. As its my job, I''ve got some thoughts
+      on this beef.\nLaura: Yeah, I''ve got some insider info so this should be interesting.\nPete:
+      Dope. So, when do you think this whole thing started?\nPete: Definitely was
+      Kendrick''s ''Control'' verse that kicked it off.\nLaura: Truth, but Drake never
+      went after him directly. Just some subtle jabs here and there.\nXu: That''s
+      the thing with beefs like this, though. They''ve always been a a thing, pushing
+      artists to step up their game.\nPete: For sure, and this beef has got the fans
+      taking sides. Some are all about Drake''s mainstream appeal, while others are
+      digging Kendrick''s lyrical skills.\nLaura: I mean, Drake knows how to make
+      a hit that gets everyone hyped. That''s his thing.\nPete: I hear you, Laura,
+      but I gotta give it to Kendrick when it comes to straight-up bars. The man''s
+      a beast on the mic.\nXu: It''s wild how this beef is shaping fans.\nPete: do
+      you think these beefs can actually be good for hip-hop?\nXu: Hell yeah, Pete.
+      When it''s done right, a beef can push the genre forward and make artists level
+      up.\nLaura: eh\nPete: So, where do you see this beef going?\nLaura: Honestly,
+      I think it''ll stay a hot topic for the fans, but unless someone drops a straight-up
+      diss track, it''s not gonna escalate.\nLaura: ehhhhhh not sure\nPete: I feel
+      that. I just want both of them to keep dropping heat, beef or no beef.\nXu:
+      I''m curious. May influence a lot of people. Make things more competitive. Bring
+      on a whole new wave of lyricism.\nPete: Word. Hey, thanks for chopping it up
+      with me, Xu and Laura. This was dope.\nXu: Where are you going so fast?\nLaura:
+      For real, I had a good time. Nice to get different perspectives on the situation.\n</convo>"},
+      {"role": "assistant", "content": [{"text": "Here is a summary of the key points
+      from the conversation:", "type": "text"}, {"type": "tool_use", "name": "TranscriptSummary",
+      "input": {"key_moments": "[\n  {\n    \"topic\": \"Drake and Kendrick Lamar
+      beef\",\n    \"happy_moments\": [\n      {\n        \"quote\": \"When it''s
+      done right, a beef can push the genre forward and make artists level up.\",\n        \"description\":
+      \"The participants discuss how rap beefs can be good for hip-hop by pushing
+      artists to be more competitive and improve their lyricism.\",\n        \"expressed_preference\":
+      {\n          \"content\": \"Positive view of rap beefs\",\n          \"sources\":
+      \"Xu: ''Hell yeah, Pete. When it''s done right, a beef can push the genre forward
+      and make artists level up.''\"\n        }\n      }\n    ],\n    \"tense_moments\":
+      [\n      {\n        \"quote\": \"Honestly, I think it''ll stay a hot topic for
+      the fans, but unless someone drops a straight-up diss track, it''s not gonna
+      escalate.\",\n        \"description\": \"The participants discuss whether the
+      Drake-Kendrick beef will escalate, with Laura expressing skepticism that it
+      will go beyond a \"hot topic\" for fans.\",\n        \"expressed_preference\":
+      {\n          \"content\": \"Skeptical the beef will escalate\", \n          \"sources\":
+      \"Laura: ''Honestly, I think it''ll stay a hot topic for the fans, but unless
+      someone drops a straight-up diss track, it''s not gonna escalate.''\"\n        }\n      }\n    ],\n    \"sad_moments\":
+      [\n      {\n        \"quote\": \"eh\",\n        \"description\": \"Laura seems
+      unenthused about the potential positives of the beef, in contrast to Xu''s more
+      optimistic view.\",\n        \"expressed_preference\": {\n          \"content\":
+      \"Neutral / unenthused about the beef\",\n          \"sources\": \"Laura: ''eh''\"\n        }\n      }\n    ],\n    \"background_info\":
+      [\n      {\n        \"factoid\": {\n          \"content\": \"The beef started
+      with Kendrick''s ''Control'' verse\",\n          \"sources\": \"Pete: ''Definitely
+      was Kendrick''s ''Control'' verse that kicked it off.''\"\n        },\n        \"professions\":
+      [],\n        \"why\": \"This provides context on the origin of the Drake-Kendrick
+      beef\"\n      },\n      {\n        \"factoid\": {\n          \"content\": \"Drake
+      has taken some subtle jabs at Kendrick, but never went after him directly\",\n          \"sources\":
+      \"Laura: ''Truth, but Drake never went after him directly. Just some subtle
+      jabs here and there.''\"\n        },\n        \"professions\": [],\n        \"why\":
+      \"This provides additional context on the nature of the beef\"\n      }\n    ],\n    \"moments_summary\":
+      \"The participants discuss the Drake-Kendrick beef, with varying perspectives
+      on whether it is good for hip-hop or will escalate further. Xu sees potential
+      positives in the beef pushing the artists to improve, while Laura is more skeptical
+      it will lead to anything beyond a ''hot topic'' for fans.\"\n  }\n]"}, "id":
+      "toolu_011kvnTdo5puFznNENKXmUYp"}]}, {"role": "user", "content": [{"type": "tool_result",
+      "content": "Error:\n\n```\n7 validation errors for TranscriptSummary\nmetadata\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nparticipants\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nkey_moments\n  Input
+      should be a valid list [type=list_type, input_value=''[\\n  {\\n    \"topic\":
+      \"Dr...ic\\'' for fans.\"\\n  }\\n]'', input_type=str]\n    For further information
+      visit https://errors.pydantic.dev/2.9/v/list_type\ninsightful_quotes\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\noverall_summary\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nnext_steps\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nother_stuff\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n```\nExpected
+      Parameter Schema:\n\n```json\n{\"$defs\": {\"BackgroundInfo\": {\"properties\":
+      {\"factoid\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\": \"Important
+      factoid about the member.\"}, \"professions\": {\"items\": {}, \"title\": \"Professions\",
+      \"type\": \"array\"}, \"why\": {\"description\": \"Why this is important.\",
+      \"title\": \"Why\", \"type\": \"string\"}}, \"required\": [\"factoid\", \"professions\",
+      \"why\"], \"title\": \"BackgroundInfo\", \"type\": \"object\"}, \"InsightfulQuote\":
+      {\"properties\": {\"quote\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"An insightful quote from the transcript.\"}, \"speaker\": {\"description\":
+      \"The name of the speaker who said the quote.\", \"title\": \"Speaker\", \"type\":
+      \"string\"}, \"analysis\": {\"description\": \"An analysis of the quote and
+      its significance.\", \"title\": \"Analysis\", \"type\": \"string\"}}, \"required\":
+      [\"quote\", \"speaker\", \"analysis\"], \"title\": \"InsightfulQuote\", \"type\":
+      \"object\"}, \"KeyMoments\": {\"properties\": {\"topic\": {\"description\":
+      \"The topic of the key moments.\", \"title\": \"Topic\", \"type\": \"string\"},
+      \"happy_moments\": {\"description\": \"A list of key moments related to the
+      topic.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Happy Moments\",
+      \"type\": \"array\"}, \"tense_moments\": {\"description\": \"Moments where things
+      were a bit tense.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Tense
+      Moments\", \"type\": \"array\"}, \"sad_moments\": {\"description\": \"Moments
+      where things where everyone was downtrodden.\", \"items\": {\"$ref\": \"#/$defs/Moment\"},
+      \"title\": \"Sad Moments\", \"type\": \"array\"}, \"background_info\": {\"items\":
+      {\"$ref\": \"#/$defs/BackgroundInfo\"}, \"title\": \"Background Info\", \"type\":
+      \"array\"}, \"moments_summary\": {\"description\": \"A summary of the key moments.\",
+      \"title\": \"Moments Summary\", \"type\": \"string\"}}, \"required\": [\"topic\",
+      \"happy_moments\", \"tense_moments\", \"sad_moments\", \"background_info\",
+      \"moments_summary\"], \"title\": \"KeyMoments\", \"type\": \"object\"}, \"Member\":
+      {\"properties\": {\"name\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"The name of the member.\"}, \"role\": {\"anyOf\": [{\"type\": \"string\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The role of the
+      member.\", \"title\": \"Role\"}, \"age\": {\"anyOf\": [{\"type\": \"integer\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The age of the
+      member.\", \"title\": \"Age\"}, \"background_details\": {\"description\": \"A
+      list of background details about the member.\", \"items\": {\"$ref\": \"#/$defs/BackgroundInfo\"},
+      \"title\": \"Background Details\", \"type\": \"array\"}}, \"required\": [\"name\",
+      \"background_details\"], \"title\": \"Member\", \"type\": \"object\"}, \"Moment\":
+      {\"properties\": {\"quote\": {\"description\": \"The relevant quote from the
+      transcript.\", \"title\": \"Quote\", \"type\": \"string\"}, \"description\":
+      {\"description\": \"A description of the moment.\", \"title\": \"Description\",
+      \"type\": \"string\"}, \"expressed_preference\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The preference expressed in the moment.\"}}, \"required\":
+      [\"quote\", \"description\", \"expressed_preference\"], \"title\": \"Moment\",
+      \"type\": \"object\"}, \"OutputFormat\": {\"properties\": {\"sources\": {\"description\":
+      \"The raw transcript / span you could cite to justify the choice.\", \"title\":
+      \"Sources\", \"type\": \"string\"}, \"content\": {\"description\": \"The chosen
+      value.\", \"title\": \"Content\", \"type\": \"string\"}}, \"required\": [\"sources\",
+      \"content\"], \"title\": \"OutputFormat\", \"type\": \"object\"}, \"TranscriptMetadata\":
+      {\"properties\": {\"title\": {\"description\": \"The title of the transcript.\",
+      \"title\": \"Title\", \"type\": \"string\"}, \"location\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The location where the interview took place.\"}, \"duration\":
+      {\"description\": \"The duration of the interview.\", \"title\": \"Duration\",
+      \"type\": \"string\"}}, \"required\": [\"title\", \"location\", \"duration\"],
+      \"title\": \"TranscriptMetadata\", \"type\": \"object\"}}, \"properties\": {\"metadata\":
+      {\"$ref\": \"#/$defs/TranscriptMetadata\", \"description\": \"Metadata about
+      the transcript.\"}, \"participants\": {\"description\": \"A list of participants
+      in the interview.\", \"items\": {\"$ref\": \"#/$defs/Member\"}, \"title\": \"Participants\",
+      \"type\": \"array\"}, \"key_moments\": {\"description\": \"A list of key moments
+      from the interview.\", \"items\": {\"$ref\": \"#/$defs/KeyMoments\"}, \"title\":
+      \"Key Moments\", \"type\": \"array\"}, \"insightful_quotes\": {\"description\":
+      \"A list of insightful quotes from the interview.\", \"items\": {\"$ref\": \"#/$defs/InsightfulQuote\"},
+      \"title\": \"Insightful Quotes\", \"type\": \"array\"}, \"overall_summary\":
+      {\"description\": \"An overall summary of the interview.\", \"title\": \"Overall
+      Summary\", \"type\": \"string\"}, \"next_steps\": {\"description\": \"A list
+      of next steps or action items based on the interview.\", \"items\": {\"type\":
+      \"string\"}, \"title\": \"Next Steps\", \"type\": \"array\"}, \"other_stuff\":
+      {\"items\": {\"$ref\": \"#/$defs/OutputFormat\"}, \"title\": \"Other Stuff\",
+      \"type\": \"array\"}}, \"required\": [\"metadata\", \"participants\", \"key_moments\",
+      \"insightful_quotes\", \"overall_summary\", \"next_steps\", \"other_stuff\"],
+      \"title\": \"TranscriptSummary\", \"type\": \"object\"}\n```\nPlease respond
+      with a JSONPatch to correct the error for tool_call_id=[toolu_011kvnTdo5puFznNENKXmUYp].",
+      "tool_use_id": "toolu_011kvnTdo5puFznNENKXmUYp", "is_error": false}]}, {"role":
+      "assistant", "content": [{"type": "tool_use", "name": "PatchFunctionParameters",
+      "input": {"tool_call_id": "toolu_011kvnTdo5puFznNENKXmUYp", "reasoning": "The
+      validation errors are caused by the input parameters not matching the expected
+      schema for the TranscriptSummary function. The following patches will correct
+      the issues:\n\n1. Add the required ''metadata'' field, which is a TranscriptMetadata
+      object.\n2. Add the required ''participants'' field, which is a list of Member
+      objects.\n3. Ensure the ''key_moments'' field is provided as a valid list, not
+      a string.\n4. Add the required ''insightful_quotes'' field, which is a list
+      of InsightfulQuote objects.\n5. Add the required ''overall_summary'' field,
+      which is a string.\n6. Add the required ''next_steps'' field, which is a list
+      of strings.\n7. Add the required ''other_stuff'' field, which is a list of OutputFormat
+      objects."}, "id": "toolu_01WJ9akEAGwy95T8HBnm8239"}]}, {"role": "user", "content":
+      [{"type": "tool_result", "content": "Error:\n\n```\n7 validation errors for
+      TranscriptSummary\nmetadata\n  Field required [type=missing, input_value={''key_moments'':
+      ''[\\n  {\\n...c\\'' for fans.\"\\n  }\\n]''}, input_type=dict]\n    For further
+      information visit https://errors.pydantic.dev/2.9/v/missing\nparticipants\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nkey_moments\n  Input
+      should be a valid list [type=list_type, input_value=''[\\n  {\\n    \"topic\":
+      \"Dr...ic\\'' for fans.\"\\n  }\\n]'', input_type=str]\n    For further information
+      visit https://errors.pydantic.dev/2.9/v/list_type\ninsightful_quotes\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\noverall_summary\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nnext_steps\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nother_stuff\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n```\nExpected
+      Parameter Schema:\n\n```json\n{\"$defs\": {\"BackgroundInfo\": {\"properties\":
+      {\"factoid\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\": \"Important
+      factoid about the member.\"}, \"professions\": {\"items\": {}, \"title\": \"Professions\",
+      \"type\": \"array\"}, \"why\": {\"description\": \"Why this is important.\",
+      \"title\": \"Why\", \"type\": \"string\"}}, \"required\": [\"factoid\", \"professions\",
+      \"why\"], \"title\": \"BackgroundInfo\", \"type\": \"object\"}, \"InsightfulQuote\":
+      {\"properties\": {\"quote\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"An insightful quote from the transcript.\"}, \"speaker\": {\"description\":
+      \"The name of the speaker who said the quote.\", \"title\": \"Speaker\", \"type\":
+      \"string\"}, \"analysis\": {\"description\": \"An analysis of the quote and
+      its significance.\", \"title\": \"Analysis\", \"type\": \"string\"}}, \"required\":
+      [\"quote\", \"speaker\", \"analysis\"], \"title\": \"InsightfulQuote\", \"type\":
+      \"object\"}, \"KeyMoments\": {\"properties\": {\"topic\": {\"description\":
+      \"The topic of the key moments.\", \"title\": \"Topic\", \"type\": \"string\"},
+      \"happy_moments\": {\"description\": \"A list of key moments related to the
+      topic.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Happy Moments\",
+      \"type\": \"array\"}, \"tense_moments\": {\"description\": \"Moments where things
+      were a bit tense.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Tense
+      Moments\", \"type\": \"array\"}, \"sad_moments\": {\"description\": \"Moments
+      where things where everyone was downtrodden.\", \"items\": {\"$ref\": \"#/$defs/Moment\"},
+      \"title\": \"Sad Moments\", \"type\": \"array\"}, \"background_info\": {\"items\":
+      {\"$ref\": \"#/$defs/BackgroundInfo\"}, \"title\": \"Background Info\", \"type\":
+      \"array\"}, \"moments_summary\": {\"description\": \"A summary of the key moments.\",
+      \"title\": \"Moments Summary\", \"type\": \"string\"}}, \"required\": [\"topic\",
+      \"happy_moments\", \"tense_moments\", \"sad_moments\", \"background_info\",
+      \"moments_summary\"], \"title\": \"KeyMoments\", \"type\": \"object\"}, \"Member\":
+      {\"properties\": {\"name\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"The name of the member.\"}, \"role\": {\"anyOf\": [{\"type\": \"string\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The role of the
+      member.\", \"title\": \"Role\"}, \"age\": {\"anyOf\": [{\"type\": \"integer\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The age of the
+      member.\", \"title\": \"Age\"}, \"background_details\": {\"description\": \"A
+      list of background details about the member.\", \"items\": {\"$ref\": \"#/$defs/BackgroundInfo\"},
+      \"title\": \"Background Details\", \"type\": \"array\"}}, \"required\": [\"name\",
+      \"background_details\"], \"title\": \"Member\", \"type\": \"object\"}, \"Moment\":
+      {\"properties\": {\"quote\": {\"description\": \"The relevant quote from the
+      transcript.\", \"title\": \"Quote\", \"type\": \"string\"}, \"description\":
+      {\"description\": \"A description of the moment.\", \"title\": \"Description\",
+      \"type\": \"string\"}, \"expressed_preference\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The preference expressed in the moment.\"}}, \"required\":
+      [\"quote\", \"description\", \"expressed_preference\"], \"title\": \"Moment\",
+      \"type\": \"object\"}, \"OutputFormat\": {\"properties\": {\"sources\": {\"description\":
+      \"The raw transcript / span you could cite to justify the choice.\", \"title\":
+      \"Sources\", \"type\": \"string\"}, \"content\": {\"description\": \"The chosen
+      value.\", \"title\": \"Content\", \"type\": \"string\"}}, \"required\": [\"sources\",
+      \"content\"], \"title\": \"OutputFormat\", \"type\": \"object\"}, \"TranscriptMetadata\":
+      {\"properties\": {\"title\": {\"description\": \"The title of the transcript.\",
+      \"title\": \"Title\", \"type\": \"string\"}, \"location\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The location where the interview took place.\"}, \"duration\":
+      {\"description\": \"The duration of the interview.\", \"title\": \"Duration\",
+      \"type\": \"string\"}}, \"required\": [\"title\", \"location\", \"duration\"],
+      \"title\": \"TranscriptMetadata\", \"type\": \"object\"}}, \"properties\": {\"metadata\":
+      {\"$ref\": \"#/$defs/TranscriptMetadata\", \"description\": \"Metadata about
+      the transcript.\"}, \"participants\": {\"description\": \"A list of participants
+      in the interview.\", \"items\": {\"$ref\": \"#/$defs/Member\"}, \"title\": \"Participants\",
+      \"type\": \"array\"}, \"key_moments\": {\"description\": \"A list of key moments
+      from the interview.\", \"items\": {\"$ref\": \"#/$defs/KeyMoments\"}, \"title\":
+      \"Key Moments\", \"type\": \"array\"}, \"insightful_quotes\": {\"description\":
+      \"A list of insightful quotes from the interview.\", \"items\": {\"$ref\": \"#/$defs/InsightfulQuote\"},
+      \"title\": \"Insightful Quotes\", \"type\": \"array\"}, \"overall_summary\":
+      {\"description\": \"An overall summary of the interview.\", \"title\": \"Overall
+      Summary\", \"type\": \"string\"}, \"next_steps\": {\"description\": \"A list
+      of next steps or action items based on the interview.\", \"items\": {\"type\":
+      \"string\"}, \"title\": \"Next Steps\", \"type\": \"array\"}, \"other_stuff\":
+      {\"items\": {\"$ref\": \"#/$defs/OutputFormat\"}, \"title\": \"Other Stuff\",
+      \"type\": \"array\"}}, \"required\": [\"metadata\", \"participants\", \"key_moments\",
+      \"insightful_quotes\", \"overall_summary\", \"next_steps\", \"other_stuff\"],
+      \"title\": \"TranscriptSummary\", \"type\": \"object\"}\n```\nPlease respond
+      with a JSONPatch to correct the error for tool_call_id=[toolu_01WJ9akEAGwy95T8HBnm8239].",
+      "tool_use_id": "toolu_01WJ9akEAGwy95T8HBnm8239", "is_error": false}]}], "model":
+      "claude-3-haiku-20240307", "system": "Respond directly using the TranscriptSummary
+      function.", "tools": [{"name": "PatchFunctionParameters", "description": "Respond
+      with all JSONPatch operation to correct validation errors caused by passing
+      in incorrect or incomplete parameters in a previous tool call.", "input_schema":
+      {"properties": {"tool_call_id": {"description": "The ID of the original tool
+      call that generated the error. Must NOT be an ID of a PatchFunctionParameters
+      tool call.", "type": "string"}, "reasoning": {"description": "Think step-by-step,
+      listing each validation error and the JSONPatch operation needed to correct
+      it. Cite the fields in the JSONSchema you referenced in developing this plan.",
+      "type": "string"}, "patches": {"description": "A list of JSONPatch operations
+      to be applied to the previous tool call''s response.", "items": {"description":
+      "A JSON Patch document represents an operation to be performed on a JSON document.\n\nNote
+      that the op and path are ALWAYS required. Value is required for ALL operations
+      except ''remove''.\nExamples:\n\n```json\n{\"op\": \"add\", \"path\": \"/a/b/c\",
+      \"patch_value\": 1}\n{\"op\": \"replace\", \"path\": \"/a/b/c\", \"patch_value\":
+      2}\n{\"op\": \"remove\", \"path\": \"/a/b/c\"}\n```", "properties": {"op": {"description":
+      "The operation to be performed. Must be one of ''add'', ''remove'', ''replace''.",
+      "enum": ["add", "remove", "replace"], "type": "string"}, "path": {"description":
+      "A JSON Pointer path that references a location within the target document where
+      the operation is performed.", "type": "string"}, "value": {"description": "The
+      value to be used within the operation. REQUIRED for ''add'', ''replace'', and
+      ''test'' operations."}}, "required": ["op", "path", "value"], "type": "object"},
+      "type": "array"}}, "required": ["tool_call_id", "reasoning", "patches"], "type":
+      "object"}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '22573'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3yTX0/bMBTFv4rlF15ClTZAS96YgDLKNroxbWKdootz03j1n9S+pq2qfvfJKXRM
+        inj09fHvnGv7brksec61nxdpv385bG7rr5PxtBxO7+5pdHOXrR95wmnTYFSh9zBHnnBnVSyA99IT
+        GOIJ17ZExXMuFIQSj7PjGuQiHA/SwUmapUOecGENoSGe/9q+EslaVQQfkW2OuA5F2p9M1vh97O6y
+        8Ph5qic4vvw5dUuecAM6nrsHEvV1MIKkNffgQCOh8xFjmkA83+7RApQq/iP/uD2HxdXFeLU5P30Y
+        3XwwejTIzmNLCN4aaeY85w81smdQsoTIZ+icdZ6BQyYgeCzZ04ZRjaw1Y83BnxlLTMds0sxbBa4b
+        FIQl86JGDayyrq0/ODBeONnQt6A1uA2rXrrpseheWaXsKlKaiEPPVlIpJqxzKGhv7n1An8/MzPR7
+        7KIs26rDZZAOS3akkaAEgiNWSVRlwla1FDWTnsEb+08vKmaf/qCg3swMumANOJJCNmDIdwGV9MRs
+        xT6hfkL3AvO9mcl67Mr44LAFHi1wU2ir8R8mnm+cfZYllgwiq735lpi0FwrMk5Nm3puZk65s0ng5
+        r6kKqlgGS/huwI8H8TRq3yQ97WLbZ3TxD/n9K3WRD+HOugAG11R4wubdVHtGTDHsTEE1usJTqKr3
+        KF8CNYGurdNAh8b4bvc74Z5sU+y/eBxkWBdkF2jixLRbHpcBjUCem6BUwkM76Pl2P0+v4vwsG50k
+        3LY+h2I/HaS73V8AAAD//wMAcBvWw0oEAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b9bc29ebe1567-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:23:50 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01Cee3AeDjAya3moVwpraNA5
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - b5eed6632f54eca23b7683daf9766f4d
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"max_tokens": 1024, "messages": [{"role": "user", "content": "Extract
+      the summary from the following conversation:\n\n<convo>\nPete: Hey Xu, Laura,
+      thanks for hopping on this call. I''ve been itching to talk about this Drake
+      and Kendrick situation.\nXu: No problem. As its my job, I''ve got some thoughts
+      on this beef.\nLaura: Yeah, I''ve got some insider info so this should be interesting.\nPete:
+      Dope. So, when do you think this whole thing started?\nPete: Definitely was
+      Kendrick''s ''Control'' verse that kicked it off.\nLaura: Truth, but Drake never
+      went after him directly. Just some subtle jabs here and there.\nXu: That''s
+      the thing with beefs like this, though. They''ve always been a a thing, pushing
+      artists to step up their game.\nPete: For sure, and this beef has got the fans
+      taking sides. Some are all about Drake''s mainstream appeal, while others are
+      digging Kendrick''s lyrical skills.\nLaura: I mean, Drake knows how to make
+      a hit that gets everyone hyped. That''s his thing.\nPete: I hear you, Laura,
+      but I gotta give it to Kendrick when it comes to straight-up bars. The man''s
+      a beast on the mic.\nXu: It''s wild how this beef is shaping fans.\nPete: do
+      you think these beefs can actually be good for hip-hop?\nXu: Hell yeah, Pete.
+      When it''s done right, a beef can push the genre forward and make artists level
+      up.\nLaura: eh\nPete: So, where do you see this beef going?\nLaura: Honestly,
+      I think it''ll stay a hot topic for the fans, but unless someone drops a straight-up
+      diss track, it''s not gonna escalate.\nLaura: ehhhhhh not sure\nPete: I feel
+      that. I just want both of them to keep dropping heat, beef or no beef.\nXu:
+      I''m curious. May influence a lot of people. Make things more competitive. Bring
+      on a whole new wave of lyricism.\nPete: Word. Hey, thanks for chopping it up
+      with me, Xu and Laura. This was dope.\nXu: Where are you going so fast?\nLaura:
+      For real, I had a good time. Nice to get different perspectives on the situation.\n</convo>"},
+      {"role": "assistant", "content": [{"text": "Here is a summary of the key points
+      from the conversation:", "type": "text"}, {"type": "tool_use", "name": "TranscriptSummary",
+      "input": {"key_moments": "[\n  {\n    \"topic\": \"Drake and Kendrick Lamar
+      beef\",\n    \"happy_moments\": [\n      {\n        \"quote\": \"When it''s
+      done right, a beef can push the genre forward and make artists level up.\",\n        \"description\":
+      \"The participants discuss how rap beefs can be good for hip-hop by pushing
+      artists to be more competitive and improve their lyricism.\",\n        \"expressed_preference\":
+      {\n          \"content\": \"Positive view of rap beefs\",\n          \"sources\":
+      \"Xu: ''Hell yeah, Pete. When it''s done right, a beef can push the genre forward
+      and make artists level up.''\"\n        }\n      }\n    ],\n    \"tense_moments\":
+      [\n      {\n        \"quote\": \"Honestly, I think it''ll stay a hot topic for
+      the fans, but unless someone drops a straight-up diss track, it''s not gonna
+      escalate.\",\n        \"description\": \"The participants discuss whether the
+      Drake-Kendrick beef will escalate, with Laura expressing skepticism that it
+      will go beyond a \"hot topic\" for fans.\",\n        \"expressed_preference\":
+      {\n          \"content\": \"Skeptical the beef will escalate\", \n          \"sources\":
+      \"Laura: ''Honestly, I think it''ll stay a hot topic for the fans, but unless
+      someone drops a straight-up diss track, it''s not gonna escalate.''\"\n        }\n      }\n    ],\n    \"sad_moments\":
+      [\n      {\n        \"quote\": \"eh\",\n        \"description\": \"Laura seems
+      unenthused about the potential positives of the beef, in contrast to Xu''s more
+      optimistic view.\",\n        \"expressed_preference\": {\n          \"content\":
+      \"Neutral / unenthused about the beef\",\n          \"sources\": \"Laura: ''eh''\"\n        }\n      }\n    ],\n    \"background_info\":
+      [\n      {\n        \"factoid\": {\n          \"content\": \"The beef started
+      with Kendrick''s ''Control'' verse\",\n          \"sources\": \"Pete: ''Definitely
+      was Kendrick''s ''Control'' verse that kicked it off.''\"\n        },\n        \"professions\":
+      [],\n        \"why\": \"This provides context on the origin of the Drake-Kendrick
+      beef\"\n      },\n      {\n        \"factoid\": {\n          \"content\": \"Drake
+      has taken some subtle jabs at Kendrick, but never went after him directly\",\n          \"sources\":
+      \"Laura: ''Truth, but Drake never went after him directly. Just some subtle
+      jabs here and there.''\"\n        },\n        \"professions\": [],\n        \"why\":
+      \"This provides additional context on the nature of the beef\"\n      }\n    ],\n    \"moments_summary\":
+      \"The participants discuss the Drake-Kendrick beef, with varying perspectives
+      on whether it is good for hip-hop or will escalate further. Xu sees potential
+      positives in the beef pushing the artists to improve, while Laura is more skeptical
+      it will lead to anything beyond a ''hot topic'' for fans.\"\n  }\n]"}, "id":
+      "toolu_011kvnTdo5puFznNENKXmUYp"}]}, {"role": "user", "content": [{"type": "tool_result",
+      "content": "Error:\n\n```\n7 validation errors for TranscriptSummary\nmetadata\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nparticipants\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nkey_moments\n  Input
+      should be a valid list [type=list_type, input_value=''[\\n  {\\n    \"topic\":
+      \"Dr...ic\\'' for fans.\"\\n  }\\n]'', input_type=str]\n    For further information
+      visit https://errors.pydantic.dev/2.9/v/list_type\ninsightful_quotes\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\noverall_summary\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nnext_steps\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nother_stuff\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n```\nExpected
+      Parameter Schema:\n\n```json\n{\"$defs\": {\"BackgroundInfo\": {\"properties\":
+      {\"factoid\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\": \"Important
+      factoid about the member.\"}, \"professions\": {\"items\": {}, \"title\": \"Professions\",
+      \"type\": \"array\"}, \"why\": {\"description\": \"Why this is important.\",
+      \"title\": \"Why\", \"type\": \"string\"}}, \"required\": [\"factoid\", \"professions\",
+      \"why\"], \"title\": \"BackgroundInfo\", \"type\": \"object\"}, \"InsightfulQuote\":
+      {\"properties\": {\"quote\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"An insightful quote from the transcript.\"}, \"speaker\": {\"description\":
+      \"The name of the speaker who said the quote.\", \"title\": \"Speaker\", \"type\":
+      \"string\"}, \"analysis\": {\"description\": \"An analysis of the quote and
+      its significance.\", \"title\": \"Analysis\", \"type\": \"string\"}}, \"required\":
+      [\"quote\", \"speaker\", \"analysis\"], \"title\": \"InsightfulQuote\", \"type\":
+      \"object\"}, \"KeyMoments\": {\"properties\": {\"topic\": {\"description\":
+      \"The topic of the key moments.\", \"title\": \"Topic\", \"type\": \"string\"},
+      \"happy_moments\": {\"description\": \"A list of key moments related to the
+      topic.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Happy Moments\",
+      \"type\": \"array\"}, \"tense_moments\": {\"description\": \"Moments where things
+      were a bit tense.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Tense
+      Moments\", \"type\": \"array\"}, \"sad_moments\": {\"description\": \"Moments
+      where things where everyone was downtrodden.\", \"items\": {\"$ref\": \"#/$defs/Moment\"},
+      \"title\": \"Sad Moments\", \"type\": \"array\"}, \"background_info\": {\"items\":
+      {\"$ref\": \"#/$defs/BackgroundInfo\"}, \"title\": \"Background Info\", \"type\":
+      \"array\"}, \"moments_summary\": {\"description\": \"A summary of the key moments.\",
+      \"title\": \"Moments Summary\", \"type\": \"string\"}}, \"required\": [\"topic\",
+      \"happy_moments\", \"tense_moments\", \"sad_moments\", \"background_info\",
+      \"moments_summary\"], \"title\": \"KeyMoments\", \"type\": \"object\"}, \"Member\":
+      {\"properties\": {\"name\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"The name of the member.\"}, \"role\": {\"anyOf\": [{\"type\": \"string\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The role of the
+      member.\", \"title\": \"Role\"}, \"age\": {\"anyOf\": [{\"type\": \"integer\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The age of the
+      member.\", \"title\": \"Age\"}, \"background_details\": {\"description\": \"A
+      list of background details about the member.\", \"items\": {\"$ref\": \"#/$defs/BackgroundInfo\"},
+      \"title\": \"Background Details\", \"type\": \"array\"}}, \"required\": [\"name\",
+      \"background_details\"], \"title\": \"Member\", \"type\": \"object\"}, \"Moment\":
+      {\"properties\": {\"quote\": {\"description\": \"The relevant quote from the
+      transcript.\", \"title\": \"Quote\", \"type\": \"string\"}, \"description\":
+      {\"description\": \"A description of the moment.\", \"title\": \"Description\",
+      \"type\": \"string\"}, \"expressed_preference\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The preference expressed in the moment.\"}}, \"required\":
+      [\"quote\", \"description\", \"expressed_preference\"], \"title\": \"Moment\",
+      \"type\": \"object\"}, \"OutputFormat\": {\"properties\": {\"sources\": {\"description\":
+      \"The raw transcript / span you could cite to justify the choice.\", \"title\":
+      \"Sources\", \"type\": \"string\"}, \"content\": {\"description\": \"The chosen
+      value.\", \"title\": \"Content\", \"type\": \"string\"}}, \"required\": [\"sources\",
+      \"content\"], \"title\": \"OutputFormat\", \"type\": \"object\"}, \"TranscriptMetadata\":
+      {\"properties\": {\"title\": {\"description\": \"The title of the transcript.\",
+      \"title\": \"Title\", \"type\": \"string\"}, \"location\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The location where the interview took place.\"}, \"duration\":
+      {\"description\": \"The duration of the interview.\", \"title\": \"Duration\",
+      \"type\": \"string\"}}, \"required\": [\"title\", \"location\", \"duration\"],
+      \"title\": \"TranscriptMetadata\", \"type\": \"object\"}}, \"properties\": {\"metadata\":
+      {\"$ref\": \"#/$defs/TranscriptMetadata\", \"description\": \"Metadata about
+      the transcript.\"}, \"participants\": {\"description\": \"A list of participants
+      in the interview.\", \"items\": {\"$ref\": \"#/$defs/Member\"}, \"title\": \"Participants\",
+      \"type\": \"array\"}, \"key_moments\": {\"description\": \"A list of key moments
+      from the interview.\", \"items\": {\"$ref\": \"#/$defs/KeyMoments\"}, \"title\":
+      \"Key Moments\", \"type\": \"array\"}, \"insightful_quotes\": {\"description\":
+      \"A list of insightful quotes from the interview.\", \"items\": {\"$ref\": \"#/$defs/InsightfulQuote\"},
+      \"title\": \"Insightful Quotes\", \"type\": \"array\"}, \"overall_summary\":
+      {\"description\": \"An overall summary of the interview.\", \"title\": \"Overall
+      Summary\", \"type\": \"string\"}, \"next_steps\": {\"description\": \"A list
+      of next steps or action items based on the interview.\", \"items\": {\"type\":
+      \"string\"}, \"title\": \"Next Steps\", \"type\": \"array\"}, \"other_stuff\":
+      {\"items\": {\"$ref\": \"#/$defs/OutputFormat\"}, \"title\": \"Other Stuff\",
+      \"type\": \"array\"}}, \"required\": [\"metadata\", \"participants\", \"key_moments\",
+      \"insightful_quotes\", \"overall_summary\", \"next_steps\", \"other_stuff\"],
+      \"title\": \"TranscriptSummary\", \"type\": \"object\"}\n```\nPlease respond
+      with a JSONPatch to correct the error for tool_call_id=[toolu_011kvnTdo5puFznNENKXmUYp].",
+      "tool_use_id": "toolu_011kvnTdo5puFznNENKXmUYp", "is_error": false}]}, {"role":
+      "assistant", "content": [{"type": "tool_use", "name": "PatchFunctionParameters",
+      "input": {"tool_call_id": "toolu_011kvnTdo5puFznNENKXmUYp", "reasoning": "The
+      validation errors are caused by the input parameters not matching the expected
+      schema for the TranscriptSummary function. The following patches will correct
+      the issues:\n\n1. Add the required ''metadata'' field, which is a TranscriptMetadata
+      object.\n2. Add the required ''participants'' field, which is a list of Member
+      objects.\n3. Ensure the ''key_moments'' field is provided as a valid list, not
+      a string.\n4. Add the required ''insightful_quotes'' field, which is a list
+      of InsightfulQuote objects.\n5. Add the required ''overall_summary'' field,
+      which is a string.\n6. Add the required ''next_steps'' field, which is a list
+      of strings.\n7. Add the required ''other_stuff'' field, which is a list of OutputFormat
+      objects."}, "id": "toolu_01WJ9akEAGwy95T8HBnm8239"}]}, {"role": "user", "content":
+      [{"type": "tool_result", "content": "Error:\n\n```\n7 validation errors for
+      TranscriptSummary\nmetadata\n  Field required [type=missing, input_value={''key_moments'':
+      ''[\\n  {\\n...c\\'' for fans.\"\\n  }\\n]''}, input_type=dict]\n    For further
+      information visit https://errors.pydantic.dev/2.9/v/missing\nparticipants\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nkey_moments\n  Input
+      should be a valid list [type=list_type, input_value=''[\\n  {\\n    \"topic\":
+      \"Dr...ic\\'' for fans.\"\\n  }\\n]'', input_type=str]\n    For further information
+      visit https://errors.pydantic.dev/2.9/v/list_type\ninsightful_quotes\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\noverall_summary\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nnext_steps\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nother_stuff\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n```\nExpected
+      Parameter Schema:\n\n```json\n{\"$defs\": {\"BackgroundInfo\": {\"properties\":
+      {\"factoid\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\": \"Important
+      factoid about the member.\"}, \"professions\": {\"items\": {}, \"title\": \"Professions\",
+      \"type\": \"array\"}, \"why\": {\"description\": \"Why this is important.\",
+      \"title\": \"Why\", \"type\": \"string\"}}, \"required\": [\"factoid\", \"professions\",
+      \"why\"], \"title\": \"BackgroundInfo\", \"type\": \"object\"}, \"InsightfulQuote\":
+      {\"properties\": {\"quote\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"An insightful quote from the transcript.\"}, \"speaker\": {\"description\":
+      \"The name of the speaker who said the quote.\", \"title\": \"Speaker\", \"type\":
+      \"string\"}, \"analysis\": {\"description\": \"An analysis of the quote and
+      its significance.\", \"title\": \"Analysis\", \"type\": \"string\"}}, \"required\":
+      [\"quote\", \"speaker\", \"analysis\"], \"title\": \"InsightfulQuote\", \"type\":
+      \"object\"}, \"KeyMoments\": {\"properties\": {\"topic\": {\"description\":
+      \"The topic of the key moments.\", \"title\": \"Topic\", \"type\": \"string\"},
+      \"happy_moments\": {\"description\": \"A list of key moments related to the
+      topic.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Happy Moments\",
+      \"type\": \"array\"}, \"tense_moments\": {\"description\": \"Moments where things
+      were a bit tense.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Tense
+      Moments\", \"type\": \"array\"}, \"sad_moments\": {\"description\": \"Moments
+      where things where everyone was downtrodden.\", \"items\": {\"$ref\": \"#/$defs/Moment\"},
+      \"title\": \"Sad Moments\", \"type\": \"array\"}, \"background_info\": {\"items\":
+      {\"$ref\": \"#/$defs/BackgroundInfo\"}, \"title\": \"Background Info\", \"type\":
+      \"array\"}, \"moments_summary\": {\"description\": \"A summary of the key moments.\",
+      \"title\": \"Moments Summary\", \"type\": \"string\"}}, \"required\": [\"topic\",
+      \"happy_moments\", \"tense_moments\", \"sad_moments\", \"background_info\",
+      \"moments_summary\"], \"title\": \"KeyMoments\", \"type\": \"object\"}, \"Member\":
+      {\"properties\": {\"name\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"The name of the member.\"}, \"role\": {\"anyOf\": [{\"type\": \"string\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The role of the
+      member.\", \"title\": \"Role\"}, \"age\": {\"anyOf\": [{\"type\": \"integer\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The age of the
+      member.\", \"title\": \"Age\"}, \"background_details\": {\"description\": \"A
+      list of background details about the member.\", \"items\": {\"$ref\": \"#/$defs/BackgroundInfo\"},
+      \"title\": \"Background Details\", \"type\": \"array\"}}, \"required\": [\"name\",
+      \"background_details\"], \"title\": \"Member\", \"type\": \"object\"}, \"Moment\":
+      {\"properties\": {\"quote\": {\"description\": \"The relevant quote from the
+      transcript.\", \"title\": \"Quote\", \"type\": \"string\"}, \"description\":
+      {\"description\": \"A description of the moment.\", \"title\": \"Description\",
+      \"type\": \"string\"}, \"expressed_preference\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The preference expressed in the moment.\"}}, \"required\":
+      [\"quote\", \"description\", \"expressed_preference\"], \"title\": \"Moment\",
+      \"type\": \"object\"}, \"OutputFormat\": {\"properties\": {\"sources\": {\"description\":
+      \"The raw transcript / span you could cite to justify the choice.\", \"title\":
+      \"Sources\", \"type\": \"string\"}, \"content\": {\"description\": \"The chosen
+      value.\", \"title\": \"Content\", \"type\": \"string\"}}, \"required\": [\"sources\",
+      \"content\"], \"title\": \"OutputFormat\", \"type\": \"object\"}, \"TranscriptMetadata\":
+      {\"properties\": {\"title\": {\"description\": \"The title of the transcript.\",
+      \"title\": \"Title\", \"type\": \"string\"}, \"location\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The location where the interview took place.\"}, \"duration\":
+      {\"description\": \"The duration of the interview.\", \"title\": \"Duration\",
+      \"type\": \"string\"}}, \"required\": [\"title\", \"location\", \"duration\"],
+      \"title\": \"TranscriptMetadata\", \"type\": \"object\"}}, \"properties\": {\"metadata\":
+      {\"$ref\": \"#/$defs/TranscriptMetadata\", \"description\": \"Metadata about
+      the transcript.\"}, \"participants\": {\"description\": \"A list of participants
+      in the interview.\", \"items\": {\"$ref\": \"#/$defs/Member\"}, \"title\": \"Participants\",
+      \"type\": \"array\"}, \"key_moments\": {\"description\": \"A list of key moments
+      from the interview.\", \"items\": {\"$ref\": \"#/$defs/KeyMoments\"}, \"title\":
+      \"Key Moments\", \"type\": \"array\"}, \"insightful_quotes\": {\"description\":
+      \"A list of insightful quotes from the interview.\", \"items\": {\"$ref\": \"#/$defs/InsightfulQuote\"},
+      \"title\": \"Insightful Quotes\", \"type\": \"array\"}, \"overall_summary\":
+      {\"description\": \"An overall summary of the interview.\", \"title\": \"Overall
+      Summary\", \"type\": \"string\"}, \"next_steps\": {\"description\": \"A list
+      of next steps or action items based on the interview.\", \"items\": {\"type\":
+      \"string\"}, \"title\": \"Next Steps\", \"type\": \"array\"}, \"other_stuff\":
+      {\"items\": {\"$ref\": \"#/$defs/OutputFormat\"}, \"title\": \"Other Stuff\",
+      \"type\": \"array\"}}, \"required\": [\"metadata\", \"participants\", \"key_moments\",
+      \"insightful_quotes\", \"overall_summary\", \"next_steps\", \"other_stuff\"],
+      \"title\": \"TranscriptSummary\", \"type\": \"object\"}\n```\nPlease respond
+      with a JSONPatch to correct the error for tool_call_id=[toolu_01WJ9akEAGwy95T8HBnm8239].",
+      "tool_use_id": "toolu_01WJ9akEAGwy95T8HBnm8239", "is_error": false}]}, {"role":
+      "assistant", "content": [{"type": "tool_use", "name": "PatchFunctionParameters",
+      "input": {"tool_call_id": "toolu_01WJ9akEAGwy95T8HBnm8239", "reasoning": "The
+      validation errors are caused by the input parameters not matching the expected
+      schema for the TranscriptSummary function. The following patches will correct
+      the issues:\n\n1. Add the required ''metadata'' field, which is a TranscriptMetadata
+      object.\n2. Add the required ''participants'' field, which is a list of Member
+      objects.\n3. Ensure the ''key_moments'' field is provided as a valid list, not
+      a string.\n4. Add the required ''insightful_quotes'' field, which is a list
+      of InsightfulQuote objects.\n5. Add the required ''overall_summary'' field,
+      which is a string.\n6. Add the required ''next_steps'' field, which is a list
+      of strings.\n7. Add the required ''other_stuff'' field, which is a list of OutputFormat
+      objects."}, "id": "toolu_01KKxeUGrL3uZNQmKeGDXQrq"}]}, {"role": "user", "content":
+      [{"type": "tool_result", "content": "Error:\n\n```\n7 validation errors for
+      TranscriptSummary\nmetadata\n  Field required [type=missing, input_value={''key_moments'':
+      ''[\\n  {\\n...c\\'' for fans.\"\\n  }\\n]''}, input_type=dict]\n    For further
+      information visit https://errors.pydantic.dev/2.9/v/missing\nparticipants\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nkey_moments\n  Input
+      should be a valid list [type=list_type, input_value=''[\\n  {\\n    \"topic\":
+      \"Dr...ic\\'' for fans.\"\\n  }\\n]'', input_type=str]\n    For further information
+      visit https://errors.pydantic.dev/2.9/v/list_type\ninsightful_quotes\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\noverall_summary\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nnext_steps\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\nother_stuff\n  Field
+      required [type=missing, input_value={''key_moments'': ''[\\n  {\\n...c\\'' for
+      fans.\"\\n  }\\n]''}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n```\nExpected
+      Parameter Schema:\n\n```json\n{\"$defs\": {\"BackgroundInfo\": {\"properties\":
+      {\"factoid\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\": \"Important
+      factoid about the member.\"}, \"professions\": {\"items\": {}, \"title\": \"Professions\",
+      \"type\": \"array\"}, \"why\": {\"description\": \"Why this is important.\",
+      \"title\": \"Why\", \"type\": \"string\"}}, \"required\": [\"factoid\", \"professions\",
+      \"why\"], \"title\": \"BackgroundInfo\", \"type\": \"object\"}, \"InsightfulQuote\":
+      {\"properties\": {\"quote\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"An insightful quote from the transcript.\"}, \"speaker\": {\"description\":
+      \"The name of the speaker who said the quote.\", \"title\": \"Speaker\", \"type\":
+      \"string\"}, \"analysis\": {\"description\": \"An analysis of the quote and
+      its significance.\", \"title\": \"Analysis\", \"type\": \"string\"}}, \"required\":
+      [\"quote\", \"speaker\", \"analysis\"], \"title\": \"InsightfulQuote\", \"type\":
+      \"object\"}, \"KeyMoments\": {\"properties\": {\"topic\": {\"description\":
+      \"The topic of the key moments.\", \"title\": \"Topic\", \"type\": \"string\"},
+      \"happy_moments\": {\"description\": \"A list of key moments related to the
+      topic.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Happy Moments\",
+      \"type\": \"array\"}, \"tense_moments\": {\"description\": \"Moments where things
+      were a bit tense.\", \"items\": {\"$ref\": \"#/$defs/Moment\"}, \"title\": \"Tense
+      Moments\", \"type\": \"array\"}, \"sad_moments\": {\"description\": \"Moments
+      where things where everyone was downtrodden.\", \"items\": {\"$ref\": \"#/$defs/Moment\"},
+      \"title\": \"Sad Moments\", \"type\": \"array\"}, \"background_info\": {\"items\":
+      {\"$ref\": \"#/$defs/BackgroundInfo\"}, \"title\": \"Background Info\", \"type\":
+      \"array\"}, \"moments_summary\": {\"description\": \"A summary of the key moments.\",
+      \"title\": \"Moments Summary\", \"type\": \"string\"}}, \"required\": [\"topic\",
+      \"happy_moments\", \"tense_moments\", \"sad_moments\", \"background_info\",
+      \"moments_summary\"], \"title\": \"KeyMoments\", \"type\": \"object\"}, \"Member\":
+      {\"properties\": {\"name\": {\"$ref\": \"#/$defs/OutputFormat\", \"description\":
+      \"The name of the member.\"}, \"role\": {\"anyOf\": [{\"type\": \"string\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The role of the
+      member.\", \"title\": \"Role\"}, \"age\": {\"anyOf\": [{\"type\": \"integer\"},
+      {\"type\": \"null\"}], \"default\": null, \"description\": \"The age of the
+      member.\", \"title\": \"Age\"}, \"background_details\": {\"description\": \"A
+      list of background details about the member.\", \"items\": {\"$ref\": \"#/$defs/BackgroundInfo\"},
+      \"title\": \"Background Details\", \"type\": \"array\"}}, \"required\": [\"name\",
+      \"background_details\"], \"title\": \"Member\", \"type\": \"object\"}, \"Moment\":
+      {\"properties\": {\"quote\": {\"description\": \"The relevant quote from the
+      transcript.\", \"title\": \"Quote\", \"type\": \"string\"}, \"description\":
+      {\"description\": \"A description of the moment.\", \"title\": \"Description\",
+      \"type\": \"string\"}, \"expressed_preference\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The preference expressed in the moment.\"}}, \"required\":
+      [\"quote\", \"description\", \"expressed_preference\"], \"title\": \"Moment\",
+      \"type\": \"object\"}, \"OutputFormat\": {\"properties\": {\"sources\": {\"description\":
+      \"The raw transcript / span you could cite to justify the choice.\", \"title\":
+      \"Sources\", \"type\": \"string\"}, \"content\": {\"description\": \"The chosen
+      value.\", \"title\": \"Content\", \"type\": \"string\"}}, \"required\": [\"sources\",
+      \"content\"], \"title\": \"OutputFormat\", \"type\": \"object\"}, \"TranscriptMetadata\":
+      {\"properties\": {\"title\": {\"description\": \"The title of the transcript.\",
+      \"title\": \"Title\", \"type\": \"string\"}, \"location\": {\"$ref\": \"#/$defs/OutputFormat\",
+      \"description\": \"The location where the interview took place.\"}, \"duration\":
+      {\"description\": \"The duration of the interview.\", \"title\": \"Duration\",
+      \"type\": \"string\"}}, \"required\": [\"title\", \"location\", \"duration\"],
+      \"title\": \"TranscriptMetadata\", \"type\": \"object\"}}, \"properties\": {\"metadata\":
+      {\"$ref\": \"#/$defs/TranscriptMetadata\", \"description\": \"Metadata about
+      the transcript.\"}, \"participants\": {\"description\": \"A list of participants
+      in the interview.\", \"items\": {\"$ref\": \"#/$defs/Member\"}, \"title\": \"Participants\",
+      \"type\": \"array\"}, \"key_moments\": {\"description\": \"A list of key moments
+      from the interview.\", \"items\": {\"$ref\": \"#/$defs/KeyMoments\"}, \"title\":
+      \"Key Moments\", \"type\": \"array\"}, \"insightful_quotes\": {\"description\":
+      \"A list of insightful quotes from the interview.\", \"items\": {\"$ref\": \"#/$defs/InsightfulQuote\"},
+      \"title\": \"Insightful Quotes\", \"type\": \"array\"}, \"overall_summary\":
+      {\"description\": \"An overall summary of the interview.\", \"title\": \"Overall
+      Summary\", \"type\": \"string\"}, \"next_steps\": {\"description\": \"A list
+      of next steps or action items based on the interview.\", \"items\": {\"type\":
+      \"string\"}, \"title\": \"Next Steps\", \"type\": \"array\"}, \"other_stuff\":
+      {\"items\": {\"$ref\": \"#/$defs/OutputFormat\"}, \"title\": \"Other Stuff\",
+      \"type\": \"array\"}}, \"required\": [\"metadata\", \"participants\", \"key_moments\",
+      \"insightful_quotes\", \"overall_summary\", \"next_steps\", \"other_stuff\"],
+      \"title\": \"TranscriptSummary\", \"type\": \"object\"}\n```\nPlease respond
+      with a JSONPatch to correct the error for tool_call_id=[toolu_01KKxeUGrL3uZNQmKeGDXQrq].",
+      "tool_use_id": "toolu_01KKxeUGrL3uZNQmKeGDXQrq", "is_error": false}]}], "model":
+      "claude-3-haiku-20240307", "system": "Respond directly using the TranscriptSummary
+      function.", "tools": [{"name": "PatchFunctionParameters", "description": "Respond
+      with all JSONPatch operation to correct validation errors caused by passing
+      in incorrect or incomplete parameters in a previous tool call.", "input_schema":
+      {"properties": {"tool_call_id": {"description": "The ID of the original tool
+      call that generated the error. Must NOT be an ID of a PatchFunctionParameters
+      tool call.", "type": "string"}, "reasoning": {"description": "Think step-by-step,
+      listing each validation error and the JSONPatch operation needed to correct
+      it. Cite the fields in the JSONSchema you referenced in developing this plan.",
+      "type": "string"}, "patches": {"description": "A list of JSONPatch operations
+      to be applied to the previous tool call''s response.", "items": {"description":
+      "A JSON Patch document represents an operation to be performed on a JSON document.\n\nNote
+      that the op and path are ALWAYS required. Value is required for ALL operations
+      except ''remove''.\nExamples:\n\n```json\n{\"op\": \"add\", \"path\": \"/a/b/c\",
+      \"patch_value\": 1}\n{\"op\": \"replace\", \"path\": \"/a/b/c\", \"patch_value\":
+      2}\n{\"op\": \"remove\", \"path\": \"/a/b/c\"}\n```", "properties": {"op": {"description":
+      "The operation to be performed. Must be one of ''add'', ''remove'', ''replace''.",
+      "enum": ["add", "remove", "replace"], "type": "string"}, "path": {"description":
+      "A JSON Pointer path that references a location within the target document where
+      the operation is performed.", "type": "string"}, "value": {"description": "The
+      value to be used within the operation. REQUIRED for ''add'', ''replace'', and
+      ''test'' operations."}}, "required": ["op", "path", "value"], "type": "object"},
+      "type": "array"}}, "required": ["tool_call_id", "reasoning", "patches"], "type":
+      "object"}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      anthropic-version:
+      - '2023-06-01'
+      connection:
+      - keep-alive
+      content-length:
+      - '30896'
+      content-type:
+      - application/json
+      host:
+      - api.anthropic.com
+      user-agent:
+      - Anthropic/Python 0.34.2
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 0.34.2
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3yTW28TMRCF/4rll75so1x63bdCL6BSaEiKUAlaufbsrokvG884TYjy35E3JVBp
+        1UePj79zxvZsuFY85xaroj+4qcbq6mH6++tkelLConmP9ngQecZp3UBSAaKogGc8eJMKAlEjCUc8
+        49YrMDzn0oio4HB0WAs9j4fD/vCoP+qf8oxL7wgc8fzH5i+RvDdFxIRsc6R1LPqD84ux+vBuHueP
+        k8mlXn5Tl+ereckz7oRN5+4Fyfo6Oknau3sRhAWCgAnjmkg83+zQUhhTvCLf3q7g4SZ8GsXHz2N7
+        CzeX38dhkVoCgd5pV/GcT2tgS2G0EonPIAQfkIkATIqIoNjTmlENrDVjzd6fOU/MpmzaVa0CVg1I
+        AsVQ1mAFK31o69MgHMqgG5pEa0VYs/Klmx5L7qU3xj8nSpNwgOxZG8OkDwEk7cwRI2A+czM36LEL
+        pdpqgEXUARQ7sEBCCRIHrNRgVMaeay1rppGJ/+zvXlTMP/0CSb2ZG3bBGhFIS90IR9gFNBqJ+ZLd
+        gX2C8ALDHpu5UY9dOYwBWuLBHNaF9Rb+cRKgCX6pFSgmEqy9+haZtTcqGFLQrurN3FFXOO1QVzWV
+        0RSL6AneTPhxLx4n7T7qzB13sf0SQvpEuHumLvI+3EkXwMGKCiRo3ky1Y6QUp50pqIZQIMWyfIvy
+        JVIT6doHK2jfGN9uf2YcyTfF7o+/nrt2A2ERwUnguYvGZDy2c55vduNUkJ+DQ56fnZwPMu5bl31x
+        eHa23f4BAAD//wMAs/EXmkgEAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b9bf55b7b1567-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:23:53 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      request-id:
+      - req_01Az6rWvx2oTq5P7U46uEVgV
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - 2e0ae4acdd81b3e52c9ec285768b45a2
+    status:
+      code: 200
+      message: OK
+version: 1

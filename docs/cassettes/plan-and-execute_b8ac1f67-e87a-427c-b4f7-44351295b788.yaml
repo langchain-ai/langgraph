@@ -1,0 +1,185 @@
+interactions:
+- request:
+    body: '{"post":[{"id":"e7de9547-456f-468f-bade-2a7fe3d05a61","start_time":"2024-09-19T17:54:34.783180+00:00","end_time":null,"extra":{"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"},"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"error":null,"events":[{"name":"start","time":"2024-09-19T17:54:34.783180+00:00"}],"reference_example_id":null,"parent_run_id":null,"tags":[],"trace_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","dotted_order":"20240919T175434783180Ze7de9547-456f-468f-bade-2a7fe3d05a61","outputs":null,"session_name":"default","name":"LangGraph","inputs":{"input":"what
+      is the hometown of the mens 2024 Australia open winner?"},"run_type":"chain"},{"id":"ca17e88a-0be2-415a-aec4-1fae79719198","start_time":"2024-09-19T17:54:34.784242+00:00","end_time":"2024-09-19T17:54:34.784770+00:00","extra":{"metadata":{"langgraph_step":0,"langgraph_node":"__start__","langgraph_triggers":["__start__"],"langgraph_path":["__pregel_pull","__start__"],"langgraph_checkpoint_ns":"__start__:b96ef892-d6e7-e09b-d88b-28dfd1b682fe","revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langsmith","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1"}},"error":null,"events":[{"name":"start","time":"2024-09-19T17:54:34.784242+00:00"},{"name":"end","time":"2024-09-19T17:54:34.784770+00:00"}],"reference_example_id":null,"parent_run_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","tags":["graph:step:0","langsmith:hidden"],"trace_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","dotted_order":"20240919T175434783180Ze7de9547-456f-468f-bade-2a7fe3d05a61.20240919T175434784242Zca17e88a-0be2-415a-aec4-1fae79719198","outputs":{"input":"what
+      is the hometown of the mens 2024 Australia open winner?"},"session_name":"default","name":"__start__","inputs":{"input":"what
+      is the hometown of the mens 2024 Australia open winner?"},"run_type":"chain"},{"id":"64724df9-f8fb-40e8-b65d-2819b50d6f81","start_time":"2024-09-19T17:54:34.785785+00:00","end_time":null,"extra":{"metadata":{"langgraph_step":1,"langgraph_node":"planner","langgraph_triggers":["start:planner"],"langgraph_path":["__pregel_pull","planner"],"langgraph_checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"}},"error":null,"events":[{"name":"start","time":"2024-09-19T17:54:34.785785+00:00"}],"reference_example_id":null,"parent_run_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","tags":["graph:step:1"],"trace_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","dotted_order":"20240919T175434783180Ze7de9547-456f-468f-bade-2a7fe3d05a61.20240919T175434785785Z64724df9-f8fb-40e8-b65d-2819b50d6f81","outputs":null,"session_name":"default","name":"planner","inputs":{"input":"what
+      is the hometown of the mens 2024 Australia open winner?","past_steps":[]},"run_type":"chain"},{"id":"5ad7eb79-91d6-4de6-92df-5d3193388446","start_time":"2024-09-19T17:54:34.786401+00:00","end_time":null,"extra":{"metadata":{"langgraph_step":1,"langgraph_node":"planner","langgraph_triggers":["start:planner"],"langgraph_path":["__pregel_pull","planner"],"langgraph_checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"}},"error":null,"events":[{"name":"start","time":"2024-09-19T17:54:34.786401+00:00"}],"reference_example_id":null,"parent_run_id":"64724df9-f8fb-40e8-b65d-2819b50d6f81","tags":["seq:step:1"],"trace_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","dotted_order":"20240919T175434783180Ze7de9547-456f-468f-bade-2a7fe3d05a61.20240919T175434785785Z64724df9-f8fb-40e8-b65d-2819b50d6f81.20240919T175434786401Z5ad7eb79-91d6-4de6-92df-5d3193388446","outputs":null,"session_name":"default","name":"RunnableSequence","inputs":{"messages":[["user","what
+      is the hometown of the mens 2024 Australia open winner?"]]},"run_type":"chain"},{"id":"6078f3e6-319f-43d9-a961-2ce02ea43779","start_time":"2024-09-19T17:54:34.786860+00:00","end_time":"2024-09-19T17:54:34.787583+00:00","extra":{"metadata":{"langgraph_step":1,"langgraph_node":"planner","langgraph_triggers":["start:planner"],"langgraph_path":["__pregel_pull","planner"],"langgraph_checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langsmith","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","prompts","chat","ChatPromptTemplate"],"kwargs":{"input_variables":[],"optional_variables":["messages"],"partial_variables":{"messages":[]},"messages":[{"lc":1,"type":"constructor","id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"kwargs":{"prompt":{"lc":1,"type":"constructor","id":["langchain","prompts","prompt","PromptTemplate"],"kwargs":{"input_variables":[],"template":"For
+      the given objective, come up with a simple step by step plan.     This plan
+      should involve individual tasks, that if executed correctly will yield the correct
+      answer. Do not add any superfluous steps.     The result of the final step should
+      be the final answer. Make sure that each step has all the information needed
+      - do not skip steps.","template_format":"f-string"},"name":"PromptTemplate"}}},{"lc":1,"type":"constructor","id":["langchain","prompts","chat","MessagesPlaceholder"],"kwargs":{"variable_name":"messages","optional":true}}]},"name":"ChatPromptTemplate"},"events":[{"name":"start","time":"2024-09-19T17:54:34.786860+00:00"},{"name":"end","time":"2024-09-19T17:54:34.787583+00:00"}],"reference_example_id":null,"parent_run_id":"5ad7eb79-91d6-4de6-92df-5d3193388446","tags":["seq:step:1"],"trace_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","dotted_order":"20240919T175434783180Ze7de9547-456f-468f-bade-2a7fe3d05a61.20240919T175434785785Z64724df9-f8fb-40e8-b65d-2819b50d6f81.20240919T175434786401Z5ad7eb79-91d6-4de6-92df-5d3193388446.20240919T175434786860Z6078f3e6-319f-43d9-a961-2ce02ea43779","outputs":{"output":{"messages":[{"content":"For
+      the given objective, come up with a simple step by step plan.     This plan
+      should involve individual tasks, that if executed correctly will yield the correct
+      answer. Do not add any superfluous steps.     The result of the final step should
+      be the final answer. Make sure that each step has all the information needed
+      - do not skip steps.","additional_kwargs":{},"response_metadata":{},"type":"system"},{"content":"what
+      is the hometown of the mens 2024 Australia open winner?","additional_kwargs":{},"response_metadata":{},"type":"human"}]}},"session_name":"default","name":"ChatPromptTemplate","inputs":{"messages":[["user","what
+      is the hometown of the mens 2024 Australia open winner?"]]},"run_type":"prompt"},{"id":"9aa98ae3-d283-464a-84b1-c1b99ed97479","start_time":"2024-09-19T17:54:34.788238+00:00","end_time":null,"extra":{"invocation_params":{"model":"gpt-4o","model_name":"gpt-4o","stream":false,"n":1,"temperature":0.0,"_type":"openai-chat","stop":null,"tools":[{"type":"function","function":{"name":"Plan","description":"Plan
+      to follow in future","parameters":{"properties":{"steps":{"description":"different
+      steps to follow, should be in sorted order","items":{"type":"string"},"type":"array"}},"required":["steps"],"type":"object"}}}],"parallel_tool_calls":false,"tool_choice":{"type":"function","function":{"name":"Plan"}}},"options":{"stop":null},"batch_size":1,"metadata":{"langgraph_step":1,"langgraph_node":"planner","langgraph_triggers":["start:planner"],"langgraph_path":["__pregel_pull","planner"],"langgraph_checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","checkpoint_ns":"planner:adcbf774-3e04-5eaf-6d1d-f010a4159c07","ls_provider":"openai","ls_model_name":"gpt-4o","ls_model_type":"chat","ls_temperature":0.0,"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","chat_models","openai","ChatOpenAI"],"kwargs":{"model_name":"gpt-4o","temperature":0.0,"openai_api_key":{"lc":1,"type":"secret","id":["OPENAI_API_KEY"]},"max_retries":2,"n":1},"name":"ChatOpenAI"},"events":[{"name":"start","time":"2024-09-19T17:54:34.788238+00:00"}],"reference_example_id":null,"parent_run_id":"5ad7eb79-91d6-4de6-92df-5d3193388446","tags":["seq:step:2"],"trace_id":"e7de9547-456f-468f-bade-2a7fe3d05a61","dotted_order":"20240919T175434783180Ze7de9547-456f-468f-bade-2a7fe3d05a61.20240919T175434785785Z64724df9-f8fb-40e8-b65d-2819b50d6f81.20240919T175434786401Z5ad7eb79-91d6-4de6-92df-5d3193388446.20240919T175434788238Z9aa98ae3-d283-464a-84b1-c1b99ed97479","outputs":null,"session_name":"default","name":"ChatOpenAI","inputs":{"messages":[[{"lc":1,"type":"constructor","id":["langchain","schema","messages","SystemMessage"],"kwargs":{"content":"For
+      the given objective, come up with a simple step by step plan.     This plan
+      should involve individual tasks, that if executed correctly will yield the correct
+      answer. Do not add any superfluous steps.     The result of the final step should
+      be the final answer. Make sure that each step has all the information needed
+      - do not skip steps.","type":"system"}},{"lc":1,"type":"constructor","id":["langchain","schema","messages","HumanMessage"],"kwargs":{"content":"what
+      is the hometown of the mens 2024 Australia open winner?","type":"human"}}]]},"run_type":"llm"}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '10802'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: POST
+    uri: https://api.smith.langchain.com/runs/batch
+  response:
+    body:
+      string: '{"message":"Runs batch ingested"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '33'
+      Via:
+      - 1.1 google
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 17:54:34 GMT
+      server:
+      - uvicorn
+    status:
+      code: 202
+      message: Accepted
+- request:
+    body: '{"messages": [{"content": "For the given objective, come up with a simple
+      step by step plan.     This plan should involve individual tasks, that if executed
+      correctly will yield the correct answer. Do not add any superfluous steps.     The
+      result of the final step should be the final answer. Make sure that each step
+      has all the information needed - do not skip steps.", "role": "system"}, {"content":
+      "what is the hometown of the mens 2024 Australia open winner?", "role": "user"}],
+      "model": "gpt-4o", "n": 1, "parallel_tool_calls": false, "stream": false, "temperature":
+      0.0, "tool_choice": {"type": "function", "function": {"name": "Plan"}}, "tools":
+      [{"type": "function", "function": {"name": "Plan", "description": "Plan to follow
+      in future", "parameters": {"properties": {"steps": {"description": "different
+      steps to follow, should be in sorted order", "items": {"type": "string"}, "type":
+      "array"}}, "required": ["steps"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '952'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - AsyncOpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - async:asyncio
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSS4+bMBC+51dYc+kliQhJlpRbqrbqY7Wt1KqHblbIgQG8NR7LHpSmUf57BSTA
+        Ri0HZObz92BmThMhQGUQC0hLyWll9Wz7+j0+fPpZP+w/q/oNBT74QH88fdu4H4WCacOg/TOmfGXN
+        U6qsRlZkOjh1KBkb1UUU3kV3m1W0boGKMtQNrbA8W9EsDMLVLFjPFssLsSSVoodYPE6EEOLUvpuI
+        JsPfEItgeq1U6L0sEOL+khDgSDcVkN4rz9IwTAcwJcNomtSm1noEMJFOUqn1YNw9p9F56JPUOim2
+        98/pfb60JN8dcLNZfF9yWXo78uukj7YNlNcm7fszwvt6fGMmBBhZtdyvWt7yhADpirpCw01mOO3A
+        M1q/g/hxBx8zNKzyo+ASxUEZg05Q3n5VaF550bRdbGvPTmoljfhi0cx3MN3BW2R0lTLY3i6pQqaD
+        ubJVJ6wwu8jOd/B0hhfRzpN/nZ9G7XaY117qyxwu9XM/WE2FdbT3N3OCXBnly8Sh9G2/wDPZzrvx
+        aR2gfrETYB1VlhOmX2gawcUq6vRgWNkBDdcXkImlHrGi8H+sJEOWql2cfle7hMoUg0LQx2z/E/zR
+        M1ZJrkyBzjrVbiXkNlmHMspXwT7Yw+Q8+QsAAP//AwDphNKNngMAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b71184c7b9465-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 17:54:35 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=AK.NCDH0zD3RhUTLWJH7K8hmZJ01S3pctUxC1evGJhw-1726768475-1.0.1.1-Dh2qcEsjcpi3glmodDjB1GundacR7m8rv.ShbGqpEbqVd1D8PP8ACXljaOjpWKdNaXurlme66ln3D0EY.oMm2Q;
+        path=/; expires=Thu, 19-Sep-24 18:24:35 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=GHdJ7Z7OPuiwho8yodgjK0ey20wH3iTfjWERJLXVGOw-1726768475532-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '508'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999880'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_f92fdd7e44e151c8de437f5f2e9cfe79
+    status:
+      code: 200
+      message: OK
+version: 1

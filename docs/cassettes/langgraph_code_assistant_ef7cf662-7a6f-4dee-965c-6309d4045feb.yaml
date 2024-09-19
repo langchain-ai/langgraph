@@ -1,0 +1,147 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/info
+  response:
+    body:
+      string: '{"version":"0.7.29","license_expiration_time":null,"batch_ingest_config":{"scale_up_qsize_trigger":1000,"scale_up_nthreads_limit":16,"scale_down_nempty_trigger":4,"size_limit":100,"size_limit_bytes":20971520},"instance_flags":{"generate_ai_query_enabled":true,"org_creation_disabled":false,"show_ttl_ui":true,"trace_tier_duration_days":{"longlived":400,"shortlived":14},"search_enabled":true,"workspace_scope_org_invites":false,"s3_storage_enabled":true}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '455'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 17:56:56 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/datasets?limit=1&name=lcel-teacher-eval
+  response:
+    body:
+      string: '[{"name":"lcel-teacher-eval","description":"Eval set for LCEL teacher","created_at":"2024-09-16T22:50:04.169288+00:00","inputs_schema_definition":null,"outputs_schema_definition":null,"externally_managed":false,"data_type":"kv","id":"8b57696d-14ea-4f00-9997-b3fc74a16846","tenant_id":"acad1879-aa55-5b61-ab74-67acf65c2610","example_count":20,"session_count":5,"modified_at":"2024-09-16T22:50:04.169288+00:00","last_session_start_time":"2024-09-16T23:06:36.646177"}]'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '465'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 17:56:56 GMT
+      server:
+      - uvicorn
+      x-pagination-total:
+      - '1'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/sessions?limit=1
+  response:
+    body:
+      string: '[{"start_time":"2024-09-16T23:06:36.646177","end_time":"2024-09-16T23:11:12.242905+00:00","extra":{"metadata":{"git":{"tags":"checkpoint==1.0.10-dirty","dirty":true,"branch":"main","commit":"4d0c12117ba904345ecce7701240a2cde094cec6","repo_name":"langgraph","remote_url":"https://github.com/langchain-ai/langgraph.git","author_name":"Nuno
+        Campos","commit_time":"1726521019","author_email":"nuno@langchain.dev"},"llm":"claude-3-opus-20240229","feedback":"do
+        not reflect","revision_id":"checkpoint==1.0.10-dirty","dataset_splits":["base"],"dataset_version":"2024-09-16T22:50:04.631607+00:00","num_repetitions":1}},"name":"test-with-langgraph-claude-3-opus-20240229-do
+        not reflect-9cd6c769","description":null,"default_dataset_id":null,"reference_dataset_id":"8b57696d-14ea-4f00-9997-b3fc74a16846","trace_tier":"longlived","id":"dffa5a4c-b6b5-43b3-b957-e063729af646","run_count":20,"latency_p50":25.751,"latency_p99":59.33363,"first_token_p50":null,"first_token_p99":null,"total_tokens":986650,"prompt_tokens":972513,"completion_tokens":14137,"total_cost":0.0002105,"prompt_cost":0.0000885,"completion_cost":0.000122,"tenant_id":"acad1879-aa55-5b61-ab74-67acf65c2610","last_run_start_time":"2024-09-16T23:10:48.343969","last_run_start_time_live":null,"feedback_stats":{"code_execution_check":{"n":20,"avg":0.45,"values":{}},"import_check":{"n":20,"avg":0.9,"values":{}}},"session_feedback_stats":{},"run_facets":[],"error_rate":0.0,"streaming_rate":0.0,"test_run_number":5}]'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '1470'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 17:56:56 GMT
+      server:
+      - uvicorn
+      x-pagination-total:
+      - '2'
+    status:
+      code: 200
+      message: OK
+version: 1

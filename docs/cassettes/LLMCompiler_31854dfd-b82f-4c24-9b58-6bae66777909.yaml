@@ -1,0 +1,139 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "Solve a question answering task. Here are some
+      guidelines:\n - In the Assistant Scratchpad, you will be given results of a
+      plan you have executed to answer the user''s question.\n - Thought needs to
+      reason about the question based on the Observations in 1-2 sentences.\n - Ignore
+      irrelevant action results.\n - If the required information is present, give
+      a concise but complete and helpful answer to the user''s question.\n - If you
+      are unable to give a satisfactory finishing answer, replan to get the required
+      information. Respond in the following format:\n\nThought: <reason about the
+      task results and whether you have sufficient information to answer the question>\nAction:
+      <action to take>\nAvailable actions:\n (1) Finish(the final answer to return
+      to the user): returns the answer and finishes the task.\n (2) Replan(the reasoning
+      and other information that will help you plan again. Can be a line of any length):
+      instructs why we must replan", "role": "system"}, {"content": "What''s the temperature
+      in SF raised to the 3rd power?", "role": "user"}, {"content": "[{''url'': ''https://www.accuweather.com/en/us/san-francisco/94103/current-weather/347629'',
+      ''content'': ''Current weather in San Francisco, CA. Check current conditions
+      in San Francisco, CA with radar, hourly, and more.''}]", "name": "tavily_search_results_json",
+      "role": "function"}, {"content": "8", "name": "math", "role": "function"}, {"content":
+      "join", "name": "join", "role": "function"}, {"content": "Using the above previous
+      actions, decide whether to replan or finish. If all the required information
+      is present. You may finish. If you have made many attempts to find the information
+      without success, admit so and respond with whatever information you have gathered
+      so the user can work well with you.\n\n", "role": "system"}], "model": "gpt-4-turbo-preview",
+      "n": 1, "parallel_tool_calls": false, "stream": false, "temperature": 0.7, "tool_choice":
+      {"type": "function", "function": {"name": "JoinOutputs"}}, "tools": [{"type":
+      "function", "function": {"name": "JoinOutputs", "description": "Decide whether
+      to replan or whether you can return the final response.", "parameters": {"properties":
+      {"thought": {"description": "The chain of thought reasoning for the selected
+      action", "type": "string"}, "action": {"anyOf": [{"description": "The final
+      response/answer.", "properties": {"response": {"title": "Response", "type":
+      "string"}}, "required": ["response"], "title": "FinalResponse", "type": "object"},
+      {"properties": {"feedback": {"description": "Analysis of the previous attempts
+      and recommendations on what needs to be fixed.", "title": "Feedback", "type":
+      "string"}}, "required": ["feedback"], "title": "Replan", "type": "object"}]}},
+      "required": ["thought", "action"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2798'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//nFTLjuM2ELz7Kxq8zMVjjGfnsevbIshgkAQZLPaFJA4MmmpJvabYDNm0
+        12v43wNSHsvjPBBEB0PocnUVq8XejQAUVWoGyrRaTOft5ds3D+vvlh+f6O7bq6dPKf20nrYfv8jq
+        4Vf97kqNM4OXX9DIM2tiuPMWhdj1sAmoBXPX6f313f3dm9vp6wJ0XKHNtMbL5c3l1fT69tIHXBNu
+        DsyWyWBUM/htBACwK7/Zo6vwq5rB1fi50mGMukE1O/4JQAW2uaJ0jBRFO1HjATTsBF227ZK1J4Aw
+        24XR1g7C/bM7eR+C0tYuavvLdvNI37tPDx9qbx+/ff5x/TO+e3+i17fe+mKoTs4cAzrBj/XZmRiA
+        cror3B+Y3FMSnySe0QGUDk3q0Em2rnZzJS2nppW5ms3VhxZBsPMYtKSAQA7eawcPQTtD0TBQBMcC
+        PvCaKqzGEBlILiJQ5zlGWloEYTDammS1IJBEWGubEIKmiFVGpUV4FSrwvMEwgSzaaWmBiy6xg4Ax
+        WQGu4eL1BUTELkJyAXPLCjaUPUvpc+q26EzgLQT0VrtiFk2eethmXSRpMUCDPdWkENDJvx+YA+iq
+        o55BrubQ9RYpugsBvdZk9dLiZK7Gc6XLaOZqtpurGrFaarMagtVxBQH/SBQwQk2uItf8dyfCfYSQ
+        zfwlxEfe4BrDuNQj6mDa5xQrxuL1MDSQluLpUcagXVV4Z1PocxeGJYJhVyVznv4QLzmfZAKfc62f
+        8iHtigIasdty4P+VuxbYIBj98gwI0aOhmszxa8ueM5Aihjx8HVc54ZrDZK72e/XiJuxHf/f++8kl
+        D1inqO3h9h/q++M6sdz4wMt4th1UTY5iuwioY7mlKgr7XjvrFAWVXmwi5QN3XhbCK3S54c39bd9P
+        DZtyQKc31wdUWLQdgLvp/T/RFhWKprKvjiuyt0iuGTpcHX2Wg6q4jYLdoibXYPCBjstwtB/9CQAA
+        //8DABlc9gkLBgAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8a8f6a9717da-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:06 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=Uu4bOpcl2zXOpJFJ_STXy4gT_7wIFt5lF8hF4YWkY6c-1726769526-1.0.1.1-Rxh4OcmTuy0JRlwTcCMv24cdGOi6xdzpe0pUfno_AJS8Rv17SPmSfYtP23E7oi4ZgdC9HSM3qzV60mI9nlw2JA;
+        path=/; expires=Thu, 19-Sep-24 18:42:06 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=Ief420O76508IGoTYURc5WT.FJYfyPR00a7._6etZFE-1726769526641-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '8445'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999598'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 12ms
+      x-request-id:
+      - req_bd8b59605206e8b8e45d7bf03e6eba4c
+    status:
+      code: 200
+      message: OK
+version: 1

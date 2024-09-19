@@ -1,0 +1,107 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "You are an AI assistant.", "role": "system"},
+      {"content": "Write a research report on lithium pollution.", "role": "user"}],
+      "model": "gpt-4o", "n": 5, "stream": false, "temperature": 0.7, "tools": [{"type":
+      "function", "function": {"name": "tavily_search_results_json", "description":
+      "A search engine optimized for comprehensive, accurate, and trusted results.
+      Useful for when you need to answer questions about current events. Input should
+      be a search query.", "parameters": {"properties": {"query": {"description":
+      "search query to look up", "type": "string"}}, "required": ["query"], "type":
+      "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '637'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//7FbJbtswEL3rK4g524Wsxa51S1sEbeE2hwYBgroQaHkk0aFIlksQ1/C/
+        F1oiKUl7Sw9GrQNBzOO8Wd6I0sEjBNgWEgJZSW1WKT69WF5yfRH5V+76dvEudjgvLm9W4d38a/zh
+        C0xqD7nZYWYfvd5kslIcLZOihTON1GLNOlsE88X87TJcNkAlt8hrt0LZaSSngR9EUz+ezsLOsZQs
+        QwMJ+e4RQsihWesUxRYfICH+5NFSoTG0QEj6Q4SAlry2ADWGGUuFhckAZlJYFHXWwnE+AqyUPM0o
+        50Pg9jmM9kOfKOfpw6dv8e1mV5rrnXi/+vj5172+WUVX43gt9V41CeVOZH1/RnhvT54FIwQErRpf
+        S+8Z36cGqc7KVKNx3Jp0Z16wEQJUF65CYetK4LCGnw71fg3JGjizJXMVUZJzV4ckGltKEvhBuIYj
+        PCE7en/a/xi1TWPuDOVdPzv7sReIy0JpuTHP+g05E8zUdVDT1D1uvzeieKH97Kz962uvUUltT2UE
+        gvMIvPoInIDs4Vn2f/Xmn4D60Vn9/+be97o44J4IDUrLStnUyjsUNe2yuxJg+PUcwFnQfSfASkv5
+        AASz+G9u6RYtZc009APY5slEMTD4fZpNtWD2xmKV5kwUqJVmzahBrtI4oIs88jf+Bryj9xsAAP//
+        AwDHWVJJZwsAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7c6e283f7ad3-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:20 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '331'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999900'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_b0cecdf20cccd509e4deef11c2343130
+    status:
+      code: 200
+      message: OK
+version: 1

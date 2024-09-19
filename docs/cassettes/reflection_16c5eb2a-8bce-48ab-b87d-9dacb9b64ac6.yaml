@@ -1,0 +1,416 @@
+interactions:
+- request:
+    body: '{"model": "accounts/fireworks/models/mixtral-8x7b-instruct", "stream":
+      true, "messages": [{"role": "system", "content": "You are a teacher grading
+      an essay submission. Generate critique and recommendations for the user''s submission.
+      Provide detailed recommendations, including requests for length, depth, style,
+      etc."}, {"role": "user", "content": "Write an essay on why the little prince
+      is relevant in modern childhood"}, {"role": "user", "content": "Title: The Eternal
+      Relevance of The Little Prince in Modern Childhood\n\nIntroduction:\nAntoine
+      de Saint-Exup\u00e9ry''s The Little Prince is a timeless novella that has captured
+      the hearts and minds of children and adults alike for over seven decades. Its
+      enduring charm and profound wisdom have transcended generations, making it increasingly
+      relevant in modern childhood. This essay explores the reasons why The Little
+      Prince remains a significant and influential work in shaping the lives of children
+      today.\n\nBody Paragraph 1 - The Power of Imagination:\nIn the digital age,
+      where children are often overwhelmed with information and technology, The Little
+      Prince offers a much-needed escape into the realm of imagination. The story
+      encourages children to look beyond the ordinary and appreciate the extraordinary,
+      fostering creativity and critical thinking. The little prince''s journey through
+      various planets, each inhabited by peculiar characters, serves as a reminder
+      that there is a world full of wonder and magic waiting to be discovered.\n\nBody
+      Paragraph 2 - The Importance of Emotional Intelligence:\nModern childhood is
+      characterized by fast-paced lifestyles, academic pressures, and social media
+      influence, which can sometimes overshadow the development of emotional intelligence.
+      The Little Prince emphasizes the value of emotional connections, teaching children
+      the importance of empathy, love, and friendship. The relationship between the
+      little prince and the fox, for instance, highlights the significance of building
+      meaningful connections and understanding the feelings of others.\n\nBody Paragraph
+      3 - The Encouragement of Independence and Self-Discovery:\nThe Little Prince
+      encourages children to question authority, think for themselves, and embark
+      on their journey of self-discovery. The story challenges the traditional notion
+      of obedience and encourages young readers to think critically about their own
+      values and beliefs. By exploring the different perspectives of various characters,
+      children learn to form their own opinions and develop a strong sense of self.\n\nConclusion:\nIn
+      conclusion, The Little Prince remains highly relevant in modern childhood due
+      to its ability to spark imagination, cultivate emotional intelligence, and promote
+      independence and self-discovery. The story''s enduring appeal lies in its capacity
+      to resonate with children on a deeply personal level, offering comfort, guidance,
+      and inspiration as they navigate the complexities of growing up in an ever-changing
+      world. By embracing the wisdom of The Little Prince, children can learn to appreciate
+      the beauty of life, cherish the importance of relationships, and develop a strong
+      sense of self, ensuring their successful transition into adulthood.\n\nRevised
+      Essay (based on user critique):\n\nTitle: The Timeless Wisdom of The Little
+      Prince in Modern Childhood\n\nIntroduction:\nAntoine de Saint-Exup\u00e9ry''s
+      The Little Prince has been a beloved classic for over seven decades, captivating
+      the hearts and minds of both children and adults. Its enduring charm and profound
+      wisdom have transcended generations, making it increasingly relevant in modern
+      childhood. This essay explores the reasons why The Little Prince remains a significant
+      and influential work in shaping the lives of children today.\n\nBody Paragraph
+      1 - The Power of Imagination and Storytelling:\nIn the digital age, where children
+      are often overwhelmed with information and technology, The Little Prince offers
+      a much-needed escape into the realm of imagination. The story''s captivating
+      tale of the little prince''s journey through various planets, each inhabited
+      by peculiar characters, serves as a reminder of the power of storytelling and
+      its ability to foster creativity, critical thinking, and emotional development.\n\nBody
+      Paragraph 2 - The Importance of Emotional Intelligence and Human Connections:\nModern
+      childhood is characterized by fast-paced lifestyles, academic pressures, and
+      social media influence, which can sometimes overshadow the development of emotional
+      intelligence and human connections. The Little Prince emphasizes the value of
+      emotional connections, teaching children the importance of empathy, love, and
+      friendship through the heartwarming relationship between the little prince and
+      the fox.\n\nBody Paragraph 3 - The Encouragement of Independence, Self-Discovery,
+      and Questioning Authority:\nThe Little Prince encourages children to question
+      authority, think for themselves, and embark on their journey of self-discovery.
+      The story challenges the traditional notion of obedience and encourages young
+      readers to think critically about their own values and beliefs. By exploring
+      the different perspectives of various characters, children learn to form their
+      own opinions, develop a strong sense of self, and appreciate the value of independent
+      thought.\n\nConclusion:\nIn conclusion, The Little Prince remains highly relevant
+      in modern childhood due to its ability to spark imagination, cultivate emotional
+      intelligence, and promote independence, self-discovery, and critical thinking.
+      The story''s timeless wisdom and enduring appeal lie in its capacity to resonate
+      with children on a deeply personal level, offering comfort, guidance, and inspiration
+      as they navigate the complexities of growing up in an ever-changing world. By
+      embracing the wisdom of The Little Prince, children can learn to appreciate
+      the beauty of life, cherish the importance of relationships, and develop a strong
+      sense of self, ensuring their successful transition into adulthood."}], "n":
+      1, "temperature": 0.0, "stop": null, "max_tokens": 32768}'
+    headers:
+      accept:
+      - text/event-stream
+      accept-encoding:
+      - gzip, deflate
+      cache-control:
+      - no-store
+      connection:
+      - keep-alive
+      content-length:
+      - '6083'
+      content-type:
+      - application/json
+      host:
+      - api.fireworks.ai
+      user-agent:
+      - python-httpx/0.27.2
+    method: POST
+    uri: https://api.fireworks.ai/inference/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"Dear
+        User"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":",\n\nThank
+        you for"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        submitting your essay on \""},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"The
+        Eternal Relevance"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        of The Little Prince in Modern"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        Childhood.\" I found your"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        writing to be engaging and insight"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"ful,
+        with a clear understanding"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        of the source material and its"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        significance in contemporary society. I"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        have some recommendations to further enhance"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        your essay:\n\n1"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":".
+        Title: Consider revising"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        your title to better reflect the"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        content of your essay. A"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        title like \"The Timeless"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        Wisdom of The Little Prince"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        in Modern Childhood\" might"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        be more fitting.\n\n"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"2.
+        Length: While your"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        essay is well-written,"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        it could benefit from a slight"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        expansion in length. Adding"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        more specific examples and further developing"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        your ideas will strengthen your argument"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        and demonstrate a deeper understanding of"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        the topic.\n\n3"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":".
+        Depth: In each"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        body paragraph, delve deeper"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        into the themes you are discussing"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":".
+        For instance, when discussing"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        imagination, provide more examples from"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        the book that illustrate this"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        point. Additionally, consider connecting"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        the themes to modern childhood more"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        explicitly, such as discussing how"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        technology impacts children''s ability"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        to use their imagination or the"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        role of emotional intelligence in navig"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"ating
+        social media.\n\n"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"4.
+        Style: Vary"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        your sentence structure to create a"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        more engaging reading experience. Mix"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        shorter and longer sentences, and"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        incorporate rhetorical questions or"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        transitions to guide the reader through"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        your argument.\n\n5."},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        Conclusion: In your conclusion,"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        restate your thesis and summarize"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        your main points. However, avoid"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        introducing new ideas or information in"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        this section. Instead, focus"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        on synthesizing your arguments"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        and emphasizing the relevance"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        of The Little"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        Prince in modern childhood.\n"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"\nOverall,
+        your essay"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        is"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        thought-provoking and well"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"-structured.
+        By incorpor"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"ating
+        these recommendations, you can"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        further enhance your writing and create"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        a more compelling case for the"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        continued relevance of The Little"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        Prince in shaping the lives"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"
+        of children today.\n\n"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{"content":"Best
+        regards,\n[Your Name]"},"finish_reason":null}],"usage":null}
+
+
+        data: {"id":"82513b05-2960-4124-b2a2-4cc9367de6a6","object":"chat.completion.chunk","created":1726770391,"model":"accounts/fireworks/models/mixtral-8x7b-instruct","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1168,"total_tokens":1565,"completion_tokens":397}}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      Access-Control-Allow-Origin:
+      - '*'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - 8c5b9fdff8e1cf61-SJC
+      Cf-Placement:
+      - remote-SEA
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Thu, 19 Sep 2024 18:26:31 GMT
+      Server:
+      - cloudflare
+      Server-Timing:
+      - total;dur=155.0;desc="Total Response Time"
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      alt-svc:
+      - h3=":443"; ma=86400
+      fireworks-middleware-version:
+      - v2
+      fireworks-sampling-options:
+      - '{"max_tokens": 31599, "temperature": 0.0, "top_k": 0, "top_p": 1.0, "min_p":
+        0.0, "typical_p": 1.0, "frequency_penalty": 0.0, "presence_penalty": 0.0,
+        "repetition_penalty": 1.0, "mirostat_target": null, "mirostat_lr": 0.1}'
+      fireworks-server-time-to-first-token:
+      - '0.065'
+      x-envoy-upstream-service-time:
+      - '66'
+    status:
+      code: 200
+      message: OK
+version: 1

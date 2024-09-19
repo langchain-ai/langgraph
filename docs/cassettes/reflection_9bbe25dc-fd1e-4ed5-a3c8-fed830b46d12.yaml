@@ -1,0 +1,492 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/info
+  response:
+    body:
+      string: '{"version":"0.7.29","license_expiration_time":null,"batch_ingest_config":{"scale_up_qsize_trigger":1000,"scale_up_nthreads_limit":16,"scale_down_nempty_trigger":4,"size_limit":100,"size_limit_bytes":20971520},"instance_flags":{"generate_ai_query_enabled":true,"org_creation_disabled":false,"show_ttl_ui":true,"trace_tier_duration_days":{"longlived":400,"shortlived":14},"search_enabled":true,"workspace_scope_org_invites":false,"s3_storage_enabled":true}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '455'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:26:20 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"post":[{"id":"b561474e-e2b6-4e3d-9dff-ecc35f3e92a1","start_time":"2024-09-19T18:26:21.248932+00:00","end_time":null,"extra":{"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"},"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"error":null,"events":[{"name":"start","time":"2024-09-19T18:26:21.248932+00:00"}],"reference_example_id":null,"parent_run_id":null,"tags":[],"trace_id":"b561474e-e2b6-4e3d-9dff-ecc35f3e92a1","dotted_order":"20240919T182621248932Zb561474e-e2b6-4e3d-9dff-ecc35f3e92a1","outputs":null,"session_name":"default","name":"RunnableSequence","inputs":{"input":""},"run_type":"chain"},{"id":"0e452536-a3d4-4eee-aad4-07abf607f8ab","start_time":"2024-09-19T18:26:21.253612+00:00","end_time":"2024-09-19T18:26:21.253987+00:00","extra":{"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langsmith","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","prompts","chat","ChatPromptTemplate"],"kwargs":{"input_variables":["messages"],"messages":[{"lc":1,"type":"constructor","id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"kwargs":{"prompt":{"lc":1,"type":"constructor","id":["langchain","prompts","prompt","PromptTemplate"],"kwargs":{"input_variables":[],"template":"You
+      are an essay assistant tasked with writing excellent 5-paragraph essays. Generate
+      the best essay possible for the user''s request. If the user provides critique,
+      respond with a revised version of your previous attempts.","template_format":"f-string"},"name":"PromptTemplate"}}},{"lc":1,"type":"constructor","id":["langchain","prompts","chat","MessagesPlaceholder"],"kwargs":{"variable_name":"messages"}}]},"name":"ChatPromptTemplate"},"events":[{"name":"start","time":"2024-09-19T18:26:21.253612+00:00"},{"name":"end","time":"2024-09-19T18:26:21.253987+00:00"}],"reference_example_id":null,"parent_run_id":"b561474e-e2b6-4e3d-9dff-ecc35f3e92a1","tags":["seq:step:1"],"trace_id":"b561474e-e2b6-4e3d-9dff-ecc35f3e92a1","dotted_order":"20240919T182621248932Zb561474e-e2b6-4e3d-9dff-ecc35f3e92a1.20240919T182621253612Z0e452536-a3d4-4eee-aad4-07abf607f8ab","outputs":{"output":{"messages":[{"content":"You
+      are an essay assistant tasked with writing excellent 5-paragraph essays. Generate
+      the best essay possible for the user''s request. If the user provides critique,
+      respond with a revised version of your previous attempts.","additional_kwargs":{},"response_metadata":{},"type":"system"},{"content":"Write
+      an essay on why the little prince is relevant in modern childhood","additional_kwargs":{},"response_metadata":{},"type":"human"}]}},"session_name":"default","name":"ChatPromptTemplate","inputs":{"messages":[{"content":"Write
+      an essay on why the little prince is relevant in modern childhood","additional_kwargs":{},"response_metadata":{},"type":"human","example":false}]},"run_type":"prompt"},{"id":"93e669a5-a147-4fc9-b7fe-1fdfb9bd382e","start_time":"2024-09-19T18:26:21.254257+00:00","end_time":null,"extra":{"invocation_params":{"model":"accounts/fireworks/models/mixtral-8x7b-instruct","model_name":"accounts/fireworks/models/mixtral-8x7b-instruct","stream":false,"n":1,"temperature":0.0,"stop":null,"max_tokens":32768,"_type":"fireworks-chat"},"options":{"stop":null},"batch_size":1,"metadata":{"ls_provider":"fireworks","ls_model_name":"accounts/fireworks/models/mixtral-8x7b-instruct","ls_model_type":"chat","ls_temperature":0.0,"ls_max_tokens":32768,"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","chat_models","fireworks","ChatFireworks"],"kwargs":{"model_name":"accounts/fireworks/models/mixtral-8x7b-instruct","fireworks_api_key":{"lc":1,"type":"secret","id":["FIREWORKS_API_KEY"]},"n":1,"max_tokens":32768},"name":"ChatFireworks"},"events":[{"name":"start","time":"2024-09-19T18:26:21.254257+00:00"}],"reference_example_id":null,"parent_run_id":"b561474e-e2b6-4e3d-9dff-ecc35f3e92a1","tags":["seq:step:2"],"trace_id":"b561474e-e2b6-4e3d-9dff-ecc35f3e92a1","dotted_order":"20240919T182621248932Zb561474e-e2b6-4e3d-9dff-ecc35f3e92a1.20240919T182621254257Z93e669a5-a147-4fc9-b7fe-1fdfb9bd382e","outputs":null,"session_name":"default","name":"ChatFireworks","inputs":{"messages":[[{"lc":1,"type":"constructor","id":["langchain","schema","messages","SystemMessage"],"kwargs":{"content":"You
+      are an essay assistant tasked with writing excellent 5-paragraph essays. Generate
+      the best essay possible for the user''s request. If the user provides critique,
+      respond with a revised version of your previous attempts.","type":"system"}},{"lc":1,"type":"constructor","id":["langchain","schema","messages","HumanMessage"],"kwargs":{"content":"Write
+      an essay on why the little prince is relevant in modern childhood","type":"human"}}]]},"run_type":"llm"}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '5562'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: POST
+    uri: https://api.smith.langchain.com/runs/batch
+  response:
+    body:
+      string: '{"detail":"Monthly unique traces usage limit exceeded"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '55'
+      Via:
+      - 1.1 google
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:26:21 GMT
+      server:
+      - uvicorn
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"model": "accounts/fireworks/models/mixtral-8x7b-instruct", "stream":
+      true, "messages": [{"role": "system", "content": "You are an essay assistant
+      tasked with writing excellent 5-paragraph essays. Generate the best essay possible
+      for the user''s request. If the user provides critique, respond with a revised
+      version of your previous attempts."}, {"role": "user", "content": "Write an
+      essay on why the little prince is relevant in modern childhood"}], "n": 1, "temperature":
+      0.0, "stop": null, "max_tokens": 32768}'
+    headers:
+      accept:
+      - text/event-stream
+      accept-encoding:
+      - gzip, deflate
+      cache-control:
+      - no-store
+      connection:
+      - keep-alive
+      content-length:
+      - '514'
+      content-type:
+      - application/json
+      host:
+      - api.fireworks.ai
+      user-agent:
+      - python-httpx/0.27.2
+    method: POST
+    uri: https://api.fireworks.ai/inference/v1/chat/completions
+  response:
+    body:
+      string: "data: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Title:\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        The Eternal Relevance\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of The Little Prince in Modern\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Childhood\\n\\nIntroduction:\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\nAntoine
+        de Saint-\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Exup\xE9ry's\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        The Little Prince is a tim\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"eless
+        novella that has captured\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        the hearts and minds of children\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and adults alike for over seven\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        decades. Its enduring charm\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and profound wisdom have transcended generations\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        making it increasingly relevant in modern childhood. This essay\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        explores the reasons why The Little Prince remains a significant\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and influential work in shaping the lives of children today\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\\n\\nBody
+        Paragraph 1 - The Power\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of Imagination:\\nIn the digital age,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        where children are often overwhelmed with information and technology, The\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Little Prince offers a much-needed escape into the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        realm of imagination. The story encourages children to look\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        beyond the ordinary\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and appreciate the extraordinary, fostering\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        creativity and critical thinking. The little\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        prince's journey\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        through various planets, each inhab\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ited
+        by peculiar characters, serves\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        as a reminder that there is\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        a world full of wonder and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        magic waiting to be discovered.\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\n\\nBody
+        Paragraph \"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"2
+        - The Importance of\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Emotional Intelligence:\\n\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Modern
+        childhood is characterized by\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        fast-paced lifest\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"yles,
+        academic pressures,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and social media influence, which\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        can sometimes overshadow the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        development of emotional intelligence. The\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Little Prince emphasizes the value\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of emotional connections, teaching children\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        the importance of empathy,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        love, and friendship. The\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        relationship between the little prince and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        the fox, for instance\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        highlights the significance of building\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        meaningful connections and understanding the feelings\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of others.\\n\\nBody\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Paragraph 3 - The\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Encouragement of Independence\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and Self-Discovery:\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\nThe
+        Little Prince encourages\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        children to question authority, think\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        for themselves, and embark\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        on their journey of self-\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"discovery.
+        The story challenges\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        the traditional notion of obed\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ience
+        and encourages young readers\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        to think critically about their\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        own values and beliefs. By\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        exploring the different perspectives of\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        various characters, children learn to\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        form their own opinions and develop\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        a strong sense of self.\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\n\\nConclusion:\\n\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"In
+        conclusion, The Little Prince\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        remains highly relevant in modern childhood due\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        to its ability to spark imagination,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        cultivate emotional intelligence, and promote\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        independence and self-discovery.\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        The story's enduring appeal\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        lies in its capacity to resonate\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        with children on a deeply personal level\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        offering comfort,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        guidance, and inspiration as they\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        navigate the complexities of growing\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        up in an ever-changing\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        world. By embracing the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        wisdom of The Little Prince,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        children can learn to appreciate the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        beauty of life, cherish\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        the importance of relationships, and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        develop a strong sense of self\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        ensuring their successful transition into\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        adulthood.\\n\\n\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Revised
+        Essay (based on\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        user critique):\\n\\nTitle:\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        The Timeless Wisdom of The\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Little Prince in Modern Childhood\\n\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\nIntroduction:\\nAntoine
+        de\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Saint-Exup\xE9ry'\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"s
+        The Little Prince has been a\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        beloved classic for over seven decades,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        captivating the hearts and minds\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of both children and adults. Its\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        enduring charm and profound wisdom have\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        transcended generations, making it increasingly\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        relevant in modern childhood. This essay\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        explores the reasons why The Little\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Prince remains a significant and influential work\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        in shaping the lives of children\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        today.\\n\\nBody Paragraph\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        1 - The Power of Im\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"agination
+        and Storytelling:\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\nIn
+        the digital age, where\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        children are often overwhelmed with information and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        technology, The Little Prince offers a\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        much-needed escape into the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        realm of imagination. The story'\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"s
+        captivating tale of the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        little prince's journey through various\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        planets, each inhabited by peculiar\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        characters, serves as a reminder of\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        the power of storytelling and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        its ability to foster creativity, critical\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        thinking, and emotional development.\\n\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\nBody
+        Paragraph 2 -\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        The Importance of Emotional\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Intelligence and Human Connections:\\nMod\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ern
+        childhood is characterized\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        by fast-paced lifest\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"yles,
+        academic pressures, and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        social media influence, which\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        can sometimes overshadow the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        development of emotional intelligence and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        human connections. The Little Prince\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        emphasizes the value of emotional\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        connections, teaching children the importance\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of empathy, love,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        and friendship through the heartw\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"arming
+        relationship between the little\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        prince and the fox.\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\n\\nBody
+        Paragraph \"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"3
+        - The Encouragement\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of Independence, Self-\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Discovery,
+        and Questioning\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        Authority:\\nThe Little Prince\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        encourages children to question authority\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        think for themselves, and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        embark on their journey of\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        self-discovery. The\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        story challenges the traditional notion of\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        obedience and encourages\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        young readers to think critically\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        about their own values and beliefs\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".
+        By exploring the different pers\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"pectives
+        of various characters, children\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        learn to form their own opinions\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        develop a strong sense of\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        self, and appreciate the value\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        of independent thought.\\n\\n\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Conclusion:\\nIn
+        conclusion\"},\"finish_reason\":null}],\"usage\":null}\n\ndata: {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        The Little Prince remains highly\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        relevant in modern childhood due to\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        its ability to spark imagination,\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        cultivate emotional intelligence, and\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        promote independence, self-dis\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"covery,
+        and critical thinking.\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        The story's timeless\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        wisdom and enduring appeal lie\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        in its capacity to resonate\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        with children on a deeply personal\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        level, offering comfort, guidance\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        and inspiration as they navigate the\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        complexities of growing up in an\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        ever-changing world. By embr\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"acing
+        the wisdom of The Little Prince\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        children can learn to appreciate the beauty of life\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",
+        cherish the importance of relationships, and develop a\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        strong sense of self, ensuring their\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"
+        successful transition into adulth\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ood.\"},\"finish_reason\":null}],\"usage\":null}\n\ndata:
+        {\"id\":\"929e855c-1459-460f-9f1e-4acfc033a89d\",\"object\":\"chat.completion.chunk\",\"created\":1726770382,\"model\":\"accounts/fireworks/models/mixtral-8x7b-instruct\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":67,\"total_tokens\":1177,\"completion_tokens\":1110}}\n\ndata:
+        [DONE]\n\n"
+    headers:
+      Access-Control-Allow-Origin:
+      - '*'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - 8c5b9fa39877cf61-SJC
+      Cf-Placement:
+      - remote-SEA
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Thu, 19 Sep 2024 18:26:21 GMT
+      Server:
+      - cloudflare
+      Server-Timing:
+      - total;dur=309.0;desc="Total Response Time"
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      alt-svc:
+      - h3=":443"; ma=86400
+      fireworks-middleware-version:
+      - v2
+      fireworks-sampling-options:
+      - '{"max_tokens": 32700, "temperature": 0.0, "top_k": 0, "top_p": 1.0, "min_p":
+        0.0, "typical_p": 1.0, "frequency_penalty": 0.0, "presence_penalty": 0.0,
+        "repetition_penalty": 1.0, "mirostat_target": null, "mirostat_lr": 0.1}'
+      fireworks-server-time-to-first-token:
+      - '0.050'
+      x-envoy-upstream-service-time:
+      - '52'
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -1,0 +1,233 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/datasets?limit=1&name=Corrective+RAG+Agent+Testing
+  response:
+    body:
+      string: '[{"name":"Corrective RAG Agent Testing","description":null,"created_at":"2024-09-19T18:10:43.334575+00:00","inputs_schema_definition":null,"outputs_schema_definition":null,"externally_managed":false,"data_type":"kv","id":"96dcadd0-8f5d-458e-a384-a9de0e4be8cd","tenant_id":"acad1879-aa55-5b61-ab74-67acf65c2610","example_count":5,"session_count":0,"modified_at":"2024-09-19T18:10:43.334575+00:00","last_session_start_time":null}]'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '428'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:10:45 GMT
+      server:
+      - uvicorn
+      x-pagination-total:
+      - '1'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/sessions?limit=1
+  response:
+    body:
+      string: '[{"start_time":"2024-09-19T17:56:59.339278","end_time":"2024-09-19T18:02:10.162284+00:00","extra":{"metadata":{"git":{"tags":null,"dirty":true,"branch":"isaac/runtutorialnotebooks","commit":"22fa527b546daa41b033cb703b5158ebc288db72","repo_name":"langgraph","remote_url":"https://github.com/langchain-ai/langgraph.git","author_name":"isaac
+        hershenson","commit_time":"1726766561","author_email":"ihershenson@hmc.edu"},"llm":"claude-3-opus-20240229","feedback":"do
+        not reflect","revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty","dataset_splits":["base"],"dataset_version":"2024-09-16T22:50:04.631607+00:00","num_repetitions":1}},"name":"test-with-langgraph-claude-3-opus-20240229-do
+        not reflect-234a9de3","description":null,"default_dataset_id":null,"reference_dataset_id":"8b57696d-14ea-4f00-9997-b3fc74a16846","trace_tier":"longlived","id":"bed58106-eccf-49fd-a994-56d3cd0f7aff","run_count":0,"latency_p50":null,"latency_p99":null,"first_token_p50":null,"first_token_p99":null,"total_tokens":null,"prompt_tokens":null,"completion_tokens":null,"total_cost":null,"prompt_cost":null,"completion_cost":null,"tenant_id":"acad1879-aa55-5b61-ab74-67acf65c2610","last_run_start_time":null,"last_run_start_time_live":null,"feedback_stats":{},"session_feedback_stats":null,"run_facets":[],"error_rate":null,"streaming_rate":null,"test_run_number":6}]'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '1343'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:10:44 GMT
+      server:
+      - uvicorn
+      x-pagination-total:
+      - '2'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: GET
+    uri: https://api.smith.langchain.com/examples?offset=0&inline_s3_urls=True&limit=100&dataset=96dcadd0-8f5d-458e-a384-a9de0e4be8cd
+  response:
+    body:
+      string: "[{\"id\" : \"85e4e52e-d058-4869-8acb-7745bfdb9336\", \"created_at\"
+        : \"2024-09-19T18:10:45.107307+00:00\", \"modified_at\" : \"2024-09-19T18:10:45.107307+00:00\",
+        \"name\" : \"#85e4 @ Corrective RAG Agent Testing\", \"dataset_id\" : \"96dcadd0-8f5d-458e-a384-a9de0e4be8cd\",
+        \"source_run_id\" : null, \"metadata\" : null, \"inputs\" : {\"input\": \"How
+        does the ReAct agent use self-reflection? \"}, \"outputs\" : {\"output\":
+        \"ReAct integrates reasoning and acting, performing actions - such tools like
+        Wikipedia search API - and then observing / reasoning about the tool outputs.\"}},{\"id\"
+        : \"aecf5d38-696f-4395-9811-dfcf888ee8ee\", \"created_at\" : \"2024-09-19T18:10:45.107307+00:00\",
+        \"modified_at\" : \"2024-09-19T18:10:45.107307+00:00\", \"name\" : \"#aecf
+        @ Corrective RAG Agent Testing\", \"dataset_id\" : \"96dcadd0-8f5d-458e-a384-a9de0e4be8cd\",
+        \"source_run_id\" : null, \"metadata\" : null, \"inputs\" : {\"input\": \"What
+        are the types of biases that can arise with few-shot prompting?\"}, \"outputs\"
+        : {\"output\": \"The biases that can arise with few-shot prompting include
+        (1) Majority label bias, (2) Recency bias, and (3) Common token bias.\"}},{\"id\"
+        : \"938e8fbe-4c62-4ad1-bfe4-de800bf37477\", \"created_at\" : \"2024-09-19T18:10:45.107307+00:00\",
+        \"modified_at\" : \"2024-09-19T18:10:45.107307+00:00\", \"name\" : \"#938e
+        @ Corrective RAG Agent Testing\", \"dataset_id\" : \"96dcadd0-8f5d-458e-a384-a9de0e4be8cd\",
+        \"source_run_id\" : null, \"metadata\" : null, \"inputs\" : {\"input\": \"What
+        are five types of adversarial attacks?\"}, \"outputs\" : {\"output\": \"Five
+        types of adversarial attacks are (1) Token manipulation, (2) Gradient based
+        attack, (3) Jailbreak prompting, (4) Human red-teaming, (5) Model red-teaming.\"}},{\"id\"
+        : \"036221d6-c43a-447a-890b-1d37b1a55b14\", \"created_at\" : \"2024-09-19T18:10:45.107307+00:00\",
+        \"modified_at\" : \"2024-09-19T18:10:45.107307+00:00\", \"name\" : \"#0362
+        @ Corrective RAG Agent Testing\", \"dataset_id\" : \"96dcadd0-8f5d-458e-a384-a9de0e4be8cd\",
+        \"source_run_id\" : null, \"metadata\" : null, \"inputs\" : {\"input\": \"Who
+        did the Chicago Bears draft first in the 2024 NFL draft\u201D?\"}, \"outputs\"
+        : {\"output\": \"The Chicago Bears drafted Caleb Williams first in the 2024
+        NFL draft.\"}},{\"id\" : \"61a8c377-e4bd-452b-9429-5ea399061ae1\", \"created_at\"
+        : \"2024-09-19T18:10:45.107307+00:00\", \"modified_at\" : \"2024-09-19T18:10:45.107307+00:00\",
+        \"name\" : \"#61a8 @ Corrective RAG Agent Testing\", \"dataset_id\" : \"96dcadd0-8f5d-458e-a384-a9de0e4be8cd\",
+        \"source_run_id\" : null, \"metadata\" : null, \"inputs\" : {\"input\": \"Who
+        won the 2024 NBA finals?\"}, \"outputs\" : {\"output\": \"The Boston Celtics
+        on the 2024 NBA finals\"}}]"
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '2558'
+      Via:
+      - 1.1 google
+      cache-control:
+      - no-cache
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:10:45 GMT
+      server:
+      - uvicorn
+      x-pagination-total:
+      - '5'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"name":"custom-agent-llama3-8b-answer-and-tool-use-fc458a39","extra":{"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty","version":"CRAG,
+      llama3-8b","git":{"remote_url":"https://github.com/langchain-ai/langgraph.git","commit":"22fa527b546daa41b033cb703b5158ebc288db72","commit_time":"1726766561","branch":"isaac/runtutorialnotebooks","tags":null,"dirty":true,"author_name":"isaac
+      hershenson","author_email":"ihershenson@hmc.edu","repo_name":"langgraph"}}},"description":null,"id":"f6dfdfc6-cf33-4435-a16d-016b9d3a3419","reference_dataset_id":"96dcadd0-8f5d-458e-a384-a9de0e4be8cd"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '597'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: POST
+    uri: https://api.smith.langchain.com/sessions
+  response:
+    body:
+      string: '{"start_time":"2024-09-19T18:10:46.798607","end_time":null,"extra":{"metadata":{"git":{"tags":null,"dirty":true,"branch":"isaac/runtutorialnotebooks","commit":"22fa527b546daa41b033cb703b5158ebc288db72","repo_name":"langgraph","remote_url":"https://github.com/langchain-ai/langgraph.git","author_name":"isaac
+        hershenson","commit_time":"1726766561","author_email":"ihershenson@hmc.edu"},"version":"CRAG,
+        llama3-8b","revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"name":"custom-agent-llama3-8b-answer-and-tool-use-fc458a39","description":null,"default_dataset_id":null,"reference_dataset_id":"96dcadd0-8f5d-458e-a384-a9de0e4be8cd","trace_tier":"longlived","id":"f6dfdfc6-cf33-4435-a16d-016b9d3a3419","tenant_id":"acad1879-aa55-5b61-ab74-67acf65c2610","last_run_start_time_live":null}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '789'
+      Via:
+      - 1.1 google
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:10:46 GMT
+      server:
+      - uvicorn
+    status:
+      code: 200
+      message: OK
+version: 1

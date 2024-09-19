@@ -1,0 +1,648 @@
+interactions:
+- request:
+    body: '{"post":[{"id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","start_time":"2024-09-19T18:11:43.796048+00:00","end_time":null,"extra":{"color":"green","runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"},"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"error":null,"events":[{"name":"start","time":"2024-09-19T18:11:43.796048+00:00"}],"reference_example_id":null,"parent_run_id":null,"tags":[],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675","outputs":null,"session_name":"default","name":"math","inputs":{"input":"{''problem'':
+      \"What''s the temp of sf + 5?\", ''context'': [''Thet empreature of sf is 32
+      degrees'']}"},"run_type":"tool"},{"id":"57abbc7b-40b0-431e-82a6-450e3fc3563f","start_time":"2024-09-19T18:11:43.800782+00:00","end_time":null,"extra":{"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"},"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"}},"error":null,"events":[{"name":"start","time":"2024-09-19T18:11:43.800782+00:00"}],"reference_example_id":null,"parent_run_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","tags":[],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675.20240919T181143800782Z57abbc7b-40b0-431e-82a6-450e3fc3563f","outputs":null,"session_name":"default","name":"RunnableSequence","inputs":{"problem":"What''s
+      the temp of sf + 5?","context":[{"content":"The following additional context
+      is provided from other functions.    Use it to substitute into any ${#} variables
+      or other words in the problem.    \n\n$Thet empreature of sf is 32 degrees\n\nNote
+      that context variables are not defined in code yet.You must extract the relevant
+      numbers and directly put them in code.","additional_kwargs":{},"response_metadata":{},"type":"system"}]},"run_type":"chain"},{"id":"2e0928d7-6663-4f93-b372-908cf9e7f360","start_time":"2024-09-19T18:11:43.801206+00:00","end_time":"2024-09-19T18:11:43.801539+00:00","extra":{"metadata":{"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langsmith","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","prompts","chat","ChatPromptTemplate"],"kwargs":{"input_variables":["problem"],"optional_variables":["context"],"partial_variables":{"context":[]},"messages":[{"lc":1,"type":"constructor","id":["langchain","prompts","chat","SystemMessagePromptTemplate"],"kwargs":{"prompt":{"lc":1,"type":"constructor","id":["langchain","prompts","prompt","PromptTemplate"],"kwargs":{"input_variables":[],"template":"Translate
+      a math problem into a expression that can be executed using Python''s numexpr
+      library. Use the output of running this code to answer the question.\n\nQuestion:
+      ${{Question with math problem.}}\n```text\n${{single line mathematical expression
+      that solves the problem}}\n```\n...numexpr.evaluate(text)...\n```output\n${{Output
+      of running the code}}\n```\nAnswer: ${{Answer}}\n\nBegin.\n\nQuestion: What
+      is 37593 * 67?\nExecuteCode({{code: \"37593 * 67\"}})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({{code:
+      \"37593**(1/5)\"}})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n","template_format":"f-string"},"name":"PromptTemplate"}}},{"lc":1,"type":"constructor","id":["langchain","prompts","chat","HumanMessagePromptTemplate"],"kwargs":{"prompt":{"lc":1,"type":"constructor","id":["langchain","prompts","prompt","PromptTemplate"],"kwargs":{"input_variables":["problem"],"template":"{problem}","template_format":"f-string"},"name":"PromptTemplate"}}},{"lc":1,"type":"constructor","id":["langchain","prompts","chat","MessagesPlaceholder"],"kwargs":{"variable_name":"context","optional":true}}]},"name":"ChatPromptTemplate"},"events":[{"name":"start","time":"2024-09-19T18:11:43.801206+00:00"},{"name":"end","time":"2024-09-19T18:11:43.801539+00:00"}],"reference_example_id":null,"parent_run_id":"57abbc7b-40b0-431e-82a6-450e3fc3563f","tags":["seq:step:1"],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675.20240919T181143800782Z57abbc7b-40b0-431e-82a6-450e3fc3563f.20240919T181143801206Z2e0928d7-6663-4f93-b372-908cf9e7f360","outputs":{"output":{"messages":[{"content":"Translate
+      a math problem into a expression that can be executed using Python''s numexpr
+      library. Use the output of running this code to answer the question.\n\nQuestion:
+      ${Question with math problem.}\n```text\n${single line mathematical expression
+      that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n","additional_kwargs":{},"response_metadata":{},"type":"system"},{"content":"What''s
+      the temp of sf + 5?","additional_kwargs":{},"response_metadata":{},"type":"human"},{"content":"The
+      following additional context is provided from other functions.    Use it to
+      substitute into any ${#} variables or other words in the problem.    \n\n$Thet
+      empreature of sf is 32 degrees\n\nNote that context variables are not defined
+      in code yet.You must extract the relevant numbers and directly put them in code.","additional_kwargs":{},"response_metadata":{},"type":"system"}]}},"session_name":"default","name":"ChatPromptTemplate","inputs":{"problem":"What''s
+      the temp of sf + 5?","context":[{"content":"The following additional context
+      is provided from other functions.    Use it to substitute into any ${#} variables
+      or other words in the problem.    \n\n$Thet empreature of sf is 32 degrees\n\nNote
+      that context variables are not defined in code yet.You must extract the relevant
+      numbers and directly put them in code.","additional_kwargs":{},"response_metadata":{},"type":"system"}]},"run_type":"prompt"},{"id":"48eccac8-3f62-4412-ba14-56adcfe7c659","start_time":"2024-09-19T18:11:43.801912+00:00","end_time":null,"extra":{"invocation_params":{"model":"gpt-4-turbo-preview","model_name":"gpt-4-turbo-preview","stream":false,"n":1,"temperature":0.7,"_type":"openai-chat","stop":null,"tools":[{"type":"function","function":{"name":"ExecuteCode","description":"The
+      input to the numexpr.evaluate() function.","parameters":{"properties":{"reasoning":{"description":"The
+      reasoning behind the code expression, including how context is included, if
+      applicable.","type":"string"},"code":{"description":"The simple code expression
+      to execute by numexpr.evaluate().","type":"string"}},"required":["reasoning","code"],"type":"object"}}}],"parallel_tool_calls":false,"tool_choice":{"type":"function","function":{"name":"ExecuteCode"}}},"options":{"stop":null},"batch_size":1,"metadata":{"ls_provider":"openai","ls_model_name":"gpt-4-turbo-preview","ls_model_type":"chat","ls_temperature":0.7,"revision_id":"checkpoint==1.0.10-68-g22fa527b-dirty"},"runtime":{"sdk":"langsmith-py","sdk_version":"0.1.123","library":"langchain-core","platform":"macOS-14.5-arm64-arm-64bit","runtime":"python","py_implementation":"CPython","runtime_version":"3.12.4","langchain_version":"0.3.0","langchain_core_version":"0.3.1","library_version":"0.3.1"}},"error":null,"serialized":{"lc":1,"type":"constructor","id":["langchain","chat_models","openai","ChatOpenAI"],"kwargs":{"model_name":"gpt-4-turbo-preview","temperature":0.7,"openai_api_key":{"lc":1,"type":"secret","id":["OPENAI_API_KEY"]},"max_retries":2,"n":1},"name":"ChatOpenAI"},"events":[{"name":"start","time":"2024-09-19T18:11:43.801912+00:00"}],"reference_example_id":null,"parent_run_id":"57abbc7b-40b0-431e-82a6-450e3fc3563f","tags":["seq:step:2"],"trace_id":"4c8fffbe-15fc-4dfe-9376-5607f16aa675","dotted_order":"20240919T181143796048Z4c8fffbe-15fc-4dfe-9376-5607f16aa675.20240919T181143800782Z57abbc7b-40b0-431e-82a6-450e3fc3563f.20240919T181143801912Z48eccac8-3f62-4412-ba14-56adcfe7c659","outputs":null,"session_name":"default","name":"ChatOpenAI","inputs":{"messages":[[{"lc":1,"type":"constructor","id":["langchain","schema","messages","SystemMessage"],"kwargs":{"content":"Translate
+      a math problem into a expression that can be executed using Python''s numexpr
+      library. Use the output of running this code to answer the question.\n\nQuestion:
+      ${Question with math problem.}\n```text\n${single line mathematical expression
+      that solves the problem}\n```\n...numexpr.evaluate(text)...\n```output\n${Output
+      of running the code}\n```\nAnswer: ${Answer}\n\nBegin.\n\nQuestion: What is
+      37593 * 67?\nExecuteCode({code: \"37593 * 67\"})\n...numexpr.evaluate(\"37593
+      * 67\")...\n```output\n2518731\n```\nAnswer: 2518731\n\nQuestion: 37593^(1/5)\nExecuteCode({code:
+      \"37593**(1/5)\"})\n...numexpr.evaluate(\"37593**(1/5)\")...\n```output\n8.222831614237718\n```\nAnswer:
+      8.222831614237718\n","type":"system"}},{"lc":1,"type":"constructor","id":["langchain","schema","messages","HumanMessage"],"kwargs":{"content":"What''s
+      the temp of sf + 5?","type":"human"}},{"lc":1,"type":"constructor","id":["langchain","schema","messages","SystemMessage"],"kwargs":{"content":"The
+      following additional context is provided from other functions.    Use it to
+      substitute into any ${#} variables or other words in the problem.    \n\n$Thet
+      empreature of sf is 32 degrees\n\nNote that context variables are not defined
+      in code yet.You must extract the relevant numbers and directly put them in code.","type":"system"}}]]},"run_type":"llm"}]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '10407'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: POST
+    uri: https://api.smith.langchain.com/runs/batch
+  response:
+    body:
+      string: '{"detail":"Monthly unique traces usage limit exceeded"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '55'
+      Via:
+      - 1.1 google
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:12:14 GMT
+      server:
+      - uvicorn
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"messages": [{"content": "Given a user query, create a plan to solve it
+      with the utmost parallelizability. Each plan should comprise an action from
+      the following 3 types:\n1. tavily_search_results_json(query=\"the search query\")
+      - a search engine.\n\n2. math(problem: str, context: Optional[list[str]]) ->
+      float:\n - Solves the provided math problem.\n - `problem` can be either a simple
+      math problem (e.g. \"1 + 3\") or a word problem (e.g. \"how many apples are
+      there if there are 3 apples and 2 apples\").\n - You cannot calculate multiple
+      expressions in one call. For instance, `math(''1 + 3, 2 + 4'')` does not work.
+      If you need to calculate multiple expressions, you need to call them separately
+      like `math(''1 + 3'')` and then `math(''2 + 4'')`\n - Minimize the number of
+      `math` actions as much as possible. For instance, instead of calling 2. math(\"what
+      is the 10% of $1\") and then call 3. math(\"$1 + $2\"), you MUST call 2. math(\"what
+      is the 110% of $1\") instead, which will reduce the number of math actions.\n
+      - You can optionally provide a list of strings as `context` to help the agent
+      solve the problem. If there are multiple contexts you need to answer the question,
+      you can provide them as a list of strings.\n - `math` action will not see the
+      output of the previous actions unless you provide it as `context`. You MUST
+      provide the output of the previous actions as `context` if you need to do math
+      on it.\n - You MUST NEVER provide `search` type action''s outputs as a variable
+      in the `problem` argument. This is because `search` returns a text blob that
+      contains the information about the entity, not a number or value. Therefore,
+      when you need to provide an output of `search` action, you MUST provide it as
+      a `context` argument to `math` action. For example, 1. search(\"Barack Obama\")
+      and then 2. math(\"age of $1\") is NEVER allowed. Use 2. math(\"age of Barack
+      Obama\", context=[\"$1\"]) instead.\n - When you ask a question about `context`,
+      specify the units. For instance, \"what is xx in height?\" or \"what is xx in
+      millions?\" instead of \"what is xx?\"\n\n3. join(): Collects and combines results
+      from prior actions.\n\n - An LLM agent is called upon invoking join() to either
+      finalize the user query or wait until the plans are executed.\n - join should
+      always be the last action in the plan, and will be called in two scenarios:\n   (a)
+      if the answer can be determined by gathering the outputs from tasks to generate
+      the final response.\n   (b) if the answer cannot be determined in the planning
+      phase before you execute the plans. Guidelines:\n - Each action described above
+      contains input/output types and description.\n    - You must strictly adhere
+      to the input and output types for each action.\n    - The action descriptions
+      contain the guidelines. You MUST strictly follow those guidelines when you use
+      the actions.\n - Each action in the plan should strictly be one of the above
+      types. Follow the Python conventions for each action.\n - Each action MUST have
+      a unique ID, which is strictly increasing.\n - Inputs for actions can either
+      be constants or outputs from preceding actions. In the latter case, use the
+      format $id to denote the ID of the previous action whose output will be the
+      input.\n - Always call join as the last action in the plan. Say ''<END_OF_PLAN>''
+      after you call join\n - Ensure the plan maximizes parallelizability.\n - Only
+      use the provided action types. If a query cannot be addressed using these, invoke
+      the join action for the next steps.\n - Never introduce new actions other than
+      the ones provided.", "role": "system"}, {"content": "What''s the oldest parrot
+      alive, and how much longer is that than the average?", "role": "user"}, {"content":
+      "Remember, ONLY respond with the task list in the correct format! E.g.:\nidx.
+      tool(arg_name=args)", "role": "system"}], "model": "gpt-4-turbo-preview", "n":
+      1, "stream": true, "temperature": 0.7}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '3904'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=DxvKOcipR504YFIyOHWGMeMx9MY70WMcWGVSKy_wMmc-1726769508-1.0.1.1-LEjvtkNS0MATEtE3CPM00d9GzfdolnYEIjr2eKQNfp5xad3zOeHBwSkJheM8af6O8gfw8FSCoaLzfelV4Qd70g;
+        _cfuvid=_YrqhyvdHQEYp8rjPEpqxVrE9zfcrbwD6yOMNtxZPiI-1726769508416-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: 'data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"1"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        tav"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"ily"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_search"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_results"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_json"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"(query"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"=\""},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"ol"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"dest"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        par"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"rot"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        alive"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"\")\n"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"2"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        tav"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"ily"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_search"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_results"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_json"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"(query"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"=\""},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"average"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        lifespan"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        of"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        a"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        par"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"rot"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"\")\n"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"3"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"
+        join"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"()<"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"END"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_OF"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"_PLAN"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":">"},"logprobs":null,"finish_reason":null}]}
+
+
+        data: {"id":"chatcmpl-A9FvShjcOjA70MUfmP2Ckh8qq6ERx","object":"chat.completion.chunk","created":1726769534,"model":"gpt-4-0125-preview","system_fingerprint":null,"choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}]}
+
+
+        data: [DONE]
+
+
+        '
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8af63a456894-SJC
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Thu, 19 Sep 2024 18:12:14 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '297'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1999067'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 27ms
+      x-request-id:
+      - req_23271b8008537a30104b8074ba695ca5
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"api_key": "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", "query": "oldest parrot
+      alive", "max_results": 1, "search_depth": "advanced", "include_domains": [],
+      "exclude_domains": [], "include_answer": false, "include_raw_content": false,
+      "include_images": false}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '256'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.3
+    method: POST
+    uri: https://api.tavily.com/search
+  response:
+    body:
+      string: "{\"query\":\"oldest parrot alive\",\"follow_up_questions\":null,\"answer\":null,\"images\":[],\"results\":[{\"title\":\"Cookie
+        (cockatoo) | Wikipedia\",\"url\":\"https://en.wikipedia.org/wiki/Cookie_(cockatoo)\",\"content\":\"He
+        was one of the longest-lived birds on record[4] and was recognised by the
+        Guinness World Records as the oldest living parrot in the world.[5]\\nThe
+        next-oldest pink cockatoo to be found in a zoological setting was a 31-year-old
+        female bird located at Paradise Wildlife Sanctuary, England.[3] Information
+        published by the World Parrot Trust states longevity for Cookie's species
+        in captivity is on average 40\u201360 years.[6]\\nLife[edit]\\nCookie was
+        Brookfield Zoo's oldest resident and the last surviving member of the animal
+        collection from the time of the zoo's opening in 1934, having arrived from
+        Taronga Zoo of Sydney, New South Wales, Australia, in the same year and judged
+        to be one year old at the time.[7]\\nIn the 1950s an attempt was made to introduce
+        Cookie to a female pink cockatoo, but Cookie rejected her as \\\"she was not
+        nice to him\\\".[8]\\n In 2007, Cookie was diagnosed with, and placed on medication
+        and nutritional supplements for, osteoarthritis and osteoporosis\_\u2013 medical
+        conditions which occur commonly in aging animals and humans alike,[7] although
+        it is believed that the latter may also have been brought on as a result of
+        being fed a seed-only diet for the first 40 years of his life, in the years
+        before the dietary requirements of his species were fully understood.[9]\\nCookie
+        was \\\"retired\\\" from exhibition at the zoo in 2009 (following a few months
+        of weekend-only appearances) in order to preserve his health, after it was
+        noticed by staff that his appetite, demeanor and stress levels improved markedly
+        when not on public display. age.[11] A memorial at the zoo was unveiled in
+        September 2017.[12]\\nIn 2020, Cookie became the subject of a poetry collection
+        by Barbara Gregorich entitled Cookie the Cockatoo: Everything Changes.[13]\\nSee
+        also[edit]\\nReferences[edit]\\nExternal links[edit] He was believed to be
+        the oldest member of his species alive in captivity, at the age of 82 in June
+        2015,[1][2] having significantly exceeded the average lifespan for his kind.[3]
+        He was moved to a permanent residence in the keepers' office of the zoo's
+        Perching Bird House, although he made occasional appearances for special events,
+        such as his birthday celebration, which was held each June.[3]\",\"score\":0.9982522,\"raw_content\":null}],\"response_time\":1.9}"
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2485'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:18 GMT
+      Server:
+      - nginx
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"api_key": "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", "query": "average
+      lifespan of a parrot", "max_results": 1, "search_depth": "advanced", "include_domains":
+      [], "exclude_domains": [], "include_answer": false, "include_raw_content": false,
+      "include_images": false}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '265'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.3
+    method: POST
+    uri: https://api.tavily.com/search
+  response:
+    body:
+      string: '{"query":"average lifespan of a parrot","follow_up_questions":null,"answer":null,"images":[],"results":[{"title":"How
+        Long Do Parrots Live? Longevity & The Biggest Dangers - Birdzilla","url":"https://www.birdzilla.com/learn/how-long-do-parrots-live/","content":"In
+        captivity, they can easily live to be ten or even 18 years of age. In general,
+        most wild parrot species live only half the numbers of years they would live
+        in captivity. For example, adopted African Gray Parrots might live to be 60,
+        whereas wild birds have an average lifespan of 30 or 40 at the very most.","score":0.9948001,"raw_content":null}],"response_time":2.4}'
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '632'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:21 GMT
+      Server:
+      - nginx
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Solve a question answering task. Here are some
+      guidelines:\n - In the Assistant Scratchpad, you will be given results of a
+      plan you have executed to answer the user''s question.\n - Thought needs to
+      reason about the question based on the Observations in 1-2 sentences.\n - Ignore
+      irrelevant action results.\n - If the required information is present, give
+      a concise but complete and helpful answer to the user''s question.\n - If you
+      are unable to give a satisfactory finishing answer, replan to get the required
+      information. Respond in the following format:\n\nThought: <reason about the
+      task results and whether you have sufficient information to answer the question>\nAction:
+      <action to take>\nAvailable actions:\n (1) Finish(the final answer to return
+      to the user): returns the answer and finishes the task.\n (2) Replan(the reasoning
+      and other information that will help you plan again. Can be a line of any length):
+      instructs why we must replan", "role": "system"}, {"content": "What''s the oldest
+      parrot alive, and how much longer is that than the average?", "role": "user"},
+      {"content": "[{''url'': ''https://en.wikipedia.org/wiki/Cookie_(cockatoo)'',
+      ''content'': ''He was one of the longest-lived birds on record[4] and was recognised
+      by the Guinness World Records as the oldest living parrot in the world.[5]\\nThe
+      next-oldest pink cockatoo to be found in a zoological setting was a 31-year-old
+      female bird located at Paradise Wildlife Sanctuary, England.[3] Information
+      published by the World Parrot Trust states longevity for Cookie\\''s species
+      in captivity is on average 40\u201360 years.[6]\\nLife[edit]\\nCookie was Brookfield
+      Zoo\\''s oldest resident and the last surviving member of the animal collection
+      from the time of the zoo\\''s opening in 1934, having arrived from Taronga Zoo
+      of Sydney, New South Wales, Australia, in the same year and judged to be one
+      year old at the time.[7]\\nIn the 1950s an attempt was made to introduce Cookie
+      to a female pink cockatoo, but Cookie rejected her as \"she was not nice to
+      him\".[8]\\n In 2007, Cookie was diagnosed with, and placed on medication and
+      nutritional supplements for, osteoarthritis and osteoporosis\\xa0\u2013 medical
+      conditions which occur commonly in aging animals and humans alike,[7] although
+      it is believed that the latter may also have been brought on as a result of
+      being fed a seed-only diet for the first 40 years of his life, in the years
+      before the dietary requirements of his species were fully understood.[9]\\nCookie
+      was \"retired\" from exhibition at the zoo in 2009 (following a few months of
+      weekend-only appearances) in order to preserve his health, after it was noticed
+      by staff that his appetite, demeanor and stress levels improved markedly when
+      not on public display. age.[11] A memorial at the zoo was unveiled in September
+      2017.[12]\\nIn 2020, Cookie became the subject of a poetry collection by Barbara
+      Gregorich entitled Cookie the Cockatoo: Everything Changes.[13]\\nSee also[edit]\\nReferences[edit]\\nExternal
+      links[edit] He was believed to be the oldest member of his species alive in
+      captivity, at the age of 82 in June 2015,[1][2] having significantly exceeded
+      the average lifespan for his kind.[3] He was moved to a permanent residence
+      in the keepers\\'' office of the zoo\\''s Perching Bird House, although he made
+      occasional appearances for special events, such as his birthday celebration,
+      which was held each June.[3]''}]", "name": "tavily_search_results_json", "role":
+      "function"}, {"content": "[{''url'': ''https://www.birdzilla.com/learn/how-long-do-parrots-live/'',
+      ''content'': ''In captivity, they can easily live to be ten or even 18 years
+      of age. In general, most wild parrot species live only half the numbers of years
+      they would live in captivity. For example, adopted African Gray Parrots might
+      live to be 60, whereas wild birds have an average lifespan of 30 or 40 at the
+      very most.''}]", "name": "tavily_search_results_json", "role": "function"},
+      {"content": "join", "name": "join", "role": "function"}, {"content": "Using
+      the above previous actions, decide whether to replan or finish. If all the required
+      information is present. You may finish. If you have made many attempts to find
+      the information without success, admit so and respond with whatever information
+      you have gathered so the user can work well with you.\n\n", "role": "system"}],
+      "model": "gpt-4-turbo-preview", "n": 1, "parallel_tool_calls": false, "stream":
+      false, "temperature": 0.7, "tool_choice": {"type": "function", "function": {"name":
+      "JoinOutputs"}}, "tools": [{"type": "function", "function": {"name": "JoinOutputs",
+      "description": "Decide whether to replan or whether you can return the final
+      response.", "parameters": {"properties": {"thought": {"description": "The chain
+      of thought reasoning for the selected action", "type": "string"}, "action":
+      {"anyOf": [{"description": "The final response/answer.", "properties": {"response":
+      {"title": "Response", "type": "string"}}, "required": ["response"], "title":
+      "FinalResponse", "type": "object"}, {"properties": {"feedback": {"description":
+      "Analysis of the previous attempts and recommendations on what needs to be fixed.",
+      "title": "Feedback", "type": "string"}}, "required": ["feedback"], "title":
+      "Replan", "type": "object"}]}}, "required": ["thought", "action"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '5345'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=Uu4bOpcl2zXOpJFJ_STXy4gT_7wIFt5lF8hF4YWkY6c-1726769526-1.0.1.1-Rxh4OcmTuy0JRlwTcCMv24cdGOi6xdzpe0pUfno_AJS8Rv17SPmSfYtP23E7oi4ZgdC9HSM3qzV60mI9nlw2JA;
+        _cfuvid=Ief420O76508IGoTYURc5WT.FJYfyPR00a7._6etZFE-1726769526641-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//tFRNb+NGDL37VxBz6cUObNdxdn1LC3Sx7ba7aFok2LowmBE1YjOaUYeU
+        E6/h/16M5K8Em0OBVgdBIId8j4+jtx0AGC7MAoytUG3d+NH12x/Wn2/cl+KJ5r/c/P3+021dv7+7
+        upn9eo3RDHNFvP+LrB6qLmysG0/KMfRpmwiVctfJ1XR+NX97OZt0iToW5HOZa3Q0G40n08tRk2jN
+        9LivrCJbErOAPwYAANvunTmGgp7MAsbDQ6QmEXRkFsdDACZFnyMGRVgUg5rhKWljUAqZdmi9P0to
+        jH5l0fsTcP9sz75PQqH3q/Xt7Oqnu1vRx4/ffv79w9N3d3fXP9+++3CG17feNB2hsg32KNBZ/hhf
+        vAADMAHrrvbHyOFjq02r8qIcwGBybU1BM3WzXRqtYusqXZrF0vxWEXAoY6oxY0CZYg1aEZScRCGR
+        tF6BQ8EWlQS0QoXvY3xgGgKCjfYBNcYhPKKAjUG4oERF1yL6gkTB85qDgwZTigqo8GYKG8Ik+QBw
+        gOl4cgkYChB2gUu2GNRvgJ4sUbHvhWtK6Ag8lyQNBihjgooFpCHLJEN4rNhWwAKz8Wg+3iNwAIuN
+        8pp1cwF5WCEbQ3EYzPGaBBwFSuifCYH3sdUD6QOqwH2rPWTJBzWwiI1SAddlytThXcINfOoKBWp2
+        VScBgUY48DpjK1yzx5Szec6EwVE3XC/yN8cJM/18vnWORJ9toutf7ClPp7nX7KCxj8FRyqfD60Ie
+        SPTjysXSDJcGu1u3NIvt0iSSJgah7s68tv5ENrrAXzIV+dc3YPjV9ee6/3D/LFBT3uP/JtxuZ579
+        f7vB177/PLOWRGUr6Pees4/vjibmo2tSvJcXnmRKDizVKhFK5w1GNDY9dsbpEEz7zP9Mk2Ld6Erj
+        A4XccDK+nPcNzcmgz9JvZvusRkV/lpjOxq/VrQpS5M4nj9bck+TgTi3GR6bdqEY2olSvSs6qN4mP
+        JjzYDf4BAAD//wMAaDKq7oMGAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8b236f259e62-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:12:28 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '6464'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '2000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '1998973'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 30ms
+      x-request-id:
+      - req_571f0c1163806a9ab0836f09e7ab3b44
+    status:
+      code: 200
+      message: OK
+version: 1

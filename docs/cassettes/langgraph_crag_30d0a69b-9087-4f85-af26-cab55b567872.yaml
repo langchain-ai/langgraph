@@ -1,0 +1,104 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "You a question re-writer that converts an input
+      question to a better version that is optimized \n \n         for web search.
+      Look at the input and try to reason about the underlying semantic intent / meaning.",
+      "role": "system"}, {"content": "Here is the initial question: \n\n agent memory
+      \n Formulate an improved question.", "role": "user"}], "model": "gpt-3.5-turbo-0125",
+      "n": 1, "stream": false, "temperature": 0.0}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '448'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dJBLTwJBEITv/IrOnIHwEBAuxhhJTNCDF2OMIcNs727L7PQ606sg4b+b
+        WR6LBy9zqG+qUl27FoCiRM1AmVyLKUrbuZ3Oq/niiX+ye58vHobJ3fXr1+b7c/683j6qdnTw6gON
+        nFxdw0VpUYjdARuPWjCm9ieD8WQ8vRpNa1BwgjbaslI6w+6oI5VfcafXH4yOzpzJYFAzeGsBAOzq
+        N3Z0CW7UDHrtk1JgCDpDNTt/AlCebVSUDoGCaCeq3UDDTtDVtV9yLUABJEeIHuAUCizYb4EcaC+U
+        kiFtgZygtZShMwg6Qyfh5jLTY1oFHW9ylbVHfX8uaTkrPa/CkZ/1lByFfOlRB3axUBAuVU33LYD3
+        eozqz32q9FyUshReo4uB48khTjXzN7DfP0Jh0bbRJ9f/mZYJiiYbLgZVh37ksiagdy5ZX6nCNggW
+        y5Rchr70VO9bb7Fv/QIAAP//AwB+yzGGXgIAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b89226e95ce7c-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:10:59 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=AynsG.PVoghKMxmpSF4QTUHKenEofePGZasQv6gqRh8-1726769459-1.0.1.1-H2rR3qzJ6IlnUfHZccut06xES6aiLdxe0CARAkStYe1rzqSyRnaw9FNCeWpB5LKOt2NxKXy8U6lISij26JYyow;
+        path=/; expires=Thu, 19-Sep-24 18:40:59 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=LHY.TrCatPcigye.ihIWxuou2aAsdn5K9V4EoowMAPs-1726769459888-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '205'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '50000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '49999910'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_ac75c43c9c0827a218068633880eeb3c
+    status:
+      code: 200
+      message: OK
+version: 1

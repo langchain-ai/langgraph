@@ -1,0 +1,208 @@
+interactions:
+- request:
+    body: "{\"post\":[{\"id\":\"3d237850-821e-4ed9-be9e-0fb9d1057649\",\"start_time\":\"2024-09-19T18:13:07.352798+00:00\",\"end_time\":\"2024-09-19T18:13:07.353448+00:00\",\"extra\":{\"color\":\"green\",\"metadata\":{\"revision_id\":\"checkpoint==1.0.10-68-g22fa527b-dirty\"},\"runtime\":{\"sdk\":\"langsmith-py\",\"sdk_version\":\"0.1.123\",\"library\":\"langsmith\",\"platform\":\"macOS-14.5-arm64-arm-64bit\",\"runtime\":\"python\",\"py_implementation\":\"CPython\",\"runtime_version\":\"3.12.4\",\"langchain_version\":\"0.3.0\",\"langchain_core_version\":\"0.3.1\"}},\"error\":null,\"events\":[{\"name\":\"start\",\"time\":\"2024-09-19T18:13:07.352798+00:00\"},{\"name\":\"end\",\"time\":\"2024-09-19T18:13:07.353448+00:00\"}],\"reference_example_id\":null,\"parent_run_id\":null,\"tags\":[],\"trace_id\":\"3d237850-821e-4ed9-be9e-0fb9d1057649\",\"dotted_order\":\"20240919T181307352798Z3d237850-821e-4ed9-be9e-0fb9d1057649\",\"outputs\":{\"output\":\"Album,
+      Artist, Customer, Employee, Genre, Invoice, InvoiceLine, MediaType, Playlist,
+      PlaylistTrack, Track\"},\"session_name\":\"default\",\"name\":\"sql_db_list_tables\",\"inputs\":{\"input\":\"\"},\"run_type\":\"tool\"},{\"id\":\"4e77bcea-ae43-40d7-b6f1-95730b684b14\",\"start_time\":\"2024-09-19T18:13:07.353632+00:00\",\"end_time\":\"2024-09-19T18:13:07.355225+00:00\",\"extra\":{\"color\":\"green\",\"metadata\":{\"revision_id\":\"checkpoint==1.0.10-68-g22fa527b-dirty\"},\"runtime\":{\"sdk\":\"langsmith-py\",\"sdk_version\":\"0.1.123\",\"library\":\"langsmith\",\"platform\":\"macOS-14.5-arm64-arm-64bit\",\"runtime\":\"python\",\"py_implementation\":\"CPython\",\"runtime_version\":\"3.12.4\",\"langchain_version\":\"0.3.0\",\"langchain_core_version\":\"0.3.1\"}},\"error\":null,\"events\":[{\"name\":\"start\",\"time\":\"2024-09-19T18:13:07.353632+00:00\"},{\"name\":\"end\",\"time\":\"2024-09-19T18:13:07.355225+00:00\"}],\"reference_example_id\":null,\"parent_run_id\":null,\"tags\":[],\"trace_id\":\"4e77bcea-ae43-40d7-b6f1-95730b684b14\",\"dotted_order\":\"20240919T181307353632Z4e77bcea-ae43-40d7-b6f1-95730b684b14\",\"outputs\":{\"output\":\"\\nCREATE
+      TABLE \\\"Artist\\\" (\\n\\t\\\"ArtistId\\\" INTEGER NOT NULL, \\n\\t\\\"Name\\\"
+      NVARCHAR(120), \\n\\tPRIMARY KEY (\\\"ArtistId\\\")\\n)\\n\\n/*\\n3 rows from
+      Artist table:\\nArtistId\\tName\\n1\\tAC/DC\\n2\\tAccept\\n3\\tAerosmith\\n*/\"},\"session_name\":\"default\",\"name\":\"sql_db_schema\",\"inputs\":{\"input\":\"Artist\"},\"run_type\":\"tool\"},{\"id\":\"7c9c27be-c051-48f2-9759-2ef1e53ac78c\",\"start_time\":\"2024-09-19T18:13:07.361554+00:00\",\"end_time\":\"2024-09-19T18:13:07.361972+00:00\",\"extra\":{\"color\":\"green\",\"metadata\":{\"revision_id\":\"checkpoint==1.0.10-68-g22fa527b-dirty\"},\"runtime\":{\"sdk\":\"langsmith-py\",\"sdk_version\":\"0.1.123\",\"library\":\"langsmith\",\"platform\":\"macOS-14.5-arm64-arm-64bit\",\"runtime\":\"python\",\"py_implementation\":\"CPython\",\"runtime_version\":\"3.12.4\",\"langchain_version\":\"0.3.0\",\"langchain_core_version\":\"0.3.1\"}},\"error\":null,\"events\":[{\"name\":\"start\",\"time\":\"2024-09-19T18:13:07.361554+00:00\"},{\"name\":\"end\",\"time\":\"2024-09-19T18:13:07.361972+00:00\"}],\"reference_example_id\":null,\"parent_run_id\":null,\"tags\":[],\"trace_id\":\"7c9c27be-c051-48f2-9759-2ef1e53ac78c\",\"dotted_order\":\"20240919T181307361554Z7c9c27be-c051-48f2-9759-2ef1e53ac78c\",\"outputs\":{\"output\":\"[(1,
+      'AC/DC'), (2, 'Accept'), (3, 'Aerosmith'), (4, 'Alanis Morissette'), (5, 'Alice
+      In Chains'), (6, 'Ant\xF4nio Carlos Jobim'), (7, 'Apocalyptica'), (8, 'Audioslave'),
+      (9, 'BackBeat'), (10, 'Billy Cobham')]\"},\"session_name\":\"default\",\"name\":\"db_query_tool\",\"inputs\":{\"input\":\"SELECT
+      * FROM Artist LIMIT 10;\"},\"run_type\":\"tool\"},{\"id\":\"5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"start_time\":\"2024-09-19T18:13:07.380151+00:00\",\"end_time\":null,\"extra\":{\"runtime\":{\"sdk\":\"langsmith-py\",\"sdk_version\":\"0.1.123\",\"library\":\"langchain-core\",\"platform\":\"macOS-14.5-arm64-arm-64bit\",\"runtime\":\"python\",\"py_implementation\":\"CPython\",\"runtime_version\":\"3.12.4\",\"langchain_version\":\"0.3.0\",\"langchain_core_version\":\"0.3.1\",\"library_version\":\"0.3.1\"},\"metadata\":{\"revision_id\":\"checkpoint==1.0.10-68-g22fa527b-dirty\"}},\"error\":null,\"events\":[{\"name\":\"start\",\"time\":\"2024-09-19T18:13:07.380151+00:00\"}],\"reference_example_id\":null,\"parent_run_id\":null,\"tags\":[],\"trace_id\":\"5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"dotted_order\":\"20240919T181307380151Z5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"outputs\":null,\"session_name\":\"default\",\"name\":\"RunnableSequence\",\"inputs\":{\"messages\":[[\"user\",\"SELECT
+      * FROM Artist LIMIT 10;\"]]},\"run_type\":\"chain\"},{\"id\":\"b6c850ac-9db9-44cb-bb43-081ac52d605f\",\"start_time\":\"2024-09-19T18:13:07.380515+00:00\",\"end_time\":\"2024-09-19T18:13:07.380794+00:00\",\"extra\":{\"metadata\":{\"revision_id\":\"checkpoint==1.0.10-68-g22fa527b-dirty\"},\"runtime\":{\"sdk\":\"langsmith-py\",\"sdk_version\":\"0.1.123\",\"library\":\"langsmith\",\"platform\":\"macOS-14.5-arm64-arm-64bit\",\"runtime\":\"python\",\"py_implementation\":\"CPython\",\"runtime_version\":\"3.12.4\",\"langchain_version\":\"0.3.0\",\"langchain_core_version\":\"0.3.1\"}},\"error\":null,\"serialized\":{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"prompts\",\"chat\",\"ChatPromptTemplate\"],\"kwargs\":{\"input_variables\":[],\"optional_variables\":[\"messages\"],\"partial_variables\":{\"messages\":[]},\"messages\":[{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"prompts\",\"chat\",\"SystemMessagePromptTemplate\"],\"kwargs\":{\"prompt\":{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"prompts\",\"prompt\",\"PromptTemplate\"],\"kwargs\":{\"input_variables\":[],\"template\":\"You
+      are a SQL expert with a strong attention to detail.\\n    Double check the SQLite
+      query for common mistakes, including:\\n    - Using NOT IN with NULL values\\n
+      \   - Using UNION when UNION ALL should have been used\\n    - Using BETWEEN
+      for exclusive ranges\\n    - Data type mismatch in predicates\\n    - Properly
+      quoting identifiers\\n    - Using the correct number of arguments for functions\\n
+      \   - Casting to the correct data type\\n    - Using the proper columns for
+      joins\\n    \\n    If there are any of the above mistakes, rewrite the query.
+      If there are no mistakes, just reproduce the original query.\\n    \\n    You
+      will call the appropriate tool to execute the query after running this check.\",\"template_format\":\"f-string\"},\"name\":\"PromptTemplate\"}}},{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"prompts\",\"chat\",\"MessagesPlaceholder\"],\"kwargs\":{\"variable_name\":\"messages\",\"optional\":true}}]},\"name\":\"ChatPromptTemplate\"},\"events\":[{\"name\":\"start\",\"time\":\"2024-09-19T18:13:07.380515+00:00\"},{\"name\":\"end\",\"time\":\"2024-09-19T18:13:07.380794+00:00\"}],\"reference_example_id\":null,\"parent_run_id\":\"5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"tags\":[\"seq:step:1\"],\"trace_id\":\"5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"dotted_order\":\"20240919T181307380151Z5b0a9d1a-73b0-45b2-9818-bbef978b1b64.20240919T181307380515Zb6c850ac-9db9-44cb-bb43-081ac52d605f\",\"outputs\":{\"output\":{\"messages\":[{\"content\":\"You
+      are a SQL expert with a strong attention to detail.\\n    Double check the SQLite
+      query for common mistakes, including:\\n    - Using NOT IN with NULL values\\n
+      \   - Using UNION when UNION ALL should have been used\\n    - Using BETWEEN
+      for exclusive ranges\\n    - Data type mismatch in predicates\\n    - Properly
+      quoting identifiers\\n    - Using the correct number of arguments for functions\\n
+      \   - Casting to the correct data type\\n    - Using the proper columns for
+      joins\\n    \\n    If there are any of the above mistakes, rewrite the query.
+      If there are no mistakes, just reproduce the original query.\\n    \\n    You
+      will call the appropriate tool to execute the query after running this check.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"system\"},{\"content\":\"SELECT
+      * FROM Artist LIMIT 10;\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\"}]}},\"session_name\":\"default\",\"name\":\"ChatPromptTemplate\",\"inputs\":{\"messages\":[[\"user\",\"SELECT
+      * FROM Artist LIMIT 10;\"]]},\"run_type\":\"prompt\"},{\"id\":\"f025a9b0-0403-4ec5-893c-64d9085c28e5\",\"start_time\":\"2024-09-19T18:13:07.381076+00:00\",\"end_time\":null,\"extra\":{\"invocation_params\":{\"model\":\"gpt-4o\",\"model_name\":\"gpt-4o\",\"stream\":false,\"n\":1,\"temperature\":0.0,\"_type\":\"openai-chat\",\"stop\":null,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"db_query_tool\",\"description\":\"Execute
+      a SQL query against the database and get back the result.\\nIf the query is
+      not correct, an error message will be returned.\\nIf an error is returned, rewrite
+      the query, check the query, and try again.\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}}}],\"tool_choice\":\"required\"},\"options\":{\"stop\":null},\"batch_size\":1,\"metadata\":{\"ls_provider\":\"openai\",\"ls_model_name\":\"gpt-4o\",\"ls_model_type\":\"chat\",\"ls_temperature\":0.0,\"revision_id\":\"checkpoint==1.0.10-68-g22fa527b-dirty\"},\"runtime\":{\"sdk\":\"langsmith-py\",\"sdk_version\":\"0.1.123\",\"library\":\"langchain-core\",\"platform\":\"macOS-14.5-arm64-arm-64bit\",\"runtime\":\"python\",\"py_implementation\":\"CPython\",\"runtime_version\":\"3.12.4\",\"langchain_version\":\"0.3.0\",\"langchain_core_version\":\"0.3.1\",\"library_version\":\"0.3.1\"}},\"error\":null,\"serialized\":{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"chat_models\",\"openai\",\"ChatOpenAI\"],\"kwargs\":{\"model_name\":\"gpt-4o\",\"temperature\":0.0,\"openai_api_key\":{\"lc\":1,\"type\":\"secret\",\"id\":[\"OPENAI_API_KEY\"]},\"max_retries\":2,\"n\":1},\"name\":\"ChatOpenAI\"},\"events\":[{\"name\":\"start\",\"time\":\"2024-09-19T18:13:07.381076+00:00\"}],\"reference_example_id\":null,\"parent_run_id\":\"5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"tags\":[\"seq:step:2\"],\"trace_id\":\"5b0a9d1a-73b0-45b2-9818-bbef978b1b64\",\"dotted_order\":\"20240919T181307380151Z5b0a9d1a-73b0-45b2-9818-bbef978b1b64.20240919T181307381076Zf025a9b0-0403-4ec5-893c-64d9085c28e5\",\"outputs\":null,\"session_name\":\"default\",\"name\":\"ChatOpenAI\",\"inputs\":{\"messages\":[[{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"SystemMessage\"],\"kwargs\":{\"content\":\"You
+      are a SQL expert with a strong attention to detail.\\n    Double check the SQLite
+      query for common mistakes, including:\\n    - Using NOT IN with NULL values\\n
+      \   - Using UNION when UNION ALL should have been used\\n    - Using BETWEEN
+      for exclusive ranges\\n    - Data type mismatch in predicates\\n    - Properly
+      quoting identifiers\\n    - Using the correct number of arguments for functions\\n
+      \   - Casting to the correct data type\\n    - Using the proper columns for
+      joins\\n    \\n    If there are any of the above mistakes, rewrite the query.
+      If there are no mistakes, just reproduce the original query.\\n    \\n    You
+      will call the appropriate tool to execute the query after running this check.\",\"type\":\"system\"}},{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"HumanMessage\"],\"kwargs\":{\"content\":\"SELECT
+      * FROM Artist LIMIT 10;\",\"type\":\"human\"}}]]},\"run_type\":\"llm\"}]}"
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '10442'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - langsmith-py/0.1.123
+    method: POST
+    uri: https://api.smith.langchain.com/runs/batch
+  response:
+    body:
+      string: '{"detail":"Monthly unique traces usage limit exceeded"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - '*'
+      Access-Control-Allow-Methods:
+      - '*'
+      Access-Control-Allow-Origin:
+      - ''
+      Access-Control-Expose-Headers:
+      - '*'
+      Access-Control-Max-Age:
+      - '600'
+      Alt-Svc:
+      - h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+      Content-Length:
+      - '55'
+      Via:
+      - 1.1 google
+      content-type:
+      - application/json
+      date:
+      - Thu, 19 Sep 2024 18:13:07 GMT
+      server:
+      - uvicorn
+    status:
+      code: 429
+      message: Too Many Requests
+- request:
+    body: '{"messages": [{"content": "You are a SQL expert with a strong attention
+      to detail.\n    Double check the SQLite query for common mistakes, including:\n    -
+      Using NOT IN with NULL values\n    - Using UNION when UNION ALL should have
+      been used\n    - Using BETWEEN for exclusive ranges\n    - Data type mismatch
+      in predicates\n    - Properly quoting identifiers\n    - Using the correct number
+      of arguments for functions\n    - Casting to the correct data type\n    - Using
+      the proper columns for joins\n    \n    If there are any of the above mistakes,
+      rewrite the query. If there are no mistakes, just reproduce the original query.\n    \n    You
+      will call the appropriate tool to execute the query after running this check.",
+      "role": "system"}, {"content": "SELECT * FROM Artist LIMIT 10;", "role": "user"}],
+      "model": "gpt-4o", "n": 1, "stream": false, "temperature": 0.0, "tool_choice":
+      "required", "tools": [{"type": "function", "function": {"name": "db_query_tool",
+      "description": "Execute a SQL query against the database and get back the result.\nIf
+      the query is not correct, an error message will be returned.\nIf an error is
+      returned, rewrite the query, check the query, and try again.", "parameters":
+      {"properties": {"query": {"type": "string"}}, "required": ["query"], "type":
+      "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '1301'
+      content-type:
+      - application/json
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RSW2+bMBR+51dY53EKEyG3hj1lU7O1Sxupi3rRMiFjDHFjbM82alGU/z4ZUqDR
+        ygOyzufv4nPOwUMIWAoRArLDlhSK+4v58uU6sNcXX5812d2S2WN1uw+/Z+bHU76EgWPI5JkS+8b6
+        TGShOLVMigYmmmJLnepwFk5n0/nkYlYDhUwpd7RcWX8s/TAIx34w8YejE3EnGaEGIvTbQwihQ/13
+        EUVKXyFCweCtUlBjcE4hai8hBFpyVwFsDDMWCwuDDiRSWCpcalFy3gOslDwmmPPOuPkOvXPXJ8x5
+        /DivVuvRZn1/95NMF/cP+2DxMl6lDz2/RrpSdaCsFKTtTw9v69GZGUIgcFFz0yT+W1JdxS7nmQBC
+        gHVeFlRYFx4OW6jvbiHawq/L1eW3DfqElnfrG7TQlhmLVlc3Vxs0DL5s4QjvtI7e/85/eo3SNCsN
+        5qcOnurHdiRc5krLxJx1GDImmNnFmmJTvxSMlarxdj61A5TvpglKy0LZ2Mo9FU4wHI0aPeiWrYee
+        9gKstJj36pMPWXFKLWb1yNstaxIykXcKQRuzfieYylhaxBkTOdVKs3qfIFPxJMSzbBwkQQLe0fsH
+        AAD//wMAHy+KUlgDAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b8c42080d9812-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:13:08 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=SiYviRqPAQ2kx5.csdlcMpqfAEkKMV8frp8QOTMTECM-1726769588-1.0.1.1-D_w5buvHUDFtD8zHIAt3pnug_A2jweHyn9RGjko9GJLgX03wFqa.AlDu3_w1.nv41UM3PvgJjxUAY.xOG9GF9g;
+        path=/; expires=Thu, 19-Sep-24 18:43:08 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=DYMOViFs8R4YOSJ0SlZHvaNoSQ896BSr0XC8k8yKwsc-1726769588086-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '310'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999802'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_39d86466f5395319561eed8064351cf1
+    status:
+      code: 200
+      message: OK
+version: 1

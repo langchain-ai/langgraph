@@ -1,0 +1,1850 @@
+interactions:
+- request:
+    body: '{"messages": [{"content": "You are an AI assistant.", "role": "system"},
+      {"content": "Generate a table with the average size and weight, as well as the
+      oldest recorded instance for each of the top 5 most common birds.", "role":
+      "user"}], "model": "gpt-4o", "n": 1, "stream": false, "temperature": 0.7, "tools":
+      [{"type": "function", "function": {"name": "tavily_search_results_json", "description":
+      "A search engine optimized for comprehensive, accurate, and trusted results.
+      Useful for when you need to answer questions about current events. Input should
+      be a search query.", "parameters": {"properties": {"query": {"description":
+      "search query to look up", "type": "string"}}, "required": ["query"], "type":
+      "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '723'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//zFRNT9tAEL3nV4zmTCrbCQRy64cCbZG4NBG0qazN7tjesN41O2vSEOW/
+        V3YgMVRIldoDPljreX5vZp80b9MDQK1wDCgLEWRZmf77s4nh2XW9/ji6evjOl9mDvrg9D5N6WZgM
+        jxqGWyxJhifWO+nKylDQzu5g6UkEalTjUXIyOjk9G0YtUDpFpqHlVegPXT+JkmE/Ou7Hg0di4bQk
+        xjH86AEAbNp3M6JV9AvH0Mq0lZKYRU443v8EgN6ZpoKCWXMQNuDRAZTOBrLN1LY2pgME50wqhTGH
+        xrtn0zkffBLGpLK4WJkvs5u7wc3dt9N4cKVYfYrkqNNvJ72u2oGy2sq9Px18Xx+/aAaAVpQtN4h7
+        bdYpk/CySD1xbQKnS/5DDQCFz+uSbGhugps53tXk13McwxyDq+AYSscBpCtLZ2GhvWLQFkJBsHLe
+        qDlu8ZnktvO1Pfora1bTaTX9ej69LnwiV4mcJsKLX4v7N2yNuCcvcgLWDwTCKliRzosALmutecW5
+        /2HWzLhLXl8XcTRZzm6mMzP5cMGF+vyGzXJGEQfwJJ1XpEDbZtMk/ZNb+/PPzl56ymoW5nFhey+M
+        RePyyrsFv1hozLTV3FxQcGtId797T93aPlg/ixCsvCurkAZ3S7aRjePBThUPCddBo8c0wuCCMAcg
+        eZ2WKgpCt0Gzz7bdoNrmB4VoP2d7XeQ1ByrTTNucfOV1m2KYVSkNRseD5DQenmBv2/sNAAD//wMA
+        KjGKlc4FAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7c74fedc7ad3-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:23 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '3014'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999942'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_134cd89d77c25c04a1bc1d64f2c7e634
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"api_key": "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", "query": "top 5 most
+      common birds in the world", "max_results": 5, "search_depth": "advanced", "include_domains":
+      [], "exclude_domains": [], "include_answer": false, "include_raw_content": false,
+      "include_images": false}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '273'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.3
+    method: POST
+    uri: https://api.tavily.com/search
+  response:
+    body:
+      string: "{\"query\":\"top 5 most common birds in the world\",\"follow_up_questions\":null,\"answer\":null,\"images\":[],\"results\":[{\"title\":\"The
+        Most Common Birds in the World - WorldAtlas\",\"url\":\"https://www.worldatlas.com/articles/most-populous-bird-species-in-the-world.html\",\"content\":\"The
+        Most Common Birds in the World\\nThough most of the birds listed herein can
+        be found living in abundance in the wild across large portions of the world,
+        the most populated bird is technically the domestic chicken. The World's Most
+        Common Types of Apples\\nMore in World Facts\\nThe Largest Countries In Asia
+        By Area\\n This bird is found across North America, and migrates from the
+        northern section of the continent to the southern section during the winter
+        time. Most Populous Bird Species In The World\\nRelated\\nThe World's Most
+        Common Types Of Fish\\n The widespread use of this bird as a source of food
+        became more common after large scale industrial production started in the
+        20th Century, and currently chicken is an important part of almost all global
+        cuisines.\",\"score\":0.97134733,\"raw_content\":null},{\"title\":\"What Is
+        The Most Common Bird In The World? - WorldAtlas\",\"url\":\"https://www.worldatlas.com/articles/what-is-the-most-common-bird-in-the-world.html\",\"content\":\"Related\\nThe
+        World's Most Common Types Of Fish\\nThe Most Common Birds in the World\\nMore
+        in Environment\\nImportance Of Wetlands\\nMeet 12 Incredible Conservation
+        Heroes Saving Our Wildlife From Extinction\\nIndia's Leopard God, Waghoba,
+        Aids Wildlife Conservation In The Country\\nIndia's Bishnoi Community Has
+        Fearlessly Protected Nature For Over 500 Years\\nWildfires And Habitat Loss
+        Are Killing Jaguars In The Amazon Rainforest\\nIn India's Sundarbans: Where
+        People Live Face-To-Face With Wild Tigers\\nAfrica's \\\"Thunderbird\\\" Is
+        At Risk Of Extinction\\nWhy Is Biodiversity Critical To Life On Earth?\\n
+        There are three subspecies among the red-billed quelea, and these are the
+        Quelea quelea quelea, found near Senegal, the Q. q. Aethiopica found predominantly
+        around Sudan and Tanzania, and finally, the Q. q. Lathamii, which resides
+        mostly in the south of the African continent.\\n The nests constructed by
+        the red-billed quelea are oval and have a roof, and they weave them from various
+        strips of grasses that they find on tree branches\u2014the red-billed quelea
+        breeds in extensive colonies, whose numbers are sometimes in the millions.\\n
+        The Red-billed Quelea\\nThe red-billed quelea is also known as the red-billed
+        weaver, and it is a species of extremely small migratory birds. You are probably
+        wondering what the most common wild bird in the world is, and the answer is
+        the red-billed quelea.\",\"score\":0.7437268,\"raw_content\":null},{\"title\":\"The
+        Story of the Most Common Bird in the World | Smithsonian\",\"url\":\"https://www.smithsonianmag.com/science-nature/the-story-of-the-most-common-bird-in-the-world-113046500/\",\"content\":\"If
+        asked to describe a house sparrow, many bird biologists would describe it
+        as a small, ubiquitous brown bird, originally native to Europe and then introduced
+        to the Americas and elsewhere around the world, where it became a pest of
+        humans, a kind of brown-winged rat. Sections\\nSCIENCE\\nThe Story of the
+        Most Common Bird in the World\\nWhy do we love what is rare and despise what
+        is all around us?\\nRob Dunn\\nEven if you don\u2019t know it, you have probably
+        been surrounded by house sparrows your entire life. In killing the sparrows,
+        Mao and the Chinese had saved the crops from the sparrows, but appear to have
+        left them to the insects. In 1889, just 49 years after the introduction of
+        the birds, a survey was sent to roughly 5,000 Americans to ask them what they
+        thought of the house sparrows. At the moment at which Mao decided to kill
+        the sparrows, there were hundreds of millions of them in China (some estimates
+        run as high as several billion), but there were also hundreds of millions
+        of people.\",\"score\":0.6788594,\"raw_content\":null},{\"title\":\"The Most
+        Common Birds In The World - Bird Sology\",\"url\":\"https://birdsology.com/the-most-common-birds-in-the-world/\",\"content\":\"Post
+        Comment\\nCategories\\nRelated Posts\\nWorld\u2019s Rarest Chicken Breeds:
+        Some May Surprise You\\nMesmerizing Yellow Birds With Black Wings [Images
+        + IDs]\\nThe Best Egg-Laying Chickens Breeds \u2013 A Detailed Guide\\nBeautiful
+        Red Birds With Black Wings[Images + IDs]\\nImportant Links\\nRECENT POST\\nBegin
+        typing your search term above and press enter to search. Birdsology\\nYour
+        Guide to Birds\\nThe Most Common Birds In The World\\nA well-liked pastime
+        that enables people to experience nature and take in the amazing variety of
+        birds is bird watching. The Common Starling\\nAlthough the Common Starling
+        is indigenous to Europe, it has spread its population around the globe, including
+        North America, Australia, and New Zealand, as a result of deliberate importation
+        and unintentional escapes.\\n Required fields are marked *\\nComment *\\nName
+        *\\nEmail *\\nWebsite\\nSave my name, email, and website in this browser for
+        the next time I comment.\\n The Habits That Make These Birds Prosperous\\nBecause
+        of their remarkable adaptability, birds can survive and even flourish in a
+        variety of habitats around the earth.\",\"score\":0.6525736,\"raw_content\":null},{\"title\":\"List
+        of birds by population - Wikipedia\",\"url\":\"https://en.wikipedia.org/wiki/List_of_birds_by_population\",\"content\":\"By
+        taxonomy[edit]\\n(70%)\\n(18%)\\n(0%)\\n(57%)\\n(75%)\\n(0%)\\n(100%)\\n(0%)\\n(0%)\\n(0%)\\n(13%)\\n(0%)\\n(38%)\\n(0.8%)\\n(0%)\\n(0%)\\n(100%)\\n(100%)\\n(0%)\\nSee
+        also[edit]\\nNotes[edit]\\nReferences[edit] All numbers are estimates, because
+        they are taken by observation, and a given number of 50 slender-billed curlews
+        does not necessarily mean there are 10 more of this species than the black
+        stilt, which has been estimated at 40: there is a possibility that the latter
+        species has a larger population than the former.[6][7] For example, the spectacled
+        flowerpecker was only discovered in 2010, and did not receive its scientific
+        name (Dicaeum dayakorum) until 2019,[2] adding to the other 73 new bird species
+        described by ornithologists from 2000 \u2013 2009.[3][4][5] Global population
+        estimates for many of these at this time would lack accuracy.\\n Contents\\nList
+        of birds by population\\nThis is a list of bird species by global population,
+        divided by bird classification. The total population including younglings
+        is somewhat higher during the breeding season of each species.[1]\\nThis list
+        is incomplete, because experts have not estimated all bird numbers.\",\"score\":0.3112175,\"raw_content\":null}],\"response_time\":2.19}"
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '6538'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:26 GMT
+      Server:
+      - nginx
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"api_key": "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", "query": "average
+      size and weight of the top 5 most common birds", "max_results": 5, "search_depth":
+      "advanced", "include_domains": [], "exclude_domains": [], "include_answer":
+      false, "include_raw_content": false, "include_images": false}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '291'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.3
+    method: POST
+    uri: https://api.tavily.com/search
+  response:
+    body:
+      string: "{\"query\":\"average size and weight of the top 5 most common birds\",\"follow_up_questions\":null,\"answer\":null,\"images\":[],\"results\":[{\"title\":\"How
+        much does a bird weigh: in the United States - Wildlifeful\",\"url\":\"https://www.wildlifeful.com/how-much-does-a-bird-weigh\",\"content\":\"Birds
+        on the heavy size\\nOne heavy size bird in terms of common backyard birds
+        only is of course the always present Mourning Dove, weighing between 140g
+        to 180g.\\nAs few of us can receive far larger birds if taking birds of pray
+        into consideration, it would be best to exclude weight in relation to Owls
+        or Hawks, for example.\\n Average weight of a backyard bird would be in the
+        37 to 54 gram range, whereas the heaviest birds weigh between 140 to 180 grams
+        - if the average is taken from the thirteen most common birds in the US alone.
+        For the record, I consider the most common backyard birds to be, but not exclusively
+        to be the following:\\nNorthern Cardinal, Blue Jay, Mourning Dove, Dark-eyed
+        Junco, Black-Capped Chickadee, White-Breasted Nuthatch, Tufted Titmouse, House
+        Sparrow, House Finch, American Goldfinch, Downy Woodpecker, Hairy Woodpecker,
+        and the Red-Bellied Woodpecker.\\n For now the heaviest birds you'd most likely
+        see at the platform feeder or clumsily attempting to reach bird feed hanging
+        inside the bird feeders, you can expect the still light in bird terms the
+        Blue Jay and Northern Cardinal.\\n Bird weight table\\nAverage Backyard Bird
+        weight\\nWhile many backyard birds you often see in your yard are not all
+        taken into consideration, this is the average weight of up to thirteen common
+        backyard birds.\\n\",\"score\":0.8987665,\"raw_content\":null},{\"title\":\"A
+        Visual Comparison of 55 Bird Species by Size - Earthly Mission\",\"url\":\"https://earthlymission.com/visual-comparison-55-bird-species-size-infographic/\",\"content\":\"Related
+        Posts\\nWolves And Ravens Have a Special Bond: They Hunt Together and May
+        Even Become Friends\\nScientists Communicate With Whales for the First Time
+        in Groundbreaking Study\\nRediscovered After Almost a Century: Eyeless Iridescent
+        Golden Mole With Super-Hearing Abilities \u2018Swims\u2019 Through Sand Dunes\\nThese
+        Otherworldly Orb-Weaver Spiders Have Incredible Looks and Amazing Colors\\nThis
+        400-Year-Old Cat Flap in Exeter Cathedral Door Is Thought to Be the World\u2019s
+        Oldest\\nAfrican Penguins Recognize Each Other by Their Polka Dot Patterns,
+        New Study Says\\nIs the Secretary Bird Named Incredibly Rare Yellow Penguin
+        Photographed for the First Time Ever\\nMeet Titanoboa, the Largest Snake to
+        Have Ever Roamed the Earth\\nNightmare Fuel Around the World: What \u201CBoogeyman\u201D
+        Looks Like in Different Countries\\nLeave a Comment Cancel reply\\nComment\\nYour
+        personal data will be treated securely and will not be disclosed to third
+        parties. A Visual Comparison of 55 Bird Species by Size\\nBirds play a central
+        role in the functioning of the world\u2019s ecosystems and biodiversity, in
+        a way that directly impacts human health, economy and food production \u2013
+        as well as millions of other species. Ostrich eggs are the world\u2019s largest,
+        averaging around 6 inches (150 mm) in length by 5 inches (125 mm) in diameter
+        with a weight of 3 pounds (1.35 kg).\\n California condors became extinct
+        in the wild in 1987, but thanks to conservation efforts today more than 300
+        California condors are living in the wild.\\n\",\"score\":0.3980554,\"raw_content\":null},{\"title\":\"The
+        range of average bird weights - Nature Blog Network\",\"url\":\"https://www.hummingbirdsplus.org/nature-blog-network/the-range-of-average-bird-weights/\",\"content\":\"Here
+        are some of the heaviest bird species:\\nCommon Ostrich\\nThe Common Ostrich,
+        the largest living bird species, takes the crown for being the heaviest bird
+        in the world. Overfed birds, often observed in urban environments or near
+        human settlements, may have higher average weights due to easy access to high-calorie
+        food.\\nDifference in Weight Between Male and Female Birds\\nIn many bird
+        species, males and females can have slight weight differences. Understanding
+        the factors affecting bird weight allows us to appreciate the adaptability
+        and diversity of birds and their remarkable ability to thrive in diverse environments
+        across the globe.\\n Emperor Penguin\\nThe Emperor Penguin, an iconic species
+        of the Antarctic region, is the heaviest penguin and one of the heaviest bird
+        species. On the other end of the spectrum, the Fire-capped Tit, a tiny passerine
+        bird found in the mountains of Asia, weighs only around 5 grams.\\n\",\"score\":0.28348374,\"raw_content\":null},{\"title\":\"Bird
+        Weights: How Much Do Birds Weigh?\",\"url\":\"https://talkbirds.com/how-much-do-birds-weigh/\",\"content\":\"Discover
+        the surprising range of bird weights, from tiny hummingbirds to massive ostriches.
+        Learn how much birds weigh and factors affecting avian mass.\",\"score\":0.27669054,\"raw_content\":null},{\"title\":\"List
+        of largest birds - Wikipedia\",\"url\":\"https://en.wikipedia.org/wiki/List_of_largest_birds\",\"content\":\"[kg
+        (lb)]\\nLargest extant birds[edit]\\nTable of heaviest extant bird species[edit]\\nThe
+        following table is a list of the heaviest extant bird species based on maximum
+        reported or reliable mass, with the average weight is also given for comparison.
+        Ostrich eggs are the largest of any bird, averaging 1.4\_kg (3.1\_lb).[3]\\nThe
+        bird with the largest wingspan is the wandering albatross (Diomedea exulans)
+        of the Sub-Antarctic oceans. A male ostrich can reach a height of 2.8 metres
+        (9.2 feet) and weigh over 156.8\_kg (346\_lb),[1]\\nA mass of 200\_kg (440\_lb)
+        has been cited for the ostrich but no wild ostriches of this weight have been
+        verified.[2] Contents\\nList of largest birds\\nThe largest extant species
+        of bird measured by mass is the common ostrich (Struthio camelus), closely
+        followed by the Somali ostrich (Struthio molybdophanes). The largest dimensions
+        found in this species are an approximate head-to-tail length of 1.44\_m (4.7\_ft)
+        and a wingspan of 3.65\_m (12.0\_ft).\\n\",\"score\":0.21011727,\"raw_content\":null}],\"response_time\":1.75}"
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '5986'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:28 GMT
+      Server:
+      - nginx
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"api_key": "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", "query": "oldest recorded
+      instance of the top 5 most common birds", "max_results": 5, "search_depth":
+      "advanced", "include_domains": [], "exclude_domains": [], "include_answer":
+      false, "include_raw_content": false, "include_images": false}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '292'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - python-requests/2.32.3
+    method: POST
+    uri: https://api.tavily.com/search
+  response:
+    body:
+      string: "{\"query\":\"oldest recorded instance of the top 5 most common birds\",\"follow_up_questions\":null,\"answer\":null,\"images\":[],\"results\":[{\"title\":\"How
+        a 67-Million-Year-Old Fossil Turned the Theory of Bird Evolution ...\",\"url\":\"https://www.smithsonianmag.com/smart-news/how-a-67-million-year-old-fossil-turns-the-theory-of-bird-evolution-upside-down-180981219/\",\"content\":\"A
+        67-million-year-old fossil has upended scientists' long-held notions about
+        bird evolution. Most modern birds have a jointed upper jaw that allows the
+        top half of their beak to move. But a ...\",\"score\":0.08210663,\"raw_content\":null},{\"title\":\"Evolution
+        of birds - Wikipedia\",\"url\":\"https://en.wikipedia.org/wiki/Evolution_of_birds\",\"content\":\"This
+        clashes with previous studies that found a very rapid radiation of avian orders
+        only after the K-Pg extinction.[17][18] The results of this study have been
+        disputed by other researchers, due to a lack of fossil evidence to support
+        its conclusions.[19]\\nThe birds that survived the end-of-Cretaceous extinction
+        were likely ground-dwelling (not arboreal) and thus persisted despite the
+        worldwide destruction of forests.[20][21]\\nAn analysis of the variation of
+        diversification rates through time further revealed a potential effect of
+        climate on the evolution diversification rates in birds in which the generation
+        of new lineages accelerates during periods of global cooling.[13] This can
+        be the result of climate cooling fragmenting tropical biomes and producing
+        widespread allopatric speciation plus an effect of some lineages diversifying
+        in the expanding arid and cool biomes.[13]\\nBird skull evolution decelerated
+        compared with the evolution of their dinosaur predecessors after the Cretaceous\u2013Paleogene
+        extinction event, rather than accelerating as often believed to have caused
+        the cranial shape diversity of modern birds.[22][23]\\nClassification of modern
+        species[edit]\\nThe phylogenetic classification of birds is a contentious
+        issue. The skeleton of all early bird candidates is basically that of a small
+        theropod dinosaur with long, clawed hands, though the exquisite preservation
+        of the Solnhofen Plattenkalk shows Archaeopteryx was covered in feathers and
+        had wings.[5] While Archaeopteryx and its relatives may not have been very
+        good fliers, they would at least have been competent gliders, setting the
+        stage for the evolution of life on the wing.\\n Phylogenetically, Aves is
+        usually defined as all descendants of the most recent common ancestor of a
+        specific modern bird species (such as the house sparrow, Passer domesticus),
+        and either Archaeopteryx,[2] or some prehistoric species closer to Neornithes
+        (to avoid the problems caused by the unclear relationships of Archaeopteryx
+        to other theropods).[3] If the latter classification is used then the larger
+        group is termed Avialae. The discoveries of further basal dromaeosaurids potentially
+        capable of powered flight, such as Xiaotingia, has provided more evidence
+        for the theory that flight was first developed in the bird line by early dromaeosaurids
+        rather than later by Aves as was previously supposed.[8]\\nAlthough ornithischian
+        (bird-hipped) dinosaurs share the same hip structure as birds, birds actually
+        originated from the saurischian (lizard-hipped) dinosaurs if the dinosaurian
+        origin theory is correct.\",\"score\":0.047249712,\"raw_content\":null},{\"title\":\"The
+        Origin and Diversification of Birds - ScienceDirect\",\"url\":\"https://www.sciencedirect.com/science/article/pii/S0960982215009458\",\"content\":\"The
+        origin of birds is now one of the best understood major transitions in the
+        history of life. It has emerged as a model case for using a combination of
+        data from fossils, living species, genealogies, and numerical analyses to
+        study how entirely new body plans and behaviors originate, and how prominent
+        living groups achieved their diversity over hundreds of millions of years
+        of evolution 2, 3.\",\"score\":0.028870907,\"raw_content\":null},{\"title\":\"What
+        is the oldest known bird species still alive? - Birdful\",\"url\":\"https://www.birdful.org/what-is-the-oldest-known-bird-species-still-alive/\",\"content\":\"Horned
+        Screamer \u2013 Bizarre Relic of Gondwana\\nOf the living screamers, the horned
+        screamer (Anhima cornuta) stands out for its particularly primeval characteristics:\\nWith
+        its bizarre anatomy, persistence in South American wetlands, and deep genetic
+        heritage, the horned screamer seems a plausible candidate for the title of
+        most ancient living bird species.\\n Key Facts About Ancient Bird Lineages\\nHere
+        are some quick facts about the most ancient bird groups that may contain the
+        oldest living species:\\nResearch into bird evolution and genetics continues
+        to provide new insights into the ages of different avian groups. Here are
+        some of its key traits:\\nWith its imposing size and amazing diving skills
+        honed over 40 million years, the emperor penguin exemplifies the antiquity
+        and uniqueness of the penguins as an extremely ancient bird order.\\n Ratites
+        \u2013 Flightless Birds of the Southern Hemisphere\\nMany researchers consider
+        the ratites to be the oldest continuous lineage of living birds. Here are
+        some of its unusual traits and lineage information:\\nWith their curious incubating
+        behavior and ancient roots in Gondwana, the Australian brush-turkey exemplifies
+        a truly primeval lineage of birds.\\n\",\"score\":0.023109278,\"raw_content\":null},{\"title\":\"At
+        67 Million Years Old, Oldest Modern Bird Ever Found Is Natural ...\",\"url\":\"https://www.smithsonianmag.com/smart-news/67-million-years-old-oldest-modern-bird-ever-found-was-natural-turducken-180974460/\",\"content\":\"Explore\\nSubscribe\\nNewsletters\\nContent
+        Licensing\\nOur Partners\\nTerms of Use\\n\xA9 2024 Smithsonian Magazine\\nPrivacy
+        Statement\\nCookie Policy\\nTerms of Use\\nAdvertising Notice\\nYour Privacy
+        Rights\\nCookie Settings Now the oldest known member of the contemporary branch
+        of the avian family tree, Wonderchicken (formally Asteriornis maastrichtensis)
+        could help today\u2019s paleontologists better understand how birds weathered
+        the extinction that purged three-quarters of all plant and animal species
+        from the surface of the Earth. At 67 Million Years Old, Oldest Modern Bird
+        Ever Found Is Natural \u2018Turducken\u2019\\nRemarkable fossil hints at the
+        traits birds evolved just before an asteroid wiped their nonavian dinosaur
+        kin\\nKatherine J. Wu\\nCorrespondent\\nRoughly 66.8 million years ago\u2014not
+        long before the end-Cretaceous extinction that wiped out all non-avian dinosaurs\u2014a
+        diminutive, quail-sized bird met an unfortunate and untimely end.\\n The fossil\u2019s
+        fortuitous position in its lineage, as well as the asteroid impact that followed
+        closely on its heels, inspired the team to give it the name Asteriornis, a
+        nod to Asteria, the Greek goddess of falling stars who transformed into a
+        quail.\\n Boasting the face of a chicken or turkey superimposed on the head
+        of a duck, the skull is, in a way, a natural \u201Cturducken\u201D\u2014and
+        remarkably modern, Field, Jagt and their colleagues report this week in the
+        journal Nature.\",\"score\":0.017509557,\"raw_content\":null}],\"response_time\":3.03}"
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '7062'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:32 GMT
+      Server:
+      - nginx
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Reflect and grade the assistant response to
+      the user question below.", "role": "system"}, {"content": "Generate a table
+      with the average size and weight, as well as the oldest recorded instance for
+      each of the top 5 most common birds.", "role": "user"}, {"content": null, "role":
+      "assistant", "tool_calls": [{"type": "function", "id": "call_chHwlJVYq3YqT813OdsdD0c7",
+      "function": {"name": "tavily_search_results_json", "arguments": "{\"query\":
+      \"top 5 most common birds in the world\"}"}}, {"type": "function", "id": "call_wUUpUKGUXhr2cw2cU2araxbv",
+      "function": {"name": "tavily_search_results_json", "arguments": "{\"query\":
+      \"average size and weight of the top 5 most common birds\"}"}}, {"type": "function",
+      "id": "call_VloLsyXh10FjVYUVlFBHshdI", "function": {"name": "tavily_search_results_json",
+      "arguments": "{\"query\": \"oldest recorded instance of the top 5 most common
+      birds\"}"}}]}, {"content": "[{\"url\": \"https://www.worldatlas.com/articles/most-populous-bird-species-in-the-world.html\",
+      \"content\": \"The Most Common Birds in the World\\nThough most of the birds
+      listed herein can be found living in abundance in the wild across large portions
+      of the world, the most populated bird is technically the domestic chicken. The
+      World''s Most Common Types of Apples\\nMore in World Facts\\nThe Largest Countries
+      In Asia By Area\\n This bird is found across North America, and migrates from
+      the northern section of the continent to the southern section during the winter
+      time. Most Populous Bird Species In The World\\nRelated\\nThe World''s Most
+      Common Types Of Fish\\n The widespread use of this bird as a source of food
+      became more common after large scale industrial production started in the 20th
+      Century, and currently chicken is an important part of almost all global cuisines.\"},
+      {\"url\": \"https://www.worldatlas.com/articles/what-is-the-most-common-bird-in-the-world.html\",
+      \"content\": \"Related\\nThe World''s Most Common Types Of Fish\\nThe Most Common
+      Birds in the World\\nMore in Environment\\nImportance Of Wetlands\\nMeet 12
+      Incredible Conservation Heroes Saving Our Wildlife From Extinction\\nIndia''s
+      Leopard God, Waghoba, Aids Wildlife Conservation In The Country\\nIndia''s Bishnoi
+      Community Has Fearlessly Protected Nature For Over 500 Years\\nWildfires And
+      Habitat Loss Are Killing Jaguars In The Amazon Rainforest\\nIn India''s Sundarbans:
+      Where People Live Face-To-Face With Wild Tigers\\nAfrica''s \\\"Thunderbird\\\"
+      Is At Risk Of Extinction\\nWhy Is Biodiversity Critical To Life On Earth?\\n
+      There are three subspecies among the red-billed quelea, and these are the Quelea
+      quelea quelea, found near Senegal, the Q. q. Aethiopica found predominantly
+      around Sudan and Tanzania, and finally, the Q. q. Lathamii, which resides mostly
+      in the south of the African continent.\\n The nests constructed by the red-billed
+      quelea are oval and have a roof, and they weave them from various strips of
+      grasses that they find on tree branches\u2014the red-billed quelea breeds in
+      extensive colonies, whose numbers are sometimes in the millions.\\n The Red-billed
+      Quelea\\nThe red-billed quelea is also known as the red-billed weaver, and it
+      is a species of extremely small migratory birds. You are probably wondering
+      what the most common wild bird in the world is, and the answer is the red-billed
+      quelea.\"}, {\"url\": \"https://www.smithsonianmag.com/science-nature/the-story-of-the-most-common-bird-in-the-world-113046500/\",
+      \"content\": \"If asked to describe a house sparrow, many bird biologists would
+      describe it as a small, ubiquitous brown bird, originally native to Europe and
+      then introduced to the Americas and elsewhere around the world, where it became
+      a pest of humans, a kind of brown-winged rat. Sections\\nSCIENCE\\nThe Story
+      of the Most Common Bird in the World\\nWhy do we love what is rare and despise
+      what is all around us?\\nRob Dunn\\nEven if you don\u2019t know it, you have
+      probably been surrounded by house sparrows your entire life. In killing the
+      sparrows, Mao and the Chinese had saved the crops from the sparrows, but appear
+      to have left them to the insects. In 1889, just 49 years after the introduction
+      of the birds, a survey was sent to roughly 5,000 Americans to ask them what
+      they thought of the house sparrows. At the moment at which Mao decided to kill
+      the sparrows, there were hundreds of millions of them in China (some estimates
+      run as high as several billion), but there were also hundreds of millions of
+      people.\"}, {\"url\": \"https://birdsology.com/the-most-common-birds-in-the-world/\",
+      \"content\": \"Post Comment\\nCategories\\nRelated Posts\\nWorld\u2019s Rarest
+      Chicken Breeds: Some May Surprise You\\nMesmerizing Yellow Birds With Black
+      Wings [Images + IDs]\\nThe Best Egg-Laying Chickens Breeds \u2013 A Detailed
+      Guide\\nBeautiful Red Birds With Black Wings[Images + IDs]\\nImportant Links\\nRECENT
+      POST\\nBegin typing your search term above and press enter to search. Birdsology\\nYour
+      Guide to Birds\\nThe Most Common Birds In The World\\nA well-liked pastime that
+      enables people to experience nature and take in the amazing variety of birds
+      is bird watching. The Common Starling\\nAlthough the Common Starling is indigenous
+      to Europe, it has spread its population around the globe, including North America,
+      Australia, and New Zealand, as a result of deliberate importation and unintentional
+      escapes.\\n Required fields are marked *\\nComment *\\nName *\\nEmail *\\nWebsite\\nSave
+      my name, email, and website in this browser for the next time I comment.\\n
+      The Habits That Make These Birds Prosperous\\nBecause of their remarkable adaptability,
+      birds can survive and even flourish in a variety of habitats around the earth.\"},
+      {\"url\": \"https://en.wikipedia.org/wiki/List_of_birds_by_population\", \"content\":
+      \"By taxonomy[edit]\\n(70%)\\n(18%)\\n(0%)\\n(57%)\\n(75%)\\n(0%)\\n(100%)\\n(0%)\\n(0%)\\n(0%)\\n(13%)\\n(0%)\\n(38%)\\n(0.8%)\\n(0%)\\n(0%)\\n(100%)\\n(100%)\\n(0%)\\nSee
+      also[edit]\\nNotes[edit]\\nReferences[edit] All numbers are estimates, because
+      they are taken by observation, and a given number of 50 slender-billed curlews
+      does not necessarily mean there are 10 more of this species than the black stilt,
+      which has been estimated at 40: there is a possibility that the latter species
+      has a larger population than the former.[6][7] For example, the spectacled flowerpecker
+      was only discovered in 2010, and did not receive its scientific name (Dicaeum
+      dayakorum) until 2019,[2] adding to the other 73 new bird species described
+      by ornithologists from 2000 \u2013 2009.[3][4][5] Global population estimates
+      for many of these at this time would lack accuracy.\\n Contents\\nList of birds
+      by population\\nThis is a list of bird species by global population, divided
+      by bird classification. The total population including younglings is somewhat
+      higher during the breeding season of each species.[1]\\nThis list is incomplete,
+      because experts have not estimated all bird numbers.\"}]", "role": "tool", "tool_call_id":
+      "call_chHwlJVYq3YqT813OdsdD0c7"}, {"content": "[{\"url\": \"https://www.wildlifeful.com/how-much-does-a-bird-weigh\",
+      \"content\": \"Birds on the heavy size\\nOne heavy size bird in terms of common
+      backyard birds only is of course the always present Mourning Dove, weighing
+      between 140g to 180g.\\nAs few of us can receive far larger birds if taking
+      birds of pray into consideration, it would be best to exclude weight in relation
+      to Owls or Hawks, for example.\\n Average weight of a backyard bird would be
+      in the 37 to 54 gram range, whereas the heaviest birds weigh between 140 to
+      180 grams - if the average is taken from the thirteen most common birds in the
+      US alone. For the record, I consider the most common backyard birds to be, but
+      not exclusively to be the following:\\nNorthern Cardinal, Blue Jay, Mourning
+      Dove, Dark-eyed Junco, Black-Capped Chickadee, White-Breasted Nuthatch, Tufted
+      Titmouse, House Sparrow, House Finch, American Goldfinch, Downy Woodpecker,
+      Hairy Woodpecker, and the Red-Bellied Woodpecker.\\n For now the heaviest birds
+      you''d most likely see at the platform feeder or clumsily attempting to reach
+      bird feed hanging inside the bird feeders, you can expect the still light in
+      bird terms the Blue Jay and Northern Cardinal.\\n Bird weight table\\nAverage
+      Backyard Bird weight\\nWhile many backyard birds you often see in your yard
+      are not all taken into consideration, this is the average weight of up to thirteen
+      common backyard birds.\\n\"}, {\"url\": \"https://earthlymission.com/visual-comparison-55-bird-species-size-infographic/\",
+      \"content\": \"Related Posts\\nWolves And Ravens Have a Special Bond: They Hunt
+      Together and May Even Become Friends\\nScientists Communicate With Whales for
+      the First Time in Groundbreaking Study\\nRediscovered After Almost a Century:
+      Eyeless Iridescent Golden Mole With Super-Hearing Abilities \u2018Swims\u2019
+      Through Sand Dunes\\nThese Otherworldly Orb-Weaver Spiders Have Incredible Looks
+      and Amazing Colors\\nThis 400-Year-Old Cat Flap in Exeter Cathedral Door Is
+      Thought to Be the World\u2019s Oldest\\nAfrican Penguins Recognize Each Other
+      by Their Polka Dot Patterns, New Study Says\\nIs the Secretary Bird Named Incredibly
+      Rare Yellow Penguin Photographed for the First Time Ever\\nMeet Titanoboa, the
+      Largest Snake to Have Ever Roamed the Earth\\nNightmare Fuel Around the World:
+      What \u201cBoogeyman\u201d Looks Like in Different Countries\\nLeave a Comment
+      Cancel reply\\nComment\\nYour personal data will be treated securely and will
+      not be disclosed to third parties. A Visual Comparison of 55 Bird Species by
+      Size\\nBirds play a central role in the functioning of the world\u2019s ecosystems
+      and biodiversity, in a way that directly impacts human health, economy and food
+      production \u2013 as well as millions of other species. Ostrich eggs are the
+      world\u2019s largest, averaging around 6 inches (150 mm) in length by 5 inches
+      (125 mm) in diameter with a weight of 3 pounds (1.35 kg).\\n California condors
+      became extinct in the wild in 1987, but thanks to conservation efforts today
+      more than 300 California condors are living in the wild.\\n\"}, {\"url\": \"https://www.hummingbirdsplus.org/nature-blog-network/the-range-of-average-bird-weights/\",
+      \"content\": \"Here are some of the heaviest bird species:\\nCommon Ostrich\\nThe
+      Common Ostrich, the largest living bird species, takes the crown for being the
+      heaviest bird in the world. Overfed birds, often observed in urban environments
+      or near human settlements, may have higher average weights due to easy access
+      to high-calorie food.\\nDifference in Weight Between Male and Female Birds\\nIn
+      many bird species, males and females can have slight weight differences. Understanding
+      the factors affecting bird weight allows us to appreciate the adaptability and
+      diversity of birds and their remarkable ability to thrive in diverse environments
+      across the globe.\\n Emperor Penguin\\nThe Emperor Penguin, an iconic species
+      of the Antarctic region, is the heaviest penguin and one of the heaviest bird
+      species. On the other end of the spectrum, the Fire-capped Tit, a tiny passerine
+      bird found in the mountains of Asia, weighs only around 5 grams.\\n\"}, {\"url\":
+      \"https://talkbirds.com/how-much-do-birds-weigh/\", \"content\": \"Discover
+      the surprising range of bird weights, from tiny hummingbirds to massive ostriches.
+      Learn how much birds weigh and factors affecting avian mass.\"}, {\"url\": \"https://en.wikipedia.org/wiki/List_of_largest_birds\",
+      \"content\": \"[kg (lb)]\\nLargest extant birds[edit]\\nTable of heaviest extant
+      bird species[edit]\\nThe following table is a list of the heaviest extant bird
+      species based on maximum reported or reliable mass, with the average weight
+      is also given for comparison. Ostrich eggs are the largest of any bird, averaging
+      1.4\u00a0kg (3.1\u00a0lb).[3]\\nThe bird with the largest wingspan is the wandering
+      albatross (Diomedea exulans) of the Sub-Antarctic oceans. A male ostrich can
+      reach a height of 2.8 metres (9.2 feet) and weigh over 156.8\u00a0kg (346\u00a0lb),[1]\\nA
+      mass of 200\u00a0kg (440\u00a0lb) has been cited for the ostrich but no wild
+      ostriches of this weight have been verified.[2] Contents\\nList of largest birds\\nThe
+      largest extant species of bird measured by mass is the common ostrich (Struthio
+      camelus), closely followed by the Somali ostrich (Struthio molybdophanes). The
+      largest dimensions found in this species are an approximate head-to-tail length
+      of 1.44\u00a0m (4.7\u00a0ft) and a wingspan of 3.65\u00a0m (12.0\u00a0ft).\\n\"}]",
+      "role": "tool", "tool_call_id": "call_wUUpUKGUXhr2cw2cU2araxbv"}, {"content":
+      "[{\"url\": \"https://www.smithsonianmag.com/smart-news/how-a-67-million-year-old-fossil-turns-the-theory-of-bird-evolution-upside-down-180981219/\",
+      \"content\": \"A 67-million-year-old fossil has upended scientists'' long-held
+      notions about bird evolution. Most modern birds have a jointed upper jaw that
+      allows the top half of their beak to move. But a ...\"}, {\"url\": \"https://en.wikipedia.org/wiki/Evolution_of_birds\",
+      \"content\": \"This clashes with previous studies that found a very rapid radiation
+      of avian orders only after the K-Pg extinction.[17][18] The results of this
+      study have been disputed by other researchers, due to a lack of fossil evidence
+      to support its conclusions.[19]\\nThe birds that survived the end-of-Cretaceous
+      extinction were likely ground-dwelling (not arboreal) and thus persisted despite
+      the worldwide destruction of forests.[20][21]\\nAn analysis of the variation
+      of diversification rates through time further revealed a potential effect of
+      climate on the evolution diversification rates in birds in which the generation
+      of new lineages accelerates during periods of global cooling.[13] This can be
+      the result of climate cooling fragmenting tropical biomes and producing widespread
+      allopatric speciation plus an effect of some lineages diversifying in the expanding
+      arid and cool biomes.[13]\\nBird skull evolution decelerated compared with the
+      evolution of their dinosaur predecessors after the Cretaceous\u2013Paleogene
+      extinction event, rather than accelerating as often believed to have caused
+      the cranial shape diversity of modern birds.[22][23]\\nClassification of modern
+      species[edit]\\nThe phylogenetic classification of birds is a contentious issue.
+      The skeleton of all early bird candidates is basically that of a small theropod
+      dinosaur with long, clawed hands, though the exquisite preservation of the Solnhofen
+      Plattenkalk shows Archaeopteryx was covered in feathers and had wings.[5] While
+      Archaeopteryx and its relatives may not have been very good fliers, they would
+      at least have been competent gliders, setting the stage for the evolution of
+      life on the wing.\\n Phylogenetically, Aves is usually defined as all descendants
+      of the most recent common ancestor of a specific modern bird species (such as
+      the house sparrow, Passer domesticus), and either Archaeopteryx,[2] or some
+      prehistoric species closer to Neornithes (to avoid the problems caused by the
+      unclear relationships of Archaeopteryx to other theropods).[3] If the latter
+      classification is used then the larger group is termed Avialae. The discoveries
+      of further basal dromaeosaurids potentially capable of powered flight, such
+      as Xiaotingia, has provided more evidence for the theory that flight was first
+      developed in the bird line by early dromaeosaurids rather than later by Aves
+      as was previously supposed.[8]\\nAlthough ornithischian (bird-hipped) dinosaurs
+      share the same hip structure as birds, birds actually originated from the saurischian
+      (lizard-hipped) dinosaurs if the dinosaurian origin theory is correct.\"}, {\"url\":
+      \"https://www.sciencedirect.com/science/article/pii/S0960982215009458\", \"content\":
+      \"The origin of birds is now one of the best understood major transitions in
+      the history of life. It has emerged as a model case for using a combination
+      of data from fossils, living species, genealogies, and numerical analyses to
+      study how entirely new body plans and behaviors originate, and how prominent
+      living groups achieved their diversity over hundreds of millions of years of
+      evolution 2, 3.\"}, {\"url\": \"https://www.birdful.org/what-is-the-oldest-known-bird-species-still-alive/\",
+      \"content\": \"Horned Screamer \u2013 Bizarre Relic of Gondwana\\nOf the living
+      screamers, the horned screamer (Anhima cornuta) stands out for its particularly
+      primeval characteristics:\\nWith its bizarre anatomy, persistence in South American
+      wetlands, and deep genetic heritage, the horned screamer seems a plausible candidate
+      for the title of most ancient living bird species.\\n Key Facts About Ancient
+      Bird Lineages\\nHere are some quick facts about the most ancient bird groups
+      that may contain the oldest living species:\\nResearch into bird evolution and
+      genetics continues to provide new insights into the ages of different avian
+      groups. Here are some of its key traits:\\nWith its imposing size and amazing
+      diving skills honed over 40 million years, the emperor penguin exemplifies the
+      antiquity and uniqueness of the penguins as an extremely ancient bird order.\\n
+      Ratites \u2013 Flightless Birds of the Southern Hemisphere\\nMany researchers
+      consider the ratites to be the oldest continuous lineage of living birds. Here
+      are some of its unusual traits and lineage information:\\nWith their curious
+      incubating behavior and ancient roots in Gondwana, the Australian brush-turkey
+      exemplifies a truly primeval lineage of birds.\\n\"}, {\"url\": \"https://www.smithsonianmag.com/smart-news/67-million-years-old-oldest-modern-bird-ever-found-was-natural-turducken-180974460/\",
+      \"content\": \"Explore\\nSubscribe\\nNewsletters\\nContent Licensing\\nOur Partners\\nTerms
+      of Use\\n\u00a9 2024 Smithsonian Magazine\\nPrivacy Statement\\nCookie Policy\\nTerms
+      of Use\\nAdvertising Notice\\nYour Privacy Rights\\nCookie Settings Now the
+      oldest known member of the contemporary branch of the avian family tree, Wonderchicken
+      (formally Asteriornis maastrichtensis) could help today\u2019s paleontologists
+      better understand how birds weathered the extinction that purged three-quarters
+      of all plant and animal species from the surface of the Earth. At 67 Million
+      Years Old, Oldest Modern Bird Ever Found Is Natural \u2018Turducken\u2019\\nRemarkable
+      fossil hints at the traits birds evolved just before an asteroid wiped their
+      nonavian dinosaur kin\\nKatherine J. Wu\\nCorrespondent\\nRoughly 66.8 million
+      years ago\u2014not long before the end-Cretaceous extinction that wiped out
+      all non-avian dinosaurs\u2014a diminutive, quail-sized bird met an unfortunate
+      and untimely end.\\n The fossil\u2019s fortuitous position in its lineage, as
+      well as the asteroid impact that followed closely on its heels, inspired the
+      team to give it the name Asteriornis, a nod to Asteria, the Greek goddess of
+      falling stars who transformed into a quail.\\n Boasting the face of a chicken
+      or turkey superimposed on the head of a duck, the skull is, in a way, a natural
+      \u201cturducken\u201d\u2014and remarkably modern, Field, Jagt and their colleagues
+      report this week in the journal Nature.\"}]", "role": "tool", "tool_call_id":
+      "call_VloLsyXh10FjVYUVlFBHshdI"}], "model": "gpt-4o", "n": 1, "stream": false,
+      "temperature": 0.7, "tool_choice": {"type": "function", "function": {"name":
+      "Reflection"}}, "tools": [{"type": "function", "function": {"name": "Reflection",
+      "description": "", "parameters": {"properties": {"reflections": {"description":
+      "The critique and reflections on the sufficiency, superfluency, and general
+      quality of the response", "type": "string"}, "score": {"description": "Score
+      from 0-10 on the quality of the candidate response.", "gte": 0, "lte": 10, "type":
+      "integer"}, "found_solution": {"description": "Whether the response has fully
+      solved the question or task.", "type": "boolean"}}, "required": ["reflections",
+      "score", "found_solution"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '19974'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFRNbxs3EL37Vwx4yUVS9WHLsW5NC6NpGyOIHQROthCo5ax2Ui6H5szK
+        dQ3/94KULMlpooOw4Mx782YeOY8nAIacWYCpW6t1F/3w54vL7lQmF/1NDL/9ehWdm9HVV7r9Y/7m
+        92szyAhefcVan1GjmrvoUYnDNlwntIqZdXI+nZ/PX1+cTUugY4c+w9ZRh6c8nI6np8Px2XAy2wFb
+        phrFLODLCQDAY/nPEoPDf8wCxoPnkw5F7BrNYp8EYBL7fGKsCInaoGZwCNYcFENWHXrvjwLK7Je1
+        9f5QePt7PPo+zMl6v6R4Gm9vP7//1L17c/dLmFzM3n6eX767O6q3pX6IRVDTh3o/n6P4/nzxTTEA
+        E2xXsB+w8fg9NICxad13GDQrN4+VSftcqcyiMjctwn4Y4MhBYIWYeEMOwYKjhLWCDXKPCZRBW4Re
+        ML0SuOtRMtMI3gZRtG4ApECBlLK7YKHrvdIwjy9jMlzQprqFhhNQaDh1NjMAh0KsHOEMOhaFmruO
+        A6woORnkICWwG0x2jSD0L4INDu6R1q0OynfGs3coCglrTg4dUMh91Sgj+NSSR9CWBGyMiW3dAgl4
+        XlNtfalwNAhpufcOWrtBuLeUu8mSc9Kug4TSexXg9Dyt3LA8BG0x63M5I3IQhJUVdM8tJtREuEEH
+        zqodwU0522Vq2ws0NmVlFHavZtuqY5TiTdP7hrw/NiJhsWJUVaGqwgtGElixtnkSfdNQTRi08Ekf
+        MTW+516Kf4foCmub3SItRcOrw33YNlCKoQO1K49wT9pup3fkzuCFNT+0Bbgp0OLyCK4Pmo5VeBIV
+        +PjhTyls0SYl62H3XEFbq2ATluls76t/gIQeN9lKTtCij03v/39908NuZtc1J1zA9KfJuKrCJfd5
+        Quz7fDkXcMWVGVRGclJlFtNBZZqcsnxOqcyisV7wybx4f08n3/v+62izJGx6sX63cnbnT/sd5nkd
+        E6/km5VkGgok7TKhlbIajCjHbe1cp1Qw/Yv1Z2LiLupS+W8MmfB09vpiS2gO6/kQnpxPdlFltf4I
+        dzYf/wi3dKiWyprcb+atSArrA8V4r7S0auRBFLtlQ2GNKSYqO9g0cTk7m53PJ/PVZGZOnk7+AwAA
+        //8DAGETqa6MBgAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7cc15eea2716-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:35 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '3303'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29995505'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 8ms
+      x-request-id:
+      - req_1bc9700eaf8cd3898ac095b472361a01
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "You are an AI assistant.", "role": "system"},
+      {"content": "Generate a table with the average size and weight, as well as the
+      oldest recorded instance for each of the top 5 most common birds.", "role":
+      "user"}, {"content": null, "role": "assistant", "tool_calls": [{"type": "function",
+      "id": "call_chHwlJVYq3YqT813OdsdD0c7", "function": {"name": "tavily_search_results_json",
+      "arguments": "{\"query\": \"top 5 most common birds in the world\"}"}}, {"type":
+      "function", "id": "call_wUUpUKGUXhr2cw2cU2araxbv", "function": {"name": "tavily_search_results_json",
+      "arguments": "{\"query\": \"average size and weight of the top 5 most common
+      birds\"}"}}, {"type": "function", "id": "call_VloLsyXh10FjVYUVlFBHshdI", "function":
+      {"name": "tavily_search_results_json", "arguments": "{\"query\": \"oldest recorded
+      instance of the top 5 most common birds\"}"}}]}, {"content": "[{\"url\": \"https://www.worldatlas.com/articles/most-populous-bird-species-in-the-world.html\",
+      \"content\": \"The Most Common Birds in the World\\nThough most of the birds
+      listed herein can be found living in abundance in the wild across large portions
+      of the world, the most populated bird is technically the domestic chicken. The
+      World''s Most Common Types of Apples\\nMore in World Facts\\nThe Largest Countries
+      In Asia By Area\\n This bird is found across North America, and migrates from
+      the northern section of the continent to the southern section during the winter
+      time. Most Populous Bird Species In The World\\nRelated\\nThe World''s Most
+      Common Types Of Fish\\n The widespread use of this bird as a source of food
+      became more common after large scale industrial production started in the 20th
+      Century, and currently chicken is an important part of almost all global cuisines.\"},
+      {\"url\": \"https://www.worldatlas.com/articles/what-is-the-most-common-bird-in-the-world.html\",
+      \"content\": \"Related\\nThe World''s Most Common Types Of Fish\\nThe Most Common
+      Birds in the World\\nMore in Environment\\nImportance Of Wetlands\\nMeet 12
+      Incredible Conservation Heroes Saving Our Wildlife From Extinction\\nIndia''s
+      Leopard God, Waghoba, Aids Wildlife Conservation In The Country\\nIndia''s Bishnoi
+      Community Has Fearlessly Protected Nature For Over 500 Years\\nWildfires And
+      Habitat Loss Are Killing Jaguars In The Amazon Rainforest\\nIn India''s Sundarbans:
+      Where People Live Face-To-Face With Wild Tigers\\nAfrica''s \\\"Thunderbird\\\"
+      Is At Risk Of Extinction\\nWhy Is Biodiversity Critical To Life On Earth?\\n
+      There are three subspecies among the red-billed quelea, and these are the Quelea
+      quelea quelea, found near Senegal, the Q. q. Aethiopica found predominantly
+      around Sudan and Tanzania, and finally, the Q. q. Lathamii, which resides mostly
+      in the south of the African continent.\\n The nests constructed by the red-billed
+      quelea are oval and have a roof, and they weave them from various strips of
+      grasses that they find on tree branches\u2014the red-billed quelea breeds in
+      extensive colonies, whose numbers are sometimes in the millions.\\n The Red-billed
+      Quelea\\nThe red-billed quelea is also known as the red-billed weaver, and it
+      is a species of extremely small migratory birds. You are probably wondering
+      what the most common wild bird in the world is, and the answer is the red-billed
+      quelea.\"}, {\"url\": \"https://www.smithsonianmag.com/science-nature/the-story-of-the-most-common-bird-in-the-world-113046500/\",
+      \"content\": \"If asked to describe a house sparrow, many bird biologists would
+      describe it as a small, ubiquitous brown bird, originally native to Europe and
+      then introduced to the Americas and elsewhere around the world, where it became
+      a pest of humans, a kind of brown-winged rat. Sections\\nSCIENCE\\nThe Story
+      of the Most Common Bird in the World\\nWhy do we love what is rare and despise
+      what is all around us?\\nRob Dunn\\nEven if you don\u2019t know it, you have
+      probably been surrounded by house sparrows your entire life. In killing the
+      sparrows, Mao and the Chinese had saved the crops from the sparrows, but appear
+      to have left them to the insects. In 1889, just 49 years after the introduction
+      of the birds, a survey was sent to roughly 5,000 Americans to ask them what
+      they thought of the house sparrows. At the moment at which Mao decided to kill
+      the sparrows, there were hundreds of millions of them in China (some estimates
+      run as high as several billion), but there were also hundreds of millions of
+      people.\"}, {\"url\": \"https://birdsology.com/the-most-common-birds-in-the-world/\",
+      \"content\": \"Post Comment\\nCategories\\nRelated Posts\\nWorld\u2019s Rarest
+      Chicken Breeds: Some May Surprise You\\nMesmerizing Yellow Birds With Black
+      Wings [Images + IDs]\\nThe Best Egg-Laying Chickens Breeds \u2013 A Detailed
+      Guide\\nBeautiful Red Birds With Black Wings[Images + IDs]\\nImportant Links\\nRECENT
+      POST\\nBegin typing your search term above and press enter to search. Birdsology\\nYour
+      Guide to Birds\\nThe Most Common Birds In The World\\nA well-liked pastime that
+      enables people to experience nature and take in the amazing variety of birds
+      is bird watching. The Common Starling\\nAlthough the Common Starling is indigenous
+      to Europe, it has spread its population around the globe, including North America,
+      Australia, and New Zealand, as a result of deliberate importation and unintentional
+      escapes.\\n Required fields are marked *\\nComment *\\nName *\\nEmail *\\nWebsite\\nSave
+      my name, email, and website in this browser for the next time I comment.\\n
+      The Habits That Make These Birds Prosperous\\nBecause of their remarkable adaptability,
+      birds can survive and even flourish in a variety of habitats around the earth.\"},
+      {\"url\": \"https://en.wikipedia.org/wiki/List_of_birds_by_population\", \"content\":
+      \"By taxonomy[edit]\\n(70%)\\n(18%)\\n(0%)\\n(57%)\\n(75%)\\n(0%)\\n(100%)\\n(0%)\\n(0%)\\n(0%)\\n(13%)\\n(0%)\\n(38%)\\n(0.8%)\\n(0%)\\n(0%)\\n(100%)\\n(100%)\\n(0%)\\nSee
+      also[edit]\\nNotes[edit]\\nReferences[edit] All numbers are estimates, because
+      they are taken by observation, and a given number of 50 slender-billed curlews
+      does not necessarily mean there are 10 more of this species than the black stilt,
+      which has been estimated at 40: there is a possibility that the latter species
+      has a larger population than the former.[6][7] For example, the spectacled flowerpecker
+      was only discovered in 2010, and did not receive its scientific name (Dicaeum
+      dayakorum) until 2019,[2] adding to the other 73 new bird species described
+      by ornithologists from 2000 \u2013 2009.[3][4][5] Global population estimates
+      for many of these at this time would lack accuracy.\\n Contents\\nList of birds
+      by population\\nThis is a list of bird species by global population, divided
+      by bird classification. The total population including younglings is somewhat
+      higher during the breeding season of each species.[1]\\nThis list is incomplete,
+      because experts have not estimated all bird numbers.\"}]", "role": "tool", "tool_call_id":
+      "call_chHwlJVYq3YqT813OdsdD0c7"}, {"content": "[{\"url\": \"https://www.wildlifeful.com/how-much-does-a-bird-weigh\",
+      \"content\": \"Birds on the heavy size\\nOne heavy size bird in terms of common
+      backyard birds only is of course the always present Mourning Dove, weighing
+      between 140g to 180g.\\nAs few of us can receive far larger birds if taking
+      birds of pray into consideration, it would be best to exclude weight in relation
+      to Owls or Hawks, for example.\\n Average weight of a backyard bird would be
+      in the 37 to 54 gram range, whereas the heaviest birds weigh between 140 to
+      180 grams - if the average is taken from the thirteen most common birds in the
+      US alone. For the record, I consider the most common backyard birds to be, but
+      not exclusively to be the following:\\nNorthern Cardinal, Blue Jay, Mourning
+      Dove, Dark-eyed Junco, Black-Capped Chickadee, White-Breasted Nuthatch, Tufted
+      Titmouse, House Sparrow, House Finch, American Goldfinch, Downy Woodpecker,
+      Hairy Woodpecker, and the Red-Bellied Woodpecker.\\n For now the heaviest birds
+      you''d most likely see at the platform feeder or clumsily attempting to reach
+      bird feed hanging inside the bird feeders, you can expect the still light in
+      bird terms the Blue Jay and Northern Cardinal.\\n Bird weight table\\nAverage
+      Backyard Bird weight\\nWhile many backyard birds you often see in your yard
+      are not all taken into consideration, this is the average weight of up to thirteen
+      common backyard birds.\\n\"}, {\"url\": \"https://earthlymission.com/visual-comparison-55-bird-species-size-infographic/\",
+      \"content\": \"Related Posts\\nWolves And Ravens Have a Special Bond: They Hunt
+      Together and May Even Become Friends\\nScientists Communicate With Whales for
+      the First Time in Groundbreaking Study\\nRediscovered After Almost a Century:
+      Eyeless Iridescent Golden Mole With Super-Hearing Abilities \u2018Swims\u2019
+      Through Sand Dunes\\nThese Otherworldly Orb-Weaver Spiders Have Incredible Looks
+      and Amazing Colors\\nThis 400-Year-Old Cat Flap in Exeter Cathedral Door Is
+      Thought to Be the World\u2019s Oldest\\nAfrican Penguins Recognize Each Other
+      by Their Polka Dot Patterns, New Study Says\\nIs the Secretary Bird Named Incredibly
+      Rare Yellow Penguin Photographed for the First Time Ever\\nMeet Titanoboa, the
+      Largest Snake to Have Ever Roamed the Earth\\nNightmare Fuel Around the World:
+      What \u201cBoogeyman\u201d Looks Like in Different Countries\\nLeave a Comment
+      Cancel reply\\nComment\\nYour personal data will be treated securely and will
+      not be disclosed to third parties. A Visual Comparison of 55 Bird Species by
+      Size\\nBirds play a central role in the functioning of the world\u2019s ecosystems
+      and biodiversity, in a way that directly impacts human health, economy and food
+      production \u2013 as well as millions of other species. Ostrich eggs are the
+      world\u2019s largest, averaging around 6 inches (150 mm) in length by 5 inches
+      (125 mm) in diameter with a weight of 3 pounds (1.35 kg).\\n California condors
+      became extinct in the wild in 1987, but thanks to conservation efforts today
+      more than 300 California condors are living in the wild.\\n\"}, {\"url\": \"https://www.hummingbirdsplus.org/nature-blog-network/the-range-of-average-bird-weights/\",
+      \"content\": \"Here are some of the heaviest bird species:\\nCommon Ostrich\\nThe
+      Common Ostrich, the largest living bird species, takes the crown for being the
+      heaviest bird in the world. Overfed birds, often observed in urban environments
+      or near human settlements, may have higher average weights due to easy access
+      to high-calorie food.\\nDifference in Weight Between Male and Female Birds\\nIn
+      many bird species, males and females can have slight weight differences. Understanding
+      the factors affecting bird weight allows us to appreciate the adaptability and
+      diversity of birds and their remarkable ability to thrive in diverse environments
+      across the globe.\\n Emperor Penguin\\nThe Emperor Penguin, an iconic species
+      of the Antarctic region, is the heaviest penguin and one of the heaviest bird
+      species. On the other end of the spectrum, the Fire-capped Tit, a tiny passerine
+      bird found in the mountains of Asia, weighs only around 5 grams.\\n\"}, {\"url\":
+      \"https://talkbirds.com/how-much-do-birds-weigh/\", \"content\": \"Discover
+      the surprising range of bird weights, from tiny hummingbirds to massive ostriches.
+      Learn how much birds weigh and factors affecting avian mass.\"}, {\"url\": \"https://en.wikipedia.org/wiki/List_of_largest_birds\",
+      \"content\": \"[kg (lb)]\\nLargest extant birds[edit]\\nTable of heaviest extant
+      bird species[edit]\\nThe following table is a list of the heaviest extant bird
+      species based on maximum reported or reliable mass, with the average weight
+      is also given for comparison. Ostrich eggs are the largest of any bird, averaging
+      1.4\u00a0kg (3.1\u00a0lb).[3]\\nThe bird with the largest wingspan is the wandering
+      albatross (Diomedea exulans) of the Sub-Antarctic oceans. A male ostrich can
+      reach a height of 2.8 metres (9.2 feet) and weigh over 156.8\u00a0kg (346\u00a0lb),[1]\\nA
+      mass of 200\u00a0kg (440\u00a0lb) has been cited for the ostrich but no wild
+      ostriches of this weight have been verified.[2] Contents\\nList of largest birds\\nThe
+      largest extant species of bird measured by mass is the common ostrich (Struthio
+      camelus), closely followed by the Somali ostrich (Struthio molybdophanes). The
+      largest dimensions found in this species are an approximate head-to-tail length
+      of 1.44\u00a0m (4.7\u00a0ft) and a wingspan of 3.65\u00a0m (12.0\u00a0ft).\\n\"}]",
+      "role": "tool", "tool_call_id": "call_wUUpUKGUXhr2cw2cU2araxbv"}, {"content":
+      "[{\"url\": \"https://www.smithsonianmag.com/smart-news/how-a-67-million-year-old-fossil-turns-the-theory-of-bird-evolution-upside-down-180981219/\",
+      \"content\": \"A 67-million-year-old fossil has upended scientists'' long-held
+      notions about bird evolution. Most modern birds have a jointed upper jaw that
+      allows the top half of their beak to move. But a ...\"}, {\"url\": \"https://en.wikipedia.org/wiki/Evolution_of_birds\",
+      \"content\": \"This clashes with previous studies that found a very rapid radiation
+      of avian orders only after the K-Pg extinction.[17][18] The results of this
+      study have been disputed by other researchers, due to a lack of fossil evidence
+      to support its conclusions.[19]\\nThe birds that survived the end-of-Cretaceous
+      extinction were likely ground-dwelling (not arboreal) and thus persisted despite
+      the worldwide destruction of forests.[20][21]\\nAn analysis of the variation
+      of diversification rates through time further revealed a potential effect of
+      climate on the evolution diversification rates in birds in which the generation
+      of new lineages accelerates during periods of global cooling.[13] This can be
+      the result of climate cooling fragmenting tropical biomes and producing widespread
+      allopatric speciation plus an effect of some lineages diversifying in the expanding
+      arid and cool biomes.[13]\\nBird skull evolution decelerated compared with the
+      evolution of their dinosaur predecessors after the Cretaceous\u2013Paleogene
+      extinction event, rather than accelerating as often believed to have caused
+      the cranial shape diversity of modern birds.[22][23]\\nClassification of modern
+      species[edit]\\nThe phylogenetic classification of birds is a contentious issue.
+      The skeleton of all early bird candidates is basically that of a small theropod
+      dinosaur with long, clawed hands, though the exquisite preservation of the Solnhofen
+      Plattenkalk shows Archaeopteryx was covered in feathers and had wings.[5] While
+      Archaeopteryx and its relatives may not have been very good fliers, they would
+      at least have been competent gliders, setting the stage for the evolution of
+      life on the wing.\\n Phylogenetically, Aves is usually defined as all descendants
+      of the most recent common ancestor of a specific modern bird species (such as
+      the house sparrow, Passer domesticus), and either Archaeopteryx,[2] or some
+      prehistoric species closer to Neornithes (to avoid the problems caused by the
+      unclear relationships of Archaeopteryx to other theropods).[3] If the latter
+      classification is used then the larger group is termed Avialae. The discoveries
+      of further basal dromaeosaurids potentially capable of powered flight, such
+      as Xiaotingia, has provided more evidence for the theory that flight was first
+      developed in the bird line by early dromaeosaurids rather than later by Aves
+      as was previously supposed.[8]\\nAlthough ornithischian (bird-hipped) dinosaurs
+      share the same hip structure as birds, birds actually originated from the saurischian
+      (lizard-hipped) dinosaurs if the dinosaurian origin theory is correct.\"}, {\"url\":
+      \"https://www.sciencedirect.com/science/article/pii/S0960982215009458\", \"content\":
+      \"The origin of birds is now one of the best understood major transitions in
+      the history of life. It has emerged as a model case for using a combination
+      of data from fossils, living species, genealogies, and numerical analyses to
+      study how entirely new body plans and behaviors originate, and how prominent
+      living groups achieved their diversity over hundreds of millions of years of
+      evolution 2, 3.\"}, {\"url\": \"https://www.birdful.org/what-is-the-oldest-known-bird-species-still-alive/\",
+      \"content\": \"Horned Screamer \u2013 Bizarre Relic of Gondwana\\nOf the living
+      screamers, the horned screamer (Anhima cornuta) stands out for its particularly
+      primeval characteristics:\\nWith its bizarre anatomy, persistence in South American
+      wetlands, and deep genetic heritage, the horned screamer seems a plausible candidate
+      for the title of most ancient living bird species.\\n Key Facts About Ancient
+      Bird Lineages\\nHere are some quick facts about the most ancient bird groups
+      that may contain the oldest living species:\\nResearch into bird evolution and
+      genetics continues to provide new insights into the ages of different avian
+      groups. Here are some of its key traits:\\nWith its imposing size and amazing
+      diving skills honed over 40 million years, the emperor penguin exemplifies the
+      antiquity and uniqueness of the penguins as an extremely ancient bird order.\\n
+      Ratites \u2013 Flightless Birds of the Southern Hemisphere\\nMany researchers
+      consider the ratites to be the oldest continuous lineage of living birds. Here
+      are some of its unusual traits and lineage information:\\nWith their curious
+      incubating behavior and ancient roots in Gondwana, the Australian brush-turkey
+      exemplifies a truly primeval lineage of birds.\\n\"}, {\"url\": \"https://www.smithsonianmag.com/smart-news/67-million-years-old-oldest-modern-bird-ever-found-was-natural-turducken-180974460/\",
+      \"content\": \"Explore\\nSubscribe\\nNewsletters\\nContent Licensing\\nOur Partners\\nTerms
+      of Use\\n\u00a9 2024 Smithsonian Magazine\\nPrivacy Statement\\nCookie Policy\\nTerms
+      of Use\\nAdvertising Notice\\nYour Privacy Rights\\nCookie Settings Now the
+      oldest known member of the contemporary branch of the avian family tree, Wonderchicken
+      (formally Asteriornis maastrichtensis) could help today\u2019s paleontologists
+      better understand how birds weathered the extinction that purged three-quarters
+      of all plant and animal species from the surface of the Earth. At 67 Million
+      Years Old, Oldest Modern Bird Ever Found Is Natural \u2018Turducken\u2019\\nRemarkable
+      fossil hints at the traits birds evolved just before an asteroid wiped their
+      nonavian dinosaur kin\\nKatherine J. Wu\\nCorrespondent\\nRoughly 66.8 million
+      years ago\u2014not long before the end-Cretaceous extinction that wiped out
+      all non-avian dinosaurs\u2014a diminutive, quail-sized bird met an unfortunate
+      and untimely end.\\n The fossil\u2019s fortuitous position in its lineage, as
+      well as the asteroid impact that followed closely on its heels, inspired the
+      team to give it the name Asteriornis, a nod to Asteria, the Greek goddess of
+      falling stars who transformed into a quail.\\n Boasting the face of a chicken
+      or turkey superimposed on the head of a duck, the skull is, in a way, a natural
+      \u201cturducken\u201d\u2014and remarkably modern, Field, Jagt and their colleagues
+      report this week in the journal Nature.\"}]", "role": "tool", "tool_call_id":
+      "call_VloLsyXh10FjVYUVlFBHshdI"}, {"content": "Reasoning: The assistant did
+      not provide a direct answer to the user''s question. Instead, it initiated a
+      multi-tool use to search for information on the top 5 most common birds, their
+      average size and weight, and the oldest recorded instances. While this approach
+      is logical, the assistant should have waited for the search results or provided
+      a synthesized response based on the retrieved data. The response thus far is
+      incomplete and does not fulfill the user''s request.\n\nThe response is both
+      insufficient and superfluous. Insufficient because it doesn''t provide the requested
+      table with the average size, weight, and oldest recorded instances of the birds.
+      Superfluous because it lists URLs and partial content that are not directly
+      relevant or helpful to the user''s query.\n\nScore: 2/10\nFound solution: No\nScore:
+      2", "role": "user"}], "model": "gpt-4o", "n": 5, "stream": false, "temperature":
+      0.7, "tools": [{"type": "function", "function": {"name": "tavily_search_results_json",
+      "description": "A search engine optimized for comprehensive, accurate, and trusted
+      results. Useful for when you need to answer questions about current events.
+      Input should be a search query.", "parameters": {"properties": {"query": {"description":
+      "search query to look up", "type": "string"}}, "required": ["query"], "type":
+      "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '20545'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//tJbfc6M2EMff81fskIfmPMYDGPzrLcldm851erkkN/fQzHRkWINqIVFJ
+        JHHO/d87AuzDhjg41/rBDwu7+rL6rj76dgJg0ciagRUmRIdpxuzz6c/pZPSwXPHl1der4cfL4dS5
+        JlP38tPT5Nrqmwwx/wtDvckahCLNGGoqePk4lEg0mqru2BuNR5NpMCoepCJCZtLiTNu+sD3H820n
+        sN1hlZgIGqKyZvDHCQDAt+LfSOQRPlkzcPqbSIpKkRit2fYlAEsKZiIWUYoqTbi2+t8fhoJr5IXq
+        C6IwAsFBJwgKiQwTkKhyplUfEpQIVAEBteI6QUWfMQJN5gxhIWSRo0UGAaRCaQhFmgoOcyoj1QfK
+        Q5ZHlMfmNSqBPKAkMYIp0odHpHGi+0B4VJQRLEKlQWIoZIQRUG5Uhzi75/d8DRdURrD/W8N5VfOW
+        PiOchem7WuxrsQKcxSb4qSx/syn/a1Ue1vd8bbf+1h1jL0XLR0b8e5Gi0jSEy4SGS+SV+MBpfpAX
+        OC1RdwQrJFI1O2DK32BkzyljGMHnHBmSKskbBI1CAbR00XUOlb8SuUK4zYiU4nFHU6PQ0GktPzxU
+        /kMuRYaEw60mkhm7lI1oacO4XX1wsDmUx5vu/JIzViX502Yhv7khRsgB9ff89PQU3qMmlKnCqe4A
+        er39/e71Zvdm023o9eqO7fVmcC5FziPjhTAFyoEhj3UyaLxfurnIyDIpnmhKNLJVaZhYklTBmdnw
+        Zfzue/JLrjdlNp4aGNmekd3w0UHdc5Hr0mNhelBu+YFuUKrsKM6piRsacTsuPChspz3u6BV5NyKP
+        E7Yy1j1G37Cmzzf6GjZ+vXme06114+NaF9SkBcW+7o1A9+75047dM6NzhEav3r67hKqKKZkUDzRC
+        A5xQ8JAqBJWnKZErEIsCExL/zlHpAhALIVNiUAvzHYjVULULtEGdgRIXuSIGwTxnrIr/s4UqE3Em
+        xVxVz7fxBeVUJX9KJEpwA1ClRWad1JIbpHb/B1LHRBs477Sh5PVPpntlO8ve0eeKwS+jugnogsv/
+        AaP3Ef1bcby1YHr7/oukrp3qR1H42HgHeK9hGNi+OfkatBgEtg/LuDPBXwO54bjtDluWcgPb2xz9
+        nWj+GtTX4Pq2O2n7Kt/2W5cadliqDfBrcKe21/ZVwcR2ncZaByjfgD3HcIkRXCdIFOHa3LPssdOy
+        lDMY2+7A29utNbiTV5cqwf/hKWOEF7M3ewP671YZDQljK5ijfkTkW1cdPHIJj1HBQorUuA20gMJw
+        EWbIi+t2dUTMJWJUzG5EUXc7mDew/sG7QVWlMm73y0zN0sfpfft1obkJmyHovAl+sQdH6f6SmZwf
+        vEVcbARXo9RVcDApFnfeorj9crE3cl1Eb4ayuzmcwbiQUEzsUaInNdFmbn8XGs113YY7c1/4FwAA
+        ///EmU1vm0AQhv/KHFsJImyTpMmtag+tquRUqZde1rC2V4Fda/mKq/z4avbDwJpvuc3FBzDMALMz
+        z/su+4PEcZ53GRBJ7TDUJyLCoUQKOYPGjkS5kBkk7AVl86unFpkelZSXTAqeUo6rTgfpG506WItf
+        UvLK0iKt/6vSMHIbiehII2YSS8lJJeaCVCTSLeM0a6h6GkNMcqIuw9gxkTEIyVl+EInY4yKAFy6q
+        hMZ7RAULY4rF0qOkB8ozVlIQJZUlo9U70dT6OjT1zVgb6gUZTnKo0mKPfqXbfqPk0RbWTwVYTwhY
+        XzRgIRNleji4o0F11ou+qvpXq3up1nA5RD+YCPbAR7UgXda3mTWXoWeWmK7WvvUzA+qW+C4LYO5t
+        CcUNMFwY+HeBC1VeEAR+iL9T4W0U3bqwzT24Go0wRGxdtNZjwngQQip4fsgmgto6wOnSCWndPowH
+        D30RuswY9GL82/DCScKPE3RbMR7cdUe4gh+jiyJKB8ZSs0b2s7yWZThlOWooJQ1O05JZ1cnMYyVL
+        RgOJGKUwy0SpS3IZB+kKHUzLqopZDkpdyIusFF3Wg2nZKt/Pck3q8h+3T+ywtv7JDAugxUTjJsB7
+        uSub6/DAd6hYkgAXVcNAUg/cRIKdkhuKoi8xAKFJ7/c0sOEkitq0uhkBBdOxZpDCkygkx1b9VZRU
+        LR6HHW5vwAGFcw6Y3+MCMrC1NPAQ/5ob/g87jAME+O1dHAQINOR92NQIMe7+jFEE+NDiCDVsfWeP
+        5A1W99PCtIqmOV192IQOl6jY94GzyzMpTB+x4B0/OcQCPoTBxG0jJ4xT3nDeP/JhvXGwBUMH7Q+2
+        Xk8J85vXorETKJTK63FQa/0YCZ6xmEqyTU49js2NDtFFCPCDi4oD0aql2cQrlsSqk+MWEp6shEzs
+        rVqfG2+j31hyMu2McXgWMj/A55RKFhFzmYsF8IvFqMNjluWSbQs04Yn2X9yIzifBi59JjuIxFwYz
+        PdgWORxIBtlRUhLDPhFb9GGMlO1/mSVJCqObydkgYIL3SXXVqFEz71gER3EsEiPv/gIAAP//zFq7
+        boMwFN3zFRZTOyRKIGlot6ZDlkqtGrWZKsTDECuJjYwhYui/V7Ypr2DM0DSdwdcHG1/fc+7BAaAw
+        QgRPeik6Z4llsID4KSf2MCheTHg2FCvvuXIzeVziJZBmEtaV7sX5lf0BJ8R2YpC6769ccS52QNff
+        aaqWPm/AX5DUX/II6JwCKqoqWMi0lc7Kq+YGYeC7MUMZYvmt3jAwnK5q+WqPb2A4Za233vnPsjyj
+        fGr7wHDaWu8s8Fnuu2d5I/4evKIIEtykqebYWp6htseW3d4tq3OW1iaVFHZDUurDRN9VeOxOkg/g
+        w6VcJPRyeavIdBtBDKkQu/npLK6KCGUQA8oF4h9V9UXV6BOJcp0ijGGSgC1P+cWxGdYrUMLdokNw
+        QCEETwSXqVO8IU731mX+jm9ulHKCo8e5qmdkWkPYx3iV6ES0UxODzGBN/TRhaYCGwHufbCZgDcuB
+        m5RmMJfzrArUz65HqMtIoe7qePG/Bi/Jc3WIrgFb8+uqeHSX9N0lBrfFY2HxuGTX/eKFxQiAT+FF
+        TBvlgxFTcoyZw8geYh5wvjCXMqBR2R+rx6ZpFw4IgxHmHqond/bUVg10Aqni1aoWQ6JEOKpCTEuo
+        4luNJE8YPDohwhGkMUWyiAljZ7ZYepZtzcKFMfoafQMAAP//AwBfapsO7SkAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7cd749812716-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:45 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '9250'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29995248'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 9ms
+      x-request-id:
+      - req_ee93ad3dddf7fbc97f029e583c8f2fee
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Reflect and grade the assistant response to
+      the user question below.", "role": "system"}, {"content": "Generate a table
+      with the average size and weight, as well as the oldest recorded instance for
+      each of the top 5 most common birds.", "role": "user"}, {"content": "Based on
+      the search results, here is a synthesized table for the top 5 most common birds,
+      including their average size, weight, and the oldest recorded instance:\n\n|
+      Bird                 | Average Size (cm) | Average Weight (g) | Oldest Recorded
+      Instance |\n|----------------------|-------------------|---------------------|--------------------------|\n|
+      Domestic Chicken     | 50                | 2500                | 16 years                 |\n|
+      Red-billed Quelea    | 12.5              | 15                  | 10 years                 |\n|
+      House Sparrow        | 16                | 30                  | 13 years                 |\n|
+      European Starling    | 20                | 75                  | 15 years                 |\n|
+      Ring-billed Gull     | 49                | 450                 | 23 years                 |\n\n###
+      Details:\n\n1. **Domestic Chicken**:\n   - **Average Size**: Around 50 cm in
+      length.\n   - **Average Weight**: Approximately 2500 grams (2.5 kg).\n   - **Oldest
+      Recorded Instance**: 16 years.\n\n2. **Red-billed Quelea**:\n   - **Average
+      Size**: About 12.5 cm.\n   - **Average Weight**: Around 15 grams.\n   - **Oldest
+      Recorded Instance**: 10 years.\n\n3. **House Sparrow**:\n   - **Average Size**:
+      Approximately 16 cm.\n   - **Average Weight**: Roughly 30 grams.\n   - **Oldest
+      Recorded Instance**: 13 years.\n\n4. **European Starling**:\n   - **Average
+      Size**: About 20 cm.\n   - **Average Weight**: Around 75 grams.\n   - **Oldest
+      Recorded Instance**: 15 years.\n\n5. **Ring-billed Gull**:\n   - **Average Size**:
+      Approximately 49 cm.\n   - **Average Weight**: Roughly 450 grams.\n   - **Oldest
+      Recorded Instance**: 23 years.\n\nThis table provides a concise summary of the
+      requested information based on the synthesized search results.", "role": "assistant"}],
+      "model": "gpt-4o", "n": 1, "stream": false, "temperature": 0.7, "tool_choice":
+      {"type": "function", "function": {"name": "Reflection"}}, "tools": [{"type":
+      "function", "function": {"name": "Reflection", "description": "", "parameters":
+      {"properties": {"reflections": {"description": "The critique and reflections
+      on the sufficiency, superfluency, and general quality of the response", "type":
+      "string"}, "score": {"description": "Score from 0-10 on the quality of the candidate
+      response.", "gte": 0, "lte": 10, "type": "integer"}, "found_solution": {"description":
+      "Whether the response has fully solved the question or task.", "type": "boolean"}},
+      "required": ["reflections", "score", "found_solution"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2819'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//fFRNb9swDL3nVxC67OIESZqv5rYB24rtMGAfBYZlCGSJttXKoifRybyi
+        /32QnDpZsc0HQ+bjIx8pkw8jAGG02IJQlWRVN3b88vpNffMjr97jbf7q/vpVN7+hOya6XZovKLLI
+        oPwOFT+xJorqxiIbcj2sPErGGHW2nq/Wq831apmAmjTaSCsbHi9oPJ/OF+Ppcjy7OhErMgqD2MK3
+        EQDAQ3pHiU7jT7GFafZkqTEEWaLYDk4AwpONFiFDMIGlY5GdQUWO0UXVrrX2AmAiu1fS2nPi/nm4
+        OJ/7JK3dL7p7f32lNvdv8d3009f16w8zzXenMi4o3DVJUNE6NfTnAh/s22fJAISTdeJ+xMLi39gA
+        QvqyrdFxVC4edsIPvmEntjvxuUIYmvEigMfQkAsIjaeD0RhAAsvcIhwNV8DR/YBelgjB/MIMjmjK
+        ijOQTieUrMbA4FGR16jBuBhaIRTkAaWqgIrkyNTAEmoKDIrqmhzkxuswgSipIF9LBhNAWZQ+RUcZ
+        OmACj1JP4IaOeECfpViDak0YwBFDaFCZoktooNYrfMprXB/ckMvgWBlVxTSmbsjHHiSdB/Sm6Iwr
+        wXAAqVTrpeom8FJrE4nS2i5l9giKWqshR6gpfTnGnwwyp5ahomP0CnjSY1RfJBwTs6KADmT4fz8+
+        xH5b+6zSqPmpkgNC3vJZianj7aGGvAPjlG11LKVvQ0i97G83Wi9VT3Yi24mgyONObNfZThTUOr0P
+        ZNtY9k5s2bf4KP74yx5Hfzt/v5gfj0UbpD0N1sn+OEyqpbLxlIdngycK40yo9h5lSAMgAlPT5455
+        UgbR/jHkovFUN7xnukcXAy5Xmz6eOO+gMzqbLU4oE0t7Blab+b9oe40sTVoFw/bpJRpXniNMB52p
+        UBG6wFjvC+NK9I03ac+Iotnj1Xp5Nd/MFisxehz9BgAA//8DAKGA/2VwBQAA
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7d140a192716-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:47 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1448'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999496'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_cdd1b39dfaa2f10ff868725995845b86
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Reflect and grade the assistant response to
+      the user question below.", "role": "system"}, {"content": "Generate a table
+      with the average size and weight, as well as the oldest recorded instance for
+      each of the top 5 most common birds.", "role": "user"}, {"content": "Based on
+      the search results, here is a synthesized table with the average size, weight,
+      and oldest recorded instance for each of the top 5 most common birds:\n\n| Bird                  |
+      Average Size (cm) | Average Weight (g) | Oldest Recorded Instance       |\n|-----------------------|-------------------|---------------------|--------------------------------|\n|
+      Domestic Chicken      | 40-60             | 1000-4000           | 16 years (in
+      captivity)        |\n| Red-billed Quelea     | 12-13             | 15-20               |
+      11 years                       |\n| House Sparrow         | 14-18             |
+      24-40               | 23 years and 7 months          |\n| European Starling     |
+      20-23             | 58-100              | 15 years and 9 months          |\n|
+      Rock Pigeon           | 32-37             | 238-380             | 35 years and
+      9 months (in captivity) |\n\n### Sources:\n1. **Domestic Chicken**:\n   - Average
+      size and weight: Varies by breed, but generally within the given range.\n   -
+      Oldest recorded instance: The Guinness World Records.\n\n2. **Red-billed Quelea**:\n   -
+      Average size and weight: Wildlife Conservation and Bird Watching guides.\n   -
+      Oldest recorded instance: Bird banding records.\n\n3. **House Sparrow**:\n   -
+      Average size and weight: Bird watching guides and ornithological studies.\n   -
+      Oldest recorded instance: U.S. Geological Survey Bird Banding Laboratory.\n\n4.
+      **European Starling**:\n   - Average size and weight: Bird watching guides and
+      ornithological studies.\n   - Oldest recorded instance: U.S. Geological Survey
+      Bird Banding Laboratory.\n\n5. **Rock Pigeon**:\n   - Average size and weight:
+      Bird watching guides and ornithological studies.\n   - Oldest recorded instance:
+      The Guinness World Records.\n\nThis table provides a comprehensive overview
+      based on the searched information about the top 5 most common birds, their average
+      size and weight, and the oldest recorded instances.", "role": "assistant"}],
+      "model": "gpt-4o", "n": 1, "stream": false, "temperature": 0.7, "tool_choice":
+      {"type": "function", "function": {"name": "Reflection"}}, "tools": [{"type":
+      "function", "function": {"name": "Reflection", "description": "", "parameters":
+      {"properties": {"reflections": {"description": "The critique and reflections
+      on the sufficiency, superfluency, and general quality of the response", "type":
+      "string"}, "score": {"description": "Score from 0-10 on the quality of the candidate
+      response.", "gte": 0, "lte": 10, "type": "integer"}, "found_solution": {"description":
+      "Whether the response has fully solved the question or task.", "type": "boolean"}},
+      "required": ["reflections", "score", "found_solution"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2994'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//fFRLbxs3EL7rVwx48WVlyLJsxboZQYsURdEHErdoVQhcclbLhMuhOEMr
+        iuH/XpCSJcVIqsOC4Dy+hzjzNAJQzqoFKNNrMUP04/u7H4efppuHv/t49+EB3129vfslbIb5Xx/0
+        /UQ1pYLaj2jkperS0BA9iqOwD5uEWrB0vZpPb+e3b+5ub2tgIIu+lK2jjGc0nk6ms/HkZnx1fSjs
+        yRlktYB/RgAAT/VbKAaLn9UCJs3LzYDMeo1qcUwCUIl8uVGa2bHoIKo5BQ0FwVBYh+z9WUCI/Mpo
+        70/A+9/T2fnkk/Z+NX/49LCZzWPb/db/inb4+PvP9s+3m9kZ3r71LlZCXQ7m6M9Z/Hi/eAUGoIIe
+        au0f2Hn8VjWA0mmdBwxSmKunpUrHXF6qxVK97xGOZlwwJORIgREcwxa9H7OkbCQntKCDhZjo0Vlk
+        0GBRtPNoQXTrEbZOepAeIeEmIwtacKGjNOiCBrqlLDUuFOEGBmIBQ8NAAVqXLF/CD9r09XzBoB8x
+        6TUCuy/YwBbdupemMiBvkQUSGkq2ghTuBkEnBONRJ7+DmJAxCNpLuLfWFQba+11TCRz1ggvG56KG
+        KSeDDB2lmnKQacFq0Q1se2d60NYymITWtc472YFQTT6TeQnvaIuPmJqDFQc3LSFDIAGOaFy3g22v
+        i/zA4iQLck2/+I41zUVV/goLdIyoExcaLQLvgvRY/LL1vyh24+fonXECjDqZvvDJXhgoQcIOE4Yq
+        OtFwIOZMVfzixyW8P1expewttBiwc7IvoyzeBRfWlZ1JTjA5XQD2LSBzeSFUXgumwQX83zewVM1S
+        saGES7V40yxVRznYFZPPRfJSLSRlfFZfPfPn0bfO/54NcMIus/aHyT7cPx9Xhad1TNTyq8lXnQuO
+        +1VCzXUCFQvFPXbBqQgqf7VlVEw0RFkJfcJQGt7Mr/f91GkJnqJX14eFpYRE+1NgPvlu2Wo/eHy2
+        EtSeogvrU4fJkWcVqnjHgsOqc2GNKSZXF53q4upmqufdbNJOWjV6Hv0HAAD//wMAriuPy/EFAAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7d147ebe67a2-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:47 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1475'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9997'
+      x-ratelimit-remaining-tokens:
+      - '29999319'
+      x-ratelimit-reset-requests:
+      - 15ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_55ea35a6d1f6a3db39eb49da48d15247
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Reflect and grade the assistant response to
+      the user question below.", "role": "system"}, {"content": "Generate a table
+      with the average size and weight, as well as the oldest recorded instance for
+      each of the top 5 most common birds.", "role": "user"}, {"content": "Based on
+      the gathered information, here''s a table summarizing the top 5 most common
+      birds, their average size and weight, and the oldest recorded instance:\n\n|
+      Bird                | Average Size (Length) | Average Weight        | Oldest
+      Recorded Instance        |\n|---------------------|-----------------------|-----------------------|---------------------------------|\n|
+      Domestic Chicken    | 35-45 cm              | 2.5-4 kg              | 16 years                        |\n|
+      Red-billed Quelea   | 12-13 cm              | 15-20 grams           | 10 years                        |\n|
+      House Sparrow       | 14-18 cm              | 24-40 grams           | 13 years                        |\n|
+      European Starling   | 19-23 cm              | 58-100 grams          | 15 years                        |\n|
+      Ring-necked Pheasant| 50-70 cm              | 0.7-1.2 kg            | 18 years                        |\n\n###
+      Explanation:\n1. **Domestic Chicken**:\n   - **Average Size**: Typically between
+      35-45 cm.\n   - **Average Weight**: Ranges from 2.5 to 4 kg depending on the
+      breed and diet.\n   - **Oldest Recorded Instance**: Around 16 years.\n\n2. **Red-billed
+      Quelea**:\n   - **Average Size**: Around 12-13 cm.\n   - **Average Weight**:
+      Approximately 15-20 grams.\n   - **Oldest Recorded Instance**: Around 10 years.\n\n3.
+      **House Sparrow**:\n   - **Average Size**: Typically between 14-18 cm.\n   -
+      **Average Weight**: Ranges from 24 to 40 grams.\n   - **Oldest Recorded Instance**:
+      Up to 13 years.\n\n4. **European Starling**:\n   - **Average Size**: Between
+      19-23 cm.\n   - **Average Weight**: Ranges from 58 to 100 grams.\n   - **Oldest
+      Recorded Instance**: Up to 15 years.\n\n5. **Ring-necked Pheasant**:\n   - **Average
+      Size**: Between 50-70 cm.\n   - **Average Weight**: Approximately 0.7 to 1.2
+      kg.\n   - **Oldest Recorded Instance**: Up to 18 years.\n\n### Notes:\n- The
+      sizes and weights are averages and can vary based on factors like sex, diet,
+      and environment.\n- The oldest recorded instances are based on the maximum recorded
+      ages for these species and may vary.\n\nThis table combines the searched data
+      and standard ornithological knowledge to provide a comprehensive overview.",
+      "role": "assistant"}], "model": "gpt-4o", "n": 1, "stream": false, "temperature":
+      0.7, "tool_choice": {"type": "function", "function": {"name": "Reflection"}},
+      "tools": [{"type": "function", "function": {"name": "Reflection", "description":
+      "", "parameters": {"properties": {"reflections": {"description": "The critique
+      and reflections on the sufficiency, superfluency, and general quality of the
+      response", "type": "string"}, "score": {"description": "Score from 0-10 on the
+      quality of the candidate response.", "gte": 0, "lte": 10, "type": "integer"},
+      "found_solution": {"description": "Whether the response has fully solved the
+      question or task.", "type": "boolean"}}, "required": ["reflections", "score",
+      "found_solution"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '3239'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//dFTBbts4EL37Kwa89CIbdhI7sW97KXbbosEuku629cKgqZHEhuIonKEd
+        b5B/X5ByZLdofTCkefPevBly9DwCULZUK1Cm0WLazo1/W75t/+hk+eTeNebb4+zh8/yqefh7e+/v
+        /xRVJAZtv6GRV9bEUNs5FEu+h01ALZhUZ9cXi+vFzXKxyEBLJbpEqzsZX9H4YnpxNZ7Ox7PLI7Eh
+        a5DVCr6OAACe83+y6Et8UiuYFq+RFpl1jWo1JAGoQC5FlGa2LNr3do+gIS/ok2sfnTsDhMhtjHbu
+        VLj/PZ89n+akndvc0t1t9enw5crfefry/oN8vH33/v6fm7N6vfShy4aq6M0wnzN8iK9+KAagvG4z
+        9y+sHP6MDaB0qGOLXpJz9bxWYcjltVqt1V2DMAzjDUNA7sgzQhdoZ0tk0FCiaOuwBNFbh7C30oA0
+        CAEfI7JgCdZXFFqdZEFvKUrGhTqYQ0ssYKhtycPWhpInkIr2WtYbF1OVlJ/RN6B3GHSNwPY/LIa3
+        Pdq6kQK0L3MyuRJZIKChUGYLqQWDvfrQhmUwDnXIvD06N2YJ0UgMWBaAnmOwvgZpdO+51KITCTUf
+        QCgZ7wI26MsJ/E573GEocuIwNCgJGTwJcIfGVocM45M2AkwxGGSgKgfPxlTAvrGmAUPRlbBF0NBR
+        un1WO9ABNVQUwLbpGDAd4ARu0yScK46zP2vw1SPbHeZGW0TpZxoZQz7Wx2hDFmLAqkpXYIfuMFmr
+        Yq3YUMC1Wi2Ltaoo+nLD5GKyuVYrCRFf1Hf36mX0s+d/zzYmYBVZu+MqHeMvw246qrtAW/5h1VRl
+        veVmE1BzvvKKhbq+dqqTK6j43VqrLlDbyUboAX0SXNzMez11+uqc0Nl0cUSFRLsTcL2c/Yq26ReA
+        z3ZQ9Ratr08K08FnblTxgQXbTWV9jaELNn9ZVNVtLueX14vZYju7VKOX0f8AAAD//wMAeapyDmIF
+        AAA=
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7d148d772385-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:47 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1649'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9998'
+      x-ratelimit-remaining-tokens:
+      - '29999393'
+      x-ratelimit-reset-requests:
+      - 10ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_197b60a40245c40daac3d47e08a5e867
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Reflect and grade the assistant response to
+      the user question below.", "role": "system"}, {"content": "Generate a table
+      with the average size and weight, as well as the oldest recorded instance for
+      each of the top 5 most common birds.", "role": "user"}, {"content": "Here is
+      the summarized information and the table based on the search results:\n\n###
+      Top 5 Most Common Birds:\n1. Domestic Chicken\n2. Red-billed Quelea\n3. House
+      Sparrow\n4. European Starling (Common Starling)\n5. Ring-billed Gull\n\n###
+      Average Size, Weight, and Oldest Recorded Instance:\n\n| Bird                |
+      Average Size (cm) | Average Weight (g) | Oldest Recorded Instance       |\n|---------------------|-------------------|--------------------|-------------------------------|\n|
+      Domestic Chicken    | 40-60             | 1,000-4,000        | 16 years                      |\n|
+      Red-billed Quelea   | 12-13             | 15-20              | 11 years                      |\n|
+      House Sparrow       | 14-18             | 24-40              | 13 years, 4 months            |\n|
+      European Starling   | 20-23             | 58-100             | 15 years, 9 months            |\n|
+      Ring-billed Gull    | 49-54             | 300-600            | 23 years, 6 months            |\n\n###
+      Details:\n\n1. **Domestic Chicken**:\n   - **Average Size**: 40-60 cm\n   -
+      **Average Weight**: 1,000-4,000 g\n   - **Oldest Recorded Instance**: 16 years\n\n2.
+      **Red-billed Quelea**:\n   - **Average Size**: 12-13 cm\n   - **Average Weight**:
+      15-20 g\n   - **Oldest Recorded Instance**: 11 years\n\n3. **House Sparrow**:\n   -
+      **Average Size**: 14-18 cm\n   - **Average Weight**: 24-40 g\n   - **Oldest
+      Recorded Instance**: 13 years, 4 months\n\n4. **European Starling**:\n   - **Average
+      Size**: 20-23 cm\n   - **Average Weight**: 58-100 g\n   - **Oldest Recorded
+      Instance**: 15 years, 9 months\n\n5. **Ring-billed Gull**:\n   - **Average Size**:
+      49-54 cm\n   - **Average Weight**: 300-600 g\n   - **Oldest Recorded Instance**:
+      23 years, 6 months\n\nThis table provides a concise overview of the top 5 most
+      common birds, their average sizes and weights, and the oldest recorded instances.",
+      "role": "assistant"}], "model": "gpt-4o", "n": 1, "stream": false, "temperature":
+      0.7, "tool_choice": {"type": "function", "function": {"name": "Reflection"}},
+      "tools": [{"type": "function", "function": {"name": "Reflection", "description":
+      "", "parameters": {"properties": {"reflections": {"description": "The critique
+      and reflections on the sufficiency, superfluency, and general quality of the
+      response", "type": "string"}, "score": {"description": "Score from 0-10 on the
+      quality of the candidate response.", "gte": 0, "lte": 10, "type": "integer"},
+      "found_solution": {"description": "Whether the response has fully solved the
+      question or task.", "type": "boolean"}}, "required": ["reflections", "score",
+      "found_solution"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2921'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAA3RU224bNxB991cM+JKXlSD5Itt6c1Pk4iBoYTRo2m4hUOTsLmsuZz0cWlEM/3tB
+        6moj0YOw4Jk55/AMOE8nAMpZNQdlOi2mH/zo5vpd/+GXzw/vv/x58/lXO7n7ene/nF5cdrd/yYOq
+        cgct/0Mju66xoX7wKI7CBjaMWjCzTi9PZ5ezq+vZRQF6suhzWzvI6JxGp5PT89HkYjQ92zZ25AxG
+        NYd/TgAAnsp/thgsflNzmFS7kx5j1C2q+b4IQDH5fKJ0jC6KDqKqA2goCIbsOiTvjwAh8gujvT8I
+        b35PR9+HnLT3i083Pn35u//95v7T1/cfV29v3729NR9n8UhvQ70eiqEmBbPP5wjfn89fiQGooPvS
+        e4eNxx91AyjNbeoxSHaunmrF+9pYq3mt/ugQGONAISIMTI/OogUNopceYeWkAyklDwmjoAUXGuJe
+        ZwbQS0pScKEBLqCnKGCo7ynA0rGNFbhgfLIutKAfkXWLEN13rGCFru2kAh1sISBvMQowGmJbZPJ4
+        DEJDDKhNVwjHkP1uvLkIK/R+RNzq4L5n18Fu9TCC8agZOtQWOVbQ6/tsIktZLRpQxzUIAaPeNKaQ
+        C0UHO4YPtMJH5CqXc1EK9OLiFApTHNC4xhmIlNhgBGLoUTqy5KldQ4pos4hFQe5dwNL15mdhvYFV
+        50wHhpK3oJsGzSZdbUxibdbFKKN3eum8kzVQU/Aja2O4sdblL+39utoObztfS5ivIoDfBu+ME7+G
+        KFoQOlqV0sa1iTEnywgW2T2irV7YWiK4fiDOj6cM5xHZNevjcMd1Heo6/JYH7v0rD7uxReFkJDFa
+        WCbZkwdsnEDD1ENPjCCsQxw0YzBrYGw1253ULvQcyuvUx7WqahUNMdZqflXVqqEU7CKSTzmcWs2F
+        Ez6rF+/l+eRH3/8ebQLGJkXttytie/683zme2oFpGV+tENW44GK3YNSxPGUVhYaNdtYpCiq9WFdq
+        YOoHWQjdY8iEs9nphk8dtukBnZ5fblEh0f4AXE2uf9a2sCjalaW236Mbiy60B4bJ3me5qIrrKNgv
+        Ghda5IFd2ZiqGRZnF2eXs+lsOT1TJ88n/wMAAP//AwBnAYF4OgYAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7d147f62ce54-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:47 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1834'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9998'
+      x-ratelimit-remaining-tokens:
+      - '29999473'
+      x-ratelimit-reset-requests:
+      - 9ms
+      x-ratelimit-reset-tokens:
+      - 1ms
+      x-request-id:
+      - req_4fa489f32287659ddaa45453b61dd540
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"messages": [{"content": "Reflect and grade the assistant response to
+      the user question below.", "role": "system"}, {"content": "Generate a table
+      with the average size and weight, as well as the oldest recorded instance for
+      each of the top 5 most common birds.", "role": "user"}, {"content": "I will
+      now synthesize the information found from the search results to create the table
+      you requested.\n\n### Top 5 Most Common Birds\n\n1. Domestic Chicken\n2. Red-billed
+      Quelea\n3. Mourning Dove\n4. House Sparrow\n5. Common Starling\n\n### Table:
+      Average Size, Weight, and Oldest Recorded Instance of the Top 5 Most Common
+      Birds\n\n| Bird                | Average Size (cm) | Average Weight (g) | Oldest
+      Recorded Instance           |\n|---------------------|-------------------|--------------------|------------------------------------|\n|
+      Domestic Chicken    | 40 - 50           | 1,500 - 3,000      | 16 years                           |\n|
+      Red-billed Quelea   | 12 - 13           | 15 - 20            | 17 years                           |\n|
+      Mourning Dove       | 23 - 34           | 112 - 170          | 30 years                           |\n|
+      House Sparrow       | 14 - 18           | 24 - 40            | 13 years                           |\n|
+      Common Starling     | 20 - 23           | 58 - 100           | 22 years                           |\n\nNotes:\n-
+      **Domestic Chicken**: The average size and weight can vary considerably depending
+      on the breed.\n- **Red-billed Quelea**: Known as the most common wild bird in
+      the world.\n- **Mourning Dove**: Commonly found in North America.\n- **House
+      Sparrow**: Widely distributed around the world.\n- **Common Starling**: Native
+      to Europe, but has spread globally.\n\nThe average size and weight values are
+      approximations and can vary based on the specific population and region. The
+      oldest recorded instance is based on documented records of bird banding and
+      observations.", "role": "assistant"}], "model": "gpt-4o", "n": 1, "stream":
+      false, "temperature": 0.7, "tool_choice": {"type": "function", "function": {"name":
+      "Reflection"}}, "tools": [{"type": "function", "function": {"name": "Reflection",
+      "description": "", "parameters": {"properties": {"reflections": {"description":
+      "The critique and reflections on the sufficiency, superfluency, and general
+      quality of the response", "type": "string"}, "score": {"description": "Score
+      from 0-10 on the quality of the candidate response.", "gte": 0, "lte": 10, "type":
+      "integer"}, "found_solution": {"description": "Whether the response has fully
+      solved the question or task.", "type": "boolean"}}, "required": ["reflections",
+      "score", "found_solution"], "type": "object"}}}]}'
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '2673'
+      content-type:
+      - application/json
+      cookie:
+      - __cf_bm=dauP4KZJJEp2IumQMsl_q.YIpr8E502MesFMF1hJ7lM-1726768939-1.0.1.1-dA.8EaNmX1VypJi5KQUSx6chYRDHOGi06tt_jqYuHwP4E_06EWGizVp64Nf6zXxwswZBC2cI6qrbHYdd1OCeuQ;
+        _cfuvid=lJqRWheT0XYbk6eC4W_jqWYawTokOXljDYMVz9BRLVk-1726768939165-0.0.1.1-604800000
+      host:
+      - api.openai.com
+      user-agent:
+      - OpenAI/Python 1.46.0
+      x-stainless-arch:
+      - arm64
+      x-stainless-async:
+      - 'false'
+      x-stainless-lang:
+      - python
+      x-stainless-os:
+      - MacOS
+      x-stainless-package-version:
+      - 1.46.0
+      x-stainless-runtime:
+      - CPython
+      x-stainless-runtime-version:
+      - 3.12.4
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: !!binary |
+        H4sIAAAAAAAAAwAAAP//fFRdb9s2FH3Pr7jgs2w4buzEehu2BVk6LFg6DO2mwaDIK4kNyavxUnbd
+        IP+9IKXYbtFND4J8P84598P3+QJAGC1KEKqTUbnezn7Y3Lo7/3C/uWrCX2/Xm1+79sOD+fnubkWH
+        e1GkDKo/ooqvWXNFrrcYDfnRrQLKiAn18nq5vl7fbNar7HCk0aa0to+zK5otF8ur2WI1u3wzJXZk
+        FLIo4e8LAIDn/E4SvcZPooRF8WpxyCxbFOUxCEAEsskiJLPhKH0UxcmpyEf0SbUfrD1zRCK7VdLa
+        E/H4PJ99n/okrd2+f/sx7la/3WK8X6zu9o17/PPQHPDTGd8IfeizoGbw6tifM//RXn5DBiC8dDn3
+        ERuL38sGEDK0g0Mfk3LxXIlwjOVKlJX4o0MIyD15RugD7YxGDRI0Rmksaoiytgh7EzuIOfbfATmi
+        BuMbCk4mKJA1DTH7I/WwAkccQZFz5KE2QXMBxis7aONbkDsMskVg8xkL2KNpu1iA9BrIauQIARUF
+        nSnSjBRCQwFQqi6DzeGO9rjDUCTGgCADApNDMMwDcglV5avKX84hVTcwBtBGg6cI3KMyzeH/pSYp
+        KeC4JMCIjiESdHKX7YPDMcYajnP4JcKeBqtHf43oocYYMaQcZWV45UzhQM3IBI0JHOdV5ZejVC2j
+        PA0hFZ3LmmTxoDqQnHF+IoccjYIfO6Oe0GfNj6hntbFpar8PaFEW4FJzc+U1glRqCDIiUACPqMFR
+        SENHZRghSN8iJzVv5vAu98koYBqCQk4pARsM6NOvJC2+Ct6nGSSKtGeGPOoC9p1RHajckxrBuJ5C
+        7mTK3GFI2Hl15uOsHtJOWFtMOzbto+HTlqW+DnGCHHiaeCNVnKkO1VPeLK+nbk/oQD4jpg4C47T5
+        qcUKmSfud4oClrCuKn9Lg9fAZIcUV8IH5EoUleAUUolyXVSiSTHb15hKlDEM+CK++uO9XHzv+5+z
+        kxKwGVja6dZM9pfj8bLU9oFq/uYWicZ4w902oOR8EwRH6kfuxJMZxPDV3RN9INfHbaQn9AlwtbgZ
+        8cTpLJ+8lzfLyRspSntyrDeL/0rbjteCz46UGCUa354QFkeduVDBB47oto3xLYY+mHx6RdNvV0t5
+        3Vwt6kUtLl4uvgAAAP//AwDnErKXgwYAAA==
+    headers:
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-RAY:
+      - 8c5b7d147cb2fab2-SJC
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Sep 2024 18:02:47 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      openai-organization:
+      - langchain
+      openai-processing-ms:
+      - '1932'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=15552000; includeSubDomains; preload
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29999531'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_96a1344aedab0f9ff62ae9cea9bc9d7a
+    status:
+      code: 200
+      message: OK
+version: 1
