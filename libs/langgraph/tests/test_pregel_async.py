@@ -3962,7 +3962,7 @@ async def test_prebuilt_tool_chat() -> None:
 
     assert [
         c
-        for c in app.stream(
+        async for c in app.astream(
             {"messages": [HumanMessage(content="what is weather in sf")]},
             stream_mode="messages",
         )

@@ -66,7 +66,7 @@ class CachePolicy(NamedTuple):
 class PregelTask(NamedTuple):
     id: str
     name: str
-    path: tuple[str, ...]
+    path: tuple[Union[str, int], ...]
     error: Optional[Exception] = None
     interrupts: tuple[Interrupt, ...] = ()
     state: Union[None, RunnableConfig, "StateSnapshot"] = None
@@ -82,7 +82,7 @@ class PregelExecutableTask(NamedTuple):
     retry_policy: Optional[RetryPolicy]
     cache_policy: Optional[CachePolicy]
     id: str
-    path: tuple[str, ...]
+    path: tuple[Union[str, int], ...]
     scheduled: bool = False
 
 

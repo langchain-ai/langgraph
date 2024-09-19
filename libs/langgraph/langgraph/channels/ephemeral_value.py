@@ -1,4 +1,4 @@
-from typing import Generic, Optional, Sequence, Type
+from typing import Any, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
@@ -11,7 +11,7 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("value", "guard")
 
-    def __init__(self, typ: Type[Value], guard: bool = True) -> None:
+    def __init__(self, typ: Any, guard: bool = True) -> None:
         super().__init__(typ)
         self.guard = guard
 

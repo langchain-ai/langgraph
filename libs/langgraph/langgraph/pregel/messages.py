@@ -7,7 +7,8 @@ from typing import (
     List,
     Optional,
     Sequence,
-    Tuple,
+    Union,
+    cast,
 )
 from uuid import UUID, uuid4
 
@@ -17,21 +18,18 @@ from langchain_core.outputs import ChatGenerationChunk, LLMResult
 from langchain_core.tracers._streaming import T, _StreamingCallbackHandler
 
 from langgraph.constants import NS_SEP
+from langgraph.pregel.loop import StreamChunk
+
+Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
-    def __init__(self, stream: Callable[[Tuple[str, str, Any]], None]):
+    def __init__(self, stream: Callable[[StreamChunk], None]):
         self.stream = stream
-        self.metadata: dict[str, tuple[str, dict[str, Any]]] = {}
-        self.seen = set()
+        self.metadata: dict[UUID, Meta] = {}
+        self.seen: set[Union[int, str]] = set()
 
-    def _emit(
-        self,
-        meta: Tuple[str, dict[str, Any]],
-        message: BaseMessage,
-        *,
-        dedupe: bool = False,
-    ):
+    def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         ident = id(message)
         if dedupe and message.id in self.seen:
             return
@@ -65,7 +63,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     ) -> Any:
         if metadata:
             self.metadata[run_id] = (
-                tuple(metadata["langgraph_checkpoint_ns"].split(NS_SEP)),
+                tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
                 metadata,
             )
 
@@ -116,7 +114,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     ) -> Any:
         if metadata and kwargs.get("name") == metadata.get("langgraph_node"):
             self.metadata[run_id] = (
-                tuple(metadata["langgraph_checkpoint_ns"].split(NS_SEP)),
+                tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
                 metadata,
             )
 

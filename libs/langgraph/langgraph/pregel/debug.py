@@ -2,7 +2,17 @@ from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pprint import pformat
-from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypedDict, Union
+from typing import (
+    Any,
+    Iterable,
+    Iterator,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    TypedDict,
+    Union,
+)
 from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
@@ -48,8 +58,6 @@ class CheckpointPayload(TypedDict):
 class DebugOutputBase(TypedDict):
     timestamp: str
     step: int
-    type: str
-    payload: dict[str, Any]
 
 
 class DebugOutputTask(DebugOutputBase):
@@ -74,7 +82,7 @@ TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
 
 def map_debug_tasks(
-    step: int, tasks: list[PregelExecutableTask]
+    step: int, tasks: Iterable[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
     for task in tasks:
@@ -124,7 +132,7 @@ def map_debug_checkpoint(
     stream_channels: Union[str, Sequence[str]],
     metadata: CheckpointMetadata,
     checkpoint: Checkpoint,
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
 ) -> Iterator[DebugOutputCheckpoint]:
     yield {
@@ -201,7 +209,7 @@ def print_step_checkpoint(
 
 
 def tasks_w_writes(
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[Union[PregelTask, PregelExecutableTask]],
     pending_writes: Optional[list[PendingWrite]],
     states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
 ) -> tuple[PregelTask, ...]:

@@ -7,7 +7,6 @@ from typing import (
     Callable,
     Dict,
     Iterator,
-    List,
     Optional,
     Sequence,
     Tuple,
@@ -216,7 +215,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         ).result()
 
     def put_writes(
-        self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+        self, config: RunnableConfig, writes: Sequence[Tuple[str, Any]], task_id: str
     ) -> None:
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id), self.loop

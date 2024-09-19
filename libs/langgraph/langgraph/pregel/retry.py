@@ -47,7 +47,7 @@ def run_with_retry(
                 if not isinstance(exc, retry_policy.retry_on):
                     raise
             elif callable(retry_policy.retry_on):
-                if not retry_policy.retry_on(exc):
+                if not retry_policy.retry_on(exc):  # type: ignore[call-arg]
                     raise
             else:
                 raise TypeError(
@@ -113,7 +113,7 @@ async def arun_with_retry(
                 if not isinstance(exc, retry_policy.retry_on):
                     raise
             elif callable(retry_policy.retry_on):
-                if not retry_policy.retry_on(exc):
+                if not retry_policy.retry_on(exc):  # type: ignore[call-arg]
                     raise
             else:
                 raise TypeError(

@@ -28,7 +28,7 @@ def read_channel(
 
 def read_channels(
     channels: Mapping[str, BaseChannel],
-    select: Union[list[str], str],
+    select: Union[Sequence[str], str],
     *,
     skip_empty: bool = True,
 ) -> Union[dict[str, Any], Any]:
@@ -97,7 +97,7 @@ class AddableUpdatesDict(AddableDict):
         raise TypeError("AddableUpdatesDict does not support right-side addition")
 
 
-EMPTY_SEQ = tuple()
+EMPTY_SEQ: tuple[str, ...] = tuple()
 
 
 def map_output_updates(
@@ -131,16 +131,16 @@ def map_output_updates(
             for task, writes in output_tasks
             if any(chan in output_channels for chan, _ in writes)
         )
-    grouped = {t.name: [] for t, _ in output_tasks}
+    grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)
     for node, value in grouped.items():
         if len(value) == 0:
-            grouped[node] = None
+            grouped[node] = None  # type: ignore[assignment]
         if len(value) == 1:
             grouped[node] = value[0]
     if cached:
-        grouped["__metadata__"] = {"cached": cached}
+        grouped["__metadata__"] = {"cached": cached}  # type: ignore[assignment]
     yield AddableUpdatesDict(grouped)
 
 

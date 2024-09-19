@@ -32,6 +32,7 @@ psycopg = {extras = ["binary"], version = ">=3.0.0", python = ">=3.10"}
 uvloop = "^0.20.0"
 pyperf = "^2.7.0"
 py-spy = "^0.3.14"
+types-requests = "^2.32.0.20240914"
 
 [tool.ruff]
 lint.select = [ "E", "F", "I" ]
@@ -49,8 +50,14 @@ docstring-code-format = false
 docstring-code-line-length = "dynamic"
 
 [tool.mypy]
-ignore_missing_imports = "True"
+# https://mypy.readthedocs.io/en/stable/config_file.html
 disallow_untyped_defs = "True"
+explicit_package_bases = "True"
+warn_no_return = "False"
+warn_unused_ignores = "True"
+warn_redundant_casts = "True"
+allow_redefinition = "True"
+disable_error_code = "typeddict-item, return-value, override, has-type"
 
 [tool.coverage.run]
 omit = ["tests/*"]

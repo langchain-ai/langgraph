@@ -14,7 +14,6 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -28,6 +27,7 @@ from typing_extensions import ParamSpec, Self
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -64,6 +64,7 @@ from langgraph.managed.base import (
     WritableManagedValue,
 )
 from langgraph.pregel.algo import (
+    GetNextVersion,
     PregelTaskWrites,
     apply_writes,
     increment,
@@ -92,7 +93,7 @@ from langgraph.pregel.io import (
 )
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import PregelExecutableTask
+from langgraph.pregel.types import All, PregelExecutableTask, StreamMode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
 from langgraph.store.batch import AsyncBatchedStore
@@ -105,31 +106,32 @@ INPUT_RESUMING = object()
 EMPTY_SEQ = ()
 SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
 
+StreamChunk = tuple[tuple[str, ...], str, Any]
+
 
 class StreamProtocol:
     __slots__ = ("modes", "__call__")
 
-    modes: Sequence[Literal["values", "updates", "debug"]]
+    modes: set[StreamMode]
 
-    __call__: Callable[[Tuple[str, str, Any]], None]
+    __call__: Callable[[StreamChunk], None]
 
     def __init__(
         self,
-        __call__: Callable[[Tuple[str, str, Any]], None],
-        modes: Sequence[Literal["values", "updates", "debug"]],
+        __call__: Callable[[StreamChunk], None],
+        modes: set[StreamMode],
     ) -> None:
         self.__call__ = __call__
         self.modes = modes
 
 
-class DuplexStream(StreamProtocol):
-    def __init__(self, *streams: StreamProtocol) -> None:
-        def __call__(value: Tuple[str, str, Any]) -> None:
-            for stream in streams:
-                if value[1] in stream.modes:
-                    stream(value)
+def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
+    def __call__(value: StreamChunk) -> None:
+        for stream in streams:
+            if value[1] in stream.modes:
+                stream(value)  # type: ignore
 
-        super().__init__(__call__, {mode for s in streams for mode in s.modes})
+    return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
 
 class PregelLoop:
@@ -145,7 +147,7 @@ class PregelLoop:
     skip_done_tasks: bool
     is_nested: bool
 
-    checkpointer_get_next_version: Callable[[Optional[V]], V]
+    checkpointer_get_next_version: GetNextVersion
     checkpointer_put_writes: Optional[
         Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
     ]
@@ -156,6 +158,7 @@ class PregelLoop:
                 RunnableConfig,
                 Sequence[tuple[str, Any]],
                 str,
+                ChannelVersions,
             ],
             Any,
         ]
@@ -209,7 +212,7 @@ class PregelLoop:
             or CONFIG_KEY_DEDUPE_TASKS in config["configurable"]
         )
         self.debug = debug
-        if CONFIG_KEY_STREAM in config["configurable"]:
+        if self.stream is not None and CONFIG_KEY_STREAM in config["configurable"]:
             self.stream = DuplexStream(
                 self.stream, config["configurable"][CONFIG_KEY_STREAM]
             )
@@ -233,7 +236,7 @@ class PregelLoop:
         else:
             self.checkpoint_config = config
         self.checkpoint_ns = (
-            tuple(self.config["configurable"].get("checkpoint_ns").split(NS_SEP))
+            tuple(cast(str, self.config["configurable"]["checkpoint_ns"]).split(NS_SEP))
             if self.config["configurable"].get("checkpoint_ns")
             else ()
         )
@@ -279,8 +282,8 @@ class PregelLoop:
         self,
         *,
         input_keys: Union[str, Sequence[str]],
-        interrupt_after: Sequence[str] = EMPTY_SEQ,
-        interrupt_before: Sequence[str] = EMPTY_SEQ,
+        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
+        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
@@ -435,7 +438,7 @@ class PregelLoop:
 
         # debug flag
         if self.debug:
-            print_step_tasks(self.step, self.tasks.values())
+            print_step_tasks(self.step, list(self.tasks.values()))
 
         return True
 
@@ -482,6 +485,7 @@ class PregelLoop:
                 self.config,
                 self.step,
                 for_execution=True,
+                checkpointer=None,
                 manager=None,
             )
             # apply input writes
@@ -589,7 +593,7 @@ class PregelLoop:
         if mode not in self.stream.modes:
             return
         for v in values(*args, **kwargs):
-            self.stream((self.checkpoint_ns, mode, v))
+            self.stream((self.checkpoint_ns, mode, v))  # type: ignore
 
     def _output_writes(
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
@@ -650,7 +654,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             self.checkpointer_put_writes = checkpointer.put_writes
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None
+            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
 
     def _checkpointer_put_after_previous(
@@ -659,13 +663,15 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, float, int]]],
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         try:
             if prev is not None:
                 prev.result()
         finally:
-            self.checkpointer.put(config, checkpoint, metadata, new_versions)
+            cast(BaseCheckpointSaver, self.checkpointer).put(
+                config, checkpoint, metadata, new_versions
+            )
 
     def _update_mv(self, key: str, values: Sequence[Any]) -> None:
         return self.submit(cast(WritableManagedValue, self.managed[key]).update, values)
@@ -676,6 +682,10 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         if self.config.get("configurable", {}).get(
             CONFIG_KEY_ENSURE_LATEST
         ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            if self.checkpointer is None:
+                raise RuntimeError(
+                    "Cannot ensure latest checkpoint without checkpointer"
+                )
             saved = self.checkpointer.get_tuple(
                 patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
             )
@@ -766,7 +776,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             self.checkpointer_put_writes = checkpointer.aput_writes
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None
+            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
 
     async def _checkpointer_put_after_previous(
@@ -775,13 +785,15 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, float, int]]],
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         try:
             if prev is not None:
                 await prev
         finally:
-            await self.checkpointer.aput(config, checkpoint, metadata, new_versions)
+            await cast(BaseCheckpointSaver, self.checkpointer).aput(
+                config, checkpoint, metadata, new_versions
+            )
 
     def _update_mv(self, key: str, values: Sequence[Any]) -> None:
         return self.submit(
@@ -794,6 +806,10 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         if self.config.get("configurable", {}).get(
             CONFIG_KEY_ENSURE_LATEST
         ) and self.checkpoint_config["configurable"].get("checkpoint_id"):
+            if self.checkpointer is None:
+                raise RuntimeError(
+                    "Cannot ensure latest checkpoint without checkpointer"
+                )
             saved = await self.checkpointer.aget_tuple(
                 patch_configurable(self.checkpoint_config, {"checkpoint_id": None})
             )
@@ -851,6 +867,3 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         return await asyncio.shield(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
-
-
-EMPTY_SEQ = tuple()

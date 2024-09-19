@@ -95,7 +95,7 @@ from langgraph.utils.config import (
     patch_configurable,
 )
 from langgraph.utils.pydantic import create_model
-from langgraph.utils.queue import AsyncQueue, SyncQueue
+from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -138,7 +138,7 @@ class Channel:
             )
         return PregelNode(
             channels=cast(
-                Union[Mapping[None, str], Mapping[str, str]],
+                Union[list[str], Mapping[str, str]],
                 (
                     {key: channels}
                     if isinstance(channels, str) and key is not None
@@ -172,9 +172,9 @@ class Channel:
 
 
 class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
-    nodes: Mapping[str, PregelNode]
+    nodes: dict[str, PregelNode]
 
-    channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
+    channels: dict[str, Union[BaseChannel, ManagedValueSpec]]
 
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
@@ -214,8 +214,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     def __init__(
         self,
         *,
-        nodes: Mapping[str, PregelNode],
-        channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]] = None,
+        nodes: dict[str, PregelNode],
+        channels: Optional[dict[str, Union[BaseChannel, ManagedValueSpec]]],
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
         output_channels: Union[str, Sequence[str]],
@@ -256,12 +256,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
-        return self.copy({"config": merge_configs(self.config, config, kwargs)})
+        return self.copy(
+            {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
+        )
 
     def validate(self) -> Self:
         validate_graph(
             self.nodes,
-            self.channels,
+            {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},
             self.input_channels,
             self.output_channels,
             self.stream_channels,
@@ -303,7 +305,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     @property
     def InputType(self) -> Any:
         if isinstance(self.input_channels, str):
-            return self.channels[self.input_channels].UpdateType
+            channel = self.channels[self.input_channels]
+            if isinstance(channel, BaseChannel):
+                return channel.UpdateType
 
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
@@ -312,11 +316,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if isinstance(self.input_channels, str):
             return super().get_input_schema(config)
         else:
-            return create_model(  # type: ignore[call-overload]
+            return create_model(
                 self.get_name("Input"),
                 field_definitions={
-                    k: (self.channels[k].UpdateType, None)
+                    k: (c.UpdateType, None)
                     for k in self.input_channels or self.channels.keys()
+                    if (c := self.channels[k]) and isinstance(c, BaseChannel)
                 },
             )
 
@@ -332,7 +337,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     @property
     def OutputType(self) -> Any:
         if isinstance(self.output_channels, str):
-            return self.channels[self.output_channels].ValueType
+            channel = self.channels[self.output_channels]
+            if isinstance(channel, BaseChannel):
+                return channel.ValueType
 
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
@@ -341,10 +348,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if isinstance(self.output_channels, str):
             return super().get_output_schema(config)
         else:
-            return create_model(  # type: ignore[call-overload]
+            return create_model(
                 self.get_name("Output"),
                 field_definitions={
-                    k: (self.channels[k].ValueType, None) for k in self.output_channels
+                    k: (c.ValueType, None)
+                    for k in self.output_channels
+                    if (c := self.channels[k]) and isinstance(c, BaseChannel)
                 },
             )
 
@@ -413,7 +422,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         self,
         config: RunnableConfig,
         saved: Optional[CheckpointTuple],
-        recurse: Optional[BaseCheckpointSaver] = False,
+        recurse: Optional[BaseCheckpointSaver] = None,
     ) -> StateSnapshot:
         if not saved:
             return StateSnapshot(
@@ -486,7 +495,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         self,
         config: RunnableConfig,
         saved: Optional[CheckpointTuple],
-        recurse: Optional[BaseCheckpointSaver] = False,
+        recurse: Optional[BaseCheckpointSaver] = None,
     ) -> StateSnapshot:
         if not saved:
             return StateSnapshot(
@@ -545,7 +554,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         }
                     }
                     task_states[task.id] = await subgraphs[task.name].aget_state(
-                        config, subgraphs=recurse
+                        config, subgraphs=True
                     )
             # assemble the state snapshot
             return StateSnapshot(
@@ -828,7 +837,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
-            writes = deque()
+            writes: deque[tuple[str, Any]] = deque()
             task = PregelTaskWrites(as_node, writes, [INTERRUPT])
             task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
             run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
@@ -925,21 +934,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
-        checkpoint_config = {
-            **config,
-            "configurable": {
-                **config["configurable"],
-                # TODO: add proper support for updating nested subgraph state
-                "checkpoint_ns": "",
-            },
-        }
+        checkpoint_config = patch_configurable(
+            config,
+            {"checkpoint_ns": config["configurable"].get("checkpoint_ns", "")},
+        )
         if saved:
-            checkpoint_config = {
-                "configurable": {
-                    **config.get("configurable", {}),
-                    **saved.config["configurable"],
-                }
-            }
+            checkpoint_config = patch_configurable(config, saved.config["configurable"])
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = await checkpointer.aput(
@@ -986,7 +986,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
-            writes = deque()
+            writes: deque[tuple[str, Any]] = deque()
             task = PregelTaskWrites(as_node, writes, [INTERRUPT])
             task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
             run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
@@ -1052,10 +1052,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         debug: Optional[bool],
     ) -> tuple[
         bool,
-        Sequence[StreamMode],
+        set[StreamMode],
         Union[str, Sequence[str]],
-        Optional[Sequence[str]],
-        Optional[Sequence[str]],
+        Union[All, Sequence[str]],
+        Union[All, Sequence[str]],
         Optional[BaseCheckpointSaver],
     ]:
         debug = debug if debug is not None else self.debug
@@ -1079,7 +1079,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             checkpointer = self.checkpointer
         return (
             debug,
-            stream_mode,
+            set(stream_mode),
             output_keys,
             interrupt_before,
             interrupt_after,
@@ -1203,8 +1203,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 debug,
                 stream_modes,
                 output_keys,
-                interrupt_before,
-                interrupt_after,
+                interrupt_before_,
+                interrupt_after_,
                 checkpointer,
             ) = self._defaults(
                 config,
@@ -1249,7 +1249,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     # a pending waiter to return immediately
                     loop.stack.callback(stream._count.release)
 
-                    def get_waiter() -> asyncio.Task[None]:
+                    def get_waiter() -> concurrent.futures.Future[None]:
                         nonlocal waiter
                         if waiter is None or waiter.done():
                             waiter = loop.submit(stream.wait)
@@ -1257,7 +1257,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         else:
                             return waiter
                 else:
-                    get_waiter = None
+                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1265,8 +1265,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
+                    interrupt_before=interrupt_before_,
+                    interrupt_after=interrupt_after_,
                     manager=run_manager,
                 ):
                     for _ in runner.tick(
@@ -1390,13 +1390,6 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 else:
                     yield payload
 
-        if subgraphs:
-
-            def get_waiter() -> asyncio.Task[None]:
-                return aioloop.create_task(stream.wait())
-        else:
-            get_waiter = None
-
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1408,7 +1401,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         # if running from astream_log() run each proc with streaming
         do_stream = next(
             (
-                h
+                cast(_StreamingCallbackHandler, h)
                 for h in run_manager.handlers
                 if isinstance(h, _StreamingCallbackHandler)
             ),
@@ -1426,8 +1419,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 debug,
                 stream_modes,
                 output_keys,
-                interrupt_before,
-                interrupt_after,
+                interrupt_before_,
+                interrupt_after_,
                 checkpointer,
             ) = self._defaults(
                 config,
@@ -1437,6 +1430,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up messages stream mode
+            if "messages" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamMessagesHandler(stream.put_nowait)
+                )
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -1457,6 +1455,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
+                # enable concurrent streaming
+                if subgraphs or "messages" in stream_modes:
+
+                    def get_waiter() -> asyncio.Task[None]:
+                        return aioloop.create_task(stream.wait())
+                else:
+                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1464,8 +1469,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
+                    interrupt_before=interrupt_before_,
+                    interrupt_after=interrupt_after_,
                     manager=run_manager,
                 ):
                     async for _ in runner.atick(
