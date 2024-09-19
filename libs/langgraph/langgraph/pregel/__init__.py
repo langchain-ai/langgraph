@@ -1429,7 +1429,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put)
+                    StreamMessagesHandler(stream.put_nowait)
                 )
             async with AsyncPregelLoop(
                 input,
