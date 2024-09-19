@@ -4,6 +4,7 @@ from hashlib import sha1
 from typing import (
     Any,
     Callable,
+    Iterable,
     Iterator,
     Literal,
     Mapping,
@@ -20,7 +21,12 @@ from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunMan
 from langchain_core.runnables.config import RunnableConfig
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, copy_checkpoint
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    V,
+    copy_checkpoint,
+)
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
@@ -46,13 +52,18 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
-EMPTY_SEQ = tuple()
+EMPTY_SEQ: tuple[str, ...] = tuple()
 
 
 class WritesProtocol(Protocol):
-    name: str
-    writes: Sequence[tuple[str, Any]]
-    triggers: Sequence[str]
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def writes(self) -> Sequence[tuple[str, Any]]: ...
+
+    @property
+    def triggers(self) -> Sequence[str]: ...
 
 
 class PregelTaskWrites(NamedTuple):
@@ -64,14 +75,14 @@ class PregelTaskWrites(NamedTuple):
 def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[PregelExecutableTask],
 ) -> list[PregelExecutableTask]:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-    null_version = version_type()
+    null_version = version_type()  # type: ignore[misc]
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
     # interrupt if any channel has been updated since last interrupt
     any_updates_since_prev_interrupt = any(
-        version > seen.get(chan, null_version)
+        version > seen.get(chan, null_version)  # type: ignore[operator]
         for chan, version in checkpoint["channel_versions"].items()
     )
     # and any triggered node is in interrupt_nodes list
@@ -161,8 +172,8 @@ def increment(current: Optional[int], channel: BaseChannel) -> int:
 def apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
-    tasks: Sequence[WritesProtocol],
-    get_next_version: Optional[Callable[[int, BaseChannel], int]],
+    tasks: Iterable[WritesProtocol],
+    get_next_version: Optional[Callable[[Optional[V], BaseChannel], V]],
 ) -> dict[str, list[Any]]:
     # update seen versions
     for task in tasks:
@@ -189,7 +200,8 @@ def apply_writes(
     }:
         if channels[chan].consume() and get_next_version is not None:
             checkpoint["channel_versions"][chan] = get_next_version(
-                max_version, channels[chan]
+                max_version,  # type: ignore[arg-type]
+                channels[chan],
             )
 
     # clear pending sends
@@ -222,7 +234,8 @@ def apply_writes(
         if chan in channels:
             if channels[chan].update(vals) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
+                    max_version,  # type: ignore[arg-type]
+                    channels[chan],
                 )
             updated_channels.add(chan)
 
@@ -231,7 +244,8 @@ def apply_writes(
         if chan not in updated_channels:
             if channels[chan].update([]) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
+                    max_version,  # type: ignore[arg-type]
+                    channels[chan],
                 )
 
     # Return managed values writes to be applied externally
@@ -280,7 +294,7 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
-    tasks: Union[dict[str, PregelTask], dict[str, PregelExecutableTask]] = {}
+    tasks: dict[str, Union[PregelTask, PregelExecutableTask]] = {}
     # Consume pending packets
     for idx, _ in enumerate(checkpoint["pending_sends"]):
         if task := prepare_single_task(
@@ -377,7 +391,7 @@ def prepare_single_task(
                 managed.replace_runtime_placeholders(step, packet.arg)
                 if proc.metadata:
                     metadata.update(proc.metadata)
-                writes = deque()
+                writes: deque[tuple[str, Any]] = deque()
                 return PregelExecutableTask(
                     packet.node,
                     packet.arg,
@@ -438,7 +452,7 @@ def prepare_single_task(
             return
         proc = processes[name]
         version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-        null_version = version_type()
+        null_version = version_type()  # type: ignore[misc]
         if null_version is None:
             return
         seen = checkpoint["versions_seen"].get(name, {})
@@ -449,7 +463,7 @@ def prepare_single_task(
             if not isinstance(
                 read_channel(channels, chan, return_exception=True), EmptyChannelError
             )
-            and checkpoint["channel_versions"].get(chan, null_version)
+            and checkpoint["channel_versions"].get(chan, null_version)  # type: ignore[operator]
             > seen.get(chan, null_version)
         ):
             try:

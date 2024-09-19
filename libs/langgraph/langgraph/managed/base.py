@@ -106,7 +106,9 @@ ChannelTypePlaceholder = object()
 
 
 class ManagedValueMapping(dict[str, ManagedValue]):
-    def replace_runtime_values(self, step: int, values: Union[dict[str, Any], Any]):
+    def replace_runtime_values(
+        self, step: int, values: Union[dict[str, Any], Any]
+    ) -> None:
         if not self or not values:
             return
         if all(not mv.runtime for mv in self.values()):
@@ -128,7 +130,7 @@ class ManagedValueMapping(dict[str, ManagedValue]):
 
     def replace_runtime_placeholders(
         self, step: int, values: Union[dict[str, Any], Any]
-    ):
+    ) -> None:
         if not self or not values:
             return
         if all(not mv.runtime for mv in self.values()):

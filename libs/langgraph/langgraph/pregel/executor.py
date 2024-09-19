@@ -9,9 +9,11 @@ from typing import (
     Awaitable,
     Callable,
     ContextManager,
+    Coroutine,
     Optional,
     Protocol,
     TypeVar,
+    cast,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -42,7 +44,7 @@ class BackgroundExecutor(ContextManager):
         self.executor = self.stack.enter_context(get_executor_for_config(config))
         self.tasks: dict[concurrent.futures.Future, tuple[bool, bool]] = {}
 
-    def submit(
+    def submit(  # type: ignore[valid-type]
         self,
         fn: Callable[P, T],
         *args: P.args,
@@ -68,7 +70,7 @@ class BackgroundExecutor(ContextManager):
         else:
             self.tasks.pop(task)
 
-    def __enter__(self) -> "submit":
+    def __enter__(self) -> Submit:
         return self.submit
 
     def __exit__(
@@ -105,7 +107,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
 
-    def submit(
+    def submit(  # type: ignore[valid-type]
         self,
         fn: Callable[P, Awaitable[T]],
         *args: P.args,
@@ -114,7 +116,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         __reraise_on_exit__: bool = True,
         **kwargs: P.kwargs,
     ) -> asyncio.Task[T]:
-        coro = fn(*args, **kwargs)
+        coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
         if self.context_not_supported:
             task = self.loop.create_task(coro, name=__name__)
         else:

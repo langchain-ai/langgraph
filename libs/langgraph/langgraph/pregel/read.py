@@ -27,7 +27,7 @@ from langgraph.pregel.write import ChannelWrite
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
-READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
+READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
 
 
 class ChannelRead(RunnableCallable):

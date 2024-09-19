@@ -1,6 +1,7 @@
 from typing import (
     Annotated,
     Callable,
+    Literal,
     Optional,
     Sequence,
     Type,
@@ -9,7 +10,7 @@ from typing import (
     Union,
 )
 
-from langchain_core.language_models import LanguageModelLike
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -129,15 +130,15 @@ def _get_model_preprocessing_runnable(
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
-    model: LanguageModelLike,
+    model: BaseChatModel,
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
-    interrupt_before: Optional[Sequence[str]] = None,
-    interrupt_after: Optional[Sequence[str]] = None,
+    interrupt_before: Optional[list[str]] = None,
+    interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
@@ -421,7 +422,7 @@ def create_react_agent(
         tool_classes = tools.tools
         tool_node = ToolNode(tool_classes)
     elif isinstance(tools, ToolNode):
-        tool_classes = tools.tools_by_name.values()
+        tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
         tool_classes = tools
@@ -429,11 +430,11 @@ def create_react_agent(
     model = model.bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState):
+    def should_continue(state: AgentState) -> Literal["continue", "end"]:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if not last_message.tool_calls:
+        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
             return "end"
         # Otherwise if there is, we continue
         else:
@@ -443,12 +444,13 @@ def create_react_agent(
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
-    def call_model(
-        state: AgentState,
-        config: RunnableConfig,
-    ):
+    def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = model_runnable.invoke(state, config)
-        if state["is_last_step"] and response.tool_calls:
+        if (
+            state["is_last_step"]
+            and isinstance(response, AIMessage)
+            and response.tool_calls
+        ):
             return {
                 "messages": [
                     AIMessage(
@@ -460,9 +462,13 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState, config: RunnableConfig):
+    async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = await model_runnable.ainvoke(state, config)
-        if state["is_last_step"] and response.tool_calls:
+        if (
+            state["is_last_step"]
+            and isinstance(response, AIMessage)
+            and response.tool_calls
+        ):
             return {
                 "messages": [
                     AIMessage(

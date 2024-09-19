@@ -5,7 +5,18 @@ import sys
 from contextlib import AsyncExitStack
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Optional, Sequence
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Iterator,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -19,7 +30,7 @@ from langchain_core.runnables.config import (
     run_in_executor,
     var_child_runnable_config,
 )
-from langchain_core.runnables.utils import Input, Output, accepts_config
+from langchain_core.runnables.utils import Input, accepts_config
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
@@ -52,8 +63,8 @@ class RunnableCallable(Runnable):
 
     def __init__(
         self,
-        func: Callable[..., Optional[Runnable]],
-        afunc: Optional[Callable[..., Awaitable[Optional[Runnable]]]] = None,
+        func: Optional[Callable[..., Union[Any, Runnable]]],
+        afunc: Optional[Callable[..., Awaitable[Union[Any, Runnable]]]] = None,
         *,
         name: Optional[str] = None,
         tags: Optional[Sequence[str]] = None,
@@ -155,7 +166,7 @@ class RunnableCallable(Runnable):
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
                 context.run(_set_config_context, child_config)
-                coro = self.afunc(input, **kwargs)
+                coro = cast(Coroutine[None, None, Any], self.afunc(input, **kwargs))
                 if ASYNCIO_ACCEPTS_CONTEXT:
                     ret = await asyncio.create_task(coro, context=context)
                 else:
@@ -168,9 +179,8 @@ class RunnableCallable(Runnable):
         else:
             context.run(_set_config_context, config)
             if ASYNCIO_ACCEPTS_CONTEXT:
-                ret = await asyncio.create_task(
-                    self.afunc(input, **kwargs), context=context
-                )
+                coro = cast(Coroutine[None, None, Any], self.afunc(input, **kwargs))
+                ret = await asyncio.create_task(coro, context=context)
             else:
                 ret = await self.afunc(input, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
@@ -200,7 +210,9 @@ def is_async_generator(
     )
 
 
-def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnable:
+def coerce_to_runnable(
+    thing: RunnableLike, *, name: Optional[str], trace: bool
+) -> Runnable:
     """Coerce a runnable-like object into a Runnable.
 
     Args:
@@ -219,7 +231,7 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
         else:
             return RunnableCallable(
                 thing,
-                wraps(thing)(partial(run_in_executor, None, thing)),
+                wraps(thing)(partial(run_in_executor, None, thing)),  # type: ignore[arg-type]
                 name=name,
                 trace=trace,
             )
@@ -257,7 +269,7 @@ class RunnableSeq(Runnable):
             if isinstance(step, RunnableSequence):
                 steps_flat.extend(step.steps)
             elif isinstance(step, RunnableSeq):
-                steps_flat.extend(step.steps)
+                steps_flat.extend(step.steps)  # type: ignore[has-type]
             else:
                 steps_flat.append(coerce_to_runnable(step, name=None, trace=True))
         if len(steps_flat) < 2:
@@ -288,7 +300,7 @@ class RunnableSeq(Runnable):
         else:
             return RunnableSeq(
                 *self.steps,
-                coerce_to_runnable(other),
+                coerce_to_runnable(other, name=None, trace=True),
                 name=self.name,
             )
 
@@ -312,14 +324,16 @@ class RunnableSeq(Runnable):
             )
         else:
             return RunnableSequence(
-                coerce_to_runnable(other),
+                coerce_to_runnable(other, name=None, trace=True),
                 *self.steps,
                 name=self.name,
             )
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Output:
+    ) -> Any:
+        if config is None:
+            config = ensure_config()
         # setup callbacks and context
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
@@ -356,7 +370,9 @@ class RunnableSeq(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Output:
+    ) -> Any:
+        if config is None:
+            config = ensure_config()
         # setup callbacks
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
@@ -397,7 +413,9 @@ class RunnableSeq(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Iterator[Output]:
+    ) -> Iterator[Any]:
+        if config is None:
+            config = ensure_config()
         # setup callbacks
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
@@ -424,7 +442,7 @@ class RunnableSeq(Runnable):
                     iterator = step.transform(iterator, config)
             if stream_handler := next(
                 (
-                    h
+                    cast(_StreamingCallbackHandler, h)
                     for h in run_manager.handlers
                     if isinstance(h, _StreamingCallbackHandler)
                 ),
@@ -432,7 +450,7 @@ class RunnableSeq(Runnable):
             ):
                 # populates streamed_output in astream_log() output if needed
                 iterator = stream_handler.tap_output_iter(run_manager.run_id, iterator)
-            output: Output = None
+            output: Any = None
             add_supported = False
             for chunk in iterator:
                 yield chunk
@@ -458,7 +476,9 @@ class RunnableSeq(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> AsyncIterator[Output]:
+    ) -> AsyncIterator[Any]:
+        if config is None:
+            config = ensure_config()
         # setup callbacks
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
@@ -488,7 +508,7 @@ class RunnableSeq(Runnable):
                         stack.push_async_callback(aiterator.aclose)
                 if stream_handler := next(
                     (
-                        h
+                        cast(_StreamingCallbackHandler, h)
                         for h in run_manager.handlers
                         if isinstance(h, _StreamingCallbackHandler)
                     ),
@@ -498,7 +518,7 @@ class RunnableSeq(Runnable):
                     aiterator = stream_handler.tap_output_aiter(
                         run_manager.run_id, aiterator
                     )
-                output: Output = None
+                output: Any = None
                 add_supported = False
                 async for chunk in aiterator:
                     yield chunk

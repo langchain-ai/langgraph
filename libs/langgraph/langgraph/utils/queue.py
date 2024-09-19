@@ -1,3 +1,5 @@
+# type: ignore
+
 import asyncio
 import queue
 import sys
@@ -5,6 +7,7 @@ import threading
 import types
 from collections import deque
 from time import monotonic
+from typing import Optional
 
 PY_310 = sys.version_info >= (3, 10)
 
@@ -14,7 +17,7 @@ class AsyncQueue(asyncio.Queue):
 
     Subclassed from asyncio.Queue, adding a wait() method."""
 
-    async def wait(self):
+    async def wait(self) -> None:
         """If queue is empty, wait until an item is available.
 
         Copied from Queue.get(), removing the call to .get_nowait(),
@@ -47,7 +50,7 @@ class AsyncQueue(asyncio.Queue):
 class Semaphore(threading.Semaphore):
     """Semaphore subclass with a wait() method."""
 
-    def wait(self, blocking: bool = True, timeout: float = None):
+    def wait(self, blocking: bool = True, timeout: Optional[float] = None):
         """Block until the semaphore can be acquired, but don't acquire it."""
         if not blocking and timeout is not None:
             raise ValueError("can't specify timeout for non-blocking acquire")
@@ -125,3 +128,6 @@ class SyncQueue:
         return len(self._queue)
 
     __class_getitem__ = classmethod(types.GenericAlias)
+
+
+__all__ = ["AsyncQueue", "SyncQueue"]

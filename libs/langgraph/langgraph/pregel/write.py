@@ -50,7 +50,7 @@ class ChannelWrite(RunnableCallable):
         self,
         writes: Sequence[Union[ChannelWriteEntry, Send]],
         *,
-        tags: Optional[list[str]] = None,
+        tags: Optional[Sequence[str]] = None,
         require_at_least_one_of: Optional[Sequence[str]] = None,
     ):
         super().__init__(func=self._write, afunc=self._awrite, name=None, tags=tags)
@@ -158,6 +158,6 @@ class ChannelWrite(RunnableCallable):
 
 
 def _mk_future(val: Any) -> asyncio.Future:
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(val)
     return fut

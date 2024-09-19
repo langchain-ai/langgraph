@@ -10,6 +10,7 @@ from typing import (
     Mapping,
     NamedTuple,
     Optional,
+    Sequence,
     Tuple,
     TypedDict,
     Union,
@@ -301,7 +302,7 @@ class BaseCheckpointSaver(Generic[V]):
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
@@ -393,7 +394,7 @@ class BaseCheckpointSaver(Generic[V]):
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Asynchronously store intermediate writes linked to a checkpoint.

@@ -1,8 +1,9 @@
 import uuid
-from typing import Annotated, TypedDict, Union
+from typing import Annotated, TypedDict, Union, cast
 
 from langchain_core.messages import (
     AnyMessage,
+    BaseMessageChunk,
     MessageLikeRepresentation,
     RemoveMessage,
     convert_to_messages,
@@ -66,8 +67,14 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     if not isinstance(right, list):
         right = [right]
     # coerce to message
-    left = [message_chunk_to_message(m) for m in convert_to_messages(left)]
-    right = [message_chunk_to_message(m) for m in convert_to_messages(right)]
+    left = [
+        message_chunk_to_message(cast(BaseMessageChunk, m))
+        for m in convert_to_messages(left)
+    ]
+    right = [
+        message_chunk_to_message(cast(BaseMessageChunk, m))
+        for m in convert_to_messages(right)
+    ]
     # assign missing ids
     for m in left:
         if m.id is None:
@@ -144,7 +151,7 @@ class MessageGraph(StateGraph):
     """
 
     def __init__(self) -> None:
-        super().__init__(Annotated[list[AnyMessage], add_messages])
+        super().__init__(Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
 
 
 class MessagesState(TypedDict):

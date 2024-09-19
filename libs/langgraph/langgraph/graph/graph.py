@@ -56,9 +56,11 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Callable[[list[str], RunnableConfig], None],
+        writer: Callable[
+            [list[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
-    ) -> None:
+    ) -> RunnableCallable:
         return ChannelWrite.register_writer(
             RunnableCallable(
                 func=self._route,
@@ -75,8 +77,10 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str], RunnableConfig], None],
+        reader: Optional[Callable[[RunnableConfig], Any]],
+        writer: Callable[
+            [list[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -94,8 +98,10 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str], RunnableConfig], Optional[Runnable]],
+        reader: Optional[Callable[[RunnableConfig], Any]],
+        writer: Callable[
+            [list[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
     ) -> Runnable:
         if reader:
             value = await asyncio.to_thread(reader, config)
@@ -110,7 +116,9 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Callable[[list[str], RunnableConfig], None],
+        writer: Callable[
+            [list[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
         input: Any,
         result: Any,
         config: RunnableConfig,
@@ -378,8 +386,8 @@ class Graph:
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
     ) -> "CompiledGraph":
         # assign default values
@@ -451,7 +459,7 @@ class CompiledGraph(Pregel):
         else:
             # subscribe to start channel
             self.nodes[end].triggers.append(start)
-            self.nodes[end].channels.append(start)
+            cast(list[str], self.nodes[end].channels).append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(
@@ -530,17 +538,18 @@ class CompiledGraph(Pregel):
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
                 if len(subgraph.nodes) > 1:
-                    end_nodes[key], start_nodes[key] = graph.extend(
-                        subgraph, prefix=key
-                    )
+                    e, s = graph.extend(subgraph, prefix=key)
+                    if s is None or e is None:
+                        raise ValueError(f"Could not extend subgraph {key}")
+                    end_nodes[key], start_nodes[key] = e, s
                 else:
-                    n = graph.add_node(node, key, metadata=metadata or None)
-                    start_nodes[key] = n
-                    end_nodes[key] = n
+                    nn = graph.add_node(node, key, metadata=metadata or None)
+                    start_nodes[key] = nn
+                    end_nodes[key] = nn
             else:
-                n = graph.add_node(node, key, metadata=metadata or None)
-                start_nodes[key] = n
-                end_nodes[key] = n
+                nn = graph.add_node(node, key, metadata=metadata or None)
+                start_nodes[key] = nn
+                end_nodes[key] = nn
         for start, end in sorted(self.builder._all_edges):
             add_edge(start, end)
         for start, branches in self.builder.branches.items():

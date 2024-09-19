@@ -66,7 +66,7 @@ def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
 
 class StateNodeSpec(NamedTuple):
     runnable: Runnable
-    metadata: dict[str, Any]
+    metadata: Optional[dict[str, Any]]
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
 
@@ -318,7 +318,11 @@ class StateGraph(Graph):
             )
         if not isinstance(node, str):
             action = node
-            node = getattr(action, "name", action.__name__)
+            node = getattr(action, "name", getattr(action, "__name__"))
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
@@ -392,8 +396,8 @@ class StateGraph(Graph):
         checkpointer: Optional[BaseCheckpointSaver] = None,
         *,
         store: Optional[BaseStore] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
     ) -> "CompiledStateGraph":
         """Compiles the state graph into a `CompiledGraph` object.
@@ -554,7 +558,7 @@ class CompiledStateGraph(CompiledGraph):
                     ),
                 ],
             )
-        else:
+        elif node is not None:
             input_schema = node.input if node else self.builder.schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
@@ -582,6 +586,8 @@ class CompiledStateGraph(CompiledGraph):
                 retry_policy=node.retry_policy,
                 bound=node.runnable,
             )
+        else:
+            raise RuntimeError
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):
@@ -613,7 +619,7 @@ class CompiledStateGraph(CompiledGraph):
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(
             packets: list[Union[str, Send]], config: RunnableConfig
-        ) -> Optional[ChannelWrite]:
+        ) -> None:
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
@@ -782,12 +788,12 @@ def _get_schema(
     else:
         keys = list(schemas[typ].keys())
         if len(keys) == 1 and keys[0] == "__root__":
-            return create_model(  # type: ignore[call-overload]
+            return create_model(
                 name,
                 root=(channels[keys[0]].UpdateType, None),
             )
         else:
-            return create_model(  # type: ignore[call-overload]
+            return create_model(
                 name,
                 field_definitions={
                     k: (
