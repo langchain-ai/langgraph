@@ -320,7 +320,7 @@ class StateGraph(Graph):
             )
         if not isinstance(node, str):
             action = node
-            node = getattr(action, "name", getattr(action, "__name__"))
+            node = getattr(action, "name", getattr(action, "__name__", None))
             if node is None:
                 raise ValueError(
                     "Node name must be provided if action is not a function"
