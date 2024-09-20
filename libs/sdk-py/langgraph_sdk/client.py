@@ -970,6 +970,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -988,6 +989,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
@@ -1007,6 +1009,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1030,6 +1033,10 @@ class RunsClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
+            on_completion: The on completion behavior to use.
+                Must be one of 'delete' or 'keep'.
+            after_seconds: The number of seconds to wait before starting the run.
+                Use to schedule future runs.
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1074,6 +1081,7 @@ class RunsClient:
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
+            "after_seconds": after_seconds,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1097,6 +1105,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Run: ...
 
     @overload
@@ -1113,6 +1122,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Run: ...
 
     async def create(
@@ -1129,6 +1139,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1146,6 +1157,10 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_completion: The on completion behavior to use.
+                Must be one of 'delete' or 'keep'.
+            after_seconds: The number of seconds to wait before starting the run.
+                Use to schedule future runs.
 
         Returns:
             Run: The created background run.
@@ -1226,6 +1241,7 @@ class RunsClient:
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_completion": on_completion,
+            "after_seconds": after_seconds,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
@@ -1257,6 +1273,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -1273,6 +1290,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
@@ -1290,6 +1308,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1309,6 +1328,10 @@ class RunsClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
+            on_completion: The on completion behavior to use.
+                Must be one of 'delete' or 'keep'.
+            after_seconds: The number of seconds to wait before starting the run.
+                Use to schedule future runs.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1370,6 +1393,7 @@ class RunsClient:
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
+            "after_seconds": after_seconds,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
