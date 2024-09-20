@@ -32,7 +32,7 @@
           - name: Codespell
             uses: codespell-project/actions-codespell@v2
             with:
-              skip: '*.ambr,*.lock,*.ipynb,*.yaml'
+              skip: '*.ambr,*.lock,*.ipynb,*.yaml,*.zlib'
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
           # We do this to avoid spellchecking cell outputs
           - name: Codespell Notebooks
