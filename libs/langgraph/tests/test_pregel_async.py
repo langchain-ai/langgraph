@@ -68,7 +68,7 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.types import PregelTask
+from langgraph.pregel.types import PregelTask, StreamWriter
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import (
@@ -9051,11 +9051,13 @@ async def test_weather_subgraph(
     class SubGraphState(MessagesState):
         city: str
 
-    def model_node(state: SubGraphState):
+    def model_node(state: SubGraphState, writer: StreamWriter):
+        writer(" very")
         result = weather_model.invoke(state["messages"])
         return {"city": cast(AIMessage, result).tool_calls[0]["args"]["city"]}
 
-    def weather_node(state: SubGraphState):
+    def weather_node(state: SubGraphState, writer: StreamWriter):
+        writer(" good")
         result = get_weather.invoke({"city": state["city"]})
         return {"messages": [{"role": "assistant", "content": result}]}
 
@@ -9090,7 +9092,8 @@ async def test_weather_subgraph(
         ]
     )
 
-    def router_node(state: RouterState):
+    def router_node(state: RouterState, writer: StreamWriter):
+        writer("I'm")
         system_message = "Classify the incoming query as either about weather or not."
         messages = [{"role": "system", "content": system_message}] + state["messages"]
         route = router_model.invoke(messages)
@@ -9128,7 +9131,21 @@ async def test_weather_subgraph(
         assert graph.get_graph(xray=1).draw_mermaid() == snapshot
 
         config = {"configurable": {"thread_id": "1"}}
+        thread2 = {"configurable": {"thread_id": "2"}}
         inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+
+        # run with custom output
+        assert [
+            c async for c in graph.astream(inputs, thread2, stream_mode="custom")
+        ] == [
+            "I'm",
+            " very",
+        ]
+        assert [
+            c async for c in graph.astream(None, thread2, stream_mode="custom")
+        ] == [
+            " good",
+        ]
 
         # run until interrupt
         assert [
