@@ -31,18 +31,15 @@ vcrpy = "^6.0.1"
 click = "^8.1.7"
 
 [tool.poetry.group.test.dependencies]
-langchain-openai = "^0.2"
-langchain-anthropic = "^0.2"
+langchain-openai = "^0.1.23"
+langchain-anthropic = "^0.1.23"
 numpy = "^1.26.4"
 redis = "^5.0.8"
 pymongo = "^4.8.0"
 motor = "^3.5.1"
-langchain-community = "^0.3"
+langchain-community = "^0.2.16"
 grandalf = "^0.8"
 pyppeteer = "^2.0.0"
-chromadb = "^0.5"
-pandas = "^2.2"
-langchain_nomic = "^0.1.3"
 
 [tool.poetry.group.test]
 optional = true
