@@ -573,11 +573,11 @@ class AssistantsClient:
         )
 
     async def get_versions(
-            self,
-            assistant_id: str,
-            metadata: Json = None,
-            limit: int = 10,
-            offset: int = 0,
+        self,
+        assistant_id: str,
+        metadata: Json = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -602,8 +602,7 @@ class AssistantsClient:
         if metadata:
             payload["metadata"] = metadata
         return await self.http.post(
-            f"/assistants/{assistant_id}/versions",
-            json=payload
+            f"/assistants/{assistant_id}/versions", json=payload
         )
 
     async def change_version(self, assistant_id: str, version: int) -> Assistant:
