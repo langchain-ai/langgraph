@@ -23,6 +23,7 @@ from httpx._types import QueryParamTypes
 import langgraph_sdk
 from langgraph_sdk.schema import (
     Assistant,
+    AssistantVersion,
     Config,
     Cron,
     DisconnectMode,
@@ -417,6 +418,7 @@ class AssistantsClient:
         metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
+        name: Optional[str] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -429,6 +431,7 @@ class AssistantsClient:
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
+            name: The name of the assistant. Defaults to 'Untitled' under the hood.
 
         Returns:
             Assistant: The created assistant.
@@ -440,7 +443,8 @@ class AssistantsClient:
                 config={"configurable": {"model_name": "openai"}},
                 metadata={"number":1},
                 assistant_id="my-assistant-id",
-                if_exists="do_nothing"
+                if_exists="do_nothing",
+                name="my_name"
             )
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -454,6 +458,8 @@ class AssistantsClient:
             payload["assistant_id"] = assistant_id
         if if_exists:
             payload["if_exists"] = if_exists
+        if name:
+            payload["name"] = name
         return await self.http.post("/assistants", json=payload)
 
     async def update(
@@ -463,6 +469,7 @@ class AssistantsClient:
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
         metadata: Json = None,
+        name: Optional[str] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -495,6 +502,8 @@ class AssistantsClient:
             payload["config"] = config
         if metadata:
             payload["metadata"] = metadata
+        if name:
+            payload["name"] = name
         return await self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
@@ -561,6 +570,64 @@ class AssistantsClient:
         return await self.http.post(
             "/assistants/search",
             json=payload,
+        )
+
+    async def get_versions(
+        self,
+        assistant_id: str,
+        metadata: Json = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> list[AssistantVersion]:
+        """List all versions of an assistant.
+
+        Args:
+            assistant_id: The assistant ID to delete.
+
+        Returns:
+            list[Assistant]: A list of assistants.
+
+        Example Usage:
+
+            assistant_versions = await client.assistants.get_versions(
+                assistant_id="my_assistant_id"
+            )
+
+        """  # noqa: E501
+
+        payload: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+        return await self.http.post(
+            f"/assistants/{assistant_id}/versions", json=payload
+        )
+
+    async def set_latest(self, assistant_id: str, version: int) -> Assistant:
+        """Change the version of an assistant.
+
+        Args:
+            assistant_id: The assistant ID to delete.
+            version: The version to change to.
+
+        Returns:
+            Assistant: Assistant Object.
+
+        Example Usage:
+
+            new_version_assistant = await client.assistants.set_latest(
+                assistant_id="my_assistant_id",
+                version=3
+            )
+
+        """  # noqa: E501
+
+        payload: Dict[str, Any] = {"version": version}
+
+        return await self.http.post(
+            f"/assistants/{assistant_id}/set_latest", json=payload
         )
 
 

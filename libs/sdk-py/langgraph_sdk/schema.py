@@ -57,8 +57,8 @@ class GraphSchema(TypedDict):
     Missing if unable to generate JSON schema from graph."""
 
 
-class Assistant(TypedDict):
-    """Assistant model."""
+class AssistantBase(TypedDict):
+    """Assistant base model."""
 
     assistant_id: str
     """The ID of the assistant."""
@@ -68,10 +68,25 @@ class Assistant(TypedDict):
     """The assistant config."""
     created_at: datetime
     """The time the assistant was created."""
-    updated_at: datetime
-    """The last time the assistant was updated."""
     metadata: Json
     """The assistant metadata."""
+    version: int
+    """The version of the assistant"""
+
+
+class AssistantVersion(AssistantBase):
+    """Assistant version model."""
+
+    pass
+
+
+class Assistant(AssistantBase):
+    """Assistant model."""
+
+    updated_at: datetime
+    """The last time the assistant was updated."""
+    name: str
+    """The name of the assistant"""
 
 
 class Thread(TypedDict):

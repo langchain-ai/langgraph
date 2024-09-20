@@ -2,6 +2,7 @@ export { Client } from "./client.js";
 
 export type {
   Assistant,
+  AssistantVersion,
   AssistantGraph,
   Config,
   DefaultValues,
@@ -12,3 +13,5 @@ export type {
   ThreadState,
   Cron,
 } from "./schema.js";
+
+export type { OnConflictBehavior } from "./types.js";
