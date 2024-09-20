@@ -605,7 +605,7 @@ class AssistantsClient:
             f"/assistants/{assistant_id}/versions", json=payload
         )
 
-    async def change_version(self, assistant_id: str, version: int) -> Assistant:
+    async def set_version(self, assistant_id: str, version: int) -> Assistant:
         """Change the version of an assistant.
 
         Args:
@@ -617,7 +617,7 @@ class AssistantsClient:
 
         Example Usage:
 
-            new_version_assistant = await client.assistants.change_version(
+            new_version_assistant = await client.assistants.set_version(
                 assistant_id="my_assistant_id",
                 version=3
             )
@@ -627,7 +627,7 @@ class AssistantsClient:
         payload: Dict[str, Any] = {"version": version}
 
         return await self.http.post(
-            f"/assistants/{assistant_id}/change_version", json=payload
+            f"/assistants/{assistant_id}/set_version", json=payload
         )
 
 
