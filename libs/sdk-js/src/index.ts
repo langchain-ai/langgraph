@@ -14,6 +14,4 @@ export type {
   Cron,
 } from "./schema.js";
 
-export type {
-  OnConflictBehavior
-} from "./types.mjs"
+export type { OnConflictBehavior } from "./types.js";

@@ -255,7 +255,7 @@ export class AssistantsClient extends BaseClient {
         metadata: payload.metadata,
         assistant_id: payload.assistantId,
         if_exists: payload.ifExists,
-        assistant_name: payload.assistantName
+        assistant_name: payload.assistantName,
       },
     });
   }
@@ -281,7 +281,7 @@ export class AssistantsClient extends BaseClient {
         graph_id: payload.graphId,
         config: payload.config,
         metadata: payload.metadata,
-        assistant_name: payload.assistantName
+        assistant_name: payload.assistantName,
       },
     });
   }
@@ -321,35 +321,42 @@ export class AssistantsClient extends BaseClient {
 
   /**
    * List all versions of an assistant.
-   * 
+   *
    * @param assistantId ID of the assistant.
    * @returns List of assistant versions.
    */
-  async getVersions(assistantId: string,
+  async getVersions(
+    assistantId: string,
     payload?: {
       metadata?: Metadata;
       limit?: number;
       offset?: number;
-    }
+    },
   ): Promise<AssistantVersion[]> {
-    return this.fetch<AssistantVersion[]>(`/assistants/${assistantId}/versions`, {
-      method: "POST",
-      json: {
-        metadata: payload?.metadata ?? undefined,
-        limit: payload?.limit ?? 10,
-        offset: payload?.offset ?? 0,
-      }
-    });
+    return this.fetch<AssistantVersion[]>(
+      `/assistants/${assistantId}/versions`,
+      {
+        method: "POST",
+        json: {
+          metadata: payload?.metadata ?? undefined,
+          limit: payload?.limit ?? 10,
+          offset: payload?.offset ?? 0,
+        },
+      },
+    );
   }
 
   /**
    * Change the version of an assistant.
-   * 
+   *
    * @param assistantId ID of the assistant.
    * @param version The version to change to.
    * @returns The updated assistant.
    */
-  async changeVersion(assistantId: string, version: number): Promise<Assistant> {
+  async changeVersion(
+    assistantId: string,
+    version: number,
+  ): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}/change_version`, {
       method: "POST",
       json: { version },
