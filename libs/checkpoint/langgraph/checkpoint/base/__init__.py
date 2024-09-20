@@ -80,24 +80,20 @@ class Checkpoint(TypedDict):
     """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
     """The values of the channels at the time of the checkpoint.
-
-    Mapping from channel name to channel snapshot value.
+    Mapping from channel name to deserialized channel snapshot value.
     """
     channel_versions: ChannelVersions
     """The versions of the channels at the time of the checkpoint.
-
-    The keys are channel names and the values are the logical time step
-    at which the channel was last updated.
+    The keys are channel names and the values are monotonically increasing
+    version strings for each channel.
     """
     versions_seen: dict[str, ChannelVersions]
     """Map from node ID to map from channel name to version seen.
-
     This keeps track of the versions of the channels that each node has seen.
-
     Used to determine which nodes to execute next.
     """
     pending_sends: List[SendProtocol]
-    """List of packets sent to nodes but not yet processed.
+    """List of inputs pushed to nodes but not yet processed.
     Cleared by the next checkpoint."""
 
 
