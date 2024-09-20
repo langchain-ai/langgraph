@@ -120,4 +120,5 @@ StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 
 StreamWriter = Callable[[Any], None]
 """Callable that accepts a single argument and writes it to the output stream.
-Only available when using stream_mode="custom"."""
+Always injected into nodes if requested,
+but it's a no-op when not using stream_mode="custom"."""
