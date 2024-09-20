@@ -353,7 +353,7 @@ export class AssistantsClient extends BaseClient {
    * @param version The version to change to.
    * @returns The updated assistant.
    */
-  async setVersion(assistantId: string, version: number): Promise<Assistant> {
+  async setLatest(assistantId: string, version: number): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}/set_latest`, {
       method: "POST",
       json: { version },
