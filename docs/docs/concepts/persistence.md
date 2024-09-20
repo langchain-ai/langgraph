@@ -214,6 +214,42 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ![Update](img/persistence/checkpoints_full_story.jpg)
 
+## Shared State
+
+![Shared state](img/persistence/shared_state.png)
+
+A state schema specifies a set of keys / channels that are populated as a graph is executed and written by a checkpointer to a thread at each graph step. Persistence is scoped to a particular thread ID.
+
+But, what if we want to retrain some information across threads? Consider the case of a chatbot where we want to retain specific information at the *user level*, across all threads (e.g., chat conversations) with that user!
+
+We can do this using `SharedValue`, which allows us to specify that a particular state channel can be access across *multiple threads*. In the chatbot example shown in the above figure: let's scope the `memories` key to a `user_id`.
+
+```python
+class AgentState(MessagesState):
+    # We use a memories key to track information about the user 
+    # This is scoped to a user_id, so it will be specific to each user
+    memories: Annotated[dict, SharedValue.on("user_id")]
+
+# ... define chatbot that saves info about user to the key "memories" ...  
+
+# Let's tell the chatbot that we like pepperoni pizza, which will be saved to the memories key
+config = {"configurable": {"thread_id": "1", "user_id": "1"}}
+for update in graph.stream({"messages": [{"role": "user", "content": "i like pepperoni pizza"}]}, config, stream_mode="updates"):
+    print(update)
+```
+
+When we invoke the graph using a *new* thread ID, the chatbot can *still* access information saved to the memories for that user because we supply `"user_id": "1"`. 
+
+```python
+config = {"configurable": {"thread_id": "2", "user_id": "1"}}
+for update in graph.stream({"messages": [{"role": "user", "content": "what toppings do you like?"}]}, config, stream_mode="updates"):
+    print(update)
+```
+
+The chatbot will reply with the information saved to the memories key related to the users' preference for pepperoni pizza.
+
+See this [guide](../how-tos/memory/shared-state.ipynb) for a detailed how-to on doing this!
+ 
 ## Checkpointer libraries
 
 Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][basecheckpointsaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
