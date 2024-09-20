@@ -23,6 +23,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
@@ -211,7 +212,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-    ) -> None:
+    ) -> Self:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
 
@@ -235,7 +236,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-    ) -> None:
+    ) -> Self:
         """Adds a new node to the state graph.
 
         Args:
@@ -258,7 +259,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-    ) -> None:
+    ) -> Self:
         """Adds a new node to the state graph.
 
         Will take the name of the function/runnable as the node name.
@@ -359,8 +360,9 @@ class StateGraph(Graph):
             input=input or self.schema,
             retry_policy=retry,
         )
+        return self
 
-    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> Self:
         """Adds a directed edge from the start node to the end node.
 
         If the graph transitions to the start_key node, it will always transition to the end_key node next.
@@ -394,6 +396,7 @@ class StateGraph(Graph):
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         self.waiting_edges.add((tuple(start_key), end_key))
+        return self
 
     def compile(
         self,

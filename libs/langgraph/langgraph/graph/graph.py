@@ -23,6 +23,7 @@ from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
+from typing_extensions import Self
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -156,7 +157,7 @@ class Graph:
         node: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None: ...
+    ) -> Self: ...
 
     @overload
     def add_node(
@@ -165,7 +166,7 @@ class Graph:
         action: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None: ...
+    ) -> Self: ...
 
     def add_node(
         self,
@@ -173,7 +174,7 @@ class Graph:
         action: Optional[RunnableLike] = None,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
+    ) -> Self:
         if isinstance(node, str):
             for character in (NS_SEP, NS_END):
                 if character in node:
@@ -205,8 +206,9 @@ class Graph:
         self.nodes[cast(str, node)] = NodeSpec(
             coerce_to_runnable(action, name=cast(str, node), trace=False), metadata
         )
+        return self
 
-    def add_edge(self, start_key: str, end_key: str) -> None:
+    def add_edge(self, start_key: str, end_key: str) -> Self:
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -227,6 +229,7 @@ class Graph:
             )
 
         self.edges.add((start_key, end_key))
+        return self
 
     def add_conditional_edges(
         self,
@@ -238,7 +241,7 @@ class Graph:
         ],
         path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
-    ) -> None:
+    ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
         Args:
@@ -293,8 +296,9 @@ class Graph:
             )
         # save it
         self.branches[source][name] = Branch(path, path_map_, then)
+        return self
 
-    def set_entry_point(self, key: str) -> None:
+    def set_entry_point(self, key: str) -> Self:
         """Specifies the first node to be called in the graph.
 
         Equivalent to calling `add_edge(START, key)`.
@@ -316,7 +320,7 @@ class Graph:
         ],
         path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
-    ) -> None:
+    ) -> Self:
         """Sets a conditional entry point in the graph.
 
         Args:
@@ -333,7 +337,7 @@ class Graph:
         """
         return self.add_conditional_edges(START, path, path_map, then)
 
-    def set_finish_point(self, key: str) -> None:
+    def set_finish_point(self, key: str) -> Self:
         """Marks a node as a finish point of the graph.
 
         If the graph reaches this node, it will cease execution.
@@ -346,7 +350,7 @@ class Graph:
         """
         return self.add_edge(key, END)
 
-    def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
+    def validate(self, interrupt: Optional[Sequence[str]] = None) -> Self:
         # assemble sources
         all_sources = {src for src, _ in self._all_edges}
         for start, branches in self.branches.items():
@@ -398,6 +402,7 @@ class Graph:
                     raise ValueError(f"Interrupt node `{node}` not found")
 
         self.compiled = True
+        return self
 
     def compile(
         self,
