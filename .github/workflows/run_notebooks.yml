@@ -29,8 +29,9 @@ jobs:
           poetry install --with test
           poetry run pip install jupyter
           if [ "${{ matrix.lib-version }}" = "latest" ]; then
-            poetry add --no-update chromadb pandas langchain_nomic
-            poetry add --no-update langchain-openai@latest langchain-anthropic@latest langchain@latest langchain-community@latest
+            poetry add chromadb pandas langchain_nomic
+            poetry remove langchain-openai langchain-anthropic langchain-community
+            poetry add langchain-openai@latest langchain-anthropic@latest langchain-community@latest
           fi
 
       - name: Start services
