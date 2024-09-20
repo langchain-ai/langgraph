@@ -28,6 +28,10 @@ jobs:
         run: |
           poetry install --with test
           poetry run pip install jupyter
+          if [ "${{ matrix.lib-version }}" = "latest" ]; then
+            poetry add chromadb pandas langchain_nomic
+            poetry add langchain-openai@latest langchain-anthropic@latest langchain@latest langchain-community@latest
+          fi
 
       - name: Start services
         run: make start-services
