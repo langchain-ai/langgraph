@@ -10463,9 +10463,6 @@ def test_weather_subgraph(
     class RouterState(MessagesState):
         route: Literal["weather", "other"]
 
-    class Router(TypedDict):
-        route: Literal["weather", "other"]
-
     router_model = FakeMessagesListChatModel(
         responses=[
             AIMessage(

@@ -41,6 +41,14 @@ class Config(TypedDict, total=False):
     """
 
 
+class Checkpoint(TypedDict):
+    """Checkpoint model."""
+
+    checkpoint_id: str
+    checkpoint_ns: str
+    checkpoint_map: dict[str, Any]
+
+
 class GraphSchema(TypedDict):
     """Graph model."""
 
@@ -110,13 +118,13 @@ class ThreadState(TypedDict):
     next: Sequence[str]
     """The next nodes to execute. If empty, the thread is done until new input is 
     received."""
-    checkpoint_id: str
+    checkpoint: Checkpoint
     """The ID of the checkpoint."""
     metadata: Json
     """Metadata for this state"""
     created_at: Optional[str]
     """Timestamp of state creation"""
-    parent_checkpoint_id: Optional[str]
+    parent_checkpoint: Optional[Checkpoint]
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
 
 
