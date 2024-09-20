@@ -56,9 +56,8 @@ class GraphSchema(TypedDict):
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
 
-
-class Assistant(TypedDict):
-    """Assistant model."""
+class AssistantBase(TypedDict):
+    """Assistant base model."""
 
     assistant_id: str
     """The ID of the assistant."""
@@ -74,6 +73,14 @@ class Assistant(TypedDict):
     """The assistant metadata."""
     version: int
     """The version of the assistant"""
+
+class AssistantVersion(AssistantBase):
+    """Assistant version model."""
+    pass
+
+class Assistant(AssistantBase):
+    """Assistant model."""
+
     assistant_name: str
     """The name of the assistant"""
 

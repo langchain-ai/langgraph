@@ -23,6 +23,7 @@ from httpx._types import QueryParamTypes
 import langgraph_sdk
 from langgraph_sdk.schema import (
     Assistant,
+    AssistantVersion,
     Config,
     Cron,
     DisconnectMode,
@@ -577,7 +578,7 @@ class AssistantsClient:
             metadata: Json = None,
             limit: int = 10,
             offset: int = 0,
-    ) -> list[Assistant]:
+    ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
         Args:

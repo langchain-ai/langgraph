@@ -75,7 +75,7 @@ export interface GraphSchema {
 
 export type Metadata = Optional<Record<string, unknown>>;
 
-export interface Assistant {
+export interface AssistantBase {
   assistant_id: string;
   graph_id: string;
   config: Config;
@@ -83,6 +83,11 @@ export interface Assistant {
   updated_at: string;
   metadata: Metadata;
   version: number;
+}
+
+export interface AssistantVersion extends AssistantBase {}
+
+export interface Assistant extends AssistantBase {
   assistant_name: string;
 }
 export type AssistantGraph = Record<string, Array<Record<string, unknown>>>;

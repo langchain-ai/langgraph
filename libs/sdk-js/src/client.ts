@@ -9,6 +9,7 @@ import {
   Thread,
   ThreadState,
   Cron,
+  AssistantVersion,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import {
@@ -330,8 +331,8 @@ export class AssistantsClient extends BaseClient {
       limit?: number;
       offset?: number;
     }
-  ): Promise<Assistant[]> {
-    return this.fetch<Assistant[]>(`/assistants/${assistantId}/versions`, {
+  ): Promise<AssistantVersion[]> {
+    return this.fetch<AssistantVersion[]>(`/assistants/${assistantId}/versions`, {
       method: "POST",
       json: {
         metadata: payload?.metadata ?? undefined,
