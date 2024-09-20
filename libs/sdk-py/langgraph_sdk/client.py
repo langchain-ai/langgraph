@@ -628,7 +628,7 @@ class AssistantsClient:
         payload: Dict[str, Any] = {"version": version}
 
         return await self.http.post(
-            f"/assistants/{assistant_id}/set_latest", json=payload
+            f"/assistants/{assistant_id}/latest", json=payload
         )
 
 
