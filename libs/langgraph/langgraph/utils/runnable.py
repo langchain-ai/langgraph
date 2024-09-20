@@ -107,7 +107,9 @@ class RunnableCallable(Runnable):
         self.trace = trace
         self.recurse = recurse
         # check signature
-        params = inspect.signature(func or afunc).parameters
+        if func is None and afunc is None:
+            raise ValueError("At least one of func or afunc must be provided.")
+        params = inspect.signature(cast(Callable, func or afunc)).parameters
         self.func_accepts_config = "config" in params
         self.func_accepts: dict[str, bool] = {}
         for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
