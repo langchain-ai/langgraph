@@ -2,6 +2,7 @@ export { Client } from "./client.js";
 
 export type {
   Assistant,
+  AssistantVersion,
   AssistantGraph,
   Config,
   DefaultValues,
