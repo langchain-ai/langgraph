@@ -961,6 +961,7 @@ class RunsClient:
         *,
         input: Optional[dict] = None,
         stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_id: Optional[str] = None,
@@ -981,6 +982,7 @@ class RunsClient:
         *,
         input: Optional[dict] = None,
         stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
@@ -999,6 +1001,7 @@ class RunsClient:
         *,
         input: Optional[dict] = None,
         stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_id: Optional[str] = None,
@@ -1020,6 +1023,7 @@ class RunsClient:
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
             stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
@@ -1072,6 +1076,7 @@ class RunsClient:
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
@@ -1099,6 +1104,8 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
@@ -1115,6 +1122,8 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_id: Optional[str] = None,
@@ -1131,6 +1140,8 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_id: Optional[str] = None,
@@ -1149,6 +1160,8 @@ class RunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
@@ -1232,6 +1245,8 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
