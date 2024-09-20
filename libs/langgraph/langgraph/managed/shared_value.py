@@ -7,6 +7,7 @@ from typing import (
     Optional,
     Sequence,
     Type,
+    cast,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -30,7 +31,7 @@ Update = dict[str, Optional[V]]
 
 
 # Adapted from typing_extensions
-def _strip_extras(t):
+def _strip_extras(t):  # type: ignore[no-untyped-def]
     """Strips Annotated, Required and NotRequired from a given type."""
     if hasattr(t, "__origin__"):
         return _strip_extras(t.__origin__)
@@ -82,9 +83,9 @@ class SharedValue(WritableManagedValue[Value, Update]):
                 raise ValueError("SharedValue must be a dict")
         self.scope = scope
         self.value: Value = {}
-        self.store: BaseStore = config["configurable"].get(CONFIG_KEY_STORE)
+        self.store = cast(BaseStore, config["configurable"].get(CONFIG_KEY_STORE))
         if self.store is None:
-            self.ns: Optional[str] = None
+            pass
         elif scope_value := config["configurable"].get(self.scope):
             self.ns = f"scoped:{scope}:{key}:{scope_value}"
         else:
@@ -98,12 +99,12 @@ class SharedValue(WritableManagedValue[Value, Update]):
     def _process_update(
         self, values: Sequence[Update]
     ) -> list[tuple[str, str, Optional[dict[str, Any]]]]:
-        writes = []
+        writes: list[tuple[str, str, Optional[dict[str, Any]]]] = []
         for vv in values:
             for k, v in vv.items():
                 if v is None:
                     if k in self.value:
-                        self.value[k] = None
+                        del self.value[k]
                         writes.append((self.ns, k, None))
                 elif not isinstance(v, dict):
                     raise InvalidUpdateError("Received a non-dict value")

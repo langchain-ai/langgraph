@@ -182,6 +182,7 @@ nav:
           - Add node retries: how-tos/node-retries.ipynb
           - Return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
           - Pass custom LangSmith run ID for graph runs: how-tos/run-id-langsmith.ipynb
+          - Return state before hitting recursion limit: how-tos/return-when-recursion-limit-hits.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb

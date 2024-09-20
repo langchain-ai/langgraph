@@ -7,11 +7,11 @@ def get_new_channel_versions(
     """Get new channel versions."""
     if previous_versions:
         version_type = type(next(iter(current_versions.values()), None))
-        null_version = version_type()
+        null_version = version_type()  # type: ignore[misc]
         new_versions = {
             k: v
             for k, v in current_versions.items()
-            if v > previous_versions.get(k, null_version)
+            if v > previous_versions.get(k, null_version)  # type: ignore[operator]
         }
     else:
         new_versions = current_versions

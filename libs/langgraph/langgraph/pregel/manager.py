@@ -28,8 +28,8 @@ def ChannelsManager(
 ) -> Iterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     config_for_managed = patch_configurable(config, {CONFIG_KEY_STORE: store})
-    channel_specs: Mapping[str, BaseChannel] = {}
-    managed_specs: Mapping[str, ManagedValueSpec] = {}
+    channel_specs: dict[str, BaseChannel] = {}
+    managed_specs: dict[str, ManagedValueSpec] = {}
     for k, v in specs.items():
         if isinstance(v, BaseChannel):
             channel_specs[k] = v
@@ -66,11 +66,11 @@ async def AsyncChannelsManager(
     store: Optional[BaseStore] = None,
     *,
     skip_context: bool = False,
-) -> AsyncIterator[Mapping[str, BaseChannel]]:
+) -> AsyncIterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     config_for_managed = patch_configurable(config, {CONFIG_KEY_STORE: store})
-    channel_specs: Mapping[str, BaseChannel] = {}
-    managed_specs: Mapping[str, ManagedValueSpec] = {}
+    channel_specs: dict[str, BaseChannel] = {}
+    managed_specs: dict[str, ManagedValueSpec] = {}
     for k, v in specs.items():
         if isinstance(v, BaseChannel):
             channel_specs[k] = v

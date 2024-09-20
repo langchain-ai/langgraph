@@ -23,6 +23,7 @@ from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
+from typing_extensions import Self
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -56,9 +57,11 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Callable[[list[str], RunnableConfig], None],
+        writer: Callable[
+            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
-    ) -> None:
+    ) -> RunnableCallable:
         return ChannelWrite.register_writer(
             RunnableCallable(
                 func=self._route,
@@ -75,8 +78,10 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str], RunnableConfig], None],
+        reader: Optional[Callable[[RunnableConfig], Any]],
+        writer: Callable[
+            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -94,8 +99,10 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str], RunnableConfig], Optional[Runnable]],
+        reader: Optional[Callable[[RunnableConfig], Any]],
+        writer: Callable[
+            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
     ) -> Runnable:
         if reader:
             value = await asyncio.to_thread(reader, config)
@@ -110,17 +117,21 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Callable[[list[str], RunnableConfig], None],
+        writer: Callable[
+            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
+        ],
         input: Any,
         result: Any,
         config: RunnableConfig,
-    ):
+    ) -> Union[Runnable, Any]:
         if not isinstance(result, list):
             result = [result]
         if self.ends:
-            destinations = [r if isinstance(r, Send) else self.ends[r] for r in result]
+            destinations: Sequence[Union[Send, str]] = [
+                r if isinstance(r, Send) else self.ends[r] for r in result
+            ]
         else:
-            destinations = result
+            destinations = cast(Sequence[Union[Send, str]], result)
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
@@ -146,7 +157,7 @@ class Graph:
         node: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None: ...
+    ) -> Self: ...
 
     @overload
     def add_node(
@@ -155,7 +166,7 @@ class Graph:
         action: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None: ...
+    ) -> Self: ...
 
     def add_node(
         self,
@@ -163,7 +174,7 @@ class Graph:
         action: Optional[RunnableLike] = None,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
+    ) -> Self:
         if isinstance(node, str):
             for character in (NS_SEP, NS_END):
                 if character in node:
@@ -178,17 +189,26 @@ class Graph:
             )
         if not isinstance(node, str):
             action = node
-            node = getattr(action, "name", action.__name__)
+            node = getattr(action, "name", getattr(action, "__name__"))
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
+        if action is None:
+            raise RuntimeError(
+                "Expected a function or Runnable action in add_node. Received None."
+            )
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
 
-        self.nodes[node] = NodeSpec(
-            coerce_to_runnable(action, name=node, trace=False), metadata
+        self.nodes[cast(str, node)] = NodeSpec(
+            coerce_to_runnable(action, name=cast(str, node), trace=False), metadata
         )
+        return self
 
-    def add_edge(self, start_key: str, end_key: str) -> None:
+    def add_edge(self, start_key: str, end_key: str) -> Self:
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -209,6 +229,7 @@ class Graph:
             )
 
         self.edges.add((start_key, end_key))
+        return self
 
     def add_conditional_edges(
         self,
@@ -220,7 +241,7 @@ class Graph:
         ],
         path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
-    ) -> None:
+    ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
         Args:
@@ -249,16 +270,22 @@ class Graph:
         # coerce path_map to a dictionary
         try:
             if isinstance(path_map, dict):
-                path_map = path_map.copy()
+                path_map_ = path_map.copy()
             elif isinstance(path_map, list):
-                path_map = {name: name for name in path_map}
-            elif rtn_type := get_type_hints(path.__call__).get(
+                path_map_ = {name: name for name in path_map}
+            elif isinstance(path, Runnable):
+                path_map_ = None
+            elif rtn_type := get_type_hints(path.__call__).get(  # type: ignore[operator]
                 "return"
             ) or get_type_hints(path).get("return"):
                 if get_origin(rtn_type) is Literal:
-                    path_map = {name: name for name in get_args(rtn_type)}
+                    path_map_ = {name: name for name in get_args(rtn_type)}
+                else:
+                    path_map_ = None
+            else:
+                path_map_ = None
         except Exception:
-            pass
+            path_map_ = None
         # find a name for the condition
         path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"
@@ -268,9 +295,10 @@ class Graph:
                 f"Branch with name `{path.name}` already exists for node " f"`{source}`"
             )
         # save it
-        self.branches[source][name] = Branch(path, path_map, then)
+        self.branches[source][name] = Branch(path, path_map_, then)
+        return self
 
-    def set_entry_point(self, key: str) -> None:
+    def set_entry_point(self, key: str) -> Self:
         """Specifies the first node to be called in the graph.
 
         Equivalent to calling `add_edge(START, key)`.
@@ -292,7 +320,7 @@ class Graph:
         ],
         path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
-    ) -> None:
+    ) -> Self:
         """Sets a conditional entry point in the graph.
 
         Args:
@@ -309,7 +337,7 @@ class Graph:
         """
         return self.add_conditional_edges(START, path, path_map, then)
 
-    def set_finish_point(self, key: str) -> None:
+    def set_finish_point(self, key: str) -> Self:
         """Marks a node as a finish point of the graph.
 
         If the graph reaches this node, it will cease execution.
@@ -322,7 +350,7 @@ class Graph:
         """
         return self.add_edge(key, END)
 
-    def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
+    def validate(self, interrupt: Optional[Sequence[str]] = None) -> Self:
         # assemble sources
         all_sources = {src for src, _ in self._all_edges}
         for start, branches in self.branches.items():
@@ -374,12 +402,13 @@ class Graph:
                     raise ValueError(f"Interrupt node `{node}` not found")
 
         self.compiled = True
+        return self
 
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
     ) -> "CompiledGraph":
         # assign default values
@@ -429,7 +458,7 @@ class Graph:
 class CompiledGraph(Pregel):
     builder: Graph
 
-    def __init__(self, *, builder: Graph, **kwargs):
+    def __init__(self, *, builder: Graph, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.builder = builder
 
@@ -451,11 +480,11 @@ class CompiledGraph(Pregel):
         else:
             # subscribe to start channel
             self.nodes[end].triggers.append(start)
-            self.nodes[end].channels.append(start)
+            cast(list[str], self.nodes[end].channels).append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(
-            packets: list[Union[str, Send]], config: RunnableConfig
+            packets: Sequence[Union[str, Send]], config: RunnableConfig
         ) -> Optional[ChannelWrite]:
             writes = [
                 (
@@ -465,7 +494,10 @@ class CompiledGraph(Pregel):
                 )
                 for p in packets
             ]
-            return ChannelWrite(writes, tags=[TAG_HIDDEN])
+            return ChannelWrite(
+                cast(Sequence[Union[ChannelWriteEntry, Send]], writes),
+                tags=[TAG_HIDDEN],
+            )
 
         # add hidden start node
         if start == START and start not in self.nodes:
@@ -481,7 +513,7 @@ class CompiledGraph(Pregel):
                 channel_name = f"branch:{start}:{name}:{end}"
                 self.channels[channel_name] = EphemeralValue(Any)
                 self.nodes[end].triggers.append(channel_name)
-                self.nodes[end].channels.append(channel_name)
+                cast(list[str], self.nodes[end].channels).append(channel_name)
 
     def get_graph(
         self,
@@ -496,17 +528,25 @@ class CompiledGraph(Pregel):
         }
         end_nodes: dict[str, DrawableNode] = {}
         if xray:
-            subgraphs = dict(self.get_subgraphs())
+            subgraphs = {
+                k: v for k, v in self.get_subgraphs() if isinstance(v, CompiledGraph)
+            }
         else:
             subgraphs = {}
 
         def add_edge(
-            start: str, end: str, label: Optional[str] = None, conditional: bool = False
+            start: str,
+            end: str,
+            label: Optional[Hashable] = None,
+            conditional: bool = False,
         ) -> None:
             if end == END and END not in end_nodes:
                 end_nodes[END] = graph.add_node(self.get_output_schema(config), END)
             return graph.add_edge(
-                start_nodes[start], end_nodes[end], label, conditional
+                start_nodes[start],
+                end_nodes[end],
+                str(label) if label is not None else None,
+                conditional,
             )
 
         for key, n in self.builder.nodes.items():
@@ -530,17 +570,18 @@ class CompiledGraph(Pregel):
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
                 if len(subgraph.nodes) > 1:
-                    end_nodes[key], start_nodes[key] = graph.extend(
-                        subgraph, prefix=key
-                    )
+                    e, s = graph.extend(subgraph, prefix=key)
+                    if s is None or e is None:
+                        raise ValueError(f"Could not extend subgraph {key}")
+                    end_nodes[key], start_nodes[key] = e, s
                 else:
-                    n = graph.add_node(node, key, metadata=metadata or None)
-                    start_nodes[key] = n
-                    end_nodes[key] = n
+                    nn = graph.add_node(node, key, metadata=metadata or None)
+                    start_nodes[key] = nn
+                    end_nodes[key] = nn
             else:
-                n = graph.add_node(node, key, metadata=metadata or None)
-                start_nodes[key] = n
-                end_nodes[key] = n
+                nn = graph.add_node(node, key, metadata=metadata or None)
+                start_nodes[key] = nn
+                end_nodes[key] = nn
         for start, end in sorted(self.builder._all_edges):
             add_edge(start, end)
         for start, branches in self.builder.branches.items():
@@ -554,7 +595,7 @@ class CompiledGraph(Pregel):
                 elif branch.then is not None:
                     ends = {k: k for k in default_ends if k not in (END, branch.then)}
                 else:
-                    ends = default_ends
+                    ends = cast(dict[Hashable, str], default_ends)
                 for label, end in ends.items():
                     add_edge(
                         start,

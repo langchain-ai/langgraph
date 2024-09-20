@@ -88,6 +88,7 @@ These guides show how to use different streaming modes.
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ## Prebuilt ReAct Agent
 

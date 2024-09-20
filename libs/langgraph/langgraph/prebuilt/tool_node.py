@@ -94,7 +94,7 @@ class ToolNode(RunnableCallable):
         self.handle_tool_errors = handle_tool_errors
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
-                tool_ = create_tool(tool_)
+                tool_ = cast(BaseTool, create_tool(tool_))
             self.tools_by_name[tool_.name] = tool_
 
     def _func(
@@ -188,10 +188,7 @@ class ToolNode(RunnableCallable):
         if not isinstance(message, AIMessage):
             raise ValueError("Last message is not an AIMessage")
 
-        tool_calls = [
-            self._inject_state(call, input)
-            for call in cast(AIMessage, message).tool_calls
-        ]
+        tool_calls = [self._inject_state(call, input) for call in message.tool_calls]
         return tool_calls, output_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
@@ -385,7 +382,7 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
 
-    def _is_injection(type_arg: Any):
+    def _is_injection(type_arg: Any) -> bool:
         if isinstance(type_arg, InjectedState) or (
             isinstance(type_arg, type) and issubclass(type_arg, InjectedState)
         ):

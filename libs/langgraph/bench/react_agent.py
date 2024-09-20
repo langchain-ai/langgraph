@@ -14,7 +14,7 @@ from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.pregel import Pregel
 
 
-def react_agent(n_tools: int, checkpointer: BaseCheckpointSaver) -> Pregel:
+def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pregel:
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_tools(self, functions: list):
             return self

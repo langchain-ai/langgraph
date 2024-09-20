@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 from typing import (
     Any,
     AsyncIterator,
+    Callable,
     Dict,
     Iterator,
-    List,
     Optional,
     Sequence,
     Tuple,
@@ -30,10 +30,10 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
-T = TypeVar("T", bound=callable)
+T = TypeVar("T", bound=Callable)
 
 
-class AsyncSqliteSaver(BaseCheckpointSaver):
+class AsyncSqliteSaver(BaseCheckpointSaver[str]):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
     This class provides an asynchronous interface for saving and retrieving checkpoints
@@ -183,7 +183,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_), self.loop
+                    anext(aiter_),
+                    self.loop,
                 ).result()
             except StopAsyncIteration:
                 break
@@ -214,7 +215,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         ).result()
 
     def put_writes(
-        self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+        self, config: RunnableConfig, writes: Sequence[Tuple[str, Any]], task_id: str
     ) -> None:
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id), self.loop

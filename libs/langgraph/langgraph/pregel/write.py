@@ -9,6 +9,7 @@ from typing import (
     Sequence,
     TypeVar,
     Union,
+    cast,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -34,7 +35,7 @@ class ChannelWriteEntry(NamedTuple):
 
 
 class ChannelWrite(RunnableCallable):
-    writes: Sequence[Union[ChannelWriteEntry, Send]]
+    writes: list[Union[ChannelWriteEntry, Send]]
     """
     Sequence of write entries, each of which is a tuple of:
     - channel name
@@ -50,11 +51,11 @@ class ChannelWrite(RunnableCallable):
         self,
         writes: Sequence[Union[ChannelWriteEntry, Send]],
         *,
-        tags: Optional[list[str]] = None,
+        tags: Optional[Sequence[str]] = None,
         require_at_least_one_of: Optional[Sequence[str]] = None,
     ):
         super().__init__(func=self._write, afunc=self._awrite, name=None, tags=tags)
-        self.writes = writes
+        self.writes = cast(list[Union[ChannelWriteEntry, Send]], writes)
         self.require_at_least_one_of = require_at_least_one_of
 
     def get_name(
@@ -158,6 +159,6 @@ class ChannelWrite(RunnableCallable):
 
 
 def _mk_future(val: Any) -> asyncio.Future:
-    fut = asyncio.Future()
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(val)
     return fut

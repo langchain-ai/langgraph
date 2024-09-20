@@ -1,7 +1,12 @@
 from collections import ChainMap
 from typing import Any, Optional, Sequence
 
-from langchain_core.callbacks import AsyncCallbackManager, CallbackManager, Callbacks
+from langchain_core.callbacks import (
+    AsyncCallbackManager,
+    BaseCallbackManager,
+    CallbackManager,
+    Callbacks,
+)
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
     CONFIG_KEYS,
@@ -63,20 +68,20 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             if not value:
                 continue
             if key == "metadata":
-                if base_value := base.get(key):  # type: ignore
+                if base_value := base.get(key):
                     base[key] = {**base_value, **value}  # type: ignore
                 else:
-                    base[key] = value
+                    base[key] = value  # type: ignore[literal-required]
             elif key == "tags":
-                if base_value := base.get(key):  # type: ignore
+                if base_value := base.get(key):
                     base[key] = [*base_value, *value]  # type: ignore
                 else:
-                    base[key] = value
+                    base[key] = value  # type: ignore[literal-required]
             elif key == "configurable":
-                if base_value := base.get(key):  # type: ignore
+                if base_value := base.get(key):
                     base[key] = {**base_value, **value}  # type: ignore
                 else:
-                    base[key] = value
+                    base[key] = value  # type: ignore[literal-required]
             elif key == "callbacks":
                 base_callbacks = base.get("callbacks")
                 # callbacks can be either None, list[handler] or manager
@@ -92,7 +97,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                         for callback in value:
                             mngr.add_handler(callback, inherit=True)
                         base["callbacks"] = mngr
-                else:
+                elif isinstance(value, BaseCallbackManager):
                     # value is a manager
                     if base_callbacks is None:
                         base["callbacks"] = value.copy()
@@ -104,11 +109,13 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                     else:
                         # base_callbacks is also a manager
                         base["callbacks"] = base_callbacks.merge(value)
+                else:
+                    raise NotImplementedError
             elif key == "recursion_limit":
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
             else:
-                base[key] = config[key]
+                base[key] = config[key]  # type: ignore[literal-required]
     return base
 
 
@@ -138,7 +145,7 @@ def patch_config(
     Returns:
         RunnableConfig: The patched config.
     """
-    config = config.copy() or {}
+    config = config.copy() if config is not None else {}
     if callbacks is not None:
         # If we're replacing callbacks, we need to unset run_name
         # As that should apply only to the same run as the original callbacks
@@ -176,7 +183,7 @@ def get_callback_manager_for_config(
     if all_tags is not None and tags is not None:
         all_tags = [*all_tags, *tags]
     elif tags is not None:
-        all_tags = tags
+        all_tags = list(tags)
     # use existing callbacks if they exist
     if (callbacks := config.get("callbacks")) and isinstance(
         callbacks, CallbackManager
@@ -214,7 +221,7 @@ def get_async_callback_manager_for_config(
     if all_tags is not None and tags is not None:
         all_tags = [*all_tags, *tags]
     elif tags is not None:
-        all_tags = tags
+        all_tags = list(tags)
     # use existing callbacks if they exist
     if (callbacks := config.get("callbacks")) and isinstance(
         callbacks, AsyncCallbackManager
@@ -263,7 +270,7 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             continue
         for k, v in config.items():
             if v is not None and k in CONFIG_KEYS:
-                empty[k] = v
+                empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
             if v is not None and k not in CONFIG_KEYS:
                 empty["configurable"][k] = v

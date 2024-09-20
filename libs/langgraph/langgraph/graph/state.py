@@ -7,11 +7,13 @@ from inspect import isclass, isfunction, signature
 from typing import (
     Any,
     Callable,
+    Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
     Union,
+    cast,
     get_origin,
     get_type_hints,
     overload,
@@ -21,6 +23,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
@@ -66,7 +69,7 @@ def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
 
 class StateNodeSpec(NamedTuple):
     runnable: Runnable
-    metadata: dict[str, Any]
+    metadata: Optional[dict[str, Any]]
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
 
@@ -122,7 +125,7 @@ class StateGraph(Graph):
         >>> print(step1)
         {'x': [0.5, 0.75]}"""
 
-    nodes: dict[str, StateNodeSpec]
+    nodes: dict[str, StateNodeSpec]  # type: ignore[assignment]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
     schemas: dict[Type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
@@ -209,7 +212,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-    ) -> None:
+    ) -> Self:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
 
@@ -233,7 +236,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-    ) -> None:
+    ) -> Self:
         """Adds a new node to the state graph.
 
         Args:
@@ -256,7 +259,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-    ) -> None:
+    ) -> Self:
         """Adds a new node to the state graph.
 
         Will take the name of the function/runnable as the node name.
@@ -302,7 +305,7 @@ class StateGraph(Graph):
         if not isinstance(node, str):
             action = node
             if isinstance(action, Runnable):
-                node = action.name
+                node = action.get_name()
             else:
                 node = getattr(action, "__name__", action.__class__.__name__)
             if node is None:
@@ -318,14 +321,20 @@ class StateGraph(Graph):
             )
         if not isinstance(node, str):
             action = node
-            node = getattr(action, "name", action.__name__)
+            node = cast(str, getattr(action, "name", getattr(action, "__name__", None)))
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
+        if action is None:
+            raise RuntimeError
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
 
         for character in (NS_SEP, NS_END):
-            if character in node:
+            if character in cast(str, node):
                 raise ValueError(
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
@@ -345,14 +354,15 @@ class StateGraph(Graph):
             pass
         if input is not None:
             self._add_schema(input)
-        self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
+        self.nodes[cast(str, node)] = StateNodeSpec(
+            coerce_to_runnable(action, name=cast(str, node), trace=False),
             metadata,
             input=input or self.schema,
             retry_policy=retry,
         )
+        return self
 
-    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> Self:
         """Adds a directed edge from the start node to the end node.
 
         If the graph transitions to the start_key node, it will always transition to the end_key node next.
@@ -386,14 +396,15 @@ class StateGraph(Graph):
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         self.waiting_edges.add((tuple(start_key), end_key))
+        return self
 
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         *,
         store: Optional[BaseStore] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
     ) -> "CompiledStateGraph":
         """Compiles the state graph into a `CompiledGraph` object.
@@ -554,7 +565,7 @@ class CompiledStateGraph(CompiledGraph):
                     ),
                 ],
             )
-        else:
+        elif node is not None:
             input_schema = node.input if node else self.builder.schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
@@ -582,6 +593,8 @@ class CompiledStateGraph(CompiledGraph):
                 retry_policy=node.retry_policy,
                 bound=node.runnable,
             )
+        else:
+            raise RuntimeError
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):
@@ -612,8 +625,8 @@ class CompiledStateGraph(CompiledGraph):
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(
-            packets: list[Union[str, Send]], config: RunnableConfig
-        ) -> Optional[ChannelWrite]:
+            packets: Sequence[Union[str, Send]], config: RunnableConfig
+        ) -> None:
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
@@ -632,7 +645,9 @@ class CompiledStateGraph(CompiledGraph):
                             ),
                         )
                     )
-                ChannelWrite.do_write(config, writes)
+                ChannelWrite.do_write(
+                    config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
+                )
 
         # attach branch publisher
         schema = (
@@ -702,9 +717,21 @@ def _get_channels(
         if name != "__slots__"
     }
     return (
-        {k: v for k, v in all_keys.items() if not is_managed_value(v)},
+        {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
     )
+
+
+@overload
+def _get_channel(
+    name: str, annotation: Any, *, allow_managed: Literal[False]
+) -> BaseChannel: ...
+
+
+@overload
+def _get_channel(
+    name: str, annotation: Any, *, allow_managed: Literal[True] = True
+) -> Union[BaseChannel, ManagedValueSpec]: ...
 
 
 def _get_channel(
@@ -722,7 +749,7 @@ def _get_channel(
         channel.key = name
         return channel
 
-    fallback = LastValue(annotation)
+    fallback: LastValue = LastValue(annotation)
     fallback.key = name
     return fallback
 
@@ -782,12 +809,12 @@ def _get_schema(
     else:
         keys = list(schemas[typ].keys())
         if len(keys) == 1 and keys[0] == "__root__":
-            return create_model(  # type: ignore[call-overload]
+            return create_model(
                 name,
                 root=(channels[keys[0]].UpdateType, None),
             )
         else:
-            return create_model(  # type: ignore[call-overload]
+            return create_model(
                 name,
                 field_definitions={
                     k: (
