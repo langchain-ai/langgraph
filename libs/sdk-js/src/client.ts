@@ -245,7 +245,7 @@ export class AssistantsClient extends BaseClient {
     metadata?: Metadata;
     assistantId?: string;
     ifExists?: OnConflictBehavior;
-    assistantName?: string;
+    name?: string;
   }): Promise<Assistant> {
     return this.fetch<Assistant>("/assistants", {
       method: "POST",
@@ -255,7 +255,7 @@ export class AssistantsClient extends BaseClient {
         metadata: payload.metadata,
         assistant_id: payload.assistantId,
         if_exists: payload.ifExists,
-        assistant_name: payload.assistantName,
+        name: payload.name,
       },
     });
   }
@@ -272,7 +272,7 @@ export class AssistantsClient extends BaseClient {
       graphId?: string;
       config?: Config;
       metadata?: Metadata;
-      assistantName?: string;
+      name?: string;
     },
   ): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}`, {
@@ -281,7 +281,7 @@ export class AssistantsClient extends BaseClient {
         graph_id: payload.graphId,
         config: payload.config,
         metadata: payload.metadata,
-        assistant_name: payload.assistantName,
+        name: payload.name,
       },
     });
   }
@@ -354,7 +354,7 @@ export class AssistantsClient extends BaseClient {
    * @returns The updated assistant.
    */
   async setVersion(assistantId: string, version: number): Promise<Assistant> {
-    return this.fetch<Assistant>(`/assistants/${assistantId}/set_version`, {
+    return this.fetch<Assistant>(`/assistants/${assistantId}/set_latest`, {
       method: "POST",
       json: { version },
     });

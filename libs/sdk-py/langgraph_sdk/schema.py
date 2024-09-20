@@ -68,8 +68,6 @@ class AssistantBase(TypedDict):
     """The assistant config."""
     created_at: datetime
     """The time the assistant was created."""
-    updated_at: datetime
-    """The last time the assistant was updated."""
     metadata: Json
     """The assistant metadata."""
     version: int
@@ -85,7 +83,9 @@ class AssistantVersion(AssistantBase):
 class Assistant(AssistantBase):
     """Assistant model."""
 
-    assistant_name: str
+    updated_at: datetime
+    """The last time the assistant was updated."""
+    name: str
     """The name of the assistant"""
 
 

@@ -80,7 +80,6 @@ export interface AssistantBase {
   graph_id: string;
   config: Config;
   created_at: string;
-  updated_at: string;
   metadata: Metadata;
   version: number;
 }
@@ -88,7 +87,8 @@ export interface AssistantBase {
 export interface AssistantVersion extends AssistantBase {}
 
 export interface Assistant extends AssistantBase {
-  assistant_name: string;
+  updated_at: string;
+  name: string;
 }
 export type AssistantGraph = Record<string, Array<Record<string, unknown>>>;
 

@@ -418,7 +418,7 @@ class AssistantsClient:
         metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
-        assistant_name: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -431,7 +431,7 @@ class AssistantsClient:
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
-            assistant_name: The name of the assistant. Defaults to 'Untitled' under the hood.
+            name: The name of the assistant. Defaults to 'Untitled' under the hood.
 
         Returns:
             Assistant: The created assistant.
@@ -444,7 +444,7 @@ class AssistantsClient:
                 metadata={"number":1},
                 assistant_id="my-assistant-id",
                 if_exists="do_nothing",
-                assistant_name="my_assistant_name"
+                name="my_name"
             )
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -458,8 +458,8 @@ class AssistantsClient:
             payload["assistant_id"] = assistant_id
         if if_exists:
             payload["if_exists"] = if_exists
-        if assistant_name:
-            payload["assistant_name"] = assistant_name
+        if name:
+            payload["name"] = name
         return await self.http.post("/assistants", json=payload)
 
     async def update(
@@ -469,7 +469,7 @@ class AssistantsClient:
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
         metadata: Json = None,
-        assistant_name: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -502,8 +502,8 @@ class AssistantsClient:
             payload["config"] = config
         if metadata:
             payload["metadata"] = metadata
-        if assistant_name:
-            payload["assistant_name"] = assistant_name
+        if name:
+            payload["name"] = name
         return await self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
@@ -605,7 +605,7 @@ class AssistantsClient:
             f"/assistants/{assistant_id}/versions", json=payload
         )
 
-    async def set_version(self, assistant_id: str, version: int) -> Assistant:
+    async def set_latest(self, assistant_id: str, version: int) -> Assistant:
         """Change the version of an assistant.
 
         Args:
@@ -617,7 +617,7 @@ class AssistantsClient:
 
         Example Usage:
 
-            new_version_assistant = await client.assistants.set_version(
+            new_version_assistant = await client.assistants.set_latest(
                 assistant_id="my_assistant_id",
                 version=3
             )
@@ -627,7 +627,7 @@ class AssistantsClient:
         payload: Dict[str, Any] = {"version": version}
 
         return await self.http.post(
-            f"/assistants/{assistant_id}/set_version", json=payload
+            f"/assistants/{assistant_id}/set_latest", json=payload
         )
 
 
