@@ -60,6 +60,7 @@ from langgraph.constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_END,
@@ -1219,6 +1220,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream.put)
                 )
+            # set up custom stream mode
+            if "custom" in stream_modes:
+                config["configurable"][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
+                    ((), "custom", c)
+                )
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -1240,7 +1246,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes:
+                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
                     # we are careful to have a single waiter live at any one time
                     # because on exit we increment semaphore count by exactly 1
                     waiter: Optional[concurrent.futures.Future] = None
@@ -1435,6 +1441,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream.put_nowait)
                 )
+            # set up custom stream mode
+            if "custom" in stream_modes:
+                config["configurable"][CONFIG_KEY_STREAM_WRITER] = (
+                    lambda c: stream.put_nowait(((), "custom", c))
+                )
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -1456,7 +1467,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes:
+                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
 
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())
