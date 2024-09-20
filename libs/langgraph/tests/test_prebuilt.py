@@ -153,29 +153,35 @@ def test_passing_two_modifiers():
 
 
 def test_system_message_modifier():
-    model = FakeToolCallingModel()
     messages_modifier = SystemMessage(content="Foo")
-    agent_1 = create_react_agent(model, [], messages_modifier=messages_modifier)
-    agent_2 = create_react_agent(model, [], state_modifier=messages_modifier)
+    agent_1 = create_react_agent(
+        FakeToolCallingModel(), [], messages_modifier=messages_modifier
+    )
+    agent_2 = create_react_agent(
+        FakeToolCallingModel(), [], state_modifier=messages_modifier
+    )
     for agent in [agent_1, agent_2]:
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
-            "messages": inputs + [AIMessage(content="Foo-hi?", id="0")]
+            "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
         }
         assert response == expected_response
 
 
 def test_system_message_string_modifier():
-    model = FakeToolCallingModel()
     messages_modifier = "Foo"
-    agent_1 = create_react_agent(model, [], messages_modifier=messages_modifier)
-    agent_2 = create_react_agent(model, [], state_modifier=messages_modifier)
+    agent_1 = create_react_agent(
+        FakeToolCallingModel(), [], messages_modifier=messages_modifier
+    )
+    agent_2 = create_react_agent(
+        FakeToolCallingModel(), [], state_modifier=messages_modifier
+    )
     for agent in [agent_1, agent_2]:
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
-            "messages": inputs + [AIMessage(content="Foo-hi?", id="0")]
+            "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
         }
         assert response == expected_response
 

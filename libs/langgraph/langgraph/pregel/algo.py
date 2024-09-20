@@ -35,6 +35,7 @@ from langgraph.constants import (
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NO_WRITES,
+    NS_END,
     NS_SEP,
     PULL,
     PUSH,
@@ -487,7 +488,7 @@ def prepare_single_task(
                 PULL,
                 *triggers,
             )
-            task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+            task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
             metadata = {
                 "langgraph_step": step,
                 "langgraph_node": name,
