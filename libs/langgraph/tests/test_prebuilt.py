@@ -47,6 +47,9 @@ pytestmark = pytest.mark.anyio
 
 
 class FakeToolCallingModel(BaseChatModel):
+    tool_calls: Optional[list[list[ToolCall]]] = None
+    index: int = 0
+
     def _generate(
         self,
         messages: List[BaseMessage],
@@ -56,7 +59,15 @@ class FakeToolCallingModel(BaseChatModel):
     ) -> ChatResult:
         """Top Level call"""
         messages_string = "-".join([m.content for m in messages])
-        message = AIMessage(content=messages_string, id="0")
+        tool_calls = (
+            self.tool_calls[self.index % len(self.tool_calls)]
+            if self.tool_calls
+            else []
+        )
+        message = AIMessage(
+            content=messages_string, id=str(self.index), tool_calls=tool_calls.copy()
+        )
+        self.index += 1
         return ChatResult(generations=[ChatGeneration(message=message)])
 
     @property
@@ -68,8 +79,6 @@ class FakeToolCallingModel(BaseChatModel):
         tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        if len(tools) > 0:
-            raise ValueError("Not supported yet!")
         return self
 
 
@@ -584,3 +593,100 @@ def test_tool_node_ensure_utf8() -> None:
         [AIMessage(content="", tool_calls=tool_calls)]
     )
     assert outputs[0].content == json.dumps(data, ensure_ascii=False)
+
+
+async def test_return_direct() -> None:
+    @dec_tool(return_direct=True)
+    def tool_return_direct(input: str) -> str:
+        """A tool that returns directly."""
+        return f"Direct result: {input}"
+
+    @dec_tool
+    def tool_normal(input: str) -> str:
+        """A normal tool."""
+        return f"Normal result: {input}"
+
+    first_tool_call = [
+        ToolCall(
+            name="tool_return_direct",
+            args={"input": "Test direct"},
+            id="1",
+        ),
+    ]
+    expected_ai = AIMessage(
+        content="Test direct",
+        id="0",
+        tool_calls=first_tool_call,
+    )
+    model = FakeToolCallingModel(tool_calls=[first_tool_call, []])
+    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+
+    # Test direct return for tool_return_direct
+    result = agent.invoke(
+        {"messages": [HumanMessage(content="Test direct", id="hum0")]}
+    )
+    assert result["messages"] == [
+        HumanMessage(content="Test direct", id="hum0"),
+        expected_ai,
+        ToolMessage(
+            content="Direct result: Test direct",
+            name="tool_return_direct",
+            tool_call_id="1",
+            id=result["messages"][2].id,
+        ),
+    ]
+    second_tool_call = [
+        ToolCall(
+            name="tool_normal",
+            args={"input": "Test normal"},
+            id="2",
+        ),
+    ]
+    model = FakeToolCallingModel(tool_calls=[second_tool_call, []])
+    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    result = agent.invoke(
+        {"messages": [HumanMessage(content="Test normal", id="hum1")]}
+    )
+    assert result["messages"] == [
+        HumanMessage(content="Test normal", id="hum1"),
+        AIMessage(content="Test normal", id="0", tool_calls=second_tool_call),
+        ToolMessage(
+            content="Normal result: Test normal",
+            name="tool_normal",
+            tool_call_id="2",
+            id=result["messages"][2].id,
+        ),
+        AIMessage(content="Test normal-Test normal-Normal result: Test normal", id="1"),
+    ]
+
+    both_tool_calls = [
+        ToolCall(
+            name="tool_return_direct",
+            args={"input": "Test both direct"},
+            id="3",
+        ),
+        ToolCall(
+            name="tool_normal",
+            args={"input": "Test both normal"},
+            id="4",
+        ),
+    ]
+    model = FakeToolCallingModel(tool_calls=[both_tool_calls, []])
+    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    result = agent.invoke({"messages": [HumanMessage(content="Test both", id="hum2")]})
+    assert result["messages"] == [
+        HumanMessage(content="Test both", id="hum2"),
+        AIMessage(content="Test both", id="0", tool_calls=both_tool_calls),
+        ToolMessage(
+            content="Direct result: Test both direct",
+            name="tool_return_direct",
+            tool_call_id="3",
+            id=result["messages"][2].id,
+        ),
+        ToolMessage(
+            content="Normal result: Test both normal",
+            name="tool_normal",
+            tool_call_id="4",
+            id=result["messages"][3].id,
+        ),
+    ]
