@@ -44,9 +44,10 @@ class Config(TypedDict, total=False):
 class Checkpoint(TypedDict):
     """Checkpoint model."""
 
-    checkpoint_id: str
+    thread_id: str
     checkpoint_ns: str
-    checkpoint_map: dict[str, Any]
+    checkpoint_id: Optional[str]
+    checkpoint_map: Optional[dict[str, Any]]
 
 
 class GraphSchema(TypedDict):
@@ -112,6 +113,15 @@ class Thread(TypedDict):
     """The current state of the thread."""
 
 
+class ThreadTask(TypedDict):
+    id: str
+    name: str
+    error: Optional[str]
+    interrupts: list[dict]
+    checkpoint: Optional[Checkpoint]
+    state: Optional["ThreadState"]
+
+
 class ThreadState(TypedDict):
     values: Union[list[dict], dict[str, Any]]
     """The state values."""
@@ -126,6 +136,8 @@ class ThreadState(TypedDict):
     """Timestamp of state creation"""
     parent_checkpoint: Optional[Checkpoint]
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
+    tasks: Sequence[ThreadTask]
+    """Tasks to execute in this step. If already attempted, may contain an error."""
 
 
 class Run(TypedDict):

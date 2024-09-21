@@ -1012,6 +1012,7 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1052,6 +1053,7 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1074,11 +1076,9 @@ class RunsClient:
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
-            checkpoint_id: The checkpoint to start streaming from.
+            checkpoint: The checkpoint to resume from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             feedback_keys: Feedback keys to assign to run.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
@@ -1102,7 +1102,6 @@ class RunsClient:
                 stream_mode=["values","debug"],
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "anthropic"}},
-                checkpoint_id="my_checkpoint",
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 feedback_keys=["my_feedback_key_1","my_feedback_key_2"],
@@ -1130,6 +1129,7 @@ class RunsClient:
             "interrupt_after": interrupt_after,
             "feedback_keys": feedback_keys,
             "webhook": webhook,
+            "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
@@ -1174,6 +1174,7 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1192,6 +1193,7 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1212,7 +1214,7 @@ class RunsClient:
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
-            checkpoint_id: The checkpoint to start streaming from.
+            checkpoint: The checkpoint to resume from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -1234,7 +1236,6 @@ class RunsClient:
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "openai"}},
-                checkpoint_id="my_checkpoint",
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -1301,6 +1302,7 @@ class RunsClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_completion": on_completion,
@@ -1330,6 +1332,7 @@ class RunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1364,6 +1367,7 @@ class RunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1383,7 +1387,7 @@ class RunsClient:
             input: The input to the graph.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
-            checkpoint_id: The checkpoint to start streaming from.
+            checkpoint: The checkpoint to resume from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -1407,7 +1411,6 @@ class RunsClient:
                 input={"messages": [{"role": "user", "content": "how are you?"}]},
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "anthropic"}},
-                checkpoint_id="my_checkpoint",
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -1452,6 +1455,7 @@ class RunsClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
