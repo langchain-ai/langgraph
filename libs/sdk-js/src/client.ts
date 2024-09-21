@@ -354,7 +354,7 @@ export class AssistantsClient extends BaseClient {
    * @returns The updated assistant.
    */
   async setLatest(assistantId: string, version: number): Promise<Assistant> {
-    return this.fetch<Assistant>(`/assistants/${assistantId}/set_latest`, {
+    return this.fetch<Assistant>(`/assistants/${assistantId}/latest`, {
       method: "POST",
       json: { version },
     });
