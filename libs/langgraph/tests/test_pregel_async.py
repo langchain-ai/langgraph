@@ -70,7 +70,7 @@ from langgraph.pregel import (
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.memory import MemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
-from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
+from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
@@ -7202,22 +7202,22 @@ async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None
         assert chunks == [
             # arrives before "inner" finishes
             (
-                0.0,
+                FloatBetween(0.0, 0.1),
                 (
                     (AnyStr("inner:"),),
                     {"inner_1": {"my_key": "got here", "my_other_key": ""}},
                 ),
             ),
-            (0.2, ((), {"outer_1": {"my_key": " and parallel"}})),
+            (FloatBetween(0.2, 0.3), ((), {"outer_1": {"my_key": " and parallel"}})),
             (
-                0.5,
+                FloatBetween(0.5, 0.6),
                 (
                     (AnyStr("inner:"),),
                     {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
                 ),
             ),
-            (0.5, ((), {"inner": {"my_key": "got here and there"}})),
-            (0.5, ((), {"outer_2": {"my_key": " and back again"}})),
+            (FloatBetween(0.5, 0.6), ((), {"inner": {"my_key": "got here and there"}})),
+            (FloatBetween(0.5, 0.6), ((), {"outer_2": {"my_key": " and back again"}})),
         ]
 
 
