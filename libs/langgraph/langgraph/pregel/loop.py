@@ -41,6 +41,7 @@ from langgraph.constants import (
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_DELEGATE,
     CONFIG_KEY_ENSURE_LATEST,
+    CONFIG_KEY_GRAPH_COUNT,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -220,6 +221,11 @@ class PregelLoop:
             self.config = patch_configurable(
                 self.config, {"checkpoint_ns": "", "checkpoint_id": None}
             )
+        if config["configurable"].get(CONFIG_KEY_GRAPH_COUNT, 0) > 0:
+            raise ValueError("Detected multiple subgraphs called in a single node.")
+        else:
+            # mutate config so that sibling subgraphs can be detected
+            self.config["configurable"][CONFIG_KEY_GRAPH_COUNT] = 1
         if (
             CONFIG_KEY_CHECKPOINT_MAP in self.config["configurable"]
             and self.config["configurable"].get("checkpoint_ns")
