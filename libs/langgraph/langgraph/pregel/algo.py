@@ -30,6 +30,7 @@ from langgraph.checkpoint.base import (
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_GRAPH_COUNT,
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
@@ -429,6 +430,7 @@ def prepare_single_task(
                             manager.get_child(f"graph:step:{step}") if manager else None
                         ),
                         configurable={
+                            CONFIG_KEY_GRAPH_COUNT: 0,
                             CONFIG_KEY_TASK_ID: task_id,
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: partial(
@@ -539,6 +541,7 @@ def prepare_single_task(
                                 else None
                             ),
                             configurable={
+                                CONFIG_KEY_GRAPH_COUNT: 0,
                                 CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
