@@ -1,6 +1,6 @@
 import sys
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, cast
 
 from langgraph.types import Interrupt, Send  # noqa: F401
 
@@ -73,7 +73,7 @@ NS_SEP = sys.intern("|")
 # for checkpoint_ns, separates each level (ie. graph|subgraph|subsubgraph)
 NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
-CONF = sys.intern("configurable")
+CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
 
 RESERVED = {

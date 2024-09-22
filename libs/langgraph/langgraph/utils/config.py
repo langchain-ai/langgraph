@@ -83,9 +83,9 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                     base[key] = value  # type: ignore[literal-required]
             elif key == CONF:
                 if base_value := base.get(key):
-                    base[key] = {**base_value, **value}  # type: ignore
+                    base[key] = {**base_value, **value}  # type: ignore[dict-item]
                 else:
-                    base[key] = value  # type: ignore[literal-required]
+                    base[key] = value
             elif key == "callbacks":
                 base_callbacks = base.get("callbacks")
                 # callbacks can be either None, list[handler] or manager
