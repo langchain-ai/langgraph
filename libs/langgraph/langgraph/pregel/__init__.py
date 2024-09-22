@@ -87,7 +87,7 @@ from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import All, StateSnapshot, StreamMode
+from langgraph.types import All, Checkpointer, StateSnapshot, StreamMode
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -197,7 +197,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     debug: bool
     """Whether to print debug information during execution. Defaults to False."""
 
-    checkpointer: Optional[BaseCheckpointSaver] = None
+    checkpointer: Checkpointer = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
     store: Optional[BaseStore] = None
@@ -281,7 +281,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 [spec for node in self.nodes.values() for spec in node.config_specs]
                 + (
                     self.checkpointer.config_specs
-                    if self.checkpointer is not None
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
                     else []
                 )
                 + (
@@ -1059,6 +1059,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         Union[All, Sequence[str]],
         Optional[BaseCheckpointSaver],
     ]:
+        if config["recursion_limit"] < 1:
+            raise ValueError("recursion_limit must be at least 1")
         debug = debug if debug is not None else self.debug
         if output_keys is None:
             output_keys = self.stream_channels_asis
@@ -1072,12 +1074,16 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if CONFIG_KEY_TASK_ID in config.get("configurable", {}):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-        if CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
-            checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
-                CONFIG_KEY_CHECKPOINTER
-            ]
+        if self.checkpointer is False:
+            checkpointer: Optional[BaseCheckpointSaver] = None
+        elif CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
+            checkpointer = config["configurable"][CONFIG_KEY_CHECKPOINTER]
         else:
             checkpointer = self.checkpointer
+        if checkpointer and not config.get("configurable"):
+            raise ValueError(
+                f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in checkpointer.config_specs]}"
+            )
         return (
             debug,
             set(stream_mode),
@@ -1193,12 +1199,6 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             run_id=config.get("run_id"),
         )
         try:
-            if config["recursion_limit"] < 1:
-                raise ValueError("recursion_limit must be at least 1")
-            if self.checkpointer and not config.get("configurable"):
-                raise ValueError(
-                    f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in self.checkpointer.config_specs]}"
-                )
             # assign defaults
             (
                 debug,
@@ -1414,12 +1414,6 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             None,
         )
         try:
-            if config["recursion_limit"] < 1:
-                raise ValueError("recursion_limit must be at least 1")
-            if self.checkpointer and not config.get("configurable"):
-                raise ValueError(
-                    f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in self.checkpointer.config_specs]}"
-                )
             # assign defaults
             (
                 debug,

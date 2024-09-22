@@ -10,6 +10,14 @@ from langgraph.types import Interrupt, Send  # noqa: F401
 EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 EMPTY_SEQ: tuple[str, ...] = tuple()
 
+# --- Public constants ---
+TAG_HIDDEN = "langsmith:hidden"
+# tag to hide a node/edge from certain tracing/streaming environments
+START = "__start__"
+# the first (maybe virtual) node in graph-style Pregel
+END = "__end__"
+# the last (maybe virtual) node in graph-style Pregel
+
 # --- Reserved write keys ---
 INPUT = "__input__"
 # for values passed as input to the graph
@@ -23,10 +31,6 @@ SCHEDULED = "__scheduled__"
 # marker to signal node was scheduled (in distributed mode)
 TASKS = "__pregel_tasks"
 # for Send objects returned by nodes/edges, corresponds to PUSH below
-START = "__start__"
-# marker for the first (maybe virtual) node in graph-style Pregel
-END = "__end__"
-# marker for the last (maybe virtual) node in graph-style Pregel
 
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = "__pregel_send"
@@ -43,8 +47,6 @@ CONFIG_KEY_STORE = "__pregel_store"
 # holds a `BaseStore` made available to managed values
 CONFIG_KEY_RESUMING = "__pregel_resuming"
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
-CONFIG_KEY_GRAPH_COUNT = "__pregel_graph_count"
-# holds the number of subgraphs executed in a given task, used to raise errors
 CONFIG_KEY_TASK_ID = "__pregel_task_id"
 # holds the task ID for the current task
 CONFIG_KEY_DEDUPE_TASKS = "__pregel_dedupe_tasks"
@@ -68,14 +70,13 @@ PULL = "__pregel_pull"
 # denotes pull-style tasks, ie. those triggered by edges
 RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
 # placeholder for managed values replaced at runtime
-TAG_HIDDEN = "langsmith:hidden"
-# tag to hide a node/edge from certain tracing/streaming environments
 NS_SEP = "|"
 # for checkpoint_ns, separates each level (ie. graph|subgraph|subsubgraph)
 NS_END = ":"
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 
 RESERVED = {
+    TAG_HIDDEN,
     # reserved write keys
     INPUT,
     INTERRUPT,
@@ -103,7 +104,6 @@ RESERVED = {
     PUSH,
     PULL,
     RUNTIME_PLACEHOLDER,
-    TAG_HIDDEN,
     NS_SEP,
     NS_END,
 }
