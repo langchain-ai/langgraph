@@ -348,6 +348,7 @@ class KafkaOrchestrator(AbstractContextManager):
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
+            check_subgraphs=False,
         ) as loop:
             if loop.tick(
                 input_keys=graph.input_channels,
