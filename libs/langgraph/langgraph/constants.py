@@ -1,9 +1,21 @@
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from langgraph.pregel.types import Interrupt, Send  # noqa: F401
 
 # Interrupt, Send re-exported for backwards compatibility
+def __getattr__(name: str) -> Any:
+    if name in globals():
+        return globals()[name]
+    elif name == "Interrupt":
+        from langgraph.pregel.types import Interrupt
+
+        return Interrupt
+    elif name == "Send":
+        from langgraph.pregel.types import Send
+
+        return Send
+    raise AttributeError(f"module {__name__} has no attribute {name}")
+
 
 # --- Empty read-only containers ---
 EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
