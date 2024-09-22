@@ -38,8 +38,8 @@ from langgraph.constants import (
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.types import All
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)

@@ -69,8 +69,12 @@ builder.add_conditional_edges("my_node", my_condition)
 
 ## Send
 
-::: langgraph.pregel.types.Send
+::: langgraph.types.Send
+
+## Interrupt
+
+::: langgraph.types.Interrupt
 
 ## RetryPolicy
 
-::: langgraph.pregel.types.RetryPolicy
+::: langgraph.types.RetryPolicy

@@ -22,7 +22,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.types import PregelExecutableTask, PregelTask, StateSnapshot
+from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 
 
 class TaskPayload(TypedDict):

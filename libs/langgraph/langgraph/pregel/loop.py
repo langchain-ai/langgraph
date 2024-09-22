@@ -94,10 +94,10 @@ from langgraph.pregel.io import (
 )
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All, PregelExecutableTask, StreamMode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
 from langgraph.store.batch import AsyncBatchedStore
+from langgraph.types import All, PregelExecutableTask, StreamMode
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")

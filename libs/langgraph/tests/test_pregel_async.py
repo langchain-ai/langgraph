@@ -68,8 +68,8 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.types import PregelTask, StreamWriter
 from langgraph.store.memory import MemoryStore
+from langgraph.types import PregelTask, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,

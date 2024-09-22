@@ -1,20 +1,9 @@
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from langgraph.types import Interrupt, Send  # noqa: F401
 
 # Interrupt, Send re-exported for backwards compatibility
-def __getattr__(name: str) -> Any:
-    if name in globals():
-        return globals()[name]
-    elif name == "Interrupt":
-        from langgraph.pregel.types import Interrupt
-
-        return Interrupt
-    elif name == "Send":
-        from langgraph.pregel.types import Send
-
-        return Send
-    raise AttributeError(f"module {__name__} has no attribute {name}")
 
 
 # --- Empty read-only containers ---
@@ -54,6 +43,8 @@ CONFIG_KEY_STORE = "__pregel_store"
 # holds a `BaseStore` made available to managed values
 CONFIG_KEY_RESUMING = "__pregel_resuming"
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
+CONFIG_KEY_GRAPH_COUNT = "__pregel_graph_count"
+# holds the number of subgraphs executed in a given task, used to raise errors
 CONFIG_KEY_TASK_ID = "__pregel_task_id"
 # holds the task ID for the current task
 CONFIG_KEY_DEDUPE_TASKS = "__pregel_dedupe_tasks"

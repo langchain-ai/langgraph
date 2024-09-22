@@ -3,7 +3,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import RESERVED
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All
+from langgraph.types import All
 
 
 def validate_graph(

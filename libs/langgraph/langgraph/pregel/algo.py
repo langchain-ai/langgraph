@@ -51,7 +51,7 @@ from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
+from langgraph.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]

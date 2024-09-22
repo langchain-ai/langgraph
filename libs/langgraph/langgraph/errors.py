@@ -1,7 +1,7 @@
 from typing import Any, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
-from langgraph.constants import Interrupt
+from langgraph.types import Interrupt
 
 # EmptyChannelError re-exported for backwards compatibility
 

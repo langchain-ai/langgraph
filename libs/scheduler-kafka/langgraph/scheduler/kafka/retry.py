@@ -6,7 +6,7 @@ from typing import Awaitable, Callable, Optional
 
 from typing_extensions import ParamSpec
 
-from langgraph.pregel.types import RetryPolicy
+from langgraph.types import RetryPolicy
 
 logger = logging.getLogger(__name__)
 P = ParamSpec("P")

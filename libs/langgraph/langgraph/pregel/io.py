@@ -5,7 +5,7 @@ from langchain_core.runnables.utils import AddableDict
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import EMPTY_SEQ, ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.log import logger
-from langgraph.pregel.types import PregelExecutableTask
+from langgraph.types import PregelExecutableTask
 
 
 def read_channel(

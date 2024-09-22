@@ -18,7 +18,7 @@ from langgraph.constants import ERROR, INTERRUPT, NO_WRITES
 from langgraph.errors import GraphDelegate, GraphInterrupt
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
-from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
+from langgraph.types import PregelExecutableTask, RetryPolicy
 
 
 class PregelRunner:

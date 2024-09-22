@@ -24,7 +24,6 @@ from langgraph.errors import CheckpointNotLatest, GraphInterrupt
 from langgraph.pregel import Pregel
 from langgraph.pregel.executor import BackgroundExecutor, Submit
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
-from langgraph.pregel.types import RetryPolicy
 from langgraph.scheduler.kafka.retry import aretry, retry
 from langgraph.scheduler.kafka.types import (
     AsyncConsumer,
@@ -37,6 +36,7 @@ from langgraph.scheduler.kafka.types import (
     Producer,
     Topics,
 )
+from langgraph.types import RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 
