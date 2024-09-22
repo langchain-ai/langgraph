@@ -32,7 +32,7 @@ class InvalidUpdateError(Exception):
 
 
 class GraphInterrupt(Exception):
-    """Raised when a subgraph is interrupted, supressed by the root graph.
+    """Raised when a subgraph is interrupted, suppressed by the root graph.
     Never raised directly, or surfaced to the user."""
 
     def __init__(self, interrupts: Sequence[Interrupt] = ()) -> None:
