@@ -13,7 +13,7 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, Self
 
-from langgraph.constants import CONFIG_KEY_STORE
+from langgraph.constants import CONF, CONFIG_KEY_STORE
 from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -83,10 +83,10 @@ class SharedValue(WritableManagedValue[Value, Update]):
                 raise ValueError("SharedValue must be a dict")
         self.scope = scope
         self.value: Value = {}
-        self.store = cast(BaseStore, config["configurable"].get(CONFIG_KEY_STORE))
+        self.store = cast(BaseStore, config[CONF].get(CONFIG_KEY_STORE))
         if self.store is None:
             pass
-        elif scope_value := config["configurable"].get(self.scope):
+        elif scope_value := config[CONF].get(self.scope):
             self.ns = f"scoped:{scope}:{key}:{scope_value}"
         else:
             raise ValueError(

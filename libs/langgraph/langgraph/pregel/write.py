@@ -14,7 +14,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONFIG_KEY_SEND, TASKS, Send
+from langgraph.constants import CONF, CONFIG_KEY_SEND, TASKS, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.utils.runnable import RunnableCallable
 
@@ -138,7 +138,7 @@ class ChannelWrite(RunnableCallable):
                 raise InvalidUpdateError(
                     f"Must write to at least one of {require_at_least_one_of}"
                 )
-        write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
+        write: TYPE_SEND = config[CONF][CONFIG_KEY_SEND]
         write(sends + filtered)
 
     @staticmethod

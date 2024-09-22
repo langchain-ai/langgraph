@@ -55,6 +55,8 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -451,7 +453,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             # get the subgraphs
             subgraphs = dict(self.get_subgraphs())
-            parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
+            parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
             task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
             for task in next_tasks.values():
                 if task.name not in subgraphs:
@@ -463,19 +465,19 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 if not recurse:
                     # set config as signal that subgraph checkpoints exist
                     config = {
-                        "configurable": {
-                            "thread_id": saved.config["configurable"]["thread_id"],
-                            "checkpoint_ns": task_ns,
+                        CONF: {
+                            "thread_id": saved.config[CONF]["thread_id"],
+                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
                         }
                     }
                     task_states[task.id] = config
                 else:
                     # get the state of the subgraph
                     config = {
-                        "configurable": {
+                        CONF: {
                             CONFIG_KEY_CHECKPOINTER: recurse,
-                            "thread_id": saved.config["configurable"]["thread_id"],
-                            "checkpoint_ns": task_ns,
+                            "thread_id": saved.config[CONF]["thread_id"],
+                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
                         }
                     }
                     task_states[task.id] = subgraphs[task.name].get_state(
@@ -527,7 +529,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             # get the subgraphs
             subgraphs = {n: g async for n, g in self.aget_subgraphs()}
-            parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
+            parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
             task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
             for task in next_tasks.values():
                 if task.name not in subgraphs:
@@ -539,19 +541,19 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 if not recurse:
                     # set config as signal that subgraph checkpoints exist
                     config = {
-                        "configurable": {
-                            "thread_id": saved.config["configurable"]["thread_id"],
-                            "checkpoint_ns": task_ns,
+                        CONF: {
+                            "thread_id": saved.config[CONF]["thread_id"],
+                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
                         }
                     }
                     task_states[task.id] = config
                 else:
                     # get the state of the subgraph
                     config = {
-                        "configurable": {
+                        CONF: {
                             CONFIG_KEY_CHECKPOINTER: recurse,
-                            "thread_id": saved.config["configurable"]["thread_id"],
-                            "checkpoint_ns": task_ns,
+                            "thread_id": saved.config[CONF]["thread_id"],
+                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
                         }
                     }
                     task_states[task.id] = await subgraphs[task.name].aget_state(
@@ -572,15 +574,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
         if (
-            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
             recast_checkpoint_ns = NS_SEP.join(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
@@ -607,15 +609,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
         if (
-            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
             recast_checkpoint_ns = NS_SEP.join(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
@@ -647,15 +649,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
         if (
-            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
             recast_checkpoint_ns = NS_SEP.join(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
@@ -676,7 +678,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         config = merge_configs(
-            self.config, config, {"configurable": {"checkpoint_ns": checkpoint_ns}}
+            self.config,
+            config,
+            {CONF: {CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns}},
         )
         # eagerly consume list() to avoid holding up the db cursor
         for checkpoint_tuple in list(
@@ -695,15 +699,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the history of the state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
         if (
-            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
             recast_checkpoint_ns = NS_SEP.join(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
@@ -725,7 +729,9 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         config = merge_configs(
-            self.config, config, {"configurable": {"checkpoint_ns": checkpoint_ns}}
+            self.config,
+            config,
+            {CONF: {CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns}},
         )
         # eagerly consume list() to avoid holding up the db cursor
         for checkpoint_tuple in [
@@ -748,7 +754,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -756,8 +762,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
         # delegate to subgraph
         if (
-            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
             recast_checkpoint_ns = NS_SEP.join(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
@@ -786,10 +792,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         # merge configurable fields with previous checkpoint config
         checkpoint_config = patch_configurable(
             config,
-            {"checkpoint_ns": config["configurable"].get("checkpoint_ns", "")},
+            {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
         if saved:
-            checkpoint_config = patch_configurable(config, saved.config["configurable"])
+            checkpoint_config = patch_configurable(config, saved.config[CONF])
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = checkpointer.put(
@@ -896,7 +902,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -904,8 +910,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
         # delegate to subgraph
         if (
-            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
             recast_checkpoint_ns = NS_SEP.join(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
@@ -934,10 +940,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         # merge configurable fields with previous checkpoint config
         checkpoint_config = patch_configurable(
             config,
-            {"checkpoint_ns": config["configurable"].get("checkpoint_ns", "")},
+            {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
         if saved:
-            checkpoint_config = patch_configurable(config, saved.config["configurable"])
+            checkpoint_config = patch_configurable(config, saved.config[CONF])
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = await checkpointer.aput(
@@ -1065,16 +1071,16 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if CONFIG_KEY_TASK_ID in config.get("configurable", {}):
+        if CONFIG_KEY_TASK_ID in config.get(CONF, {}):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
         if self.checkpointer is False:
             checkpointer: Optional[BaseCheckpointSaver] = None
-        elif CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
-            checkpointer = config["configurable"][CONFIG_KEY_CHECKPOINTER]
+        elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
+            checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
         else:
             checkpointer = self.checkpointer
-        if checkpointer and not config.get("configurable"):
+        if checkpointer and not config.get(CONF):
             raise ValueError(
                 f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in checkpointer.config_specs]}"
             )
@@ -1216,7 +1222,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config["configurable"][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
                     ((), "custom", c)
                 )
             with SyncPregelLoop(
@@ -1238,7 +1244,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 )
                 # enable subgraph streaming
                 if subgraphs:
-                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
+                    loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
                 if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
                     # we are careful to have a single waiter live at any one time
@@ -1431,8 +1437,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config["configurable"][CONFIG_KEY_STREAM_WRITER] = (
-                    lambda c: stream.put_nowait(((), "custom", c))
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put_nowait(
+                    ((), "custom", c)
                 )
             async with AsyncPregelLoop(
                 input,
@@ -1453,7 +1459,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 )
                 # enable subgraph streaming
                 if subgraphs:
-                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
+                    loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
                 if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
 

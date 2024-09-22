@@ -16,32 +16,36 @@ from langchain_core.runnables.config import (
 )
 
 from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import CONFIG_KEY_CHECKPOINT_MAP
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_CHECKPOINT_NS,
+)
 
 
 def patch_configurable(
     config: Optional[RunnableConfig], patch: dict[str, Any]
 ) -> RunnableConfig:
     if config is None:
-        return {"configurable": patch}
-    elif "configurable" not in config:
-        return {**config, "configurable": patch}
+        return {CONF: patch}
+    elif CONF not in config:
+        return {**config, CONF: patch}
     else:
-        return {**config, "configurable": {**config["configurable"], **patch}}
+        return {**config, CONF: {**config[CONF], **patch}}
 
 
 def patch_checkpoint_map(
     config: RunnableConfig, metadata: Optional[CheckpointMetadata]
 ) -> RunnableConfig:
     if parents := (metadata.get("parents") if metadata else None):
+        conf = config[CONF]
         return patch_configurable(
             config,
             {
                 CONFIG_KEY_CHECKPOINT_MAP: {
                     **parents,
-                    config["configurable"]["checkpoint_ns"]: config["configurable"][
-                        "checkpoint_id"
-                    ],
+                    conf[CONFIG_KEY_CHECKPOINT_NS]: conf[CONFIG_KEY_CHECKPOINT_ID],
                 },
             },
         )
@@ -77,7 +81,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                     base[key] = [*base_value, *value]  # type: ignore
                 else:
                     base[key] = value  # type: ignore[literal-required]
-            elif key == "configurable":
+            elif key == CONF:
                 if base_value := base.get(key):
                     base[key] = {**base_value, **value}  # type: ignore
                 else:
@@ -161,7 +165,7 @@ def patch_config(
     if run_name is not None:
         config["run_name"] = run_name
     if configurable is not None:
-        config["configurable"] = {**config.get("configurable", {}), **configurable}
+        config[CONF] = {**config.get(CONF, {}), **configurable}
     return config
 
 
@@ -273,8 +277,8 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                 empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
             if v is not None and k not in CONFIG_KEYS:
-                empty["configurable"][k] = v
-    for key, value in empty["configurable"].items():
+                empty[CONF][k] = v
+    for key, value in empty[CONF].items():
         if (
             not key.startswith("__")
             and isinstance(value, (str, int, float, bool))
