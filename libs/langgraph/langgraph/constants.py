@@ -68,8 +68,6 @@ PUSH = "__pregel_push"
 # denotes push-style tasks, ie. those created by Send objects
 PULL = "__pregel_pull"
 # denotes pull-style tasks, ie. those triggered by edges
-RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
-# placeholder for managed values replaced at runtime
 NS_SEP = "|"
 # for checkpoint_ns, separates each level (ie. graph|subgraph|subsubgraph)
 NS_END = ":"
@@ -103,7 +101,6 @@ RESERVED = {
     # other constants
     PUSH,
     PULL,
-    RUNTIME_PLACEHOLDER,
     NS_SEP,
     NS_END,
 }
