@@ -52,7 +52,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import ERROR, PULL, PUSH
-from langgraph.errors import InvalidUpdateError, NodeInterrupt
+from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -2080,7 +2080,10 @@ async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -
     ]
 
 
-async def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_invoke_join_then_call_other_pregel(
+    mocker: MockerFixture, checkpointer_name: str
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
@@ -2132,6 +2135,18 @@ async def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None
     assert await asyncio.gather(*(app.ainvoke([2, 3]) for _ in range(10))) == [
         27 for _ in range(10)
     ]
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        # add checkpointer
+        app.checkpointer = checkpointer
+        # subgraph is called twice in the same node, through .map(), so raises
+        with pytest.raises(MultipleSubgraphsError):
+            await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}})
+
+        # set inner graph checkpointer NeverCheckpoint
+        inner_app.checkpointer = False
+        # subgraph still called twice, but checkpointing for inner graph is disabled
+        assert await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
 
 async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:

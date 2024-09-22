@@ -53,7 +53,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import ERROR, PULL, PUSH
-from langgraph.errors import InvalidUpdateError, NodeInterrupt
+from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -1861,7 +1861,12 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
         assert [*executor.map(app.invoke, [2] * 100)] == [[13, 13]] * 100
 
 
-def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_invoke_join_then_call_other_pregel(
+    mocker: MockerFixture, request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
@@ -1911,6 +1916,17 @@ def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
 
     with ThreadPoolExecutor() as executor:
         assert [*executor.map(app.invoke, [[2, 3]] * 10)] == [27] * 10
+
+    # add checkpointer
+    app.checkpointer = checkpointer
+    # subgraph is called twice in the same node, through .map(), so raises
+    with pytest.raises(MultipleSubgraphsError):
+        app.invoke([2, 3], {"configurable": {"thread_id": "1"}})
+
+    # set inner graph checkpointer NeverCheckpoint
+    inner_app.checkpointer = False
+    # subgraph still called twice, but checkpointing for inner graph is disabled
+    assert app.invoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
 
 def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:

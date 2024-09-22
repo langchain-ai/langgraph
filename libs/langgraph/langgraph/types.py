@@ -1,12 +1,26 @@
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, NamedTuple, Optional, Sequence, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+)
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
-from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 All = Literal["*"]
+"""Special value to indicate that graph should interrupt on all nodes."""
+
+Checkpointer = Union[None, Literal[False], BaseCheckpointSaver]
+"""Type of the checkpointer to use for a subgraph. False disables checkpointing,
+even if the parent graph has a checkpointer. None inherits checkpointer."""
 
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
