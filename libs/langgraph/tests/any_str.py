@@ -1,8 +1,13 @@
 import re
 from typing import Any, Sequence, Union
 
+from typing_extensions import Self
+
 
 class FloatBetween(float):
+    def __new__(cls, min_value: float, max_value: float) -> Self:
+        return super().__new__(cls, min_value)
+
     def __init__(self, min_value: float, max_value: float) -> None:
         super().__init__()
         self.min_value = min_value
