@@ -17,7 +17,7 @@ def validate_graph(
 ) -> None:
     for chan in channels:
         if chan in RESERVED:
-            raise ValueError(f"Channel names {RESERVED} are reserved")
+            raise ValueError(f"Channel names {chan} are reserved")
 
     subscribed_channels = set[str]()
     for name, node in nodes.items():

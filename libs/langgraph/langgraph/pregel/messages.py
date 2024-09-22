@@ -24,6 +24,9 @@ Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
+    """A callback handler that implements stream_mode=messages.
+    Collects messages from (1) chat model stream events and (2) node outputs."""
+
     def __init__(self, stream: Callable[[StreamChunk], None]):
         self.stream = stream
         self.metadata: dict[UUID, Meta] = {}

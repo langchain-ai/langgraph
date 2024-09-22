@@ -31,6 +31,9 @@ READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any
 
 
 class ChannelRead(RunnableCallable):
+    """Implements the logic for reading state from CONFIG_KEY_READ.
+    Usable both as a runnable as well as a static method to call imperatively."""
+
     channel: Union[str, list[str]]
 
     fresh: bool = False
@@ -108,21 +111,39 @@ DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
 class PregelNode(Runnable):
+    """A node in a Pregel graph. This won't be invoked as a runnable by the graph
+    itself, but instead acts as a container for the components necessary to make
+    a PregelExecutableTask for a node."""
+
     channels: Union[list[str], Mapping[str, str]]
+    """The channels that will be passed as input to `bound`.
+    If a list, the node will be invoked with the first of that isn't empty.
+    If a dict, the keys are the names of the channels, and the values are the keys
+    to use in the input to `bound`."""
 
     triggers: list[str]
+    """If any of these channels is written to, this node will be triggered in
+    the next step."""
 
     mapper: Optional[Callable[[Any], Any]]
+    """A function to transform the input before passing it to `bound`."""
 
     writers: list[Runnable]
+    """A list of writers that will be executed after `bound`, responsible for
+    taking the output of `bound` and writing it to the appropriate channels."""
 
     bound: Runnable[Any, Any]
+    """The main logic of the node. This will be invoked with the input from 
+    `channels`."""
 
     retry_policy: Optional[RetryPolicy]
+    """The retry policy to use when invoking the node."""
 
     tags: Optional[Sequence[str]]
+    """Tags to attach to the node for tracing."""
 
     metadata: Optional[Mapping[str, Any]]
+    """Metadata to attach to the node for tracing."""
 
     def __init__(
         self,
@@ -151,7 +172,7 @@ class PregelNode(Runnable):
 
     @cached_property
     def flat_writers(self) -> list[Runnable]:
-        """Get writers with optimizations applied."""
+        """Get writers with optimizations applied. Dedupes consecutive ChannelWrites."""
         writers = self.writers.copy()
         while (
             len(writers) > 1
@@ -170,6 +191,7 @@ class PregelNode(Runnable):
 
     @cached_property
     def node(self) -> Optional[Runnable[Any, Any]]:
+        """Get a runnable that combines `bound` and `writers`."""
         writers = self.flat_writers
         if self.bound is DEFAULT_BOUND and not writers:
             return None

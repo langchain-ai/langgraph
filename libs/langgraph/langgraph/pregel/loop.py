@@ -44,6 +44,7 @@ from langgraph.constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
+    EMPTY_SEQ,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -101,12 +102,11 @@ from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")
+StreamChunk = tuple[tuple[str, ...], str, Any]
+
 INPUT_DONE = object()
 INPUT_RESUMING = object()
-EMPTY_SEQ = ()
 SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
-
-StreamChunk = tuple[tuple[str, ...], str, Any]
 
 
 class StreamProtocol:

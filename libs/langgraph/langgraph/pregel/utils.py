@@ -4,7 +4,7 @@ from langgraph.checkpoint.base import ChannelVersions
 def get_new_channel_versions(
     previous_versions: ChannelVersions, current_versions: ChannelVersions
 ) -> ChannelVersions:
-    """Get new channel versions."""
+    """Get subset of current_versions that are newer than previous_versions."""
     if previous_versions:
         version_type = type(next(iter(current_versions.values()), None))
         null_version = version_type()  # type: ignore[misc]

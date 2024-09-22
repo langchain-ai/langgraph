@@ -22,6 +22,10 @@ from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
 
 
 class PregelRunner:
+    """Responsible for executing a set of Pregel tasks concurrently, commiting
+    their writes, yielding control to caller when there is output to emit, and
+    interrupting other tasks if appropriate."""
+
     def __init__(
         self,
         *,
@@ -215,6 +219,8 @@ class PregelRunner:
 def _should_stop_others(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Future[Any]]],
 ) -> bool:
+    """Check if any task failed, if so, cancel all other tasks.
+    GraphInterrupts are not considered failures."""
     for fut in done:
         if fut.cancelled():
             return True
@@ -227,6 +233,7 @@ def _should_stop_others(
 def _exception(
     fut: Union[concurrent.futures.Future[Any], asyncio.Future[Any]],
 ) -> Optional[BaseException]:
+    """Return the exception from a future, without raising CancelledError."""
     if fut.cancelled():
         if isinstance(fut, asyncio.Future):
             return asyncio.CancelledError()
@@ -245,6 +252,7 @@ def _panic_or_proceed(
     timeout_exc_cls: Type[Exception] = TimeoutError,
     panic: bool = True,
 ) -> None:
+    """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
     done: set[Union[concurrent.futures.Future[Any], asyncio.Future[Any]]] = set()
     inflight: set[Union[concurrent.futures.Future[Any], asyncio.Future[Any]]] = set()
     for fut, val in futs.items():

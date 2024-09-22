@@ -39,6 +39,13 @@ class Submit(Protocol[P, T]):
 
 
 class BackgroundExecutor(ContextManager):
+    """A context manager that runs sync tasks in the background.
+    Uses a thread pool executor to delegate tasks to separate threads.
+    On exit,
+    - cancels any (not yet started) tasks with `__cancel_on_exit__=True`
+    - waits for all tasks to finish
+    - re-raises the first exception from tasks with `__reraise_on_exit__=True`"""
+
     def __init__(self, config: RunnableConfig) -> None:
         self.stack = ExitStack()
         self.executor = self.stack.enter_context(get_executor_for_config(config))
@@ -49,7 +56,7 @@ class BackgroundExecutor(ContextManager):
         fn: Callable[P, T],
         *args: P.args,
         __name__: Optional[str] = None,  # currently not used in sync version
-        __cancel_on_exit__: bool = False,
+        __cancel_on_exit__: bool = False,  # for sync, can cancel only if not started
         __reraise_on_exit__: bool = True,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]:
@@ -101,6 +108,14 @@ class BackgroundExecutor(ContextManager):
 
 
 class AsyncBackgroundExecutor(AsyncContextManager):
+    """A context manager that runs async tasks in the background.
+    Uses the current event loop to delegate tasks to asyncio tasks.
+    On exit,
+    - cancels any tasks with `__cancel_on_exit__=True`
+    - waits for all tasks to finish
+    - re-raises the first exception from tasks with `__reraise_on_exit__=True`
+      ignoring CancelledError"""
+
     def __init__(self) -> None:
         self.context_not_supported = sys.version_info < (3, 11)
         self.tasks: dict[asyncio.Task, tuple[bool, bool]] = {}

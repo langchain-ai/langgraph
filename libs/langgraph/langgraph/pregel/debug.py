@@ -84,6 +84,7 @@ TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 def map_debug_tasks(
     step: int, tasks: Iterable[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
+    """Produce "task" events for stream_mode=debug."""
     ts = datetime.now(timezone.utc).isoformat()
     for task in tasks:
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
@@ -107,6 +108,7 @@ def map_debug_task_results(
     task_tup: tuple[PregelExecutableTask, Sequence[tuple[str, Any]]],
     stream_keys: Union[str, Sequence[str]],
 ) -> Iterator[DebugOutputTaskResult]:
+    """Produce "task_result" events for stream_mode=debug."""
     stream_channels_list = (
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
@@ -135,6 +137,7 @@ def map_debug_checkpoint(
     tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
 ) -> Iterator[DebugOutputCheckpoint]:
+    """Produce "checkpoint" events for stream_mode=debug."""
     yield {
         "type": "checkpoint",
         "timestamp": checkpoint["ts"],
@@ -213,6 +216,7 @@ def tasks_w_writes(
     pending_writes: Optional[list[PendingWrite]],
     states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
 ) -> tuple[PregelTask, ...]:
+    """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
     pending_writes = pending_writes or []
     return tuple(
         PregelTask(

@@ -1,10 +1,28 @@
 from collections import deque
+from dataclasses import dataclass
 from typing import Any, Callable, Literal, NamedTuple, Optional, Sequence, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import Interrupt
+
+All = Literal["*"]
+
+StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
+"""How the stream method should emit outputs.
+
+- 'values': Emit all values of the state for each step.
+- 'updates': Emit only the node name(s) and updates
+    that were returned by the node(s) **after** each step.
+- 'debug': Emit debug events for each step.
+- 'messages': Emit LLM messages token-by-token.
+- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
+"""
+
+StreamWriter = Callable[[Any], None]
+"""Callable that accepts a single argument and writes it to the output stream.
+Always injected into nodes if requested as a keyword argument, but it's a no-op
+when not using stream_mode="custom"."""
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -63,6 +81,12 @@ class CachePolicy(NamedTuple):
     pass
 
 
+@dataclass
+class Interrupt:
+    value: Any
+    when: Literal["during"] = "during"
+
+
 class PregelTask(NamedTuple):
     id: str
     name: str
@@ -105,20 +129,72 @@ class StateSnapshot(NamedTuple):
     """Tasks to execute in this step. If already attempted, may contain an error."""
 
 
-All = Literal["*"]
+class Send:
+    """A message or packet to send to a specific node in the graph.
 
-StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
-"""How the stream method should emit outputs.
+    The `Send` class is used within a `StateGraph`'s conditional edges to
+    dynamically invoke a node with a custom state at the next step.
 
-- 'values': Emit all values of the state for each step.
-- 'updates': Emit only the node name(s) and updates
-    that were returned by the node(s) **after** each step.
-- 'debug': Emit debug events for each step.
-- 'messages': Emit LLM messages token-by-token.
-- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
-"""
+    Importantly, the sent state can differ from the core graph's state,
+    allowing for flexible and dynamic workflow management.
 
-StreamWriter = Callable[[Any], None]
-"""Callable that accepts a single argument and writes it to the output stream.
-Always injected into nodes if requested,
-but it's a no-op when not using stream_mode="custom"."""
+    One such example is a "map-reduce" workflow where your graph invokes
+    the same node multiple times in parallel with different states,
+    before aggregating the results back into the main graph's state.
+
+    Attributes:
+        node (str): The name of the target node to send the message to.
+        arg (Any): The state or message to send to the target node.
+
+    Examples:
+        >>> from typing import Annotated
+        >>> import operator
+        >>> class OverallState(TypedDict):
+        ...     subjects: list[str]
+        ...     jokes: Annotated[list[str], operator.add]
+        ...
+        >>> from langgraph.constants import Send
+        >>> from langgraph.graph import END, START
+        >>> def continue_to_jokes(state: OverallState):
+        ...     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
+        ...
+        >>> from langgraph.graph import StateGraph
+        >>> builder = StateGraph(OverallState)
+        >>> builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
+        >>> builder.add_conditional_edges(START, continue_to_jokes)
+        >>> builder.add_edge("generate_joke", END)
+        >>> graph = builder.compile()
+        >>>
+        >>> # Invoking with two subjects results in a generated joke for each
+        >>> graph.invoke({"subjects": ["cats", "dogs"]})
+        {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
+    """
+
+    __slots__ = ("node", "arg")
+
+    node: str
+    arg: Any
+
+    def __init__(self, /, node: str, arg: Any) -> None:
+        """
+        Initialize a new instance of the Send class.
+
+        Args:
+            node (str): The name of the target node to send the message to.
+            arg (Any): The state or message to send to the target node.
+        """
+        self.node = node
+        self.arg = arg
+
+    def __hash__(self) -> int:
+        return hash((self.node, self.arg))
+
+    def __repr__(self) -> str:
+        return f"Send(node={self.node!r}, arg={self.arg!r})"
+
+    def __eq__(self, value: object) -> bool:
+        return (
+            isinstance(value, Send)
+            and self.node == value.node
+            and self.arg == value.arg
+        )

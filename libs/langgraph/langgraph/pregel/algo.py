@@ -33,6 +33,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
+    EMPTY_SEQ,
     INTERRUPT,
     NO_WRITES,
     NS_END,
@@ -55,10 +56,11 @@ from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
 
-EMPTY_SEQ: tuple[str, ...] = tuple()
-
 
 class WritesProtocol(Protocol):
+    """Protocol for objects containing writes to be applied to checkpoint.
+    Implemented by PregelTaskWrites and PregelExecutableTask."""
+
     @property
     def name(self) -> str: ...
 
@@ -70,6 +72,9 @@ class WritesProtocol(Protocol):
 
 
 class PregelTaskWrites(NamedTuple):
+    """Simplest implementation of WritesProtocol, for usage with writes that
+    don't originate from a runnable task, eg. graph input, update_state, etc."""
+
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
@@ -80,6 +85,7 @@ def should_interrupt(
     interrupt_nodes: Union[All, Sequence[str]],
     tasks: Iterable[PregelExecutableTask],
 ) -> list[PregelExecutableTask]:
+    """Check if the graph should be interrupted based on current state."""
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()  # type: ignore[misc]
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
@@ -117,6 +123,9 @@ def local_read(
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
+    """Function injected under CONFIG_KEY_READ in task config, to read current state.
+    Used by conditional edges to read a copy of the state with reflecting the writes
+    from that node only."""
     if isinstance(select, str):
         managed_keys = []
         for c, _ in task.writes:
@@ -153,6 +162,8 @@ def local_write(
     managed: ManagedValueMapping,
     writes: Sequence[tuple[str, Any]],
 ) -> None:
+    """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
+    Validates writes and forwards them to `commit` function."""
     for chan, value in writes:
         if chan == TASKS:
             if not isinstance(value, Send):
@@ -169,6 +180,7 @@ def local_write(
 
 
 def increment(current: Optional[int], channel: BaseChannel) -> int:
+    """Default channel versioning function, increments the current int version."""
     return current + 1 if current is not None else 1
 
 
@@ -178,6 +190,9 @@ def apply_writes(
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
 ) -> dict[str, list[Any]]:
+    """Apply writes from a set of tasks (usually the tasks from a Pregel step)
+    to the checkpoint and channels, and return managed values writes to be applied
+    externally."""
     # update seen versions
     for task in tasks:
         checkpoint["versions_seen"].setdefault(task.name, {}).update(
@@ -297,6 +312,9 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
+    """Prepare the set of tasks that will make up the next Pregel step.
+    This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
+    by edges)."""
     tasks: dict[str, Union[PregelTask, PregelExecutableTask]] = {}
     # Consume pending packets
     for idx, _ in enumerate(checkpoint["pending_sends"]):
@@ -348,6 +366,8 @@ def prepare_single_task(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
+    """Prepares a single task for the next Pregel step, given a task path, which
+    uniquely identifies a PUSH or PULL task within the graph."""
     checkpoint_id = UUID(checkpoint["id"]).bytes
     configurable = config.get("configurable", {})
     parent_ns = configurable.get("checkpoint_ns", "")
@@ -568,6 +588,7 @@ def _proc_input(
     *,
     for_execution: bool,
 ) -> Iterator[Any]:
+    """Prepare input for a PULL task, based on the process's channels and triggers."""
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import (
     Any,
     Callable,
@@ -22,30 +21,29 @@ from langgraph.utils.runnable import RunnableCallable
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 R = TypeVar("R", bound=Runnable)
 
-
 SKIP_WRITE = object()
 PASSTHROUGH = object()
 
 
 class ChannelWriteEntry(NamedTuple):
     channel: str
+    """Channel name to write to."""
     value: Any = PASSTHROUGH
+    """Value to write, or PASSTHROUGH to use the input."""
     skip_none: bool = False
+    """Whether to skip writing if the value is None."""
     mapper: Optional[Callable] = None
+    """Function to transform the value before writing."""
 
 
 class ChannelWrite(RunnableCallable):
+    """Implements th logic for sending writes to CONFIG_KEY_SEND.
+    Can be used as a runnable or as a static method to call imperatively."""
+
     writes: list[Union[ChannelWriteEntry, Send]]
-    """
-    Sequence of write entries, each of which is a tuple of:
-    - channel name
-    - runnable to map input, or None to use the input, or any other value to use instead
-    - whether to skip writing if the mapped value is None
-    """
+    """Sequence of write entries or Send objects to write."""
     require_at_least_one_of: Optional[Sequence[str]]
-    """
-    If defined, at least one of these channels must be written to.
-    """
+    """If defined, at least one of these channels must be written to."""
 
     def __init__(
         self,
@@ -145,6 +143,7 @@ class ChannelWrite(RunnableCallable):
 
     @staticmethod
     def is_writer(runnable: Runnable) -> bool:
+        """Used by PregelNode to distinguish between writers and other runnables."""
         return (
             isinstance(runnable, ChannelWrite)
             or getattr(runnable, "_is_channel_writer", False) is True
@@ -152,13 +151,9 @@ class ChannelWrite(RunnableCallable):
 
     @staticmethod
     def register_writer(runnable: R) -> R:
+        """Used to mark a runnable as a writer, so that it can be detected by is_writer.
+        Instances of ChannelWrite are automatically marked as writers."""
         # using object.__setattr__ to work around objects that override __setattr__
         # eg. pydantic models and dataclasses
         object.__setattr__(runnable, "_is_channel_writer", True)
         return runnable
-
-
-def _mk_future(val: Any) -> asyncio.Future:
-    fut: asyncio.Future[Any] = asyncio.Future()
-    fut.set_result(val)
-    return fut
