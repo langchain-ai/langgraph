@@ -27,6 +27,8 @@ jobs:
           cache-key: bench
       - name: Install dependencies
         run: poetry install --with dev
+      - run: |
+          sudo .venv/bin/python -m pyperf system tune
       - name: Run benchmarks
         run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs
