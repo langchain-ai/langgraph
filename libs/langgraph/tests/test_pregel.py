@@ -52,7 +52,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import ERROR, PULL, PUSH, Interrupt, Send
+from langgraph.constants import ERROR, PULL, PUSH
 from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
@@ -71,7 +71,7 @@ from langgraph.pregel import (
 )
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.memory import MemoryStore
-from langgraph.types import PregelTask, StreamWriter
+from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
 from tests.fake_chat import FakeChatModel

@@ -29,7 +29,7 @@ handler: python
 
 ## StreamMode
 
-::: langgraph.pregel.types.StreamMode
+::: langgraph.types.StreamMode
 
 ## Constants
 

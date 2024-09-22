@@ -153,7 +153,7 @@ class Send:
         ...     subjects: list[str]
         ...     jokes: Annotated[list[str], operator.add]
         ...
-        >>> from langgraph.constants import Send
+        >>> from langgraph.types import Send
         >>> from langgraph.graph import END, START
         >>> def continue_to_jokes(state: OverallState):
         ...     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
