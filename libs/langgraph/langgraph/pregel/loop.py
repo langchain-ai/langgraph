@@ -197,6 +197,7 @@ class PregelLoop:
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]],
         stream_keys: Union[str, Sequence[str]],
+        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         self.stream = stream
@@ -222,7 +223,7 @@ class PregelLoop:
             self.config = patch_configurable(
                 self.config, {"checkpoint_ns": "", "checkpoint_id": None}
             )
-        if self.is_nested and self.checkpointer is not None:
+        if check_subgraphs and self.is_nested and self.checkpointer is not None:
             if self.config["configurable"]["checkpoint_ns"] in _SEEN_CHECKPOINT_NS:
                 raise MultipleSubgraphsError
             else:
@@ -641,6 +642,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
+        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -653,6 +655,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             specs=specs,
             output_keys=output_keys,
             stream_keys=stream_keys,
+            check_subgraphs=check_subgraphs,
             debug=debug,
         )
         self.stack = ExitStack()
@@ -762,6 +765,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
+        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -774,6 +778,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             specs=specs,
             output_keys=output_keys,
             stream_keys=stream_keys,
+            check_subgraphs=check_subgraphs,
             debug=debug,
         )
         self.store = AsyncBatchedStore(self.store) if self.store else None
