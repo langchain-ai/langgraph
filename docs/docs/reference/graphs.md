@@ -29,7 +29,7 @@ handler: python
 
 ## StreamMode
 
-::: langgraph.pregel.StreamMode
+::: langgraph.pregel.types.StreamMode
 
 ## Constants
 
@@ -69,7 +69,7 @@ builder.add_conditional_edges("my_node", my_condition)
 
 ## Send
 
-::: langgraph.constants.Send
+::: langgraph.pregel.types.Send
 
 ## RetryPolicy
 
