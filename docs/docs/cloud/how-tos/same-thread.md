@@ -6,6 +6,8 @@ This means that you can run multiple agents on the same thread, which allows a d
 In this example, we will create two agents and then call them both on the same thread.
 You'll see that the second agent will respond using information from the [checkpoint](https://langchain-ai.github.io/langgraph/concepts/low_level/#checkpointer-state) generated in the thread by the first agent as context.
 
+## Setup
+
 === "Python"
 
     ```python
@@ -124,6 +126,10 @@ Output:
         }
     }
 
+## Run assistants on thread
+
+### Run OpenAI assistant
+
 We can now run the OpenAI assistant on the thread first.
 
 === "Python"
@@ -178,7 +184,7 @@ We can now run the OpenAI assistant on the thread first.
             "input": {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": "who made you?"
                     }
                 ]
@@ -217,6 +223,8 @@ Output:
 
     Receiving event of type: updates
     {'agent': {'messages': [{'content': 'I was created by OpenAI, a research organization focused on developing and advancing artificial intelligence technology.', 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-f5735b86-b80d-4c71-8dc3-4782b5a9c7c8', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+
+### Run default assistant
 
 Now, we can run it on the default assistant and see that this second assistant is aware of the initial question, and can answer the question, "and you?":
 
@@ -266,7 +274,7 @@ Now, we can run it on the default assistant and see that this second assistant i
             "input": {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": "and you?"
                     }
                 ]

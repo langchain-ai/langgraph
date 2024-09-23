@@ -1,9 +1,10 @@
 import asyncio
+import random
 from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
@@ -17,11 +18,11 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.types import TASKS
+from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 
 class MemorySaver(
-    BaseCheckpointSaver, AbstractContextManager, AbstractAsyncContextManager
+    BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
 
@@ -53,9 +54,14 @@ class MemorySaver(
     """
 
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
-    storage: defaultdict[str, dict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]]
+    storage: defaultdict[
+        str,
+        dict[
+            str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], Optional[str]]]
+        ],
+    ]
     writes: defaultdict[
-        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, bytes]]
+        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, tuple[str, bytes]]]
     ]
 
     def __init__(
@@ -315,7 +321,7 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         c = checkpoint.copy()
-        c.pop("pending_sends")
+        c.pop("pending_sends")  # type: ignore[misc]
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         self.storage[thread_id][checkpoint_ns].update(
@@ -338,9 +344,9 @@ class MemorySaver(
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
-    ) -> RunnableConfig:
+    ) -> None:
         """Save a list of writes to the in-memory storage.
 
         This method saves a list of writes to the in-memory storage. The writes are associated
@@ -441,9 +447,9 @@ class MemorySaver(
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
-    ) -> RunnableConfig:
+    ) -> None:
         """Asynchronous version of put_writes.
 
         This method is an asynchronous wrapper around put_writes that runs the synchronous
@@ -457,3 +463,14 @@ class MemorySaver(
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put_writes, config, writes, task_id
         )
+
+    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+        if current is None:
+            current_v = 0
+        elif isinstance(current, int):
+            current_v = current
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"

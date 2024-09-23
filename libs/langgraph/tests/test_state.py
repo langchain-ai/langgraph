@@ -73,7 +73,7 @@ def test_state_schema_with_type_hint():
     def miss_all_hint(state, config):
         return {"input_state": state}
 
-    graph = StateGraph(input=InputState, output=OutputState)
+    graph = StateGraph(InputState, output=OutputState)
     actions = [complete_hint, miss_first_hint, only_return_hint, miss_all_hint]
 
     for action in actions:
@@ -107,15 +107,25 @@ def test_state_schema_optional_values(total_: bool):
         val5: Annotated[Required[str], "foo"]
         val6: Annotated[NotRequired[str], "bar"]
 
+    class OutputState(SomeParentState, total=total_):  # type: ignore
+        out_val1: str
+        out_val2: Optional[str]
+        out_val3: Required[str]
+        out_val4: NotRequired[dict]
+        out_val5: Annotated[Required[str], "foo"]
+        out_val6: Annotated[NotRequired[str], "bar"]
+
     class State(InputState):  # this would be ignored
         val4: dict
+        some_shared_channel: Annotated[str, SharedValue.on("assistant_id")] = field(
+            default="foo"
+        )
 
-    builder = StateGraph(State, input=InputState)
+    builder = StateGraph(State, input=InputState, output=OutputState)
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()
-    model = graph.input_schema
-    json_schema = model.schema()
+    json_schema = graph.get_input_jsonschema()
 
     if total_ is False:
         expected_required = set()
@@ -132,6 +142,23 @@ def test_state_schema_optional_values(total_: bool):
     assert set(json_schema.get("required", set())) == expected_required
     assert (
         set(json_schema["properties"].keys()) == expected_required | expected_optional
+    )
+
+    # Check output schema. Should be the same process
+    output_schema = graph.get_output_jsonschema()
+    if total_ is False:
+        expected_required = set()
+        expected_optional = {"out_val2", "out_val1"}
+    else:
+        expected_required = {"out_val1"}
+        expected_optional = {"out_val2"}
+
+    expected_required |= {"val0a", "out_val3", "out_val5"}
+    expected_optional |= {"val0b", "out_val4", "out_val6"}
+
+    assert set(output_schema.get("required", set())) == expected_required
+    assert (
+        set(output_schema["properties"].keys()) == expected_required | expected_optional
     )
 
 
@@ -156,26 +183,27 @@ def test_state_schema_default_values(kw_only_: bool):
         val11: Annotated[list[str], "annotated list"] = field(
             default_factory=lambda: ["a", "b"]
         )
+        some_shared_channel: Annotated[str, SharedValue.on("assistant_id")] = field(
+            default="foo"
+        )
 
     builder = StateGraph(InputState)
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()
-    model = graph.input_schema
-    json_schema = model.schema()
-
-    expected_required = {"val1", "val7"}
-    expected_optional = {
-        "val2",
-        "val3",
-        "val4",
-        "val5",
-        "val6",
-        "val8",
-        "val9",
-        "val10",
-        "val11",
-    }
+    for json_schema in [graph.get_input_jsonschema(), graph.get_output_jsonschema()]:
+        expected_required = {"val1", "val7"}
+        expected_optional = {
+            "val2",
+            "val3",
+            "val4",
+            "val5",
+            "val6",
+            "val8",
+            "val9",
+            "val10",
+            "val11",
+        }
 
     assert set(json_schema.get("required", set())) == expected_required
     assert (
@@ -225,8 +253,6 @@ def test_raises_invalid_managed():
             StateGraph(_state, input=_inp, output=_outp)
     bad_output_examples = [
         (State, InputState, BadOutputState),
-        (None, InputState, BadOutputState),
-        (None, State, BadOutputState),
         (State, None, BadOutputState),
     ]
     for _state, _inp, _outp in bad_output_examples:

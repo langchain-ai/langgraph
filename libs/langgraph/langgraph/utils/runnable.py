@@ -5,7 +5,18 @@ import sys
 from contextlib import AsyncExitStack
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Optional
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Iterator,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -16,17 +27,21 @@ from langchain_core.runnables.base import (
     RunnableSequence,
 )
 from langchain_core.runnables.config import (
-    ensure_config,
-    get_async_callback_manager_for_config,
-    get_callback_manager_for_config,
     run_in_executor,
     var_child_runnable_config,
 )
-from langchain_core.runnables.utils import Input, Output, accepts_config
+from langchain_core.runnables.utils import Input
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
-from langgraph.utils.config import merge_configs, patch_config
+from langgraph.constants import CONF, CONFIG_KEY_STREAM_WRITER
+from langgraph.types import StreamWriter
+from langgraph.utils.config import (
+    ensure_config,
+    get_async_callback_manager_for_config,
+    get_callback_manager_for_config,
+    patch_config,
+)
 
 try:
     from langchain_core.runnables.config import _set_config_context
@@ -44,17 +59,30 @@ class StrEnum(str, enum.Enum):
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
+KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
+    (
+        sys.intern("writer"),
+        (StreamWriter, inspect.Parameter.empty),
+        CONFIG_KEY_STREAM_WRITER,
+        lambda _: None,
+    ),
+)
+"""List of kwargs that can be passed to functions, and their corresponding
+config keys, default values and type annotations."""
+
+VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+
 
 class RunnableCallable(Runnable):
     """A much simpler version of RunnableLambda that requires sync and async functions."""
 
     def __init__(
         self,
-        func: Callable[..., Optional[Runnable]],
-        afunc: Optional[Callable[..., Awaitable[Optional[Runnable]]]] = None,
+        func: Optional[Callable[..., Union[Any, Runnable]]],
+        afunc: Optional[Callable[..., Awaitable[Union[Any, Runnable]]]] = None,
         *,
         name: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        tags: Optional[Sequence[str]] = None,
         trace: bool = True,
         recurse: bool = True,
         **kwargs: Any,
@@ -73,15 +101,22 @@ class RunnableCallable(Runnable):
                 except AttributeError:
                     pass
         self.func = func
-        if func is not None:
-            self.func_accepts_config = accepts_config(func)
         self.afunc = afunc
-        if afunc is not None:
-            self.afunc_accepts_config = accepts_config(afunc)
-        self.config: Optional[RunnableConfig] = {"tags": tags} if tags else None
+        self.tags = tags
         self.kwargs = kwargs
         self.trace = trace
         self.recurse = recurse
+        # check signature
+        if func is None and afunc is None:
+            raise ValueError("At least one of func or afunc must be provided.")
+        params = inspect.signature(cast(Callable, func or afunc)).parameters
+        self.func_accepts_config = "config" in params
+        self.func_accepts: dict[str, bool] = {}
+        for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
+            p = params.get(kw)
+            self.func_accepts[kw] = (
+                p is not None and p.annotation in typ and p.kind in VALID_KINDS
+            )
 
     def __repr__(self) -> str:
         repr_args = {
@@ -100,14 +135,17 @@ class RunnableCallable(Runnable):
                 "\nEither initialize with a synchronous function or invoke"
                 " via the async API (ainvoke, astream, etc.)"
             )
+        if config is None:
+            config = ensure_config()
         kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
-        config = ensure_config(merge_configs(self.config, config))
+        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
+            if self.func_accepts[kw]:
+                kwargs[kw] = config[CONF].get(ck, defv)
         context = copy_context()
         if self.trace:
-            config = ensure_config(config)
-            callback_manager = get_callback_manager_for_config(config)
+            callback_manager = get_callback_manager_for_config(config, self.tags)
             run_manager = callback_manager.on_chain_start(
                 None,
                 input,
@@ -136,13 +174,17 @@ class RunnableCallable(Runnable):
     ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
+        if config is None:
+            config = ensure_config()
         kwargs = {**self.kwargs, **kwargs}
-        if self.afunc_accepts_config:
+        if self.func_accepts_config:
             kwargs["config"] = config
-        config = ensure_config(merge_configs(self.config, config))
+        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
+            if self.func_accepts[kw]:
+                kwargs[kw] = config[CONF].get(ck, defv)
         context = copy_context()
         if self.trace:
-            callback_manager = get_async_callback_manager_for_config(config)
+            callback_manager = get_async_callback_manager_for_config(config, self.tags)
             run_manager = await callback_manager.on_chain_start(
                 None,
                 input,
@@ -152,7 +194,7 @@ class RunnableCallable(Runnable):
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
                 context.run(_set_config_context, child_config)
-                coro = self.afunc(input, **kwargs)
+                coro = cast(Coroutine[None, None, Any], self.afunc(input, **kwargs))
                 if ASYNCIO_ACCEPTS_CONTEXT:
                     ret = await asyncio.create_task(coro, context=context)
                 else:
@@ -165,9 +207,8 @@ class RunnableCallable(Runnable):
         else:
             context.run(_set_config_context, config)
             if ASYNCIO_ACCEPTS_CONTEXT:
-                ret = await asyncio.create_task(
-                    self.afunc(input, **kwargs), context=context
-                )
+                coro = cast(Coroutine[None, None, Any], self.afunc(input, **kwargs))
+                ret = await asyncio.create_task(coro, context=context)
             else:
                 ret = await self.afunc(input, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
@@ -197,7 +238,9 @@ def is_async_generator(
     )
 
 
-def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnable:
+def coerce_to_runnable(
+    thing: RunnableLike, *, name: Optional[str], trace: bool
+) -> Runnable:
     """Coerce a runnable-like object into a Runnable.
 
     Args:
@@ -216,7 +259,7 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
         else:
             return RunnableCallable(
                 thing,
-                wraps(thing)(partial(run_in_executor, None, thing)),
+                wraps(thing)(partial(run_in_executor, None, thing)),  # type: ignore[arg-type]
                 name=name,
                 trace=trace,
             )
@@ -285,7 +328,7 @@ class RunnableSeq(Runnable):
         else:
             return RunnableSeq(
                 *self.steps,
-                coerce_to_runnable(other),
+                coerce_to_runnable(other, name=None, trace=True),
                 name=self.name,
             )
 
@@ -309,16 +352,17 @@ class RunnableSeq(Runnable):
             )
         else:
             return RunnableSequence(
-                coerce_to_runnable(other),
+                coerce_to_runnable(other, name=None, trace=True),
                 *self.steps,
                 name=self.name,
             )
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Output:
+    ) -> Any:
+        if config is None:
+            config = ensure_config()
         # setup callbacks and context
-        config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
         run_manager = callback_manager.on_chain_start(
@@ -354,9 +398,10 @@ class RunnableSeq(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Output:
+    ) -> Any:
+        if config is None:
+            config = ensure_config()
         # setup callbacks
-        config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
         run_manager = await callback_manager.on_chain_start(
@@ -396,9 +441,10 @@ class RunnableSeq(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Iterator[Output]:
+    ) -> Iterator[Any]:
+        if config is None:
+            config = ensure_config()
         # setup callbacks
-        config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
         run_manager = callback_manager.on_chain_start(
@@ -424,7 +470,7 @@ class RunnableSeq(Runnable):
                     iterator = step.transform(iterator, config)
             if stream_handler := next(
                 (
-                    h
+                    cast(_StreamingCallbackHandler, h)
                     for h in run_manager.handlers
                     if isinstance(h, _StreamingCallbackHandler)
                 ),
@@ -432,7 +478,7 @@ class RunnableSeq(Runnable):
             ):
                 # populates streamed_output in astream_log() output if needed
                 iterator = stream_handler.tap_output_iter(run_manager.run_id, iterator)
-            output: Output = None
+            output: Any = None
             add_supported = False
             for chunk in iterator:
                 yield chunk
@@ -458,9 +504,10 @@ class RunnableSeq(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> AsyncIterator[Output]:
+    ) -> AsyncIterator[Any]:
+        if config is None:
+            config = ensure_config()
         # setup callbacks
-        config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
         run_manager = await callback_manager.on_chain_start(
@@ -489,7 +536,7 @@ class RunnableSeq(Runnable):
                         stack.push_async_callback(aiterator.aclose)
                 if stream_handler := next(
                     (
-                        h
+                        cast(_StreamingCallbackHandler, h)
                         for h in run_manager.handlers
                         if isinstance(h, _StreamingCallbackHandler)
                     ),
@@ -499,7 +546,7 @@ class RunnableSeq(Runnable):
                     aiterator = stream_handler.tap_output_aiter(
                         run_manager.run_id, aiterator
                     )
-                output: Output = None
+                output: Any = None
                 add_supported = False
                 async for chunk in aiterator:
                     yield chunk

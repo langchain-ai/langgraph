@@ -59,7 +59,7 @@ Now, let's run the graph on the first thread, and provide it some information ab
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "i like pepperoni pizza"}]}
+    input = {"messages": [{"role": "user", "content": "i like pepperoni pizza"}]}
     config = {"configurable": {"user_id": "123"}}
     # stream values
     async for chunk in client.runs.stream(
@@ -162,7 +162,7 @@ Let's stay on the same thread and provide some additional information. Note that
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "i also just moved to SF"}]}
+    input = {"messages": [{"role": "user", "content": "i also just moved to SF"}]}
     # stream values
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -270,7 +270,7 @@ Now, let's run the graph on a completely different thread, and see that it remem
     ```python
     # new thread for new conversation
     thread = await client.threads.create()
-    input = {"messages": [{"role": "human", "content": "where and what should i eat for dinner? Can you list some restaurants?"}]}
+    input = {"messages": [{"role": "user", "content": "where and what should i eat for dinner? Can you list some restaurants?"}]}
     # stream values
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -330,7 +330,7 @@ Now, let's run the graph on a completely different thread, and see that it remem
         "assistant_id": "agent",
         "input": {
             "messages": [{
-            "role": "human", 
+            "role": "user", 
             "content": "where and what should i eat for dinner? Can you list some restaurants?"
             }]
         },
@@ -389,7 +389,7 @@ Let's now run the graph for another user to verify that the preferences of the f
     # new thread for new conversation
     thread = await client.threads.create()
     # create input
-    input = {"messages": [{"role": "human", "content": "where do I live? what do I like to eat?"}]}
+    input = {"messages": [{"role": "user", "content": "where do I live? what do I like to eat?"}]}
     config = {"configurable": {"user_id": "321"}}
     # stream values
     async for chunk in client.runs.stream(

@@ -1,0 +1,59 @@
+name: test
+
+on:
+  workflow_call:
+
+env:
+  POETRY_VERSION: "1.7.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+        core-version:
+          - ">=0.2.39,<0.3.0"
+          - "latest"
+
+    defaults:
+      run:
+        working-directory: libs/langgraph
+    name: "test #${{ matrix.python-version }} (langchain-core: ${{ matrix.core-version }})"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: test-langgraph
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          poetry install --with dev
+          if [ "${{ matrix.core-version }}" != "latest" ]; then
+            poetry run pip install "langchain-core${{ matrix.core-version }}"
+          fi
+
+      - name: Run tests
+        shell: bash
+        run: |
+          make test
+
+      - name: Ensure the tests did not create any additional files
+        shell: bash
+        run: |
+          set -eu
+
+          STATUS="$(git status)"
+          echo "$STATUS"
+
+          # grep will exit non-zero if the target message isn't found,
+          # and `set -e` above will cause the step to fail.
+          echo "$STATUS" | grep 'nothing to commit, working tree clean'

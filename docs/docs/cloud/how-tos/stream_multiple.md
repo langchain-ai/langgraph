@@ -2,6 +2,8 @@
 
 This guide covers how to configure multiple streaming modes at the same time.
 
+## Setup
+
 First let's set up our client and thread:
 
 === "Python"
@@ -51,6 +53,8 @@ Output:
         'values': None
     }
 
+## Stream graph with multiple modes
+
 When configuring multiple streaming modes for a run, responses for each respective mode will be produced. In the following example, note that a `list` of modes (`messages`, `events`, `debug`) is passed to the `stream_mode` parameter and the response contains `events`, `debug`, `messages/complete`, `messages/metadata`, and `messages/partial` event types.
 
 === "Python"
@@ -60,7 +64,7 @@ When configuring multiple streaming modes for a run, responses for each respecti
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "What's the weather in SF?",
             }
         ]

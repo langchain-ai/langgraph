@@ -1,15 +1,16 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Iterator, List, Optional, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
 from psycopg.errors import UndefinedTable
-from psycopg.rows import dict_row
+from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -19,11 +20,13 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
+Conn = Union[AsyncConnection[DictRow], AsyncConnectionPool[AsyncConnection[DictRow]]]
+
 
 @asynccontextmanager
 async def _get_connection(
-    conn: Union[AsyncConnection, AsyncConnectionPool],
-) -> AsyncIterator[AsyncConnection]:
+    conn: Conn,
+) -> AsyncIterator[AsyncConnection[DictRow]]:
     if isinstance(conn, AsyncConnection):
         yield conn
     elif isinstance(conn, AsyncConnectionPool):
@@ -38,7 +41,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: Union[AsyncConnection, AsyncConnectionPool],
+        conn: Conn,
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
@@ -56,7 +59,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        serde: Optional[SerializerProtocol] = None,
     ) -> AsyncIterator["AsyncPostgresSaver"]:
         """Create a new PostgresSaver instance from a connection string.
 
@@ -72,9 +79,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
-                    yield AsyncPostgresSaver(conn, pipe)
+                    yield AsyncPostgresSaver(conn=conn, pipe=pipe, serde=serde)
             else:
-                yield AsyncPostgresSaver(conn)
+                yield AsyncPostgresSaver(conn=conn, serde=serde)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -88,7 +95,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 results = await cur.execute(
                     "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
                 )
-                version = (await results.fetchone())["v"]
+                row = await results.fetchone()
+                if row is None:
+                    version = -1
+                else:
+                    version = row["v"]
             except UndefinedTable:
                 version = -1
             for v, migration in zip(
@@ -175,7 +186,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id:
-            args = (thread_id, checkpoint_ns, checkpoint_id)
+            args: tuple[Any, ...] = (thread_id, checkpoint_ns, checkpoint_id)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
         else:
             args = (thread_id, checkpoint_ns)
@@ -260,7 +271,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     self._dump_blobs,
                     thread_id,
                     checkpoint_ns,
-                    copy.pop("channel_values"),
+                    copy.pop("channel_values"),  # type: ignore[misc]
                     new_versions,
                 ),
             )
@@ -280,7 +291,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: list[tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint asynchronously.
@@ -292,21 +303,26 @@ class AsyncPostgresSaver(BasePostgresSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
+        query = (
+            self.UPSERT_CHECKPOINT_WRITES_SQL
+            if all(w[0] in WRITES_IDX_MAP for w in writes)
+            else self.INSERT_CHECKPOINT_WRITES_SQL
+        )
+        params = await asyncio.to_thread(
+            self._dump_writes,
+            config["configurable"]["thread_id"],
+            config["configurable"]["checkpoint_ns"],
+            config["configurable"]["checkpoint_id"],
+            task_id,
+            writes,
+        )
         async with self._cursor(pipeline=True) as cur:
-            await cur.executemany(
-                self.UPSERT_CHECKPOINT_WRITES_SQL,
-                await asyncio.to_thread(
-                    self._dump_writes,
-                    config["configurable"]["thread_id"],
-                    config["configurable"]["checkpoint_ns"],
-                    config["configurable"]["checkpoint_id"],
-                    task_id,
-                    writes,
-                ),
-            )
+            await cur.executemany(query, params)
 
     @asynccontextmanager
-    async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
+    async def _cursor(
+        self, *, pipeline: bool = False
+    ) -> AsyncIterator[AsyncCursor[DictRow]]:
         async with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -357,7 +373,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_), self.loop
+                    anext(aiter_),
+                    self.loop,
                 ).result()
             except StopAsyncIteration:
                 break
@@ -376,6 +393,18 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
+        try:
+            # check if we are in the main thread, only bg threads can block
+            # we don't check in other methods to avoid the overhead
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface."
+                    "For example, use `await checkpointer.aget_tuple(...)` or `await "
+                    "graph.ainvoke(...)`."
+                )
+        except RuntimeError:
+            pass
         return asyncio.run_coroutine_threadsafe(
             self.aget_tuple(config), self.loop
         ).result()
@@ -408,7 +437,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint.

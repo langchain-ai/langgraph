@@ -87,6 +87,8 @@ These guides show how to use different streaming modes.
 - [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
+- [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ## Prebuilt ReAct Agent
 
@@ -97,3 +99,4 @@ Please note that here will we use a **prebuilt agent**. One of the big benefits 
 - [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
+- [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)

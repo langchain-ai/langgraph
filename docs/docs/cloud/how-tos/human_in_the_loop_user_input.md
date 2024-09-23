@@ -62,7 +62,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "Use the search tool to ask the user where they are, then look up the weather there",
             }
         ]

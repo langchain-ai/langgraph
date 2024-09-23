@@ -61,7 +61,7 @@ And, now let's compile it with a breakpoint before the tool node:
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]}
+    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     async for chunk in client.runs.stream(
         thread["thread_id"],
         assistant_id,

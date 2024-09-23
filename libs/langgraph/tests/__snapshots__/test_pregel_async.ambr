@@ -1198,12 +1198,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -1223,12 +1223,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -1248,12 +1248,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -1273,12 +1273,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
@@ -1298,12 +1298,12 @@
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
-  	__start__([__start__]):::first
+  	__start__([<p>__start__</p>]):::first
   	router_node(router_node)
   	normal_llm_node(normal_llm_node)
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
-  	__end__([__end__]):::last
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;

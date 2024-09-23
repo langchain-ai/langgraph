@@ -1,7 +1,5 @@
 from typing import (
     Any,
-    AsyncGenerator,
-    Generator,
     Optional,
     Protocol,
     Sequence,
@@ -9,15 +7,14 @@ from typing import (
     runtime_checkable,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 ERROR = "__error__"
 SCHEDULED = "__scheduled__"
 TASKS = "__pregel_tasks"
 
-Value = TypeVar("Value")
-Update = TypeVar("Update")
+Value = TypeVar("Value", covariant=True)
+Update = TypeVar("Update", contravariant=True)
 C = TypeVar("C")
 
 
@@ -31,13 +28,7 @@ class ChannelProtocol(Protocol[Value, Update, C]):
 
     def checkpoint(self) -> Optional[C]: ...
 
-    def from_checkpoint(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> Generator[Self, None, None]: ...
-
-    async def afrom_checkpoint(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> AsyncGenerator[Self, None]: ...
+    def from_checkpoint(self, checkpoint: Optional[C]) -> Self: ...
 
     def update(self, values: Sequence[Update]) -> bool: ...
 
