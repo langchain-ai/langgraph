@@ -31,7 +31,7 @@ _AIO_ERROR_MSG = (
 )
 
 
-class SqliteSaver(BaseCheckpointSaver):
+class SqliteSaver(BaseCheckpointSaver[str]):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
     Note:
@@ -487,6 +487,7 @@ class SqliteSaver(BaseCheckpointSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to the database asynchronously.
 

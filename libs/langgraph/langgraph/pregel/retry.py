@@ -4,9 +4,9 @@ import random
 import time
 from typing import Optional, Sequence
 
-from langgraph.constants import CONFIG_KEY_RESUMING
-from langgraph.errors import GraphInterrupt
-from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
+from langgraph.constants import CONF, CONFIG_KEY_CHECKPOINT_NS, CONFIG_KEY_RESUMING
+from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphInterrupt
+from langgraph.types import PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def run_with_retry(
                 if not isinstance(exc, retry_policy.retry_on):
                     raise
             elif callable(retry_policy.retry_on):
-                if not retry_policy.retry_on(exc):
+                if not retry_policy.retry_on(exc):  # type: ignore[call-arg]
                     raise
             else:
                 raise TypeError(
@@ -71,6 +71,13 @@ def run_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
+            # clear checkpoint_ns seen (for subgraph detection)
+            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
+                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
+        finally:
+            # clear checkpoint_ns seen (for subgraph detection)
+            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
+                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
 
 
 async def arun_with_retry(
@@ -113,7 +120,7 @@ async def arun_with_retry(
                 if not isinstance(exc, retry_policy.retry_on):
                     raise
             elif callable(retry_policy.retry_on):
-                if not retry_policy.retry_on(exc):
+                if not retry_policy.retry_on(exc):  # type: ignore[call-arg]
                     raise
             else:
                 raise TypeError(
@@ -137,3 +144,10 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
+            # clear checkpoint_ns seen (for subgraph detection)
+            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
+                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
+        finally:
+            # clear checkpoint_ns seen (for subgraph detection)
+            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
+                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)

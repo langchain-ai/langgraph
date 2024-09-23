@@ -95,7 +95,7 @@ You can pass any of the following values as `kwargs` to either `KafkaOrchestrato
 
 - batch_max_n (int): Maximum number of messages to include in a single batch. Default: 10.
 - batch_max_ms (int): Maximum time in milliseconds to wait for messages to include in a batch. Default: 1000.
-- retry_policy (langgraph.pregel.types.RetryPolicy): Controls which graph-level errors will be retried when processing messages. A good use for this is to retry database errors thrown by the checkpointer. Defaults to None.
+- retry_policy (langgraph.types.RetryPolicy): Controls which graph-level errors will be retried when processing messages. A good use for this is to retry database errors thrown by the checkpointer. Defaults to None.
 
 ### Connection settings
 

@@ -56,6 +56,7 @@ These guides show how to use different streaming modes.
 - [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
 - [How to stream from subgraphs](streaming-subgraphs.ipynb)
+- [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 
 ## Tool calling
 
@@ -88,6 +89,7 @@ These guides show how to use different streaming modes.
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ## Prebuilt ReAct Agent
 

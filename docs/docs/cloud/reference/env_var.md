@@ -2,6 +2,12 @@
 
 The LangGraph Cloud API supports specific environment variables for configuring a deployment.
 
+## `LANGCHAIN_TRACING_SAMPLING_RATE`
+
+Sampling rate for traces sent to LangSmith. Valid values: Any float between `0` and `1`.
+
+See <a href="https://docs.smith.langchain.com/how_to_guides/tracing/sample_traces" target="_blank">LangSmith documentation</a> for more details.
+
 ## `LANGGRAPH_AUTH_TYPE`
 
 Type of authentication for the LangGraph Cloud API deployment. Valid values: `langsmith`, `noop`.

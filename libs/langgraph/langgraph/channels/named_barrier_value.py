@@ -11,10 +11,13 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
 
     __slots__ = ("names", "seen")
 
+    names: set[Value]
+    seen: set[Value]
+
     def __init__(self, typ: Type[Value], names: set[Value]) -> None:
         super().__init__(typ)
         self.names = names
-        self.seen = set()
+        self.seen: set[str] = set()
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, NamedBarrierValue) and value.names == self.names

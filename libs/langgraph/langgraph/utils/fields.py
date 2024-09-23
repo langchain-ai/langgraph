@@ -59,7 +59,7 @@ def _is_readonly_type(type_: Any) -> bool:
     return False
 
 
-_DEFAULT_KEYS = frozenset()
+_DEFAULT_KEYS: frozenset[str] = frozenset()
 
 
 def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:

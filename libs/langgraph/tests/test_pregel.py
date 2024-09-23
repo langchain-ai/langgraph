@@ -52,8 +52,8 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import ERROR, PULL, PUSH, Interrupt, Send
-from langgraph.errors import InvalidUpdateError, NodeInterrupt
+from langgraph.constants import ERROR, PULL, PUSH
+from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -70,13 +70,19 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
-from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
+from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
+from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
-from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage, _AnyIdToolMessage
+from tests.messages import (
+    _AnyIdAIMessage,
+    _AnyIdAIMessageChunk,
+    _AnyIdHumanMessage,
+    _AnyIdToolMessage,
+)
 
 
 # define these objects to avoid importing langchain_core.agents
@@ -1855,7 +1861,12 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
         assert [*executor.map(app.invoke, [2] * 100)] == [[13, 13]] * 100
 
 
-def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_invoke_join_then_call_other_pregel(
+    mocker: MockerFixture, request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
@@ -1905,6 +1916,17 @@ def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
 
     with ThreadPoolExecutor() as executor:
         assert [*executor.map(app.invoke, [[2, 3]] * 10)] == [27] * 10
+
+    # add checkpointer
+    app.checkpointer = checkpointer
+    # subgraph is called twice in the same node, through .map(), so raises
+    with pytest.raises(MultipleSubgraphsError):
+        app.invoke([2, 3], {"configurable": {"thread_id": "1"}})
+
+    # set inner graph checkpointer NeverCheckpoint
+    inner_app.checkpointer = False
+    # subgraph still called twice, but checkpointing for inner graph is disabled
+    assert app.invoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
 
 def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
@@ -3926,15 +3948,8 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
 
 def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
     from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
-
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_tools(self, functions: list):
-            return self
 
     @tool()
     def search_api(query: str) -> str:
@@ -3943,8 +3958,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     tools = [search_api]
 
-    model = FakeFuntionChatModel(
-        responses=[
+    model = FakeChatModel(
+        messages=[
             AIMessage(
                 content="",
                 tool_calls=[
@@ -4032,6 +4047,161 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         ]
     }
 
+    assert [
+        c
+        for c in app.stream(
+            {"messages": [HumanMessage(content="what is weather in sf")]},
+            stream_mode="messages",
+        )
+    ] == [
+        (
+            _AnyIdHumanMessage(
+                content="what is weather in sf",
+            ),
+            {
+                "langgraph_step": 0,
+                "langgraph_node": "__start__",
+                "langgraph_triggers": ["__start__"],
+                "langgraph_path": ("__pregel_pull", "__start__"),
+                "langgraph_checkpoint_ns": AnyStr("__start__:"),
+            },
+        ),
+        (
+            _AnyIdAIMessageChunk(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                        "id": "tool_call123",
+                        "type": "tool_call",
+                    }
+                ],
+                tool_call_chunks=[
+                    {
+                        "name": "search_api",
+                        "args": '{"query": "query"}',
+                        "id": "tool_call123",
+                        "index": None,
+                        "type": "tool_call_chunk",
+                    }
+                ],
+            ),
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "agent",
+                "langgraph_triggers": ["start:agent"],
+                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_checkpoint_ns": AnyStr("agent:"),
+                "checkpoint_ns": AnyStr("agent:"),
+                "ls_provider": "fakechatmodel",
+                "ls_model_type": "chat",
+            },
+        ),
+        (
+            _AnyIdToolMessage(
+                content="result for query",
+                name="search_api",
+                tool_call_id="tool_call123",
+            ),
+            {
+                "langgraph_step": 2,
+                "langgraph_node": "tools",
+                "langgraph_triggers": ["branch:agent:should_continue:tools"],
+                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_checkpoint_ns": AnyStr("tools:"),
+            },
+        ),
+        (
+            _AnyIdAIMessageChunk(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                        "id": "tool_call234",
+                        "type": "tool_call",
+                    },
+                    {
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                        "id": "tool_call567",
+                        "type": "tool_call",
+                    },
+                ],
+                tool_call_chunks=[
+                    {
+                        "name": "search_api",
+                        "args": '{"query": "another"}',
+                        "id": "tool_call234",
+                        "index": None,
+                        "type": "tool_call_chunk",
+                    },
+                    {
+                        "name": "search_api",
+                        "args": '{"query": "a third one"}',
+                        "id": "tool_call567",
+                        "index": None,
+                        "type": "tool_call_chunk",
+                    },
+                ],
+            ),
+            {
+                "langgraph_step": 3,
+                "langgraph_node": "agent",
+                "langgraph_triggers": ["tools"],
+                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_checkpoint_ns": AnyStr("agent:"),
+                "checkpoint_ns": AnyStr("agent:"),
+                "ls_provider": "fakechatmodel",
+                "ls_model_type": "chat",
+            },
+        ),
+        (
+            _AnyIdToolMessage(
+                content="result for another",
+                name="search_api",
+                tool_call_id="tool_call234",
+            ),
+            {
+                "langgraph_step": 4,
+                "langgraph_node": "tools",
+                "langgraph_triggers": ["branch:agent:should_continue:tools"],
+                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_checkpoint_ns": AnyStr("tools:"),
+            },
+        ),
+        (
+            _AnyIdToolMessage(
+                content="result for a third one",
+                name="search_api",
+                tool_call_id="tool_call567",
+            ),
+            {
+                "langgraph_step": 4,
+                "langgraph_node": "tools",
+                "langgraph_triggers": ["branch:agent:should_continue:tools"],
+                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_checkpoint_ns": AnyStr("tools:"),
+            },
+        ),
+        (
+            _AnyIdAIMessageChunk(
+                content="answer",
+            ),
+            {
+                "langgraph_step": 5,
+                "langgraph_node": "agent",
+                "langgraph_triggers": ["tools"],
+                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_checkpoint_ns": AnyStr("agent:"),
+                "checkpoint_ns": AnyStr("agent:"),
+                "ls_provider": "fakechatmodel",
+                "ls_model_type": "chat",
+            },
+        ),
+    ]
+
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]},
         {"recursion_limit": 2},
@@ -4045,76 +4215,79 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     model.i = 0  # reset the model
 
-    assert app.invoke(
-        {"messages": [HumanMessage(content="what is weather in sf")]},
-        stream_mode="updates",
-    ) == [
-        {
-            "agent": {
-                "messages": [
-                    _AnyIdAIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "query"},
-                            },
-                        ],
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    _AnyIdToolMessage(
-                        content="result for query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    )
-                ]
-            }
-        },
-        {
-            "agent": {
-                "messages": [
-                    _AnyIdAIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call234",
-                                "name": "search_api",
-                                "args": {"query": "another"},
-                            },
-                            {
-                                "id": "tool_call567",
-                                "name": "search_api",
-                                "args": {"query": "a third one"},
-                            },
-                        ],
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    _AnyIdToolMessage(
-                        content="result for another",
-                        name="search_api",
-                        tool_call_id="tool_call234",
-                    ),
-                    _AnyIdToolMessage(
-                        content="result for a third one",
-                        name="search_api",
-                        tool_call_id="tool_call567",
-                    ),
-                ]
-            }
-        },
-        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
-    ]
+    assert (
+        app.invoke(
+            {"messages": [HumanMessage(content="what is weather in sf")]},
+            stream_mode="updates",
+        )[0]["agent"]["messages"]
+        == [
+            {
+                "agent": {
+                    "messages": [
+                        _AnyIdAIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "tool_call123",
+                                    "name": "search_api",
+                                    "args": {"query": "query"},
+                                },
+                            ],
+                        )
+                    ]
+                }
+            },
+            {
+                "tools": {
+                    "messages": [
+                        _AnyIdToolMessage(
+                            content="result for query",
+                            name="search_api",
+                            tool_call_id="tool_call123",
+                        )
+                    ]
+                }
+            },
+            {
+                "agent": {
+                    "messages": [
+                        _AnyIdAIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "tool_call234",
+                                    "name": "search_api",
+                                    "args": {"query": "another"},
+                                },
+                                {
+                                    "id": "tool_call567",
+                                    "name": "search_api",
+                                    "args": {"query": "a third one"},
+                                },
+                            ],
+                        )
+                    ]
+                }
+            },
+            {
+                "tools": {
+                    "messages": [
+                        _AnyIdToolMessage(
+                            content="result for another",
+                            name="search_api",
+                            tool_call_id="tool_call234",
+                        ),
+                        _AnyIdToolMessage(
+                            content="result for a third one",
+                            name="search_api",
+                            tool_call_id="tool_call567",
+                        ),
+                    ]
+                }
+            },
+            {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
+        ][0]["agent"]["messages"]
+    )
 
     assert [
         *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
@@ -4267,25 +4440,16 @@ def test_state_graph_packets(
         ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [
-                Send("tools", {"call": tool_call, "my_session": data["session"]})
-                for tool_call in tool_calls
-            ]
+            return [Send("tools", tool_call) for tool_call in tool_calls]
         else:
             return END
 
-    class ToolInput(TypedDict):
-        call: ToolCall
-        my_session: httpx.Client
-
-    def tools_node(input: ToolInput, config: RunnableConfig) -> AgentState:
-        assert isinstance(input["my_session"], httpx.Client)
-        tool_call = input["call"]
-        time.sleep(tool_call["args"].get("idx", 0) / 10)
-        output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
+    def tools_node(input: ToolCall, config: RunnableConfig) -> AgentState:
+        time.sleep(input["args"].get("idx", 0) / 10)
+        output = tools_by_name[input["name"]].invoke(input["args"], config)
         return {
             "messages": ToolMessage(
-                content=output, name=tool_call["name"], tool_call_id=tool_call["id"]
+                content=output, name=input["name"], tool_call_id=input["id"]
             )
         }
 
@@ -8423,22 +8587,22 @@ def test_stream_subgraphs_during_execution(
     assert chunks == [
         # arrives before "inner" finishes
         (
-            0.0,
+            FloatBetween(0.0, 0.1),
             (
                 (AnyStr("inner:"),),
                 {"inner_1": {"my_key": "got here", "my_other_key": ""}},
             ),
         ),
-        (0.2, ((), {"outer_1": {"my_key": " and parallel"}})),
+        (FloatBetween(0.2, 0.3), ((), {"outer_1": {"my_key": " and parallel"}})),
         (
-            0.5,
+            FloatBetween(0.5, 0.6),
             (
                 (AnyStr("inner:"),),
                 {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
             ),
         ),
-        (0.5, ((), {"inner": {"my_key": "got here and there"}})),
-        (0.5, ((), {"outer_2": {"my_key": " and back again"}})),
+        (FloatBetween(0.5, 0.6), ((), {"inner": {"my_key": "got here and there"}})),
+        (FloatBetween(0.5, 0.6), ((), {"outer_2": {"my_key": " and back again"}})),
     ]
 
 
@@ -10283,11 +10447,13 @@ def test_weather_subgraph(
     class SubGraphState(MessagesState):
         city: str
 
-    def model_node(state: SubGraphState):
+    def model_node(state: SubGraphState, writer: StreamWriter):
+        writer(" very")
         result = weather_model.invoke(state["messages"])
         return {"city": cast(AIMessage, result).tool_calls[0]["args"]["city"]}
 
-    def weather_node(state: SubGraphState):
+    def weather_node(state: SubGraphState, writer: StreamWriter):
+        writer(" good")
         result = get_weather.invoke({"city": state["city"]})
         return {"messages": [{"role": "assistant", "content": result}]}
 
@@ -10302,9 +10468,6 @@ def test_weather_subgraph(
     # setup main graph
 
     class RouterState(MessagesState):
-        route: Literal["weather", "other"]
-
-    class Router(TypedDict):
         route: Literal["weather", "other"]
 
     router_model = FakeMessagesListChatModel(
@@ -10322,7 +10485,8 @@ def test_weather_subgraph(
         ]
     )
 
-    def router_node(state: RouterState):
+    def router_node(state: RouterState, writer: StreamWriter):
+        writer("I'm")
         system_message = "Classify the incoming query as either about weather or not."
         messages = [{"role": "system", "content": system_message}] + state["messages"]
         route = router_model.invoke(messages)
@@ -10353,7 +10517,17 @@ def test_weather_subgraph(
     assert graph.get_graph(xray=1).draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
+    thread2 = {"configurable": {"thread_id": "2"}}
     inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+
+    # run with custom output
+    assert [c for c in graph.stream(inputs, thread2, stream_mode="custom")] == [
+        "I'm",
+        " very",
+    ]
+    assert [c for c in graph.stream(None, thread2, stream_mode="custom")] == [
+        " good",
+    ]
 
     # run until interrupt
     assert [
