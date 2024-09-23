@@ -21,7 +21,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.base import Input, Other, coerce_to_runnable
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONFIG_KEY_READ
+from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils.config import merge_configs
@@ -95,7 +95,7 @@ class ChannelRead(RunnableCallable):
         mapper: Optional[Callable[[Any], Any]] = None,
     ) -> Any:
         try:
-            read: READ_TYPE = config["configurable"][CONFIG_KEY_READ]
+            read: READ_TYPE = config[CONF][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
                 "Not configured with a read function"

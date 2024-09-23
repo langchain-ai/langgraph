@@ -28,7 +28,10 @@ from langgraph.checkpoint.base import (
     copy_checkpoint,
 )
 from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
@@ -360,8 +363,8 @@ def prepare_single_task(
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
     checkpoint_id = UUID(checkpoint["id"]).bytes
-    configurable = config.get("configurable", {})
-    parent_ns = configurable.get("checkpoint_ns", "")
+    configurable = config.get(CONF, {})
+    parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
     if task_path[0] == PUSH:
         idx = int(task_path[1])
@@ -443,8 +446,8 @@ def prepare_single_task(
                                 **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                 parent_ns: checkpoint["id"],
                             },
-                            "checkpoint_id": None,
-                            "checkpoint_ns": task_checkpoint_ns,
+                            CONFIG_KEY_CHECKPOINT_ID: None,
+                            CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         },
                     ),
                     triggers,
@@ -550,8 +553,8 @@ def prepare_single_task(
                                     **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                     parent_ns: checkpoint["id"],
                                 },
-                                "checkpoint_id": None,
-                                "checkpoint_ns": task_checkpoint_ns,
+                                CONFIG_KEY_CHECKPOINT_ID: None,
+                                CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                             },
                         ),
                         triggers,

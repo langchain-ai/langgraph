@@ -34,7 +34,7 @@ from langchain_core.runnables.utils import Input
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
-from langgraph.constants import CONFIG_KEY_STREAM_WRITER
+from langgraph.constants import CONF, CONFIG_KEY_STREAM_WRITER
 from langgraph.types import StreamWriter
 from langgraph.utils.config import (
     ensure_config,
@@ -142,7 +142,7 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
             if self.func_accepts[kw]:
-                kwargs[kw] = config["configurable"].get(ck, defv)
+                kwargs[kw] = config[CONF].get(ck, defv)
         context = copy_context()
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
@@ -181,7 +181,7 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
             if self.func_accepts[kw]:
-                kwargs[kw] = config["configurable"].get(ck, defv)
+                kwargs[kw] = config[CONF].get(ck, defv)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)
