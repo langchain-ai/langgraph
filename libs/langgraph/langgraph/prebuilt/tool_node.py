@@ -43,6 +43,27 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
+def msg_content_output(output: Any) -> str | List[dict]:
+    recognized_content_block_types = ("image", "image_url", "text", "json")
+    if isinstance(output, str):
+        return output
+    elif isinstance(output, list) and all(
+        [
+            isinstance(x, dict) and x.get("type") in recognized_content_block_types
+            for x in output
+        ]
+    ):
+        return output
+    # Technically a list of strings is also valid message content but it's not currently
+    # well tested that all chat models support this. And for backwards compatibility
+    # we want to make sure we don't break any existing ToolNode usage.
+    else:
+        try:
+            return json.dumps(output, ensure_ascii=False)
+        except Exception:
+            return str(output)
+
+
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
@@ -128,6 +149,8 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
                 input, config
             )
+            # TODO: handle this properly in core
+            tool_message.content = msg_content_output(tool_message.content)
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
@@ -143,6 +166,8 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
                 input, config
             )
+            # TODO: handle this properly in core
+            tool_message.content = msg_content_output(tool_message.content)
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
