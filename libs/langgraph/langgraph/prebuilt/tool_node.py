@@ -47,7 +47,7 @@ def msg_content_output(output: Any) -> str | List[dict]:
     recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
         return output
-    elif isinstance(output, list) and all(
+    elif all(
         [
             isinstance(x, dict) and x.get("type") in recognized_content_block_types
             for x in output
