@@ -4204,12 +4204,6 @@ async def test_prebuilt_tool_chat() -> None:
     ]
 
 
-# defined outside to allow deserializer to see it
-class ToolInput(BaseModel, arbitrary_types_allowed=True):
-    call: ToolCall
-    my_session: httpx.AsyncClient
-
-
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_state_graph_packets(checkpointer_name: str) -> None:
     from langchain_core.language_models.fake_chat_models import (
@@ -4273,23 +4267,16 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
         assert isinstance(data["session"], httpx.AsyncClient)
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [
-                Send("tools", ToolInput(call=tool_call, my_session=data["session"]))
-                for tool_call in tool_calls
-            ]
+            return [Send("tools", tool_call) for tool_call in tool_calls]
         else:
             return END
 
-    async def tools_node(input: ToolInput, config: RunnableConfig) -> AgentState:
-        assert isinstance(input.my_session, httpx.AsyncClient)
-        tool_call = input.call
-        await asyncio.sleep(tool_call["args"].get("idx", 0) / 10)
-        output = await tools_by_name[tool_call["name"]].ainvoke(
-            tool_call["args"], config
-        )
+    async def tools_node(input: ToolCall, config: RunnableConfig) -> AgentState:
+        await asyncio.sleep(input["args"].get("idx", 0) / 10)
+        output = await tools_by_name[input["name"]].ainvoke(input["args"], config)
         return {
             "messages": ToolMessage(
-                content=output, name=tool_call["name"], tool_call_id=tool_call["id"]
+                content=output, name=input["name"], tool_call_id=input["id"]
             )
         }
 

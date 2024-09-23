@@ -155,11 +155,8 @@ def local_read(
 
 
 def local_write(
-    step: int,
     commit: Callable[[Sequence[tuple[str, Any]]], None],
-    processes: Mapping[str, PregelNode],
-    channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
+    process_keys: Iterable[str],
     writes: Sequence[tuple[str, Any]],
 ) -> None:
     """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
@@ -167,15 +164,9 @@ def local_write(
     for chan, value in writes:
         if chan == TASKS:
             if not isinstance(value, Send):
-                raise InvalidUpdateError(
-                    f"Invalid packet type, expected Packet, got {value}"
-                )
-            if value.node not in processes:
+                raise InvalidUpdateError(f"Expected Send, got {value}")
+            if value.node not in process_keys:
                 raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
-            # replace any runtime values with placeholders
-            managed.replace_runtime_values(step, value.arg)
-        elif chan not in channels and chan not in managed:
-            logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     commit(writes)
 
 
@@ -411,7 +402,6 @@ def prepare_single_task(
         if for_execution:
             proc = processes[packet.node]
             if node := proc.node:
-                managed.replace_runtime_placeholders(step, packet.arg)
                 if proc.metadata:
                     metadata.update(proc.metadata)
                 writes: deque[tuple[str, Any]] = deque()
@@ -433,11 +423,8 @@ def prepare_single_task(
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: partial(
                                 local_write,
-                                step,
                                 writes.extend,
-                                processes,
-                                channels,
-                                managed,
+                                processes.keys(),
                             ),
                             CONFIG_KEY_READ: partial(
                                 local_read,
@@ -543,11 +530,8 @@ def prepare_single_task(
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
                                     local_write,
-                                    step,
                                     writes.extend,
-                                    processes,
-                                    channels,
-                                    managed,
+                                    processes.keys(),
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,

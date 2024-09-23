@@ -4440,25 +4440,16 @@ def test_state_graph_packets(
         ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [
-                Send("tools", {"call": tool_call, "my_session": data["session"]})
-                for tool_call in tool_calls
-            ]
+            return [Send("tools", tool_call) for tool_call in tool_calls]
         else:
             return END
 
-    class ToolInput(TypedDict):
-        call: ToolCall
-        my_session: httpx.Client
-
-    def tools_node(input: ToolInput, config: RunnableConfig) -> AgentState:
-        assert isinstance(input["my_session"], httpx.Client)
-        tool_call = input["call"]
-        time.sleep(tool_call["args"].get("idx", 0) / 10)
-        output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
+    def tools_node(input: ToolCall, config: RunnableConfig) -> AgentState:
+        time.sleep(input["args"].get("idx", 0) / 10)
+        output = tools_by_name[input["name"]].invoke(input["args"], config)
         return {
             "messages": ToolMessage(
-                content=output, name=tool_call["name"], tool_call_id=tool_call["id"]
+                content=output, name=input["name"], tool_call_id=input["id"]
             )
         }
 

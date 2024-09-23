@@ -852,11 +852,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: partial(
                             local_write,
-                            step + 1,
                             writes.extend,
-                            self.nodes,
-                            channels,
-                            managed,
+                            self.nodes.keys(),
                         ),
                         CONFIG_KEY_READ: partial(
                             local_read,
@@ -1001,11 +998,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: partial(
                             local_write,
-                            step + 1,
                             writes.extend,
-                            self.nodes,
-                            channels,
-                            managed,
+                            self.nodes.keys(),
                         ),
                         CONFIG_KEY_READ: partial(
                             local_read,
