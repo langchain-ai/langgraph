@@ -19,6 +19,8 @@ from httpx._types import QueryParamTypes
 
 from langgraph_sdk.schema import (
     Assistant,
+    AssistantVersion,
+    Checkpoint,
     Config,
     Cron,
     DisconnectMode,
@@ -383,6 +385,7 @@ class SyncAssistantsClient:
         metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
+        name: Optional[str] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -395,6 +398,7 @@ class SyncAssistantsClient:
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
+            name: The name of the assistant. Defaults to 'Untitled' under the hood.
 
         Returns:
             Assistant: The created assistant.
@@ -406,7 +410,8 @@ class SyncAssistantsClient:
                 config={"configurable": {"model_name": "openai"}},
                 metadata={"number":1},
                 assistant_id="my-assistant-id",
-                if_exists="do_nothing"
+                if_exists="do_nothing",
+                name="my_name"
             )
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -420,6 +425,8 @@ class SyncAssistantsClient:
             payload["assistant_id"] = assistant_id
         if if_exists:
             payload["if_exists"] = if_exists
+        if name:
+            payload["name"] = name
         return self.http.post("/assistants", json=payload)
 
     def update(
@@ -429,6 +436,7 @@ class SyncAssistantsClient:
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
         metadata: Json = None,
+        name: Optional[str] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -440,6 +448,7 @@ class SyncAssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             metadata: Metadata to add to assistant.
+            name: The new name for the assistant.
 
         Returns:
             Assistant: The updated assistant.
@@ -461,6 +470,8 @@ class SyncAssistantsClient:
             payload["config"] = config
         if metadata:
             payload["metadata"] = metadata
+        if name:
+            payload["name"] = name
         return self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
@@ -528,6 +539,60 @@ class SyncAssistantsClient:
             "/assistants/search",
             json=payload,
         )
+
+    def get_versions(
+        self,
+        assistant_id: str,
+        metadata: Json = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> list[AssistantVersion]:
+        """List all versions of an assistant.
+
+        Args:
+            assistant_id: The assistant ID to delete.
+
+        Returns:
+            list[Assistant]: A list of assistants.
+
+        Example Usage:
+
+            assistant_versions = await client.assistants.get_versions(
+                assistant_id="my_assistant_id"
+            )
+
+        """  # noqa: E501
+
+        payload: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+        return self.http.post(f"/assistants/{assistant_id}/versions", json=payload)
+
+    def set_latest(self, assistant_id: str, version: int) -> Assistant:
+        """Change the version of an assistant.
+
+        Args:
+            assistant_id: The assistant ID to delete.
+            version: The version to change to.
+
+        Returns:
+            Assistant: Assistant Object.
+
+        Example Usage:
+
+            new_version_assistant = await client.assistants.set_latest(
+                assistant_id="my_assistant_id",
+                version=3
+            )
+
+        """  # noqa: E501
+
+        payload: Dict[str, Any] = {"version": version}
+
+        return self.http.post(f"/assistants/{assistant_id}/latest", json=payload)
 
 
 class SyncThreadsClient:
@@ -702,13 +767,19 @@ class SyncThreadsClient:
         return self.http.post(f"/threads/{thread_id}/copy", json=None)
 
     def get_state(
-        self, thread_id: str, checkpoint_id: Optional[str] = None
+        self,
+        thread_id: str,
+        checkpoint: Optional[Checkpoint] = None,
+        checkpoint_id: Optional[str] = None,  # deprecated
+        *,
+        subgraphs: bool = False,
     ) -> ThreadState:
         """Get the state of a thread.
 
         Args:
             thread_id: The ID of the thread to get the state of.
-            checkpoint_id: The ID of the checkpoint to get the state of.
+            checkpoint: The checkpoint to get the state of.
+            subgraphs: Include subgraphs in the state.
 
         Returns:
             ThreadState: the thread of the state.
@@ -750,15 +821,12 @@ class SyncThreadsClient:
                     ]
                 },
                 'next': [],
-                'config':
+                'checkpoint':
                     {
-                        'configurable':
-                            {
-                                'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
-                                'checkpoint_ns': '',
-                                'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1'
-                            }
-                    },
+                        'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                        'checkpoint_ns': '',
+                        'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1'
+                    }
                 'metadata':
                     {
                         'step': 1,
@@ -768,20 +836,20 @@ class SyncThreadsClient:
                             {
                                 'agent':
                                     {
-                                            'messages': [
-                                                {
-                                                    'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b',
-                                                    'name': None,
-                                                    'type': 'ai',
-                                                    'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.",
-                                                    'example': False,
-                                                    'tool_calls': [],
-                                                    'usage_metadata': None,
-                                                    'additional_kwargs': {},
-                                                    'response_metadata': {},
-                                                    'invalid_tool_calls': []
-                                                }
-                                            ]
+                                        'messages': [
+                                            {
+                                                'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b',
+                                                'name': None,
+                                                'type': 'ai',
+                                                'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.",
+                                                'example': False,
+                                                'tool_calls': [],
+                                                'usage_metadata': None,
+                                                'additional_kwargs': {},
+                                                'response_metadata': {},
+                                                'invalid_tool_calls': []
+                                            }
+                                        ]
                                     }
                             },
                 'user_id': None,
@@ -792,20 +860,28 @@ class SyncThreadsClient:
                 'created_at': '2024-07-25T15:35:44.184703+00:00',
                 'parent_config':
                     {
-                        'configurable':
-                            {
-                                'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
-                                'checkpoint_ns': '',
-                                'checkpoint_id': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
-                            }
+                        'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                        'checkpoint_ns': '',
+                        'checkpoint_id': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
                     }
             }
 
         """  # noqa: E501
-        if checkpoint_id:
-            return self.http.get(f"/threads/{thread_id}/state/{checkpoint_id}")
+        if checkpoint:
+            return self.http.post(
+                f"/threads/{thread_id}/state/checkpoint",
+                json={"checkpoint": checkpoint, "subgraphs": subgraphs},
+            )
+        elif checkpoint_id:
+            return self.http.get(
+                f"/threads/{thread_id}/state/{checkpoint_id}",
+                params={"subgraphs": subgraphs},
+            )
         else:
-            return self.http.get(f"/threads/{thread_id}/state")
+            return self.http.get(
+                f"/threads/{thread_id}/state",
+                params={"subgraphs": subgraphs},
+            )
 
     def update_state(
         self,
@@ -813,7 +889,8 @@ class SyncThreadsClient:
         values: dict,
         *,
         as_node: Optional[str] = None,
-        checkpoint_id: Optional[str] = None,
+        checkpoint: Optional[Checkpoint] = None,
+        checkpoint_id: Optional[str] = None,  # deprecated
     ) -> None:
         """Update the state of a thread.
 
@@ -821,19 +898,17 @@ class SyncThreadsClient:
             thread_id: The ID of the thread to update.
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
-
-            checkpoint_id: The ID of the checkpoint to update the state of.
+            checkpoint: The checkpoint to update the state of.
 
         Returns:
             None
 
         Example Usage:
 
-            client.threads.update_state(
+            await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
-                checkpoint_id="my_checkpoint_id"
             )
 
         """  # noqa: E501
@@ -842,40 +917,11 @@ class SyncThreadsClient:
         }
         if checkpoint_id:
             payload["checkpoint_id"] = checkpoint_id
+        if checkpoint:
+            payload["checkpoint"] = checkpoint
         if as_node:
             payload["as_node"] = as_node
         return self.http.post(f"/threads/{thread_id}/state", json=payload)
-
-    def patch_state(
-        self,
-        thread_id: Union[str, Config],
-        metadata: dict,
-    ) -> None:
-        """Patch the state of a thread.
-
-        Args:
-            thread_id: The ID of the thread to get the state of.
-            metadata: The metadata to assign to the state.
-
-        Returns:
-            None
-
-        Example Usage:
-
-            client.threads.patch_state(
-                thread_id="my_thread_id",
-                metadata={"name":"new_name"},
-            )
-
-        """  # noqa: E501
-        if isinstance(thread_id, dict):
-            thread_id_: str = thread_id["configurable"]["thread_id"]
-        else:
-            thread_id_ = thread_id
-        return self.http.patch(
-            f"/threads/{thread_id_}/state",
-            json={"metadata": metadata},
-        )
 
     def get_history(
         self,
@@ -927,8 +973,10 @@ class SyncRunsClient:
         *,
         input: Optional[dict] = None,
         stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -936,6 +984,7 @@ class SyncRunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -946,6 +995,7 @@ class SyncRunsClient:
         *,
         input: Optional[dict] = None,
         stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
@@ -954,6 +1004,7 @@ class SyncRunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
+        after_seconds: Optional[int] = None,
     ) -> Iterator[StreamPart]: ...
 
     def stream(
@@ -963,8 +1014,10 @@ class SyncRunsClient:
         *,
         input: Optional[dict] = None,
         stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -973,6 +1026,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -983,13 +1037,12 @@ class SyncRunsClient:
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
             stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
-            checkpoint_id: The checkpoint to start streaming from.
+            checkpoint: The checkpoint to resume from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             feedback_keys: Feedback keys to assign to run.
             on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
@@ -998,9 +1051,11 @@ class SyncRunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            after_seconds: The number of seconds to wait before starting the run.
+                Use to schedule future runs.
 
         Returns:
-            Iterator[StreamPart]: Asynchronous iterator of stream results.
+            Iterator[StreamPart]: Iterator of stream results.
 
         Example Usage:
 
@@ -1011,7 +1066,6 @@ class SyncRunsClient:
                 stream_mode=["values","debug"],
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "anthropic"}},
-                checkpoint_id="my_checkpoint",
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 feedback_keys=["my_feedback_key_1","my_feedback_key_2"],
@@ -1033,15 +1087,18 @@ class SyncRunsClient:
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "feedback_keys": feedback_keys,
             "webhook": webhook,
+            "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
+            "after_seconds": after_seconds,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1059,12 +1116,15 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Run: ...
 
     @overload
@@ -1074,13 +1134,17 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Run: ...
 
     def create(
@@ -1089,14 +1153,18 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1106,18 +1174,20 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
-            checkpoint_id: The checkpoint to start streaming from.
+            checkpoint: The checkpoint to resume from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
+            after_seconds: The number of seconds to wait before starting the run.
+                Use to schedule future runs.
 
         Returns:
             Run: The created background run.
@@ -1130,7 +1200,6 @@ class SyncRunsClient:
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "openai"}},
-                checkpoint_id="my_checkpoint",
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -1189,15 +1258,19 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_completion": on_completion,
+            "after_seconds": after_seconds,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
@@ -1206,7 +1279,7 @@ class SyncRunsClient:
             return self.http.post("/runs", json=payload)
 
     def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
-        """Create a batch of background runs."""
+        """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
             return {k: v for k, v in payload.items() if v is not None}
@@ -1223,12 +1296,14 @@ class SyncRunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -1245,6 +1320,7 @@ class SyncRunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     def wait(
@@ -1255,6 +1331,7 @@ class SyncRunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
@@ -1262,6 +1339,7 @@ class SyncRunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1273,18 +1351,18 @@ class SyncRunsClient:
             input: The input to the graph.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
-            checkpoint_id: The checkpoint to start streaming from.
+            checkpoint: The checkpoint to resume from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
-            multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            after_seconds: The number of seconds to wait before starting the run.
+                Use to schedule future runs.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1297,7 +1375,6 @@ class SyncRunsClient:
                 input={"messages": [{"role": "user", "content": "how are you?"}]},
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "anthropic"}},
-                checkpoint_id="my_checkpoint",
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -1342,10 +1419,12 @@ class SyncRunsClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
+            "after_seconds": after_seconds,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -1456,7 +1535,7 @@ class SyncRunsClient:
 
         Example Usage:
 
-            await client.runs.join(
+            client.runs.join_stream(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join"
             )

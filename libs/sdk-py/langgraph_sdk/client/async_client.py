@@ -463,6 +463,7 @@ class AssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             metadata: Metadata to add to assistant.
+            name: The new name for the assistant.
 
         Returns:
             Assistant: The updated assistant.
