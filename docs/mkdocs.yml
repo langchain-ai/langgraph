@@ -84,8 +84,7 @@ plugins:
         - tutorials/llm-compiler/math_tools.py
         - tutorials/llm-compiler/output_parser.py
 nav:
-  - Home:
-      - "index.md"
+  - "index.md"
   - Tutorials:
       - "tutorials/index.md"
       - Quick Start: tutorials/introduction.ipynb
