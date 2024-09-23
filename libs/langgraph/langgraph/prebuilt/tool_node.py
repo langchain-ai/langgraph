@@ -43,16 +43,6 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def str_output(output: Any) -> str:
-    if isinstance(output, str):
-        return output
-    else:
-        try:
-            return json.dumps(output, ensure_ascii=False)
-        except Exception:
-            return str(output)
-
-
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
@@ -138,8 +128,6 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
                 input, config
             )
-            # TODO: handle this properly in core
-            tool_message.content = str_output(tool_message.content)
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
@@ -155,8 +143,6 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
                 input, config
             )
-            # TODO: handle this properly in core
-            tool_message.content = str_output(tool_message.content)
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
