@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
       - run: |
-          sudo .venv/bin/python -m pyperf system tune
+          sudo .venv/bin/python -m pyperf system tune || true
       - name: Run benchmarks
         run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs
