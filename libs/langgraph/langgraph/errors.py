@@ -1,7 +1,9 @@
 from typing import Any, Sequence
 
-from langgraph.checkpoint.base import EmptyChannelError
-from langgraph.constants import Interrupt
+from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
+from langgraph.types import Interrupt
+
+# EmptyChannelError re-exported for backwards compatibility
 
 
 class GraphRecursionError(RecursionError):
@@ -24,13 +26,14 @@ class GraphRecursionError(RecursionError):
 
 
 class InvalidUpdateError(Exception):
-    """Raised when attempting to update a channel with an invalid sequence of updates."""
+    """Raised when attempting to update a channel with an invalid set of updates."""
 
     pass
 
 
 class GraphInterrupt(Exception):
-    """Raised when a subgraph is interrupted."""
+    """Raised when a subgraph is interrupted, suppressed by the root graph.
+    Never raised directly, or surfaced to the user."""
 
     def __init__(self, interrupts: Sequence[Interrupt] = ()) -> None:
         super().__init__(interrupts)
@@ -44,7 +47,7 @@ class NodeInterrupt(GraphInterrupt):
 
 
 class GraphDelegate(Exception):
-    """Raised when a graph is delegated."""
+    """Raised when a graph is delegated (for distributed mode)."""
 
     def __init__(self, *args: dict[str, Any]) -> None:
         super().__init__(*args)
@@ -57,22 +60,22 @@ class EmptyInputError(Exception):
 
 
 class TaskNotFound(Exception):
-    """Raised when the executor is unable to find a task."""
+    """Raised when the executor is unable to find a task (for distributed mode)."""
 
     pass
 
 
 class CheckpointNotLatest(Exception):
-    """Raised when the checkpoint is not the latest version."""
+    """Raised when the checkpoint is not the latest version (for distributed mode)."""
 
     pass
 
 
-__all__ = [
-    "GraphRecursionError",
-    "InvalidUpdateError",
-    "GraphInterrupt",
-    "NodeInterrupt",
-    "EmptyInputError",
-    "EmptyChannelError",
-]
+class MultipleSubgraphsError(Exception):
+    """Raised when multiple subgraphs are called inside the same node."""
+
+    pass
+
+
+_SEEN_CHECKPOINT_NS: set[str] = set()
+"""Used for subgraph detection."""

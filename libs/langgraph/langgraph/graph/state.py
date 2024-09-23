@@ -32,7 +32,6 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
@@ -45,9 +44,9 @@ from langgraph.managed.base import (
     is_writable_managed_value,
 )
 from langgraph.pregel.read import ChannelRead, PregelNode
-from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
+from langgraph.types import All, Checkpointer, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import coerce_to_runnable
@@ -400,7 +399,7 @@ class StateGraph(Graph):
 
     def compile(
         self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
+        checkpointer: Checkpointer = None,
         *,
         store: Optional[BaseStore] = None,
         interrupt_before: Optional[Union[All, list[str]]] = None,
@@ -413,7 +412,7 @@ class StateGraph(Graph):
         streamed, batched, and run asynchronously.
 
         Args:
-            checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+            checkpointer (Checkpointer): An optional checkpoint saver object.
                 This serves as a fully versioned "memory" for the graph, allowing
                 the graph to be paused and resumed, and replayed from any point.
             interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.

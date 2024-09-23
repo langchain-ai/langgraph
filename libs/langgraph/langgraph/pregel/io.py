@@ -3,9 +3,9 @@ from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar,
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
+from langgraph.constants import EMPTY_SEQ, ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.log import logger
-from langgraph.pregel.types import PregelExecutableTask
+from langgraph.types import PregelExecutableTask
 
 
 def read_channel(
@@ -95,9 +95,6 @@ class AddableUpdatesDict(AddableDict):
 
     def __radd__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
         raise TypeError("AddableUpdatesDict does not support right-side addition")
-
-
-EMPTY_SEQ: tuple[str, ...] = tuple()
 
 
 def map_output_updates(

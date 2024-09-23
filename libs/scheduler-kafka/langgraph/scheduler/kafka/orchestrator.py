@@ -24,7 +24,6 @@ from langgraph.errors import CheckpointNotLatest, GraphInterrupt
 from langgraph.pregel import Pregel
 from langgraph.pregel.executor import BackgroundExecutor, Submit
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
-from langgraph.pregel.types import RetryPolicy
 from langgraph.scheduler.kafka.retry import aretry, retry
 from langgraph.scheduler.kafka.types import (
     AsyncConsumer,
@@ -37,6 +36,7 @@ from langgraph.scheduler.kafka.types import (
     Producer,
     Topics,
 )
+from langgraph.types import RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 
@@ -158,6 +158,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
+            check_subgraphs=False,
         ) as loop:
             if loop.tick(
                 input_keys=graph.input_channels,
@@ -347,6 +348,7 @@ class KafkaOrchestrator(AbstractContextManager):
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
+            check_subgraphs=False,
         ) as loop:
             if loop.tick(
                 input_keys=graph.input_channels,

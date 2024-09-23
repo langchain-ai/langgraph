@@ -35,7 +35,7 @@ from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
 from langgraph.constants import CONFIG_KEY_STREAM_WRITER
-from langgraph.pregel.types import StreamWriter
+from langgraph.types import StreamWriter
 from langgraph.utils.config import (
     ensure_config,
     get_async_callback_manager_for_config,

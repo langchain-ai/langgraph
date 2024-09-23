@@ -1,4 +1,4 @@
-"""Main entrypoint into package."""
+"""Exports package version."""
 
 from importlib import metadata
 

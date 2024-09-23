@@ -3,7 +3,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import RESERVED
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All
+from langgraph.types import All
 
 
 def validate_graph(
@@ -17,7 +17,7 @@ def validate_graph(
 ) -> None:
     for chan in channels:
         if chan in RESERVED:
-            raise ValueError(f"Channel names {RESERVED} are reserved")
+            raise ValueError(f"Channel names {chan} are reserved")
 
     subscribed_channels = set[str]()
     for name, node in nodes.items():
