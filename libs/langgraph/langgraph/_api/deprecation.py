@@ -21,14 +21,14 @@ def deprecated(
             f" removed in {removal_str}. Use {alternative} instead.{example}"
         )
         if isinstance(obj, type):
-            original_init = obj.__init__
+            original_init = obj.__init__  # type: ignore[misc]
 
             @functools.wraps(original_init)
-            def new_init(self, *args: Any, **kwargs: Any) -> None:
+            def new_init(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[no-untyped-def]
                 warnings.warn(message, LangGraphDeprecationWarning, stacklevel=2)
                 original_init(self, *args, **kwargs)
 
-            obj.__init__ = new_init
+            obj.__init__ = new_init  # type: ignore[misc]
 
             docstring = (
                 f"**Deprecated**: This class is deprecated as of version {since}. "
@@ -68,7 +68,7 @@ def deprecated_parameter(
 ) -> Callable[[F], F]:
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
             if arg_name in kwargs:
                 warnings.warn(
                     f"Parameter '{arg_name}' in function '{func.__name__}' is "

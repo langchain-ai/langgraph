@@ -1,5 +1,7 @@
+from typing import Any
+
 import pytest
-from conftest import DEFAULT_URI
+from conftest import DEFAULT_URI  # type: ignore
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
@@ -13,7 +15,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 
 class TestPostgresSaver:
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self) -> None:
         # objects for test setup
         self.config_1: RunnableConfig = {
             "configurable": {
@@ -58,7 +60,7 @@ class TestPostgresSaver:
         with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:
             saver.setup()
 
-    def test_search(self):
+    def test_search(self) -> None:
         with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:
             # save checkpoints
             saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
@@ -66,13 +68,13 @@ class TestPostgresSaver:
             saver.put(self.config_3, self.chkpnt_3, self.metadata_3, {})
 
             # call method / assertions
-            query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
-            query_2: CheckpointMetadata = {
+            query_1 = {"source": "input"}  # search by 1 key
+            query_2 = {
                 "step": 1,
                 "writes": {"foo": "bar"},
             }  # search by multiple keys
-            query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
-            query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
+            query_3: dict[str, Any] = {}  # search by no keys, return all checkpoints
+            query_4 = {"source": "update", "step": 1}  # no match
 
             search_results_1 = list(saver.list(None, filter=query_1))
             assert len(search_results_1) == 1

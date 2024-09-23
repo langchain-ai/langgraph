@@ -40,16 +40,16 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
-TEST_PATH ?= .
+TEST ?= .
 
 test:
-	make start-postgres && poetry run pytest $(TEST_PATH); \
+	make start-postgres && poetry run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres && poetry run ptw . -- --ff -v -x -n auto --dist worksteal --snapshot-update --tb short $(TEST_PATH); \
+	make start-postgres && poetry run ptw . -- --ff -v -x -n auto --dist worksteal --snapshot-update --tb short $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
@@ -74,7 +74,8 @@ lint lint_diff lint_package lint_tests:
 	poetry run ruff check .
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff check --select I $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || poetry run mypy langgraph --cache-dir $(MYPY_CACHE)
 
 format format_diff:
 	poetry run ruff format $(PYTHON_FILES)

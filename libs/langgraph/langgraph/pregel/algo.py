@@ -4,6 +4,7 @@ from hashlib import sha1
 from typing import (
     Any,
     Callable,
+    Iterable,
     Iterator,
     Literal,
     Mapping,
@@ -20,15 +21,25 @@ from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunMan
 from langchain_core.runnables.config import RunnableConfig
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, copy_checkpoint
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    V,
+    copy_checkpoint,
+)
 from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
+    EMPTY_SEQ,
     INTERRUPT,
     NO_WRITES,
+    NS_END,
     NS_SEP,
     PULL,
     PUSH,
@@ -43,19 +54,30 @@ from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
+from langgraph.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
-EMPTY_SEQ = tuple()
+GetNextVersion = Callable[[Optional[V], BaseChannel], V]
 
 
 class WritesProtocol(Protocol):
-    name: str
-    writes: Sequence[tuple[str, Any]]
-    triggers: Sequence[str]
+    """Protocol for objects containing writes to be applied to checkpoint.
+    Implemented by PregelTaskWrites and PregelExecutableTask."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def writes(self) -> Sequence[tuple[str, Any]]: ...
+
+    @property
+    def triggers(self) -> Sequence[str]: ...
 
 
 class PregelTaskWrites(NamedTuple):
+    """Simplest implementation of WritesProtocol, for usage with writes that
+    don't originate from a runnable task, eg. graph input, update_state, etc."""
+
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
@@ -64,14 +86,15 @@ class PregelTaskWrites(NamedTuple):
 def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[PregelExecutableTask],
 ) -> list[PregelExecutableTask]:
+    """Check if the graph should be interrupted based on current state."""
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-    null_version = version_type()
+    null_version = version_type()  # type: ignore[misc]
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
     # interrupt if any channel has been updated since last interrupt
     any_updates_since_prev_interrupt = any(
-        version > seen.get(chan, null_version)
+        version > seen.get(chan, null_version)  # type: ignore[operator]
         for chan, version in checkpoint["channel_versions"].items()
     )
     # and any triggered node is in interrupt_nodes list
@@ -103,6 +126,9 @@ def local_read(
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
+    """Function injected under CONFIG_KEY_READ in task config, to read current state.
+    Used by conditional edges to read a copy of the state with reflecting the writes
+    from that node only."""
     if isinstance(select, str):
         managed_keys = []
         for c, _ in task.writes:
@@ -132,38 +158,35 @@ def local_read(
 
 
 def local_write(
-    step: int,
     commit: Callable[[Sequence[tuple[str, Any]]], None],
-    processes: Mapping[str, PregelNode],
-    channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
+    process_keys: Iterable[str],
     writes: Sequence[tuple[str, Any]],
 ) -> None:
+    """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
+    Validates writes and forwards them to `commit` function."""
     for chan, value in writes:
         if chan == TASKS:
             if not isinstance(value, Send):
-                raise InvalidUpdateError(
-                    f"Invalid packet type, expected Packet, got {value}"
-                )
-            if value.node not in processes:
+                raise InvalidUpdateError(f"Expected Send, got {value}")
+            if value.node not in process_keys:
                 raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
-            # replace any runtime values with placeholders
-            managed.replace_runtime_values(step, value.arg)
-        elif chan not in channels and chan not in managed:
-            logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     commit(writes)
 
 
 def increment(current: Optional[int], channel: BaseChannel) -> int:
+    """Default channel versioning function, increments the current int version."""
     return current + 1 if current is not None else 1
 
 
 def apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
-    tasks: Sequence[WritesProtocol],
-    get_next_version: Optional[Callable[[int, BaseChannel], int]],
+    tasks: Iterable[WritesProtocol],
+    get_next_version: Optional[GetNextVersion],
 ) -> dict[str, list[Any]]:
+    """Apply writes from a set of tasks (usually the tasks from a Pregel step)
+    to the checkpoint and channels, and return managed values writes to be applied
+    externally."""
     # update seen versions
     for task in tasks:
         checkpoint["versions_seen"].setdefault(task.name, {}).update(
@@ -189,7 +212,8 @@ def apply_writes(
     }:
         if channels[chan].consume() and get_next_version is not None:
             checkpoint["channel_versions"][chan] = get_next_version(
-                max_version, channels[chan]
+                max_version,
+                channels[chan],
             )
 
     # clear pending sends
@@ -222,7 +246,8 @@ def apply_writes(
         if chan in channels:
             if channels[chan].update(vals) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
+                    max_version,
+                    channels[chan],
                 )
             updated_channels.add(chan)
 
@@ -231,7 +256,8 @@ def apply_writes(
         if chan not in updated_channels:
             if channels[chan].update([]) and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
+                    max_version,
+                    channels[chan],
                 )
 
     # Return managed values writes to be applied externally
@@ -280,7 +306,10 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
-    tasks: Union[dict[str, PregelTask], dict[str, PregelExecutableTask]] = {}
+    """Prepare the set of tasks that will make up the next Pregel step.
+    This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
+    by edges)."""
+    tasks: dict[str, Union[PregelTask, PregelExecutableTask]] = {}
     # Consume pending packets
     for idx, _ in enumerate(checkpoint["pending_sends"]):
         if task := prepare_single_task(
@@ -331,9 +360,11 @@ def prepare_single_task(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
+    """Prepares a single task for the next Pregel step, given a task path, which
+    uniquely identifies a PUSH or PULL task within the graph."""
     checkpoint_id = UUID(checkpoint["id"]).bytes
-    configurable = config.get("configurable", {})
-    parent_ns = configurable.get("checkpoint_ns", "")
+    configurable = config.get(CONF, {})
+    parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
     if task_path[0] == PUSH:
         idx = int(task_path[1])
@@ -350,12 +381,6 @@ def prepare_single_task(
             return
         # create task id
         triggers = [PUSH]
-        metadata = {
-            "langgraph_step": step,
-            "langgraph_node": packet.node,
-            "langgraph_triggers": triggers,
-            "langgraph_path": task_path,
-        }
         checkpoint_ns = (
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
@@ -367,16 +392,22 @@ def prepare_single_task(
             PUSH,
             str(idx),
         )
+        task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        metadata = {
+            "langgraph_step": step,
+            "langgraph_node": packet.node,
+            "langgraph_triggers": triggers,
+            "langgraph_path": task_path,
+            "langgraph_checkpoint_ns": task_checkpoint_ns,
+        }
         if task_id_checksum is not None:
             assert task_id == task_id_checksum
         if for_execution:
             proc = processes[packet.node]
             if node := proc.node:
-                managed.replace_runtime_placeholders(step, packet.arg)
                 if proc.metadata:
                     metadata.update(proc.metadata)
-                writes = deque()
-                task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+                writes: deque[tuple[str, Any]] = deque()
                 return PregelExecutableTask(
                     packet.node,
                     packet.arg,
@@ -395,11 +426,8 @@ def prepare_single_task(
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: partial(
                                 local_write,
-                                step,
                                 writes.extend,
-                                processes,
-                                channels,
-                                managed,
+                                processes.keys(),
                             ),
                             CONFIG_KEY_READ: partial(
                                 local_read,
@@ -418,8 +446,8 @@ def prepare_single_task(
                                 **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                 parent_ns: checkpoint["id"],
                             },
-                            "checkpoint_id": None,
-                            "checkpoint_ns": task_checkpoint_ns,
+                            CONFIG_KEY_CHECKPOINT_ID: None,
+                            CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         },
                     ),
                     triggers,
@@ -437,7 +465,7 @@ def prepare_single_task(
             return
         proc = processes[name]
         version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-        null_version = version_type()
+        null_version = version_type()  # type: ignore[misc]
         if null_version is None:
             return
         seen = checkpoint["versions_seen"].get(name, {})
@@ -448,7 +476,7 @@ def prepare_single_task(
             if not isinstance(
                 read_channel(channels, chan, return_exception=True), EmptyChannelError
             )
-            and checkpoint["channel_versions"].get(chan, null_version)
+            and checkpoint["channel_versions"].get(chan, null_version)  # type: ignore[operator]
             > seen.get(chan, null_version)
         ):
             try:
@@ -461,12 +489,6 @@ def prepare_single_task(
                 return
 
             # create task id
-            metadata = {
-                "langgraph_step": step,
-                "langgraph_node": name,
-                "langgraph_triggers": triggers,
-                "langgraph_path": task_path,
-            }
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = _uuid5_str(
                 checkpoint_id,
@@ -476,15 +498,21 @@ def prepare_single_task(
                 PULL,
                 *triggers,
             )
+            task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
+            metadata = {
+                "langgraph_step": step,
+                "langgraph_node": name,
+                "langgraph_triggers": triggers,
+                "langgraph_path": task_path,
+                "langgraph_checkpoint_ns": task_checkpoint_ns,
+            }
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum
-
             if for_execution:
                 if node := proc.node:
                     if proc.metadata:
                         metadata.update(proc.metadata)
                     writes = deque()
-                    task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     return PregelExecutableTask(
                         name,
                         val,
@@ -505,11 +533,8 @@ def prepare_single_task(
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
                                     local_write,
-                                    step,
                                     writes.extend,
-                                    processes,
-                                    channels,
-                                    managed,
+                                    processes.keys(),
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
@@ -528,8 +553,8 @@ def prepare_single_task(
                                     **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                     parent_ns: checkpoint["id"],
                                 },
-                                "checkpoint_id": None,
-                                "checkpoint_ns": task_checkpoint_ns,
+                                CONFIG_KEY_CHECKPOINT_ID: None,
+                                CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                             },
                         ),
                         triggers,
@@ -550,6 +575,7 @@ def _proc_input(
     *,
     for_execution: bool,
 ) -> Iterator[Any]:
+    """Prepare input for a PULL task, based on the process's channels and triggers."""
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):

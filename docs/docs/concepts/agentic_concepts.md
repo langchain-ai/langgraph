@@ -24,7 +24,7 @@ Structured outputs with LLMs work by providing a specific format or schema that 
 2. Output parsers: Using post-processing to extract structured data from LLM responses.
 3. Tool calling: Leveraging built-in tool calling capabilities of some LLMs to generate structured outputs.
 
-Structured outputs are crucial for routing as they ensure the LLM's decision can be reliably interpreted and acted upon by the system. Learn more about [structured outputs in this how-to guide](https://python.langchain.com/v0.2/docs/how_to/structured_output/).
+Structured outputs are crucial for routing as they ensure the LLM's decision can be reliably interpreted and acted upon by the system. Learn more about [structured outputs in this how-to guide](https://python.langchain.com/docs/how_to/structured_output/).
 
 ## Tool calling agent
 

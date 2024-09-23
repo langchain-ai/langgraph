@@ -53,6 +53,54 @@ def fanout_to_subgraph() -> StateGraph:
     return builder
 
 
+def fanout_to_subgraph_sync() -> StateGraph:
+    class OverallState(TypedDict):
+        subjects: list[str]
+        jokes: Annotated[list[str], operator.add]
+
+    def continue_to_jokes(state: OverallState):
+        return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
+
+    class JokeInput(TypedDict):
+        subject: str
+
+    class JokeOutput(TypedDict):
+        jokes: list[str]
+
+    def bump(state: JokeOutput):
+        return {"jokes": [state["jokes"][0] + " a"]}
+
+    def generate(state: JokeInput):
+        return {"jokes": [f"Joke about {state['subject']}"]}
+
+    def edit(state: JokeInput):
+        subject = state["subject"]
+        return {"subject": f"{subject} - hohoho"}
+
+    def bump_loop(state: JokeOutput):
+        return END if state["jokes"][0].endswith(" a" * 10) else "bump"
+
+    # subgraph
+    subgraph = StateGraph(input=JokeInput, output=JokeOutput)
+    subgraph.add_node("edit", edit)
+    subgraph.add_node("generate", generate)
+    subgraph.add_node("bump", bump)
+    subgraph.set_entry_point("edit")
+    subgraph.add_edge("edit", "generate")
+    subgraph.add_edge("generate", "bump")
+    subgraph.add_conditional_edges("bump", bump_loop)
+    subgraph.set_finish_point("generate")
+    subgraphc = subgraph.compile()
+
+    # parent graph
+    builder = StateGraph(OverallState)
+    builder.add_node("generate_joke", subgraphc)
+    builder.add_conditional_edges(START, continue_to_jokes)
+    builder.add_edge("generate_joke", END)
+
+    return builder
+
+
 if __name__ == "__main__":
     import asyncio
     import random

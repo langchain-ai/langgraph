@@ -51,3 +51,13 @@ lint.select = [
   "I",  # isort
 ]
 lint.ignore = ["E501", "B008", "UP007", "UP006"]
+
+[tool.mypy]
+# https://mypy.readthedocs.io/en/stable/config_file.html
+disallow_untyped_defs = "True"
+explicit_package_bases = "True"
+warn_no_return = "False"
+warn_unused_ignores = "True"
+warn_redundant_casts = "True"
+allow_redefinition = "True"
+disable_error_code = "typeddict-item, return-value"

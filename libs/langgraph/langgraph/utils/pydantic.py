@@ -19,7 +19,7 @@ def create_model(
     """
     try:
         # for langchain-core >= 0.3.0
-        from langchain_core.runnables.pydantic import create_model_v2
+        from langchain_core.utils.pydantic import create_model_v2
 
         return create_model_v2(
             model_name,
