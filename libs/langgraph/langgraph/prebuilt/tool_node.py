@@ -149,8 +149,9 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
                 input, config
             )
-            # TODO: handle this properly in core
-            tool_message.content = msg_content_output(tool_message.content)
+            tool_message.content = cast(
+                Union[str, list], msg_content_output(tool_message.content)
+            )
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
@@ -166,8 +167,9 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
                 input, config
             )
-            # TODO: handle this properly in core
-            tool_message.content = msg_content_output(tool_message.content)
+            tool_message.content = cast(
+                Union[str, list], msg_content_output(tool_message.content)
+            )
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
