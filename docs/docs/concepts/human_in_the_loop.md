@@ -35,7 +35,7 @@ def my_node(state: State) -> State:
     return state
 ```
 
-See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints/#define-the-graph) for a detailed how-to on doing this!
+See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a detailed how-to on doing this!
 
 ## Interaction Patterns
 
