@@ -1,6 +1,8 @@
 # Human-in-the-loop
 
-Human-in-the-loop (or "on-the-loop") enhances agent capabilities through several common user interaction patterns:
+Human-in-the-loop (or "on-the-loop") enhances agent capabilities through several common user interaction patterns.
+
+Common interaction patterns include:
 
 (1) `Approval` - We can interrupt our agent, surface the current state to a user, and allow the user to accept an action. 
 
@@ -8,13 +10,36 @@ Human-in-the-loop (or "on-the-loop") enhances agent capabilities through several
 
 (3) `Input` - We can explicitly create a graph node to collect human input and pass that input directly to the agent state.
 
-(4) `Debugging` - We can manually re-play and / or fork past actions of an agent.
+Use-cases for these interaction patterns include:
+
+(1) `Reviewing tool calls` - We can interrupt an agent to review and edit the results of tool calls.
+
+(2) `Time Travel` - We can manually re-play and / or fork past actions of an agent.
 
 ## Persistence
 
-All of these interaction patterns are enabled by LangGraph's built-in [persistence](./persistence.md) layer, which will write a checkpoint of the graph state at each step. This allows us to stop the graph at a specific step (with a [breakpoint](./low_level.md#breakpoints)). Once the graph is stopped, the above human-in-the-loop interaction patterns can be implemented as shown below!
+All of these interaction patterns are enabled by LangGraph's built-in [persistence](./persistence.md) layer, which will write a checkpoint of the graph state at each step. Persistence allows the graph to stop so that a human can review and / or edit the current state of the graph and then resume with the human's input.
 
-## Approval
+### Breakpoints
+
+Adding a [breakpoint](./low_level.md#breakpoints) a specific location in the graph flow is one way to enable human-in-the-loop. In this case, the developer knows *where* in the workflow human input is needed and simply places a breakpoint prior to or following that particular graph node.
+
+### Dynamic Breakpoints
+
+Alternatively, the developer can define some *condition* that must be met for the breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition.
+
+```python
+def my_node(state: State) -> State:
+    if len(state['input']) > 5:
+        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
+    return state
+```
+
+See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints/#define-the-graph) for a detailed how-to on doing this!
+
+## Interaction Patterns
+
+### Approval
 
 ![](./img/human_in_the_loop/approval.png)
 
@@ -45,7 +70,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
 
 See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed how-to on doing this!
 
-## Editing
+### Editing
 
 ![](./img/human_in_the_loop/edit_graph_state.png)
 
@@ -79,7 +104,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
 
 See [this guide](../how-tos/human_in_the_loop/edit-graph-state.ipynb) for a detailed how-to on doing this!
 
-## Input
+### Input
 
 ![](./img/human_in_the_loop/wait_for_input.png)
 
@@ -121,7 +146,9 @@ for event in graph.stream(None, thread, stream_mode="values"):
 
 See [this guide](../how-tos/human_in_the_loop/wait-user-input.ipynb) for a detailed how-to on doing this!
 
-## Review Tool Calls
+## Use-cases
+
+### Reviewing Tool Calls
 
 Some user interaction patterns combine the above ideas.
 
@@ -161,7 +188,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
 
 See [this guide](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a detailed how-to on doing this!
 
-## Debugging
+### Time Travel
 
 When working with agents, we often want closely examine their decision making process: 
 
@@ -173,7 +200,7 @@ When working with agents, we often want closely examine their decision making pr
 
 Collectively, we call these debugging concepts `time-travel` and they are composed of `replaying` and `forking`.
 
-### Replaying
+#### Replaying
 
 ![](./img/human_in_the_loop/replay.png)
 
@@ -219,7 +246,7 @@ See [this additional conceptual guide](https://langchain-ai.github.io/langgraph/
 
 See see [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a detailed how-to on doing time-travel!
 
-### Forking
+#### Forking
 
 ![](./img/human_in_the_loop/forking.png)
 
