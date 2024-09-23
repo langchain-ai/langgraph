@@ -79,6 +79,10 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
+  - exclude:
+      glob:
+        - tutorials/llm-compiler/math_tools.py
+        - tutorials/llm-compiler/output_parser.py
 nav:
   - Home:
       - "index.md"
@@ -126,9 +130,9 @@ nav:
   - "How-to Guides":
       - "how-tos/index.md"
       - Controllability:
-          - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+          - Control graph recursion limit: how-tos/recursion-limit.ipynb
       - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
           - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
@@ -137,8 +141,10 @@ nav:
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
+          - Share state between threads: how-tos/memory/shared-state.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+          - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
           - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
           - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
@@ -153,12 +159,17 @@ nav:
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
           - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
+          - Stream from subgraphs: how-tos/streaming-subgraphs.ipynb
       - Tool calling:
           - Call tools using ToolNode: how-tos/tool-calling.ipynb
           - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
           - Pass graph state to tools: how-tos/pass-run-time-values-to-tools.ipynb
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
+      - Subgraphs:
+          - Create subgraphs: how-tos/subgraph.ipynb
+          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
+          - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
           - Use a context object in state: how-tos/state-context-key.ipynb
@@ -169,16 +180,23 @@ nav:
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
           - Add node retries: how-tos/node-retries.ipynb
+          - Return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
+          - Pass custom LangSmith run ID for graph runs: how-tos/run-id-langsmith.ipynb
+          - Return state before hitting recursion limit: how-tos/return-when-recursion-limit-hits.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
           - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
-          - Add human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
+          - Add Human-in-the-loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
+          - Create prebuilt ReAct agent from scratch: how-tos/react-agent-from-scratch.ipynb
   - "Conceptual Guides":
-      - "concepts/index.md"
-      - LangGraph for Agentic Applications: concepts/high_level.md
-      - Low Level LangGraph Concepts: concepts/low_level.md
+      - Why LangGraph?: concepts/high_level.md
+      - LangGraph Glossary: concepts/low_level.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
+      - Human-in-the-Loop: concepts/human_in_the_loop.md
+      - Multi-Agent Systems: concepts/multi_agent.md
+      - Persistence: concepts/persistence.md
+      - Streaming: concepts/streaming.md
       - FAQ: concepts/faq.md
   - Reference:
       - Graphs: reference/graphs.md
@@ -194,11 +212,12 @@ nav:
           - Setup:
               - Setup App: "cloud/deployment/setup.md"
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
+              - Setup App (JavaScript): "cloud/deployment/setup_javascript.md"
               - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
+              - Customize Dockerfile: "cloud/deployment/custom_docker.md"
               - Test App Locally: "cloud/deployment/test_locally.md"
           - Deployment:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
-              - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
               - Stream Values: "cloud/how-tos/stream_values.md"
               - Stream Updates: "cloud/how-tos/stream_updates.md"
@@ -223,16 +242,17 @@ nav:
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
           - Different Types of Runs:
-              - Run an Agent in the Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
-              - Run Multiple Agents in Same Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
-              - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
-              - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
+              - Run an Agent in the Background: "cloud/how-tos/background_run.md"
+              - Run Multiple Agents in Same Thread: "cloud/how-tos/same-thread.md"
+              - Create Cron Jobs: "cloud/how-tos/cron_jobs.md"
+              - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
-              - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
-              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
-              - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
+              - Configure Agents: "cloud/how-tos/configuration_cloud.md"
+              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
+              - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'
               - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
+              - Share State Between Threads: "cloud/how-tos/shared_state.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"

@@ -1,9 +1,9 @@
-from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.constants import TAG_HIDDEN
+from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.log import logger
 from langgraph.pregel.types import PregelExecutableTask
 
@@ -28,7 +28,7 @@ def read_channel(
 
 def read_channels(
     channels: Mapping[str, BaseChannel],
-    select: Union[list[str], str],
+    select: Union[Sequence[str], str],
     *,
     skip_empty: bool = True,
 ) -> Union[dict[str, Any], Any]:
@@ -73,15 +73,19 @@ class AddableValuesDict(AddableDict):
 
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
-    pending_writes: Sequence[tuple[str, Any]],
+    pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
     channels: Mapping[str, BaseChannel],
 ) -> Iterator[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
-        if any(chan == output_channels for chan, _ in pending_writes):
+        if pending_writes is True or any(
+            chan == output_channels for chan, _ in pending_writes
+        ):
             yield read_channel(channels, output_channels)
     else:
-        if {c for c, _ in pending_writes if c in output_channels}:
+        if pending_writes is True or {
+            c for c, _ in pending_writes if c in output_channels
+        }:
             yield AddableValuesDict(read_channels(channels, output_channels))
 
 
@@ -93,40 +97,50 @@ class AddableUpdatesDict(AddableDict):
         raise TypeError("AddableUpdatesDict does not support right-side addition")
 
 
+EMPTY_SEQ: tuple[str, ...] = tuple()
+
+
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
-    tasks: list[PregelExecutableTask],
+    tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
+    cached: bool = False,
 ) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
-        t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
+        (t, ww)
+        for t, ww in tasks
+        if (not t.config or TAG_HIDDEN not in t.config.get("tags", EMPTY_SEQ))
+        and ww[0][0] != ERROR
+        and ww[0][0] != INTERRUPT
     ]
     if not output_tasks:
         return
     if isinstance(output_channels, str):
-        updated = [
+        updated = (
             (task.name, value)
-            for task in output_tasks
-            for chan, value in task.writes
+            for task, writes in output_tasks
+            for chan, value in writes
             if chan == output_channels
-        ]
+        )
     else:
-        updated = [
+        updated = (
             (
                 task.name,
                 {chan: value for chan, value in task.writes if chan in output_channels},
             )
-            for task in output_tasks
-            if any(chan in output_channels for chan, _ in task.writes)
-        ]
-    grouped = {t.name: [] for t in output_tasks}
+            for task, writes in output_tasks
+            if any(chan in output_channels for chan, _ in writes)
+        )
+    grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)
     for node, value in grouped.items():
         if len(value) == 0:
-            grouped[node] = None
+            grouped[node] = None  # type: ignore[assignment]
         if len(value) == 1:
             grouped[node] = value[0]
+    if cached:
+        grouped["__metadata__"] = {"cached": cached}  # type: ignore[assignment]
     yield AddableUpdatesDict(grouped)
 
 

@@ -1,4 +1,4 @@
-# Low Level Conceptual Guide
+# LangGraph Glossary
 
 ## Graphs
 
@@ -30,7 +30,7 @@ The `MessageGraph` class is a special type of graph. The `State` of a `MessageGr
 
 To build your graph, you first define the [state](#state), you then add [nodes](#nodes) and [edges](#edges), and then you compile it. What exactly is compiling your graph and why is it needed?
 
-Compiling is a pretty simple step. It provides a few basic checks on the structure of your graph (no orphaned nodes, etc). It is also where you can specify runtime args like [checkpointers](#checkpointer) and [breakpoints](#breakpoints). You compile your graph by just calling the `.compile` method:
+Compiling is a pretty simple step. It provides a few basic checks on the structure of your graph (no orphaned nodes, etc). It is also where you can specify runtime args like [checkpointers](./persistence.md) and [breakpoints](#breakpoints). You compile your graph by just calling the `.compile` method:
 
 ```python
 graph = graph_builder.compile(...)
@@ -48,7 +48,64 @@ The main documented way to specify the schema of a graph is by using `TypedDict`
 
 By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [notebook here](../how-tos/input_output_schema.ipynb) for how to use.
 
-By default, all nodes in the graph will share the same state. This means that they will read and write to the same state channels. It is possible to have nodes write to private state channels inside the graph for internal node communication - see [this notebook](../how-tos/pass_private_state.ipynb) for how to do that.
+#### Multiple schemas
+
+Typically, all graph nodes communicate with a single schema. This means that they will read and write to the same state channels. But, there are cases where we want more control over this:
+
+* Internal nodes can pass information that is not required in the graph's input / output.
+* We may also want to use different input / output schemas for the graph. The output might, for example, only contain a single relevant output key.
+
+It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail.  
+
+It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains *all* keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
+
+Let's look at an example:
+
+```python
+class InputState(TypedDict):
+    user_input: str
+
+class OutputState(TypedDict):
+    graph_output: str
+
+class OverallState(TypedDict):
+    foo: str
+    user_input: str
+    graph_output: str
+
+class PrivateState(TypedDict):
+    bar: str
+
+def node_1(state: InputState) -> OverallState:
+    # Write to OverallState
+    return {"foo": state["user_input"] + " name"}
+
+def node_2(state: OverallState) -> PrivateState:
+    # Read from OverallState, write to PrivateState
+    return {"bar": state["foo"] + " is"}
+
+def node_3(state: PrivateState) -> OutputState:
+    # Read from PrivateState, write to OutputState
+    return {"graph_output": state["bar"] + " Lance"}
+
+builder = StateGraph(OverallState,input=InputState,output=OutputState)
+builder.add_node("node_1", node_1)
+builder.add_node("node_2", node_2)
+builder.add_node("node_3", node_3)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+builder.add_edge("node_2", "node_3")
+builder.add_edge("node_3", END)
+
+graph = builder.compile()
+graph.invoke({"user_input":"My"})
+{'graph_output': 'My name is Lance'}
+```
+There are two subtle and important points to note here:
+
+1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node *can write to any state channel in the graph state.* The graph state is the union of of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
+
+2. We initialize the graph with `StateGraph(OverallState,input=InputState,output=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because *nodes can also declare additional state channels* as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
 
 ### Reducers
 
@@ -91,7 +148,7 @@ You can use `Context` channels to define shared resources (such as database conn
 
 #### Why use messages?
 
-Most modern LLM providers have a chat model interface that accepts a list of messages as input. LangChain's [`ChatModel`](https://python.langchain.com/v0.2/docs/concepts/#chat-models) in particular accepts a list of `Message` objects as inputs. These messages come in a variety of forms such as `HumanMessage` (user input) or `AIMessage` (LLM response). To read more about what message objects are, please refer to [this](https://python.langchain.com/v0.2/docs/concepts/#messages) conceptual guide.
+Most modern LLM providers have a chat model interface that accepts a list of messages as input. LangChain's [`ChatModel`](https://python.langchain.com/docs/concepts/#chat-models) in particular accepts a list of `Message` objects as inputs. These messages come in a variety of forms such as `HumanMessage` (user input) or `AIMessage` (LLM response). To read more about what message objects are, please refer to [this](https://python.langchain.com/docs/concepts/#messages) conceptual guide.
 
 #### Using Messages in your Graph
 
@@ -101,7 +158,7 @@ However, you might also want to manually update messages in your graph state (e.
 
 #### Serialization
 
-In addition to keeping track of message IDs, the `add_messages` function will also try to deserialize messages into LangChain `Message` objects whenever a state update is received on the `messages` channel. See more information on LangChain serialization/deserialization [here](https://python.langchain.com/v0.2/docs/how_to/serialization/). This allows sending graph inputs / state updates in the following format:
+In addition to keeping track of message IDs, the `add_messages` function will also try to deserialize messages into LangChain `Message` objects whenever a state update is received on the `messages` channel. See more information on LangChain serialization/deserialization [here](https://python.langchain.com/docs/how_to/serialization/). This allows sending graph inputs / state updates in the following format:
 
 ```python
 # this is supported
@@ -266,100 +323,9 @@ def continue_to_jokes(state: OverallState):
 graph.add_conditional_edges("node_a", continue_to_jokes)
 ```
 
-## Checkpointer
+## Persistence
 
-LangGraph has a built-in persistence layer, implemented through [checkpointers][basecheckpointsaver]. When you use a checkpointer with a graph, you can interact with the state of that graph. When you use a checkpointer with a graph, you can interact with and manage the graph's state. The checkpointer saves a _checkpoint_ of the graph state at every super-step, enabling several powerful capabilities:
-
-First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve steps.Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
-
-Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
-
-See [this guide](../how-tos/persistence.ipynb) for how to add a checkpointer to your graph.
-
-## Threads
-
-Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
-
-`thread_id` is simply the ID of a thread. This is always required
-
-`thread_ts` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
-
-You must pass these when invoking the graph as part of the configurable part of the config.
-
-```python
-config = {"configurable": {"thread_id": "a"}}
-graph.invoke(inputs, config=config)
-```
-
-See [this guide](../how-tos/persistence.ipynb) for how to use threads.
-
-## Checkpointer state
-
- When interacting with the checkpointer state, you must specify a [thread identifier](#threads).Each checkpoint saved by the checkpointer has two properties:
-
-- **values**: This is the value of the state at this point in time.
-- **next**: This is a tuple of the nodes to execute next in the graph.
-
-### Get state
-
-You can get the state of a checkpointer by calling `graph.get_state(config)`. The config should contain `thread_id`, and the state will be fetched for that thread.
-
-### Get state history
-
-You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread.
-
-### Update state
-
-You can also interact with the state directly and update it. This takes three different components:
-
-- config
-- values
-- `as_node`
-
-**config**
-
-The config should contain `thread_id` specifying which thread to update.
-
-**values**
-
-These are the values that will be used to update the state. Note that this update is treated exactly as any update from a node is treated. This means that these values will be passed to the [reducer](#reducers) functions that are part of the state. So this does NOT automatically overwrite the state. Let's walk through an example.
-
-Let's assume you have defined the state of your graph as:
-
-```python
-from typing import TypedDict, Annotated
-from operator import add
-
-class State(TypedDict):
-    foo: int
-    bar: Annotated[list[str], add]
-```
-
-Let's now assume the current state of the graph is
-
-```
-{"foo": 1, "bar": ["a"]}
-```
-
-If you update the state as below:
-
-```
-graph.update_state(config, {"foo": 2, "bar": ["b"]})
-```
-
-Then the new state of the graph will be:
-
-```
-{"foo": 2, "bar": ["a", "b"]}
-```
-
-The `foo` key is completely changed (because there is no reducer specified for that key, so it overwrites it). However, there is a reducer specified for the `bar` key, and so it appends `"b"` to the state of `bar`.
-
-**`as_node`**
-
-The final thing you specify when calling `update_state` is `as_node`. This update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous.
-
-The reason this matters is that the next steps in the graph to execute depend on the last node to have given an update, so this can be used to control which node executes next.
+LangGraph has a built-in persistence layer, implemented through [checkpointers][basecheckpointsaver]. When you use a checkpointer with a graph, you can interact with and manage the graph's state after the execution. The checkpointer saves a _checkpoint_ (a snapshot) of the graph state at every superstep, enabling several powerful capabilities, including human-in-the-loop, memory and fault-tolerance. See this [conceptual guide](./persistence.md) for more information.
 
 ## Graph Migrations
 
@@ -401,13 +367,23 @@ def node_a(state, config):
     ...
 ```
 
-See [this guide](../how-tos/configuration.ipynb) for a full breakdown on configuration
+See [this guide](../how-tos/configuration.ipynb) for a full breakdown on configuration.
+
+### Recursion Limit
+
+The recursion limit sets the maximum number of [super-steps](#graphs) the graph can execute during a single execution. Once the limit is reached, LangGraph will raise `GraphRecursionError`. By default this value is set to 25 steps. The recursion limit can be set on any graph at runtime, and is passed to `.invoke`/`.stream` via the config dictionary. Importantly, `recursion_limit` is a standalone `config` key and should not be passed inside the `configurable` key as all other user-defined configuration. See the example below:
+
+```python
+graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthropic"}})
+```
+
+Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
 
 ## Breakpoints
 
 It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
 
-You **MUST** use a [checkpoiner](#checkpointer) when using breakpoints. This is because your graph needs to be able to resume execution.
+You **MUST** use a [checkpoiner](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
 
 In order to resume execution, you can just invoke your graph with `None` as the input.
 
@@ -421,19 +397,24 @@ graph.invoke(None, config=config)
 
 See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
 
+### Dynamic Breakpoints
+
+It may be helpful to **dynamically** interrupt the graph from inside a given node based on some condition. In `LangGraph` you can do so by using `NodeInterrupt` -- a special exception that can be raised from inside a node.
+
+```python
+def my_node(state: State) -> State:
+    if len(state['input']) > 5:
+        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
+
+    return state
+```
+
 ## Visualization
 
 It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.ipynb) for more info.
 
 ## Streaming
 
-LangGraph is built with first class support for streaming. There are several different streaming modes that LangGraph supports:
 
-- [`"values"`](../how-tos/stream-values.ipynb): This streams the full value of the state after each step of the graph.
-- [`"updates`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
-- `"debug"`: This streams as much information as possible throughout the execution of the graph.
+LangGraph is built with first class support for streaming, including streaming updates from graph nodes during the execution, streaming tokens from LLM calls and more. See this [conceptual guide](./streaming.md) for more information.
 
-In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb).
-
-!!! warning "ASYNC IN PYTHON<=3.10"
-    You may fail to see events being emitted from inside a node when using `.astream_events` in Python <= 3.10. If you're using a Langchain RunnableLambda, a RunnableGenerator, or Tool asynchronously inside your node, you will have to propagate callbacks to these objects manually. This is because LangChain cannot automatically propagate callbacks to child objects in this case. Please see examples [here](../how-tos/streaming-content.ipynb) and [here](../how-tos/streaming-events-from-within-tools.ipynb).

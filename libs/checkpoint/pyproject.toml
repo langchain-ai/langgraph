@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint"
-version = "1.0.3"
+version = "1.0.10"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 license = "MIT"
@@ -10,10 +10,11 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
-langchain-core = ">=0.2.22,<0.3"
+langchain-core = ">=0.2.38,<0.4"
+msgpack = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.1.4"
+ruff = "^0.6.2"
 codespell = "^2.2.0"
 pytest = "^7.2.1"
 pytest-asyncio = "^0.21.1"
@@ -52,3 +53,13 @@ now = true
 delay = 0.1
 runner_args = ["--ff", "-v", "--tb", "short"]
 patterns = ["*.py"]
+
+[tool.mypy]
+# https://mypy.readthedocs.io/en/stable/config_file.html
+disallow_untyped_defs = "True"
+explicit_package_bases = "True"
+warn_no_return = "False"
+warn_unused_ignores = "True"
+warn_redundant_casts = "True"
+allow_redefinition = "True"
+disable_error_code = "typeddict-item, return-value"

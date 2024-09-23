@@ -12,22 +12,24 @@ class SerializerProtocol(Protocol):
     Valid implementations include the `pickle`, `json` and `orjson` modules.
     """
 
-    def dumps(self, obj: Any) -> bytes:
-        ...
+    def dumps(self, obj: Any) -> bytes: ...
 
-    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        ...
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]: ...
 
-    def loads(self, data: bytes) -> Any:
-        ...
+    def loads(self, data: bytes) -> Any: ...
 
-    def loads_typed(self, data: tuple[str, bytes]) -> Any:
-        ...
+    def loads_typed(self, data: tuple[str, bytes]) -> Any: ...
 
 
 class SerializerCompat(SerializerProtocol):
     def __init__(self, serde: SerializerProtocol) -> None:
         self.serde = serde
+
+    def dumps(self, obj: Any) -> bytes:
+        return self.serde.dumps(obj)
+
+    def loads(self, data: bytes) -> Any:
+        return self.serde.loads(data)
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         return type(obj).__name__, self.serde.dumps(obj)

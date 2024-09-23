@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional, Sequence, TypedDict, Union
 
-Metadata = Optional[dict[str, Any]]
+Json = Optional[dict[str, Any]]
 
 RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
 
@@ -9,9 +9,13 @@ ThreadStatus = Literal["idle", "busy", "interrupted"]
 
 StreamMode = Literal["values", "messages", "updates", "events", "debug"]
 
+DisconnectMode = Literal["cancel", "continue"]
+
 MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
 
 OnConflictBehavior = Literal["raise", "do_nothing"]
+
+OnCompletionBehavior = Literal["delete", "keep"]
 
 All = Literal["*"]
 
@@ -37,6 +41,15 @@ class Config(TypedDict, total=False):
     """
 
 
+class Checkpoint(TypedDict):
+    """Checkpoint model."""
+
+    thread_id: str
+    checkpoint_ns: str
+    checkpoint_id: Optional[str]
+    checkpoint_map: Optional[dict[str, Any]]
+
+
 class GraphSchema(TypedDict):
     """Graph model."""
 
@@ -53,8 +66,8 @@ class GraphSchema(TypedDict):
     Missing if unable to generate JSON schema from graph."""
 
 
-class Assistant(TypedDict):
-    """Assistant model."""
+class AssistantBase(TypedDict):
+    """Assistant base model."""
 
     assistant_id: str
     """The ID of the assistant."""
@@ -64,10 +77,25 @@ class Assistant(TypedDict):
     """The assistant config."""
     created_at: datetime
     """The time the assistant was created."""
+    metadata: Json
+    """The assistant metadata."""
+    version: int
+    """The version of the assistant"""
+
+
+class AssistantVersion(AssistantBase):
+    """Assistant version model."""
+
+    pass
+
+
+class Assistant(AssistantBase):
+    """Assistant model."""
+
     updated_at: datetime
     """The last time the assistant was updated."""
-    metadata: Metadata
-    """The assistant metadata."""
+    name: str
+    """The name of the assistant"""
 
 
 class Thread(TypedDict):
@@ -77,10 +105,21 @@ class Thread(TypedDict):
     """The time the thread was created."""
     updated_at: datetime
     """The last time the thread was updated."""
-    metadata: Metadata
+    metadata: Json
     """The thread metadata."""
     status: ThreadStatus
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
+    values: Json
+    """The current state of the thread."""
+
+
+class ThreadTask(TypedDict):
+    id: str
+    name: str
+    error: Optional[str]
+    interrupts: list[dict]
+    checkpoint: Optional[Checkpoint]
+    state: Optional["ThreadState"]
 
 
 class ThreadState(TypedDict):
@@ -89,14 +128,16 @@ class ThreadState(TypedDict):
     next: Sequence[str]
     """The next nodes to execute. If empty, the thread is done until new input is 
     received."""
-    checkpoint_id: str
+    checkpoint: Checkpoint
     """The ID of the checkpoint."""
-    metadata: Metadata
+    metadata: Json
     """Metadata for this state"""
     created_at: Optional[str]
     """Timestamp of state creation"""
-    parent_checkpoint_id: Optional[str]
+    parent_checkpoint: Optional[Checkpoint]
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
+    tasks: Sequence[ThreadTask]
+    """Tasks to execute in this step. If already attempted, may contain an error."""
 
 
 class Run(TypedDict):
@@ -112,7 +153,7 @@ class Run(TypedDict):
     """The last time the run was updated."""
     status: RunStatus
     """The status of the run. One of 'pending', 'running', "error", 'success', "timeout", "interrupted"."""
-    metadata: Metadata
+    metadata: Json
     """The run metadata."""
     multitask_strategy: MultitaskStrategy
     """Strategy to handle concurrent runs on the same thread."""

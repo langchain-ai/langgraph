@@ -1,15 +1,7 @@
 # How to stream messages from your graph
 
-LangGraph Cloud supports multiple streaming modes. The main ones are:
+This guide covers how to stream messages from your graph. In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
 
-- `values`: This streaming mode streams back values of the graph. This is the **full state of the graph** after each node is called.
-- `updates`: This streaming mode streams back updates to the graph. This is the **update to the state of the graph** after each node is called.
-- `messages`: This streaming mode streams back messages - both complete messages (at the end of a node) as well as **tokens** for any messages generated inside a node. This mode is primarily meant for powering chat applications.
-
-
-This guide covers `stream_mode="messages"`.
-
-In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
 E.g., the state should look something like:
 
 === "Python"
@@ -23,16 +15,30 @@ E.g., the state should look something like:
         messages: Annotated[list[AnyMessage], add_messages]
     ```
 
+=== "Javascript"
 
-Alternatively, you can use an instance or subclass of `from langgraph.graph import MessagesState` (`MessagesState` is equivalent to the implementation above).
+    ```js
+    import { type BaseMessage } from "@langchain/core/messages";
+    import { Annotation, messagesStateReducer } from "@langchain/langgraph";
 
-> [!NOTE]
-> LangGraph Cloud only supports hosting graphs written in Python at the moment.
+    export const StateAnnotation = Annotation.Root({
+      messages: Annotation<BaseMessage[]>({
+        reducer: messagesStateReducer,
+        default: () => [],
+      }),
+    });
+    ```
+
+Alternatively, you can use an instance or subclass of `from langgraph.graph import MessagesState` (`MessagesState` is equivalent to the implementation above). Or in Javascript: `import { MessagesAnnotation } from "@langchain/langgraph";`.
 
 With `stream_mode="messages"` two things will be streamed back:
 
 - It outputs messages produced by any chat model called inside (unless tagged in a special way)
-- It outputs messages returned from nodes (to allow for nodes to return `ToolMessages` and the like
+- It outputs messages returned from nodes (to allow for nodes to return `ToolMessages` and the like)
+
+Read more about how the `messages` streaming mode works [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#modemessages)
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -42,6 +48,8 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -53,9 +61,11 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -63,17 +73,21 @@ First let's set up our client and thread:
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Output:
 
-    {'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
-     'created_at': '2024-06-21T15:48:59.808924+00:00',
-     'updated_at': '2024-06-21T15:48:59.808924+00:00',
-     'metadata': {},
-     'status': 'idle',
-     'config': {}}
+    {
+        'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
+        'created_at': '2024-06-21T15:48:59.808924+00:00',
+        'updated_at': '2024-06-21T15:48:59.808924+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
+    }
 
 Let's also define a helper function for better formatting of the tool calls in messages (for CURL we will define a helper script called `process_stream.sh`)
 
@@ -167,6 +181,7 @@ Let's also define a helper function for better formatting of the tool calls in m
     done
     ```
 
+## Stream graph in messages mode
 
 Now we can stream by messages, which will return complete messages (at the end of node execution) as well as tokens for any messages generated inside a node:
 
@@ -178,7 +193,7 @@ Now we can stream by messages, which will return complete messages (at the end o
 
     async for event in client.runs.stream(
         thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         config=config,
         stream_mode="messages",
@@ -217,24 +232,25 @@ Now we can stream by messages, which will return complete messages (at the end o
 
     ```js
     const input = {
-      "messages": [
+      messages: [
         {
-          "role": "human",
-          "content": "What's the weather in sf",
+          role: "human",
+          content: "What's the weather in sf",
         }
       ]
-    }
-    const config = {"configurable": {"model_name": "openai"}}
+    };
+    const config = { configurable: { model_name: "openai" } };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         config,
         streamMode: "messages"
       }
     );
+
     for await (const event of streamResponse) {
       if (event.event === "metadata") {
         console.log(`Metadata: Run ID - ${event.data.run_id}`);

@@ -7,15 +7,21 @@ hide:
 
 Welcome to the LangGraph Cloud how-to guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph Cloud.
 
-## Deployment
+## Setup
 
-LangGraph Cloud gives you best in class observability, testing, and hosting services. Read more about them in these how to guides:
+LangGraph Cloud gives you best in class observability, testing, and hosting services. Learn how to setup your app for deployment to LangGraph Cloud in these how-to guides 
 
 - [How to set up app for deployment (requirements.txt)](../deployment/setup.md)
 - [How to set up app for deployment (pyproject.toml)](../deployment/setup_pyproject.md)
+- [How to set up app for deployment (JavaScript)](../deployment/setup_javascript.md)
+- [How to customize Dockerfile](../deployment/custom_docker.md)
 - [How to test locally](../deployment/test_locally.md)
+
+## Deploy
+
+Learn how to deploy your app to LangGraph Cloud in these how to guides:
+
 - [How to deploy to LangGraph cloud](../deployment/cloud.md)
-- [How to self-host](../deployment/self_hosted.md)
 
 
 ## Streaming
@@ -61,17 +67,18 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 
 LangGraph Cloud supports multiple types of runs besides streaming runs.
 
-- [How to run an agent in the background](cloud_examples/background_run.ipynb)
-- [How to run multiple agents in the same thread](cloud_examples/same-thread.ipynb)
-- [How to create cron jobs](cloud_examples/cron_jobs.ipynb)
-- [How to create stateless runs](cloud_examples/stateless_runs.ipynb)
+- [How to run an agent in the background](./background_run.md)
+- [How to run multiple agents in the same thread](./same-thread.md)
+- [How to create cron jobs](./cron_jobs.md)
+- [How to create stateless runs](./stateless_runs.md)
 
 ## Other 
 
 Other guides that may prove helpful!
 
-- [How to configure agents](cloud_examples/configuration_cloud.ipynb)
-- [How to convert LangGraph calls to LangGraph cloud calls](cloud_examples/langgraph_to_langgraph_cloud.ipynb)
-- [How to integrate webhooks](cloud_examples/webhooks.ipynb)
+- [How to configure agents](./configuration_cloud.md)
+- [How to convert LangGraph calls to LangGraph cloud calls](./langgraph_to_langgraph_cloud.ipynb)
+- [How to integrate webhooks](./webhooks.md)
 - [How to copy threads](./copy_threads.md)
 - [How to check status of your threads](./check_thread_status.md)
+- [How to share state between threads](./shared_state.md)

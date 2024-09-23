@@ -1,9 +1,10 @@
 from collections import deque
-from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
+from typing import Any, Callable, Literal, NamedTuple, Optional, Sequence, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.constants import Interrupt
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -51,13 +52,24 @@ class RetryPolicy(NamedTuple):
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
     retry_on: Union[
-        Type[Exception], tuple[Type[Exception], ...], Callable[[Exception], bool]
+        Type[Exception], Sequence[Type[Exception]], Callable[[Exception], bool]
     ] = default_retry_on
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-class PregelTaskDescription(NamedTuple):
+class CachePolicy(NamedTuple):
+    """Configuration for caching nodes."""
+
+    pass
+
+
+class PregelTask(NamedTuple):
+    id: str
     name: str
+    path: tuple[Union[str, int], ...]
+    error: Optional[Exception] = None
+    interrupts: tuple[Interrupt, ...] = ()
+    state: Union[None, RunnableConfig, "StateSnapshot"] = None
 
 
 class PregelExecutableTask(NamedTuple):
@@ -68,31 +80,45 @@ class PregelExecutableTask(NamedTuple):
     config: RunnableConfig
     triggers: list[str]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
     id: str
+    path: tuple[Union[str, int], ...]
+    scheduled: bool = False
 
 
 class StateSnapshot(NamedTuple):
+    """Snapshot of the state of the graph at the beginning of a step."""
+
     values: Union[dict[str, Any], Any]
     """Current values of channels"""
-    next: tuple[str]
-    """Nodes to execute in the next step, if any"""
+    next: tuple[str, ...]
+    """The name of the node to execute in each task for this step."""
     config: RunnableConfig
     """Config used to fetch this snapshot"""
     metadata: Optional[CheckpointMetadata]
     """Metadata associated with this snapshot"""
     created_at: Optional[str]
     """Timestamp of snapshot creation"""
-    parent_config: Optional[RunnableConfig] = None
+    parent_config: Optional[RunnableConfig]
     """Config used to fetch the parent snapshot, if any"""
+    tasks: tuple[PregelTask, ...]
+    """Tasks to execute in this step. If already attempted, may contain an error."""
 
 
 All = Literal["*"]
 
-StreamMode = Literal["values", "updates", "debug"]
+StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
 - 'values': Emit all values of the state for each step.
 - 'updates': Emit only the node name(s) and updates
     that were returned by the node(s) **after** each step.
 - 'debug': Emit debug events for each step.
+- 'messages': Emit LLM messages token-by-token.
+- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
 """
+
+StreamWriter = Callable[[Any], None]
+"""Callable that accepts a single argument and writes it to the output stream.
+Always injected into nodes if requested,
+but it's a no-op when not using stream_mode="custom"."""

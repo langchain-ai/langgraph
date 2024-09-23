@@ -1,6 +1,6 @@
 {
   "name": "@langchain/langgraph-sdk",
-  "version": "0.0.4",
+  "version": "0.0.10",
   "description": "Client library for interacting with the LangGraph API",
   "type": "module",
   "packageManager": "yarn@1.22.19",
@@ -17,7 +17,6 @@
   "license": "MIT",
   "dependencies": {
     "@types/json-schema": "^7.0.15",
-    "eventsource-parser": "^1.1.2",
     "p-queue": "^6.6.2",
     "p-retry": "4",
     "uuid": "^9.0.0"

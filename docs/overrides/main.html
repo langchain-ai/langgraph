@@ -179,3 +179,34 @@
     <title>{{ config.site_name }}</title>
   {% endif %}
 {% endblock %}
+
+{% block announce %}
+  <style>
+    .md-banner {
+      background-color: rgba(53, 151, 147, 0.1);
+      color: rgb(53, 151, 147);
+      width: 100%;
+      padding: 10px 0;
+      margin: 0;
+    }
+    .md-banner__inner {
+      margin: 0 auto;
+      padding: 0 0.8rem;
+      text-align: center;
+    }
+    .md-banner__inner p {
+      margin: 0;
+    }
+    .md-banner__inner a {
+      color: inherit;
+      text-decoration: underline;
+    }
+    .md-banner__inner a:hover {
+      color: inherit;
+      cursor: pointer;
+    }
+  </style>
+  <div class="md-banner__inner">
+    <p>Share your thoughts on AI agents. <a target="_blank" href="https://langchain.typeform.com/state-of-agents">Take the 3-min survey</a>.</p>
+  </div>
+{% endblock %}

@@ -1,7 +1,5 @@
 from typing import (
     Any,
-    AsyncGenerator,
-    Generator,
     Optional,
     Protocol,
     Sequence,
@@ -9,45 +7,34 @@ from typing import (
     runtime_checkable,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
-Value = TypeVar("Value")
-Update = TypeVar("Update")
+ERROR = "__error__"
+SCHEDULED = "__scheduled__"
+TASKS = "__pregel_tasks"
+
+Value = TypeVar("Value", covariant=True)
+Update = TypeVar("Update", contravariant=True)
 C = TypeVar("C")
 
 
 class ChannelProtocol(Protocol[Value, Update, C]):
     # Mirrors langgraph.channels.base.BaseChannel
     @property
-    def ValueType(self) -> Any:
-        ...
+    def ValueType(self) -> Any: ...
 
     @property
-    def UpdateType(self) -> Any:
-        ...
+    def UpdateType(self) -> Any: ...
 
-    def checkpoint(self) -> Optional[C]:
-        ...
+    def checkpoint(self) -> Optional[C]: ...
 
-    def from_checkpoint(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> Generator[Self, None, None]:
-        ...
+    def from_checkpoint(self, checkpoint: Optional[C]) -> Self: ...
 
-    async def afrom_checkpoint(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> AsyncGenerator[Self, None]:
-        ...
+    def update(self, values: Sequence[Update]) -> bool: ...
 
-    def update(self, values: Sequence[Update]) -> bool:
-        ...
+    def get(self) -> Value: ...
 
-    def get(self) -> Value:
-        ...
-
-    def consume(self) -> bool:
-        ...
+    def consume(self) -> bool: ...
 
 
 @runtime_checkable
@@ -56,11 +43,8 @@ class SendProtocol(Protocol):
     node: str
     arg: Any
 
-    def __hash__(self) -> int:
-        ...
+    def __hash__(self) -> int: ...
 
-    def __repr__(self) -> str:
-        ...
+    def __repr__(self) -> str: ...
 
-    def __eq__(self, value: object) -> bool:
-        ...
+    def __eq__(self, value: object) -> bool: ...

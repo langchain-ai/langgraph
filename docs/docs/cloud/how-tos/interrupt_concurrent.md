@@ -1,23 +1,49 @@
-## Interrupt
+# Interrupt
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../concepts/api.md#double-texting).
 
 The guide covers the `interrupt` option for double texting, which interrupts the prior run of the graph and starts a new one with the double-text. This option does not delete the first run, but rather keeps it in the database but sets its status to `interrupted`. Below is a quick example of using the `interrupt` option.
 
-First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
+## Setup
 
-```js
-function prettyPrint(m) {
-  const padded = " " + m['type'] + " ";
-  const sepLen = Math.floor((80 - padded.length) / 2);
-  const sep = "=".repeat(sepLen);
-  const secondSep = sep + (padded.length % 2 ? "=" : "");
-  
-  console.log(`${sep}${padded}${secondSep}`);
-  console.log("\n\n");
-  console.log(m.content);
-}
-```
+First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
+
+=== "Javascript"
+
+    ```js
+    function prettyPrint(m) {
+      const padded = " " + m['type'] + " ";
+      const sepLen = Math.floor((80 - padded.length) / 2);
+      const sep = "=".repeat(sepLen);
+      const secondSep = sep + (padded.length % 2 ? "=" : "");
+      
+      console.log(`${sep}${padded}${secondSep}`);
+      console.log("\n\n");
+      console.log(m.content);
+    }
+    ```
+
+=== "CURL"
+
+    ```bash
+    # PLACE THIS IN A FILE CALLED pretty_print.sh
+    pretty_print() {
+      local type="$1"
+      local content="$2"
+      local padded=" $type "
+      local total_width=80
+      local sep_len=$(( (total_width - ${#padded}) / 2 ))
+      local sep=$(printf '=%.0s' $(eval "echo {1.."${sep_len}"}"))
+      local second_sep=$sep
+      if (( (total_width - ${#padded}) % 2 )); then
+        second_sep="${second_sep}="
+      fi
+
+      echo "${sep}${padded}${second_sep}"
+      echo
+      echo "$content"
+    }
+    ```
 
 Now, let's import our required packages and instantiate our client, assistant, and thread.
 
@@ -30,6 +56,7 @@ Now, let's import our required packages and instantiate our client, assistant, a
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -40,9 +67,21 @@ Now, let's import our required packages and instantiate our client, assistant, a
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
+    ```
+
+## Create runs
 
 Now we can start our two runs and join the second on euntil it has completed:
 
@@ -53,14 +92,14 @@ Now we can start our two runs and join the second on euntil it has completed:
     interrupted_run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
     await asyncio.sleep(2)
     run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
-        multitask_strategychrom="interrupt",
+        input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
+        multitask_strategy="interrupt",
     )
     # wait until the second run completes
     await client.runs.join(thread["thread_id"], run["run_id"])
@@ -90,6 +129,28 @@ Now we can start our two runs and join the second on euntil it has completed:
     await client.runs.join(thread["thread_id"], run["run_id"]);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in sf?\"}]},
+    }" && sleep 2 && curl --request POST \
+    --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in nyc?\"}]},
+      \"multitask_strategy\": \"interrupt\"
+    }" && curl --request GET \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join
+    ```
+
+## View run results
+
 We can see that the thread has partial data from the first run + data from the second run
 
 
@@ -112,12 +173,24 @@ We can see that the thread has partial data from the first run + data from the s
     }
     ```
 
+=== "CURL"
+
+    ```bash
+    source pretty_print.sh && curl --request GET \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \
+    jq -c '.values.messages[]' | while read -r element; do
+        type=$(echo "$element" | jq -r '.type')
+        content=$(echo "$element" | jq -r '.content | if type == "array" then tostring else . end')
+        pretty_print "$type" "$content"
+    done
+    ```
+
 Output:
 
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in sf?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'id': 'toolu_01MjNtVJwEcpujRGrf3x6Pih', 'input': {'query': 'weather in san francisco'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -125,14 +198,14 @@ Output:
      Call ID: toolu_01MjNtVJwEcpujRGrf3x6Pih
       Args:
         query: weather in san francisco
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.wunderground.com/hourly/us/ca/san-francisco/KCASANFR2002/date/2024-6-18", "content": "High 64F. Winds W at 10 to 20 mph. A few clouds from time to time. Low 49F. Winds W at 10 to 20 mph. Temp. San Francisco Weather Forecasts. Weather Underground provides local & long-range weather ..."}]
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in nyc?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'id': 'toolu_01KtE1m1ifPLQAx4fQLyZL9Q', 'input': {'query': 'weather in new york city'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -140,11 +213,11 @@ Output:
      Call ID: toolu_01KtE1m1ifPLQAx4fQLyZL9Q
       Args:
         query: weather in new york city
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.accuweather.com/en/us/new-york/10021/june-weather/349727", "content": "Get the monthly weather forecast for New York, NY, including daily high/low, historical averages, to help you plan ahead."}]
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     The search results provide weather forecasts and information for New York City. Based on the top result from AccuWeather, here are some key details about the weather in NYC:
     

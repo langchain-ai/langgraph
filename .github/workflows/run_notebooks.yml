@@ -1,0 +1,61 @@
+name: Run notebooks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lib-version:
+          - "development"
+          - "latest"
+
+    name: "test (langgraph: ${{ matrix.lib-version }})"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python + Poetry
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: 3.11
+          poetry-version: 1.7.1
+          cache-key: test-langgraph-notebooks
+
+      - name: Install dependencies
+        run: |
+          poetry install --with test
+          poetry run pip install jupyter
+          if [ "${{ matrix.lib-version }}" = "latest" ]; then
+            poetry add chromadb pandas langchain_nomic
+            poetry remove langchain-openai langchain-anthropic langchain-community
+            poetry add langchain-openai@latest langchain-anthropic@latest langchain-community@latest
+          fi
+
+      - name: Start services
+        run: make start-services
+
+      - name: Prepare notebooks
+        run: |
+          if [ "${{ matrix.lib-version }}" = "development" ]; then
+            poetry run python docs/_scripts/prepare_notebooks_for_ci.py --comment-install-cells
+          else
+            poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+          fi
+
+      - name: Run notebooks
+        env:
+          # these won't actually be used because of the VCR cassettes
+          # but need to set them to avoid triggering getpass()
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          NOMIC_API_KEY: ${{ secrets.NOMIC_API_KEY }}
+        run: |
+          ./docs/_scripts/execute_notebooks.sh
+
+      - name: Stop services
+        run: make stop-services

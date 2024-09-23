@@ -1,6 +1,7 @@
 from typing import (
     Annotated,
     Callable,
+    Literal,
     Optional,
     Sequence,
     Type,
@@ -9,18 +10,14 @@ from typing import (
     Union,
 )
 
-from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    SystemMessage,
-)
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 
 from langgraph._api.deprecation import deprecated_parameter
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.graph import END, StateGraph
+from langgraph.graph import StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep
@@ -129,22 +126,22 @@ def _get_model_preprocessing_runnable(
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
-    model: LanguageModelLike,
-    tools: Union[ToolExecutor, Sequence[BaseTool]],
+    model: BaseChatModel,
+    tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
-    interrupt_before: Optional[Sequence[str]] = None,
-    interrupt_after: Optional[Sequence[str]] = None,
+    interrupt_before: Optional[list[str]] = None,
+    interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
     Args:
         model: The `LangChain` chat model that supports tool calling.
-        tools: A list of tools or a ToolExecutor instance.
+        tools: A list of tools, a ToolExecutor, or a ToolNode instance.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -418,32 +415,38 @@ def create_react_agent(
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if isinstance(tools, ToolExecutor):
-        tool_classes = tools.tools
+        tool_classes: Sequence[BaseTool] = tools.tools
+        tool_node = ToolNode(tool_classes)
+    elif isinstance(tools, ToolNode):
+        tool_classes = list(tools.tools_by_name.values())
+        tool_node = tools
     else:
         tool_classes = tools
+        tool_node = ToolNode(tool_classes)
     model = model.bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState):
+    def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if not last_message.tool_calls:
-            return "end"
+        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+            return "__end__"
         # Otherwise if there is, we continue
         else:
-            return "continue"
+            return "tools"
 
     preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier)
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
-    def call_model(
-        state: AgentState,
-        config: RunnableConfig,
-    ):
+    def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = model_runnable.invoke(state, config)
-        if state["is_last_step"] and response.tool_calls:
+        if (
+            state["is_last_step"]
+            and isinstance(response, AIMessage)
+            and response.tool_calls
+        ):
             return {
                 "messages": [
                     AIMessage(
@@ -455,9 +458,13 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState, config: RunnableConfig):
+    async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = await model_runnable.ainvoke(state, config)
-        if state["is_last_step"] and response.tool_calls:
+        if (
+            state["is_last_step"]
+            and isinstance(response, AIMessage)
+            and response.tool_calls
+        ):
             return {
                 "messages": [
                     AIMessage(
@@ -474,7 +481,7 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("tools", ToolNode(tool_classes))
+    workflow.add_node("tools", tool_node)
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -487,23 +494,24 @@ def create_react_agent(
         "agent",
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
-        # Finally we pass in a mapping.
-        # The keys are strings, and the values are other nodes.
-        # END is a special node marking that the graph should finish.
-        # What will happen is we will call `should_continue`, and then the output of that
-        # will be matched against the keys in this mapping.
-        # Based on which one it matches, that node will then be called.
-        {
-            # If `tools`, then we call the tool node.
-            "continue": "tools",
-            # Otherwise we finish.
-            "end": END,
-        },
     )
 
-    # We now add a normal edge from `tools` to `agent`.
-    # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("tools", "agent")
+    # If any of the tools are configured to return_directly after running,
+    # our graph needs to check if these were called
+    should_return_direct = {t.name for t in tool_classes if t.return_direct}
+
+    def route_tool_responses(state: AgentState) -> Literal["agent", "__end__"]:
+        for m in reversed(state["messages"]):
+            if not isinstance(m, ToolMessage):
+                break
+            if m.name in should_return_direct:
+                return "__end__"
+        return "agent"
+
+    if should_return_direct:
+        workflow.add_conditional_edges("tools", route_tool_responses)
+    else:
+        workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

@@ -24,8 +24,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
-    const assistantId = agent;
+    const client = new Client({ apiUrl: "<DEPLOYMENT_URL>" });
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -92,21 +92,21 @@ We can verify that the history from the prior thread did indeed copy over correc
 
     ```js
     function removeThreadId(d) {
-        if (d.metadata && d.metadata.thread_id) {
-            delete d.metadata.thread_id;
-        }
-        return d;
+      if (d.metadata && d.metadata.thread_id) {
+        delete d.metadata.thread_id;
+      }
+      return d;
     }
 
     // Assuming `client.threads.getHistory(threadId)` is an async function that returns a list of dicts
     async function compareThreadHistories(threadId, copiedThreadId) {
-        const originalThreadHistory = (await client.threads.getHistory(threadId)).map(removeThreadId);
-        const copiedThreadHistory = (await client.threads.getHistory(copiedThreadId)).map(removeThreadId);
+      const originalThreadHistory = (await client.threads.getHistory(threadId)).map(removeThreadId);
+      const copiedThreadHistory = (await client.threads.getHistory(copiedThreadId)).map(removeThreadId);
 
-        // Compare the two histories
-        console.assert(JSON.stringify(originalThreadHistory) === JSON.stringify(copiedThreadHistory))
-        // if we made it here the assertion passed!
-        console.log("The histories are the same.");
+      // Compare the two histories
+      console.assert(JSON.stringify(originalThreadHistory) === JSON.stringify(copiedThreadHistory));
+      // if we made it here the assertion passed!
+      console.log("The histories are the same.");
     }
 
     // Example usage

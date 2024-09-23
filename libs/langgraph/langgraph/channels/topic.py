@@ -1,7 +1,5 @@
-from contextlib import contextmanager
-from typing import Any, Generator, Generic, Iterator, Optional, Sequence, Type, Union
+from typing import Any, Generic, Iterator, Optional, Sequence, Type, Union
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -30,23 +28,17 @@ class Topic(
         accumulate: Whether to accumulate values across steps. If False, the channel will be emptied after each step.
     """
 
-    def __init__(
-        self, typ: Type[Value], unique: bool = False, accumulate: bool = False
-    ) -> None:
+    __slots__ = ("values", "accumulate")
+
+    def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
+        super().__init__(typ)
         # attrs
-        self.typ = typ
-        self.unique = unique
         self.accumulate = accumulate
         # state
-        self.seen = set[Value]()
         self.values = list[Value]()
 
     def __eq__(self, value: object) -> bool:
-        return (
-            isinstance(value, Topic)
-            and value.unique == self.unique
-            and value.accumulate == self.accumulate
-        )
+        return isinstance(value, Topic) and value.accumulate == self.accumulate
 
     @property
     def ValueType(self) -> Any:
@@ -59,35 +51,24 @@ class Topic(
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
     def checkpoint(self) -> tuple[set[Value], list[Value]]:
-        return (self.seen, self.values)
+        return self.values
 
-    @contextmanager
-    def from_checkpoint(
-        self,
-        checkpoint: Optional[tuple[set[Value], list[Value]]],
-        config: RunnableConfig,
-    ) -> Generator[Self, None, None]:
-        empty = self.__class__(self.typ, self.unique, self.accumulate)
+    def from_checkpoint(self, checkpoint: Optional[list[Value]]) -> Self:
+        empty = self.__class__(self.typ, self.accumulate)
+        empty.key = self.key
         if checkpoint is not None:
-            empty.seen = checkpoint[0].copy()
-            empty.values = checkpoint[1].copy()
-        try:
-            yield empty
-        finally:
-            pass
+            if isinstance(checkpoint, tuple):
+                empty.values = checkpoint[1]
+            else:
+                empty.values = checkpoint
+        return empty
 
     def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
         current = list(self.values)
         if not self.accumulate:
             self.values = list[Value]()
         if flat_values := flatten(values):
-            if self.unique:
-                for value in flat_values:
-                    if value not in self.seen:
-                        self.seen.add(value)
-                        self.values.append(value)
-            else:
-                self.values.extend(flat_values)
+            self.values.extend(flat_values)
         return self.values != current
 
     def get(self) -> Sequence[Value]:

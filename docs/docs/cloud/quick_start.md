@@ -14,13 +14,25 @@ This tutorial will use:
 
 1.  Create a new application with the following directory and files:
 
+=== "Python"
+
         <my-app>/
         |-- agent.py            # code for your LangGraph agent
         |-- requirements.txt    # Python packages required for your graph
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2.  The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](..//concepts/agentic_concepts.md#react-agent).
+=== "Javascript"
+
+        <my-app>/
+        |-- agent.ts            # code for your LangGraph agent
+        |-- package.json        # Javascript packages required for your graph
+        |-- langgraph.json      # configuration file for LangGraph
+        |-- .env                # environment files with API keys
+
+2.  The `agent.py`/`agent.ts` file should contain code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent. You can read more about it [here](../concepts/agentic_concepts.md#react-implementation).
+
+=== "Python"
 
     ```python
     from langchain_anthropic import ChatAnthropic
@@ -34,14 +46,53 @@ This tutorial will use:
     graph = create_react_agent(model, tools)
     ```
 
-3.  The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
+=== "Javascript"
 
-        langgraph
-        langchain_anthropic
-        tavily-python
-        langchain_community
+    ```ts
+    import { ChatAnthropic } from "@langchain/anthropic";
+    import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+    import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
-4.  The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
+    const model = new ChatAnthropic({
+      model: "claude-3-5-sonnet-20240620",
+    });
+
+    const tools = [
+      new TavilySearchResults({ maxResults: 3, }),
+    ];
+
+    export const graph = createReactAgent({ llm: model, tools });
+    ```
+
+3.  The `requirements.txt`/`package.json` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
+
+=== "Python"
+
+      ```python
+      langgraph
+      langchain_anthropic
+      tavily-python
+      langchain_community
+      ```
+
+=== "Javascript"
+
+      ```js
+      {
+        "name": "my-app",
+        "packageManager": "yarn@1.22.22",
+        "dependencies": {
+          "@langchain/community": "^0.2.31",
+          "@langchain/core": "^0.2.31",
+          "@langchain/langgraph": "0.2.0",
+          "@langchain/openai": "^0.2.8"
+        }
+      }
+      ```
+
+4.  The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`/`agent.ts`.
+
+=== "Python"
 
     ```json
     {
@@ -53,7 +104,21 @@ This tutorial will use:
     }
     ```
 
-    Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
+=== "Javascript"
+
+    ```json
+    {
+      "node_version": "20",
+      "dockerfile_lines": [],
+      "dependencies": ["."],
+      "graphs": {
+        "agent": "./src/agent.ts:graph"
+      },
+      "env": ".env"
+    }
+    ```
+
+Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
 
 5.  The `.env` file should have any environment variables needed to run your graph. This will only be used for local testing, so if you are not testing locally you can skip this step. NOTE: if you do add this, you should NOT check this into git. For this graph, we need two environment variables:
 
@@ -206,36 +271,108 @@ export LANGSMITH_API_KEY=...
 
 The first thing to do when using the SDK is to setup our client, access our assistant, and create a thread to execute a run on:
 
-```python
-from langgraph_sdk import get_client
+=== "Python"
 
-# Replace this with the URL of your own deployed graph
-URL = "https://chatbot-23a570f3210f52a7b167f09f6158e3b3-ffoprvkqsa-uc.a.run.app"
-client = get_client(url=URL)
+     ```python
+     from langgraph_sdk import get_client
 
-# Search all hosted graphs
-assistants = await client.assistants.search()
-# In this example we select the first assistant since we are only hosting a single graph
-assistant = assistants[0]
+     client = get_client(url=<DEPLOYMENT_URL>)
+     # get default assistant
+     assistants = await client.assistants.search()
+     assistant = [a for a in assistants if not a["config"]][0]
+     # create thread
+     thread = await client.threads.create()
+     print(thread)
+     ```
 
-# We create a thread for tracking the state of our run
-thread = await client.threads.create()
-```
+=== "Javascript"
+
+     ```js
+     import { Client } from "@langchain/langgraph-sdk";
+
+     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+     // get default assistant
+     const assistants = await client.assistants.search();
+     const assistant = assistants.find(a => !a.config);
+     // create thread
+     const thread = await client.threads.create();
+     console.log(thread)
+     ```
+
+=== "CURL"
+
+     ```bash
+     curl --request POST \
+         --url <DEPLOYMENT_URL>/assistants/search \
+         --header 'Content-Type: application/json' \
+         --data '{
+             "limit": 10,
+             "offset": 0
+         }' | jq -c 'map(select(.config == null or .config == {})) | .[0]' && \
+     curl --request POST \
+         --url <DEPLOYMENT_URL>/threads \
+         --header 'Content-Type: application/json' \
+         --data '{}'
+     ```
 
 We can then execute a run on the thread:
 
-```python
-input = {"messages":[{"role": "user", "content": "Hello! My name is Bagatur and I am 26 years old."}]}
+=== "Python"
 
-async for chunk in client.runs.stream(
-        thread['thread_id'],
-        assistant["assistant_id"],
-        input=input,
-        stream_mode="updates",
-    ):
-    if chunk.data and chunk.event != "metadata":
-        print(chunk.data)
-```
+    ```python
+    input = {"messages":[{"role": "user", "content": "Hello! My name is Bagatur and I am 26 years old."}]}
+
+    async for chunk in client.runs.stream(
+            thread['thread_id'],
+            assistant["assistant_id"],
+            input=input,
+            stream_mode="updates",
+        ):
+        if chunk.data and chunk.event != "metadata":
+            print(chunk.data)
+    ```
+
+=== "Javascript"
+
+    ```js
+    const input = { "messages":[{ "role": "user", "content": "Hello! My name is Bagatur and I am 26 years old." }] };
+
+    const streamResponse = client.runs.stream(
+      thread["thread_id"],
+      assistant["assistant_id"],
+      {
+        input,
+      }
+    );
+    for await (const chunk of streamResponse) {
+      if (chunk.data && chunk.event !== "metadata" ) {
+        console.log(chunk.data);
+      }
+    }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+      --header 'Content-Type: application/json' \
+      --data "{
+        \"assistant_id\": <ASSISTANT_ID>,
+        \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Hello! My name is Bagatur and I am 26 years old.\"}]},
+      }" | sed 's/\r$//' | awk '
+      /^event:/ { event = $2 }
+      /^data:/ {
+          json_data = substr($0, index($0, $2))
+
+          if (event != "metadata") {
+          print json_data
+          }
+      }'
+    ```
+
+
+Output:
 
     {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
 

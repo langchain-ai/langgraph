@@ -1,4 +1,7 @@
+from typing import Any, Sequence
+
 from langgraph.checkpoint.base import EmptyChannelError
+from langgraph.constants import Interrupt
 
 
 class GraphRecursionError(RecursionError):
@@ -29,7 +32,22 @@ class InvalidUpdateError(Exception):
 class GraphInterrupt(Exception):
     """Raised when a subgraph is interrupted."""
 
-    pass
+    def __init__(self, interrupts: Sequence[Interrupt] = ()) -> None:
+        super().__init__(interrupts)
+
+
+class NodeInterrupt(GraphInterrupt):
+    """Raised by a node to interrupt execution."""
+
+    def __init__(self, value: Any) -> None:
+        super().__init__([Interrupt(value)])
+
+
+class GraphDelegate(Exception):
+    """Raised when a graph is delegated."""
+
+    def __init__(self, *args: dict[str, Any]) -> None:
+        super().__init__(*args)
 
 
 class EmptyInputError(Exception):
@@ -38,10 +56,23 @@ class EmptyInputError(Exception):
     pass
 
 
+class TaskNotFound(Exception):
+    """Raised when the executor is unable to find a task."""
+
+    pass
+
+
+class CheckpointNotLatest(Exception):
+    """Raised when the checkpoint is not the latest version."""
+
+    pass
+
+
 __all__ = [
     "GraphRecursionError",
     "InvalidUpdateError",
     "GraphInterrupt",
+    "NodeInterrupt",
     "EmptyInputError",
     "EmptyChannelError",
 ]

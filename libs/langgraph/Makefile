@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix
+.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -6,6 +6,26 @@ all: help
 ######################
 # TESTING AND COVERAGE
 ######################
+
+# Benchmarks
+
+OUTPUT ?= out/benchmark.json
+
+benchmark:
+	mkdir -p out
+	rm -f $(OUTPUT)
+	poetry run python -m bench -o $(OUTPUT) --rigorous
+
+benchmark-fast:
+	mkdir -p out
+	rm -f $(OUTPUT)
+	poetry run python -m bench -o $(OUTPUT) --fast
+
+GRAPH ?= bench/fanout_to_subgraph.py
+
+profile:
+	mkdir -p out
+	sudo poetry run py-spy record -g -o out/profile.svg -- python $(GRAPH)
 
 # Run unit tests and generate a coverage report.
 coverage:
@@ -15,21 +35,21 @@ coverage:
 		--cov-report term-missing:skip-covered
 
 start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait
+	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait --remove-orphans
 
 stop-postgres:
-	docker compose -f tests/compose-postgres.yml down
+	docker compose -f tests/compose-postgres.yml down -v
+
+TEST ?= .
 
 test:
-	make start-postgres; \
-	poetry run pytest; \
+	make start-postgres && poetry run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres; \
-	poetry run ptw .; \
+	make start-postgres && poetry run ptw . -- --ff -v -x -n auto --dist worksteal --snapshot-update --tb short $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
@@ -51,14 +71,15 @@ lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
 
 lint lint_diff lint_package lint_tests:
-	poetry run ruff .
+	poetry run ruff check .
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
-	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff --select I $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff check --select I $(PYTHON_FILES)
+	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || poetry run mypy langgraph --cache-dir $(MYPY_CACHE)
 
 format format_diff:
 	poetry run ruff format $(PYTHON_FILES)
-	poetry run ruff --select I --fix $(PYTHON_FILES)
+	poetry run ruff check --select I --fix $(PYTHON_FILES)
 
 spell_check:
 	poetry run codespell --toml pyproject.toml

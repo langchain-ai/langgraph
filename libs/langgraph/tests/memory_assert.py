@@ -24,8 +24,6 @@ class NoopSerializer(SerializerProtocol):
 
 
 class MemorySaverAssertImmutable(MemorySaver):
-    serde = NoopSerializer()
-
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
     def __init__(
@@ -59,9 +57,9 @@ class MemorySaverAssertImmutable(MemorySaver):
                 )
                 == saved
             )
-        self.storage_for_copies[thread_id][checkpoint_ns][
-            checkpoint["id"]
-        ] = self.serde.dumps_typed(copy_checkpoint(checkpoint))
+        self.storage_for_copies[thread_id][checkpoint_ns][checkpoint["id"]] = (
+            self.serde.dumps_typed(copy_checkpoint(checkpoint))
+        )
         # call super to write checkpoint
         return super().put(config, checkpoint, metadata, new_versions)
 
@@ -73,15 +71,6 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
     method is called for each step, the implementation of this checkpointer
     should produce a side effect that can be asserted.
     """
-
-    serde = NoopSerializer()
-
-    def __init__(
-        self,
-        *,
-        serde: Optional[SerializerProtocol] = None,
-    ) -> None:
-        super().__init__(serde=serde)
 
     def put(
         self,

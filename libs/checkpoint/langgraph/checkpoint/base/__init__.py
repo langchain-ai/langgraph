@@ -1,15 +1,16 @@
-from abc import ABC
 from datetime import datetime, timezone
 from typing import (
     Any,
     AsyncIterator,
     Dict,
+    Generic,
     Iterator,
     List,
     Literal,
     Mapping,
     NamedTuple,
     Optional,
+    Sequence,
     Tuple,
     TypedDict,
     TypeVar,
@@ -22,6 +23,8 @@ from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
+    ERROR,
+    SCHEDULED,
     ChannelProtocol,
     SendProtocol,
 )
@@ -51,10 +54,10 @@ class CheckpointMetadata(TypedDict, total=False):
 
     Mapping from node name to writes emitted by that node.
     """
-    score: Optional[int]
-    """The score of the checkpoint.
+    parents: dict[str, str]
+    """The IDs of the parent checkpoints.
 
-    The score can be used to mark a checkpoint as "good".
+    Mapping from checkpoint namespace to checkpoint ID.
     """
 
 
@@ -77,27 +80,21 @@ class Checkpoint(TypedDict):
     """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
     """The values of the channels at the time of the checkpoint.
-
-    Mapping from channel name to channel snapshot value.
+    Mapping from channel name to deserialized channel snapshot value.
     """
     channel_versions: ChannelVersions
     """The versions of the channels at the time of the checkpoint.
-
-    The keys are channel names and the values are the logical time step
-    at which the channel was last updated.
+    The keys are channel names and the values are monotonically increasing
+    version strings for each channel.
     """
     versions_seen: dict[str, ChannelVersions]
     """Map from node ID to map from channel name to version seen.
-
     This keeps track of the versions of the channels that each node has seen.
-
     Used to determine which nodes to execute next.
     """
     pending_sends: List[SendProtocol]
-    """List of packets sent to nodes but not yet processed.
+    """List of inputs pushed to nodes but not yet processed.
     Cleared by the next checkpoint."""
-    current_tasks: Dict[str, TaskInfo]
-    """Map from task ID to task info."""
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -109,7 +106,6 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
         pending_sends=[],
-        current_tasks={},
     )
 
 
@@ -122,7 +118,6 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
-        current_tasks=checkpoint.get("current_tasks", {}).copy(),
     )
 
 
@@ -138,8 +133,10 @@ def create_checkpoint(
     if channels is None:
         values = checkpoint["channel_values"]
     else:
-        values: dict[str, Any] = {}
+        values = {}
         for k, v in channels.items():
+            if k not in checkpoint["channel_versions"]:
+                continue
             try:
                 values[k] = v.checkpoint()
             except EmptyChannelError:
@@ -152,7 +149,6 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
-        current_tasks={},
     )
 
 
@@ -194,7 +190,7 @@ CheckpointId = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver(ABC):
+class BaseCheckpointSaver(Generic[V]):
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
@@ -302,7 +298,7 @@ class BaseCheckpointSaver(ABC):
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
@@ -394,7 +390,7 @@ class BaseCheckpointSaver(ABC):
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Asynchronously store intermediate writes linked to a checkpoint.
@@ -422,7 +418,12 @@ class BaseCheckpointSaver(ABC):
         Returns:
             V: The next version identifier, which must be increasing.
         """
-        return current + 1 if current is not None else 1
+        if isinstance(current, str):
+            raise NotImplementedError
+        elif current is None:
+            return 1
+        else:
+            return current + 1
 
 
 class EmptyChannelError(Exception):
@@ -437,3 +438,13 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
     return config["configurable"].get(
         "checkpoint_id", config["configurable"].get("thread_ts")
     )
+
+
+"""
+Mapping from error type to error index.
+Regular writes just map to their index in the list of writes being saved.
+Special writes (e.g. errors) map to negative indices, to avoid those writes from
+conflicting with regular writes.
+Each Checkpointer implementation should use this mapping in put_writes.
+"""
+WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2}

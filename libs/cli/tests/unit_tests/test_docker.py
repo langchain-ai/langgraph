@@ -20,10 +20,21 @@ def test_compose_with_no_debugger_and_custom_db():
         DEFAULT_DOCKER_CAPABILITIES, port=port, postgres_uri=custom_postgres_uri
     )
     expected_compose_str = f"""services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
     langgraph-api:
         ports:
             - "{port}:8000"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy
         environment:
+            REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {custom_postgres_uri}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
 
@@ -37,10 +48,21 @@ def test_compose_with_no_debugger_and_custom_db_with_healthcheck():
         postgres_uri=custom_postgres_uri,
     )
     expected_compose_str = f"""services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
     langgraph-api:
         ports:
             - "{port}:8000"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy
         environment:
+            REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {custom_postgres_uri}
         healthcheck:
             test: python /api/healthcheck.py
@@ -59,10 +81,21 @@ def test_compose_with_debugger_and_custom_db():
         postgres_uri=custom_postgres_uri,
     )
     expected_compose_str = f"""services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
     langgraph-api:
         ports:
             - "{port}:8000"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy
         environment:
+            REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {custom_postgres_uri}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
 
@@ -74,6 +107,13 @@ def test_compose_with_debugger_and_default_db():
     langgraph-data:
         driver: local
 services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
     langgraph-postgres:
         image: postgres:16
         ports:
@@ -94,8 +134,11 @@ services:
         ports:
             - "{port}:8000"
         depends_on:
+            langgraph-redis:
+                condition: service_healthy
             langgraph-postgres:
                 condition: service_healthy
         environment:
+            REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str

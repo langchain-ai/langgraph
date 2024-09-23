@@ -18,6 +18,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -28,6 +29,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```
@@ -37,7 +39,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Editing state
@@ -65,7 +68,7 @@ Now let's invoke our graph, making sure to interrupt before the `action` node.
 === "Javascript"
 
     ```js
-    const input = {"messages": [{ "role": "human", "content": "search for weather in SF"}] }
+    const input = { messages: [{ role: "human", content: "search for weather in SF" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -76,6 +79,7 @@ Now let's invoke our graph, making sure to interrupt before the `action` node.
         interruptBefore: ["action"],
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -154,15 +158,15 @@ Now, let's assume we actually meant to search for the weather in Sidi Frej (anot
 === "Javascript"
 
     ```js
-    // First, lets get the current state
-    const currentState = await client.threads.getState(thread['thread_id']);
+    // First, let's get the current state
+    const currentState = await client.threads.getState(thread["thread_id"]);
 
     // Let's now get the last message in the state
     // This is the one with the tool calls that we want to update
-    let lastMessage = currentState['values']['messages'][-1];
+    let lastMessage = currentState.values.messages.slice(-1)[0];
 
     // Let's now update the args for that tool call
-    lastMessage['tool_calls'][0]['args'] = {'query': 'current weather in Sidi Frej'};
+    lastMessage.tool_calls[0].args = { query: "current weather in Sidi Frej" };
 
     // Let's now call `update_state` to pass in this message in the `messages` key
     // This will get treated as any other update to the state
@@ -170,7 +174,7 @@ Now, let's assume we actually meant to search for the weather in Sidi Frej (anot
     // That reducer function will use the ID of the message to update it
     // It's important that it has the right ID! Otherwise it would get appended
     // as a new message
-    await client.threads.updateState(thread['thread_id'], {values:{"messages": lastMessage}});
+    await client.threads.updateState(thread["thread_id"], { values: { messages: lastMessage } });
     ```
 
 === "CURL"
@@ -220,6 +224,7 @@ Now we can resume our graph run but with the updated state:
         streamMode: "updates",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);

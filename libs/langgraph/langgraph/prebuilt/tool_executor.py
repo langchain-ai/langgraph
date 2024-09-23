@@ -1,4 +1,4 @@
-from typing import Any, Callable, Sequence, Union
+from typing import Any, Callable, Sequence, Union, cast
 
 from langchain_core.load.serializable import Serializable
 from langchain_core.runnables import RunnableConfig
@@ -6,7 +6,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
 
 from langgraph._api.deprecation import deprecated
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_MSG_TEMPLATE = (
     "{requested_tool_name} is not a valid tool, "
@@ -101,10 +101,11 @@ class ToolExecutor(RunnableCallable):
     ) -> None:
         super().__init__(self._execute, afunc=self._aexecute, trace=False)
         tools_ = [
-            tool if isinstance(tool, BaseTool) else create_tool(tool) for tool in tools
+            tool if isinstance(tool, BaseTool) else cast(BaseTool, create_tool(tool))
+            for tool in tools
         ]
         self.tools = tools_
-        self.tool_map = {t.name: t for t in tools}
+        self.tool_map = {t.name: t for t in tools_}
         self.invalid_tool_msg_template = invalid_tool_msg_template
 
     def _execute(
