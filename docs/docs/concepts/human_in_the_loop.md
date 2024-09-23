@@ -24,7 +24,7 @@ All of these interaction patterns are enabled by LangGraph's built-in [persisten
 
 Adding a [breakpoint](./low_level.md#breakpoints) a specific location in the graph flow is one way to enable human-in-the-loop. In this case, the developer knows *where* in the workflow human input is needed and simply places a breakpoint prior to or following that particular graph node.
 
-Here, we compile our graph with a checkpointer and a breakpoint at the node we want to interrupt before, `step_for_human_in_the_loop`. We then perform one of the above interaction patterns, which will create a new checkpoint if a human edits the graph state. The new checkpoint is saved to the `thread` and we can resume the graph execution from there simply by passing in `None` for the input and the `thread` configuration.
+Here, we compile our graph with a checkpointer and a breakpoint at the node we want to interrupt before, `step_for_human_in_the_loop`. We then perform one of the above interaction patterns, which will create a new checkpoint if a human edits the graph state. The new checkpoint is saved to the `thread` and we can resume the graph execution from there by passing in `None` as the input.
 
 ```python
 # Compile our graph with a checkpoitner and a breakpoint before "step_for_human_in_the_loop"
@@ -44,7 +44,7 @@ for event in graph.stream(None, thread_config, stream_mode="values"):
 
 ### Dynamic Breakpoints
 
-Alternatively, the developer can define some *condition* that must be met for the breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition.
+Alternatively, the developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
 
 ```python
 def my_node(state: State) -> State:
@@ -53,15 +53,15 @@ def my_node(state: State) -> State:
     return state
 ```
 
-Let's assume we run the graph, hit this dynamic breakpoint, and then attempt to resume the graph execution simply by passing in `None` for the input and the `thread` configuration. 
+Let's assume we run the graph with an input that triggers the dynamic breakpoint and then attempt to resume the graph execution simply by passing in `None` for the input. 
 
 ```python
-# Continue the graph execution after we hit the dynamic breakpoint 
+# Attempt to continue the graph execution with not change to state after we hit the dynamic breakpoint 
 for event in graph.stream(None, thread_config, stream_mode="values"):
     print(event)
 ```
 
-We will *interrupt* again because this node will be *re-run* with the same graph state that triggers the dynamic breakpoint. We need to change the graph state such that the condition that triggers the dynamic breakpoint is no longer met. We'll discuss how to do this below, but for now it's important to recognize the difference between breakpoints and dynamic breakpoints. 
+The graph will *interrupt* again because this node will be *re-run* with the same graph state. We need to change the graph state such that the condition that triggers the dynamic breakpoint is no longer met. We'll discuss how to do this below, but for now it's important to recognize the difference between breakpoints, which is set before or after a particular node in the graph, and dynamic breakpoints, which are triggered within a node based upon a particular condition. 
 
 See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a detailed how-to on doing this!
 
