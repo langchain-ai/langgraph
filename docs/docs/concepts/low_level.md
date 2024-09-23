@@ -415,6 +415,4 @@ It's often nice to be able to visualize graphs, especially as they get more comp
 
 ## Streaming
 
-
 LangGraph is built with first class support for streaming, including streaming updates from graph nodes during the execution, streaming tokens from LLM calls and more. See this [conceptual guide](./streaming.md) for more information.
-
