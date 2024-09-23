@@ -263,7 +263,7 @@ async def test_tool_node():
         ]
 
     async def tool4(some_val: int, some_other_val: str) -> str:
-        """Tool 3 docstring."""
+        """Tool 4 docstring."""
         return [
             {"type": "image_url", "image_url": {"url": "abdc"}},
         ]
@@ -404,7 +404,7 @@ async def test_tool_node():
     assert tool_message.tool_call_id == "some 0"
 
     # list of content blocks tool content
-    result3 = await ToolNode([tool4]).ainvoke(
+    result4 = await ToolNode([tool4]).ainvoke(
         {
             "messages": [
                 AIMessage(
@@ -420,7 +420,7 @@ async def test_tool_node():
             ]
         }
     )
-    tool_message: ToolMessage = result3["messages"][-1]
+    tool_message: ToolMessage = result4["messages"][-1]
     assert tool_message.type == "tool"
     assert tool_message.content == [{"type": "image_url", "image_url": {"url": "abdc"}}]
     assert tool_message.tool_call_id == "some 0"
