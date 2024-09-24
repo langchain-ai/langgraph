@@ -110,12 +110,11 @@ def _convert_messages_modifier_to_model_input_preprocessor(
     )
 
 
-def _get_model_preprocessing_runnable(
+def _get_model_input_preprocessor(
     model_input_preprocessor: Optional[ModelInputPreprocessor],
     state_modifier: Optional[ModelInputPreprocessor],
     messages_modifier: Optional[MessagesModifier],
-) -> Runnable:
-    # Add the state or message modifier, if exists
+) -> ModelInputPreprocessor:
     if (
         sum(
             x is not None
@@ -137,7 +136,7 @@ def _get_model_preprocessing_runnable(
     else:
         pass
 
-    return _get_model_input_preprocessor_runnable(model_input_preprocessor)
+    return model_input_preprocessor
 
 
 @deprecated_parameter(
@@ -167,9 +166,6 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
-        prompt: Prompt to use whenever invoking model. Should contain only input
-            variables which are in the graph state. Most commonly this will be a
-            MessagesPlaceholder corresponding to input 'messages'.
         messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.
 
@@ -190,7 +186,6 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
-
         state_modifier: an alias for `preprocess_model_inputs`
             !!! Warning
                 `state_modifier` parameter is deprecated as of version 0.2.28 and will be removed in 0.3.0
@@ -319,8 +314,8 @@ def create_react_agent(
         >>>
         >>> prompt = ChatPromptTemplate([
         ...     ("system", "You are a helpful bot named Fred."),
-        ...     ("user", "Remember, always be polite!"),
         ...     ("placeholder", "{messages}"),
+        ...     ("user", "Remember, always be polite!"),
         ... ])
         >>> graph = create_react_agent(model, tools, preprocess_model_inputs=prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
@@ -348,7 +343,7 @@ def create_react_agent(
         ...     messages: Annotated[list[BaseMessage], add_messages]
         ...     is_last_step: str
         >>>
-        >>> graph = create_react_agent(model, tools, state_schema=CustomState, prompt=prompt)
+        >>> graph = create_react_agent(model, tools, state_schema=CustomState, preprocess_model_inputs=prompt)
         >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -462,10 +457,10 @@ def create_react_agent(
         else:
             return "tools"
 
-    preprocessor = _get_model_preprocessing_runnable(
+    preprocessor = _get_model_input_preprocessor(
         preprocess_model_inputs, state_modifier, messages_modifier
     )
-    model_runnable = preprocessor | model
+    model_runnable = _get_model_input_preprocessor_runnable(preprocessor) | model
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
