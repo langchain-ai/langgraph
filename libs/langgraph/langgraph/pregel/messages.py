@@ -27,21 +27,20 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     """A callback handler that implements stream_mode=messages.
     Collects messages from (1) chat model stream events and (2) node outputs."""
 
+    run_inline = True
+    """We want this callback to run in the main thread, to avoid order/locking issues."""
+
     def __init__(self, stream: Callable[[StreamChunk], None]):
         self.stream = stream
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[Union[int, str]] = set()
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
-        ident = id(message)
         if dedupe and message.id in self.seen:
-            return
-        elif ident in self.seen:
             return
         else:
             if message.id is None:
                 message.id = str(uuid4())
-            self.seen.add(ident)
             self.seen.add(message.id)
             self.stream((meta[0], "messages", (message, meta[1])))
 
