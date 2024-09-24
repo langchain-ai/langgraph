@@ -10,7 +10,6 @@ from typing import (
     Union,
 )
 
-from langchain_core.prompts import BasePromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
@@ -41,7 +40,7 @@ class AgentState(TypedDict):
 StateSchema = TypeVar("StateSchema", bound=AgentState)
 StateSchemaType = Type[StateSchema]
 
-STATE_MODIFIER_RUNNABLE_NAME = "StateModifier"
+MODEL_INPUT_PREPROCESSOR_RUNNABLE_NAME = "ModelInputPreprocessor"
 
 MessagesModifier = Union[
     SystemMessage,
@@ -50,7 +49,7 @@ MessagesModifier = Union[
     Runnable[Sequence[BaseMessage], Sequence[BaseMessage]],
 ]
 
-StateModifier = Union[
+ModelInputPreprocessor = Union[
     SystemMessage,
     str,
     Callable[[StateSchema], Sequence[BaseMessage]],
@@ -58,90 +57,103 @@ StateModifier = Union[
 ]
 
 
-def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
-    state_modifier_runnable: Runnable
-    if state_modifier is None:
-        state_modifier_runnable = RunnableLambda(
-            lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
+def _get_model_input_preprocessor_runnable(
+    model_input_preprocessor: Optional[ModelInputPreprocessor],
+) -> Runnable:
+    model_input_preprocessor_runnable: Runnable
+    if model_input_preprocessor is None:
+        model_input_preprocessor_runnable = RunnableLambda(
+            lambda state: state["messages"], name=MODEL_INPUT_PREPROCESSOR_RUNNABLE_NAME
         )
-    elif isinstance(state_modifier, str):
-        _system_message: BaseMessage = SystemMessage(content=state_modifier)
-        state_modifier_runnable = RunnableLambda(
+    elif isinstance(model_input_preprocessor, str):
+        _system_message: BaseMessage = SystemMessage(content=model_input_preprocessor)
+        model_input_preprocessor_runnable = RunnableLambda(
             lambda state: [_system_message] + state["messages"],
-            name=STATE_MODIFIER_RUNNABLE_NAME,
+            name=MODEL_INPUT_PREPROCESSOR_RUNNABLE_NAME,
         )
-    elif isinstance(state_modifier, SystemMessage):
-        state_modifier_runnable = RunnableLambda(
-            lambda state: [state_modifier] + state["messages"],
-            name=STATE_MODIFIER_RUNNABLE_NAME,
+    elif isinstance(model_input_preprocessor, SystemMessage):
+        model_input_preprocessor_runnable = RunnableLambda(
+            lambda state: [model_input_preprocessor] + state["messages"],
+            name=MODEL_INPUT_PREPROCESSOR_RUNNABLE_NAME,
         )
-    elif callable(state_modifier):
-        state_modifier_runnable = RunnableLambda(
-            state_modifier, name=STATE_MODIFIER_RUNNABLE_NAME
+    elif callable(model_input_preprocessor):
+        model_input_preprocessor_runnable = RunnableLambda(
+            model_input_preprocessor, name=MODEL_INPUT_PREPROCESSOR_RUNNABLE_NAME
         )
-    elif isinstance(state_modifier, Runnable):
-        state_modifier_runnable = state_modifier
+    elif isinstance(model_input_preprocessor, Runnable):
+        model_input_preprocessor_runnable = model_input_preprocessor
     else:
         raise ValueError(
-            f"Got unexpected type for `state_modifier`: {type(state_modifier)}"
+            f"Got unexpected type for `model_input_preprocessor`: {type(model_input_preprocessor)}"
         )
 
-    return state_modifier_runnable
+    return model_input_preprocessor_runnable
 
 
-def _convert_messages_modifier_to_state_modifier(
+def _convert_messages_modifier_to_model_input_preprocessor(
     messages_modifier: MessagesModifier,
-) -> StateModifier:
-    state_modifier: StateModifier
+) -> ModelInputPreprocessor:
+    model_input_preprocessor: ModelInputPreprocessor
     if isinstance(messages_modifier, (str, SystemMessage)):
         return messages_modifier
     elif callable(messages_modifier):
 
-        def state_modifier(state: AgentState) -> Sequence[BaseMessage]:
+        def model_input_preprocessor(state: AgentState) -> Sequence[BaseMessage]:
             return messages_modifier(state["messages"])
 
-        return state_modifier
+        return model_input_preprocessor
     elif isinstance(messages_modifier, Runnable):
-        state_modifier = (lambda state: state["messages"]) | messages_modifier
-        return state_modifier
+        model_input_preprocessor = (lambda state: state["messages"]) | messages_modifier
+        return model_input_preprocessor
     raise ValueError(
         f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
     )
 
 
 def _get_model_preprocessing_runnable(
-    state_modifier: Optional[StateModifier],
+    model_input_preprocessor: Optional[ModelInputPreprocessor],
+    state_modifier: Optional[ModelInputPreprocessor],
     messages_modifier: Optional[MessagesModifier],
-    prompt: Optional[BasePromptTemplate],
 ) -> Runnable:
     # Add the state or message modifier, if exists
-    if sum(x is not None for x in (state_modifier, messages_modifier, prompt)) > 1:
+    if (
+        sum(
+            x is not None
+            for x in (model_input_preprocessor, state_modifier, messages_modifier)
+        )
+        > 1
+    ):
         raise ValueError(
-            "Expected value for at most one of state_modifier, messages_modifier, "
-            "prompt. Received multiple."
+            "Expected value for at most one of model_input_preprocessor, state_modifier, messages_modifier. "
+            "Received multiple."
         )
 
-    if state_modifier is not None:
-        pass
     if messages_modifier is not None:
-        state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
-    elif prompt is not None:
-        state_modifier = prompt
+        model_input_preprocessor = (
+            _convert_messages_modifier_to_model_input_preprocessor(messages_modifier)
+        )
+    elif state_modifier is not None:
+        model_input_preprocessor = state_modifier
     else:
         pass
 
-    return _get_state_modifier_runnable(state_modifier)
+    return _get_model_input_preprocessor_runnable(model_input_preprocessor)
 
 
-@deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
+@deprecated_parameter(
+    "messages_modifier", "0.1.9", "preprocess_model_inputs", removal="0.3.0"
+)
+@deprecated_parameter(
+    "state_modifier", "0.2.28", "preprocess_model_inputs", removal="0.3.0"
+)
 def create_react_agent(
     model: BaseChatModel,
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
-    prompt: Optional[BasePromptTemplate] = None,
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
-    state_modifier: Optional[StateModifier] = None,
+    state_modifier: Optional[ModelInputPreprocessor] = None,
+    preprocess_model_inputs: Optional[ModelInputPreprocessor] = None,
     checkpointer: Checkpointer = None,
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
@@ -168,9 +180,9 @@ def create_react_agent(
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
             !!! Warning
-                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.2.0
-        state_modifier: An optional
-            state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
+                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.3.0
+        preprocess_model_inputs: An optional
+            model input preprocessor. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
 
             Can take a few different forms:
 
@@ -178,6 +190,10 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+
+        state_modifier: an alias for `preprocess_model_inputs`
+            !!! Warning
+                `state_modifier` parameter is deprecated as of version 0.2.28 and will be removed in 0.3.0
         checkpointer: An optional checkpoint saver object. This is useful for persisting
             the state of the graph (e.g., as chat memory).
         interrupt_before: An optional list of node names to interrupt before.
@@ -273,7 +289,7 @@ def create_react_agent(
 
         ```pycon
         >>> system_prompt = "You are a helpful bot named Fred."
-        >>> graph = create_react_agent(model, tools, state_modifier=system_prompt)
+        >>> graph = create_react_agent(model, tools, preprocess_model_inputs=system_prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -303,14 +319,10 @@ def create_react_agent(
         >>>
         >>> prompt = ChatPromptTemplate([
         ...     ("system", "You are a helpful bot named Fred."),
-        ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
+        ...     ("placeholder", "{messages}"),
         ... ])
-        >>> def modify_state_messages(state: AgentState):
-        ...     # You can do more complex modifications here
-        ...     return prompt.invoke({"messages": state["messages"]})
-        >>>
-        >>> graph = create_react_agent(model, tools, state_modifier=modify_state_messages)
+        >>> graph = create_react_agent(model, tools, preprocess_model_inputs=prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -336,7 +348,7 @@ def create_react_agent(
         ...     messages: Annotated[list[BaseMessage], add_messages]
         ...     is_last_step: str
         >>>
-        >>> graph = create_react_agent(model, tools, state_schema=CustomState, state_modifier=prompt)
+        >>> graph = create_react_agent(model, tools, state_schema=CustomState, prompt=prompt)
         >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -451,7 +463,7 @@ def create_react_agent(
             return "tools"
 
     preprocessor = _get_model_preprocessing_runnable(
-        state_modifier, messages_modifier, prompt
+        preprocess_model_inputs, state_modifier, messages_modifier
     )
     model_runnable = preprocessor | model
 

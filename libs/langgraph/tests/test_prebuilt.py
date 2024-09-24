@@ -146,21 +146,37 @@ async def test_no_modifier_async(checkpointer_name: str) -> None:
             assert saved.pending_writes == []
 
 
-def test_passing_two_modifiers():
+def test_passing_multiple_modifiers():
     model = FakeToolCallingModel()
     with pytest.raises(ValueError):
         create_react_agent(model, [], messages_modifier="Foo", state_modifier="Bar")
 
+    with pytest.raises(ValueError):
+        create_react_agent(
+            model, [], messages_modifier="Foo", preprocess_model_inputs="Bar"
+        )
 
-def test_system_message_modifier():
-    messages_modifier = SystemMessage(content="Foo")
-    agent_1 = create_react_agent(
-        FakeToolCallingModel(), [], messages_modifier=messages_modifier
-    )
-    agent_2 = create_react_agent(
-        FakeToolCallingModel(), [], state_modifier=messages_modifier
-    )
-    for agent in [agent_1, agent_2]:
+    with pytest.raises(ValueError):
+        create_react_agent(
+            model,
+            [],
+            preprocess_model_inputs="Foo",
+            state_modifier="Bar",
+            messages_modifier="Baz",
+        )
+
+
+def test_system_message_preprocess_model_inputs():
+    system_message = SystemMessage(content="Foo")
+    for agent in (
+        create_react_agent(
+            FakeToolCallingModel(), [], preprocess_model_inputs=system_message
+        ),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=system_message),
+        create_react_agent(
+            FakeToolCallingModel(), [], messages_modifier=system_message
+        ),
+    ):
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
@@ -169,15 +185,16 @@ def test_system_message_modifier():
         assert response == expected_response
 
 
-def test_system_message_string_modifier():
-    messages_modifier = "Foo"
-    agent_1 = create_react_agent(
-        FakeToolCallingModel(), [], messages_modifier=messages_modifier
-    )
-    agent_2 = create_react_agent(
-        FakeToolCallingModel(), [], state_modifier=messages_modifier
-    )
-    for agent in [agent_1, agent_2]:
+def test_system_message_string_preprocess_model_inputs():
+    system_prompt = "Foo"
+
+    for agent in (
+        create_react_agent(
+            FakeToolCallingModel(), [], preprocess_model_inputs=system_prompt
+        ),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=system_prompt),
+        create_react_agent(FakeToolCallingModel(), [], messages_modifier=system_prompt),
+    ):
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
@@ -200,18 +217,25 @@ def test_callable_messages_modifier():
     assert response == expected_response
 
 
-def test_callable_state_modifier():
-    model = FakeToolCallingModel()
-
-    def state_modifier(state):
+def test_callable_preprocess_model_inputs():
+    def preprocess_model_inputs(state):
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    agent = create_react_agent(model, [], state_modifier=state_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
-    assert response == expected_response
+    for agent in (
+        create_react_agent(
+            FakeToolCallingModel(), [], preprocess_model_inputs=preprocess_model_inputs
+        ),
+        create_react_agent(
+            FakeToolCallingModel(), [], state_modifier=preprocess_model_inputs
+        ),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
+        }
+        assert response == expected_response
 
 
 def test_runnable_messages_modifier():
@@ -228,18 +252,25 @@ def test_runnable_messages_modifier():
     assert response == expected_response
 
 
-def test_runnable_state_modifier():
-    model = FakeToolCallingModel()
-
-    state_modifier = RunnableLambda(
+def test_runnable_preprocess_model_inputs():
+    preprocess_model_inputs = RunnableLambda(
         lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
     )
 
-    agent = create_react_agent(model, [], state_modifier=state_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
-    assert response == expected_response
+    for agent in (
+        create_react_agent(
+            FakeToolCallingModel(), [], preprocess_model_inputs=preprocess_model_inputs
+        ),
+        create_react_agent(
+            FakeToolCallingModel(), [], state_modifier=preprocess_model_inputs
+        ),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Baz hi?", id="0")]
+        }
+        assert response == expected_response
 
 
 async def test_tool_node():
