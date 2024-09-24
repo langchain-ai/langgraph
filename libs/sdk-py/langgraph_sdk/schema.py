@@ -58,12 +58,18 @@ class GraphSchema(TypedDict):
     input_schema: Optional[dict]
     """The schema for the graph state.
     Missing if unable to generate JSON schema from graph."""
+    output_schema: Optional[dict]
+    """The schema for the graph output.
+    Missing if unable to generate JSON schema from graph."""
     state_schema: Optional[dict]
     """The schema for the graph state.
     Missing if unable to generate JSON schema from graph."""
     config_schema: Optional[dict]
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
+
+
+Subgraphs = dict[str, GraphSchema]
 
 
 class AssistantBase(TypedDict):

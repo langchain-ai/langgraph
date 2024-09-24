@@ -33,6 +33,7 @@ from langgraph_sdk.schema import (
     RunCreate,
     StreamMode,
     StreamPart,
+    Subgraphs,
     Thread,
     ThreadState,
     ThreadStatus,
@@ -376,6 +377,29 @@ class SyncAssistantsClient:
 
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}/schemas")
+
+    async def get_subgraphs(
+        self, assistant_id: str, namespace: Optional[str] = None, recurse: bool = False
+    ) -> Subgraphs:
+        """Get the schemas of an assistant by ID.
+
+        Args:
+            assistant_id: The ID of the assistant to get the schema of.
+
+        Returns:
+            Subgraphs: The graph schema for the assistant.
+
+        """  # noqa: E501
+        if namespace is not None:
+            return await self.http.get(
+                f"/assistants/{assistant_id}/subgraphs/{namespace}",
+                params={"recurse": recurse},
+            )
+        else:
+            return await self.http.get(
+                f"/assistants/{assistant_id}/subgraphs",
+                params={"recurse": recurse},
+            )
 
     def create(
         self,
