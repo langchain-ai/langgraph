@@ -172,7 +172,6 @@ nav:
           - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
-          - Use a context object in state: how-tos/state-context-key.ipynb
           - Have a separate input and output schema: how-tos/input_output_schema.ipynb
           - Pass private state between nodes inside the graph: how-tos/pass_private_state.ipynb
       - Other:

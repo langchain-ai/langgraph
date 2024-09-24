@@ -75,7 +75,6 @@ These guides show how to use different streaming modes.
 ## State Management
 
 - [Use Pydantic model as state](state-model.ipynb)
-- [Use a context object in state](state-context-key.ipynb)
 - [Have a separate input and output schema](input_output_schema.ipynb)
 - [Pass private state between nodes inside the graph](pass_private_state.ipynb)
 
@@ -85,7 +84,6 @@ These guides show how to use different streaming modes.
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
 - [How to use a Pydantic model as your state](state-model.ipynb)
-- [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
