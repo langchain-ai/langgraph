@@ -111,32 +111,32 @@ def _convert_messages_modifier_to_model_input_preprocessor(
 
 
 def _get_model_input_preprocessor(
-    model_input_preprocessor: Optional[ModelInputPreprocessor],
+    preprocess_model_inputs: Optional[ModelInputPreprocessor],
     state_modifier: Optional[ModelInputPreprocessor],
     messages_modifier: Optional[MessagesModifier],
 ) -> ModelInputPreprocessor:
     if (
         sum(
             x is not None
-            for x in (model_input_preprocessor, state_modifier, messages_modifier)
+            for x in (preprocess_model_inputs, state_modifier, messages_modifier)
         )
         > 1
     ):
         raise ValueError(
-            "Expected value for at most one of model_input_preprocessor, state_modifier, messages_modifier. "
+            "Expected value for at most one of preprocess_model_inputs, state_modifier, messages_modifier. "
             "Received multiple."
         )
 
     if messages_modifier is not None:
-        model_input_preprocessor = (
+        preprocess_model_inputs = (
             _convert_messages_modifier_to_model_input_preprocessor(messages_modifier)
         )
     elif state_modifier is not None:
-        model_input_preprocessor = state_modifier
+        preprocess_model_inputs = state_modifier
     else:
         pass
 
-    return model_input_preprocessor
+    return preprocess_model_inputs
 
 
 @deprecated_parameter(
