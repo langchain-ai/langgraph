@@ -1,6 +1,6 @@
 from typing import Any, List, Optional
 
-V = dict[str, Any]
+V = Any
 
 
 class BaseStore:
