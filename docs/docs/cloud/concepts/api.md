@@ -16,6 +16,12 @@ The LangGraph Cloud API provides several endpoints for creating and managing ass
 
 You can save custom assistants from the same graph to set different default prompts, models, and other configurations without changing a line of code in your graph. This allows you the ability to quickly test out different configurations without having to rewrite your graph every time, and also give users the flexibility to select different configurations when using your LangGraph application. See [this how-to](../how-tos/configuration_cloud.md) for information on how to configure a deployed graph.
 
+#### Versioning Assistants
+
+In addition to creating different assistants by changing the configuration, you can save versions for each assistant to track changes over time to specific configuration keys such as the system prompt. You can think of graphs as providing the core information architecture, assistants as representing core configuration changes to that fundamental architecture (i.e changing the model or the tools), and assistant versions as tracking smaller configuration changes (such as edits to the system prompt) that fine-tune your assistant to perform optimally for your task.
+
+For example, say your graph helps your users with planning trips. For each user of your graoh, you can create a new assistant that passes in the airline and car service the user prefers to use. As each user interacts with their own assistant you could version it on the specific desires the user expresses (explicitly or non-explicitly) such as their price sensitivity, their preferred agent response format, etc. Read [this how-to](../how-tos/assistant_versioning.md) to learn how you can use assistant versioning through both the [Studio](../how-tos/index.md/#langgraph-studio) and the SDK.
+
 ### Threads
 
 A thread contains the accumulated state of a group of runs. If a run is executed on a thread, then the [state][state] of the underlying graph of the assistant will be persisted to the thread. A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
