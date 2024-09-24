@@ -24,15 +24,59 @@ All of these interaction patterns are enabled by LangGraph's built-in [persisten
 
 Adding a [breakpoint](./low_level.md#breakpoints) a specific location in the graph flow is one way to enable human-in-the-loop. In this case, the developer knows *where* in the workflow human input is needed and simply places a breakpoint prior to or following that particular graph node.
 
+Here, we compile our graph with a checkpointer and a breakpoint at the node we want to interrupt before, `step_for_human_in_the_loop`. We then perform one of the above interaction patterns, which will create a new checkpoint if a human edits the graph state. The new checkpoint is saved to the `thread` and we can resume the graph execution from there by passing in `None` as the input.
+
+```python
+# Compile our graph with a checkpoitner and a breakpoint before "step_for_human_in_the_loop"
+graph = builder.compile(checkpointer=checkpoitner, interrupt_before=["step_for_human_in_the_loop"])
+
+# Run the graph up to the breakpoint
+thread_config = {"configurable": {"thread_id": "1"}}
+for event in graph.stream(inputs, thread_config, stream_mode="values"):
+    print(event)
+    
+# Perform some action that requires human in the loop
+
+# Continue the graph execution from the current checkpoint 
+for event in graph.stream(None, thread_config, stream_mode="values"):
+    print(event)
+```
+
 ### Dynamic Breakpoints
 
-Alternatively, the developer can define some *condition* that must be met for the breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition.
+Alternatively, the developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
 
 ```python
 def my_node(state: State) -> State:
     if len(state['input']) > 5:
         raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
     return state
+```
+
+Let's assume we run the graph with an input that triggers the dynamic breakpoint and then attempt to resume the graph execution simply by passing in `None` for the input. 
+
+```python
+# Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint 
+for event in graph.stream(None, thread_config, stream_mode="values"):
+    print(event)
+```
+
+The graph will *interrupt* again because this node will be *re-run* with the same graph state. We need to change the graph state such that the condition that triggers the dynamic breakpoint is no longer met. So, we can simply edit the graph state to an input that meets the condition of our dynamic breakpoint (< 5 characters) and re-run the node.
+
+```python 
+# Update the state to pass the dynamic breakpoint
+graph.update_state(config=thread_config, values={"input": "foo"})
+for event in graph.stream(None, thread_config, stream_mode="values"):
+    print(event)
+```
+
+Alternatively, what if we want to keep our current input and skip the node (`my_node`) that performs the check? To do this, we can simply perform the graph update with `as_node="my_node"` and pass in `None` for the values. This will make no update the graph state, but run the update as `my_node`, effectively skipping the node and bypassing the dynamic breakpoint.
+
+```python
+# This update will skip the node `my_node` altogether
+graph.update_state(config=thread_config, values=None, as_node="my_node")
+for event in graph.stream(None, thread_config, stream_mode="values"):
+    print(event)
 ```
 
 See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a detailed how-to on doing this!
