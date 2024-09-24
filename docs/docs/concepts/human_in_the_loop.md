@@ -56,12 +56,28 @@ def my_node(state: State) -> State:
 Let's assume we run the graph with an input that triggers the dynamic breakpoint and then attempt to resume the graph execution simply by passing in `None` for the input. 
 
 ```python
-# Attempt to continue the graph execution with not change to state after we hit the dynamic breakpoint 
+# Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint 
 for event in graph.stream(None, thread_config, stream_mode="values"):
     print(event)
 ```
 
-The graph will *interrupt* again because this node will be *re-run* with the same graph state. We need to change the graph state such that the condition that triggers the dynamic breakpoint is no longer met. We'll discuss how to do this below, but for now it's important to recognize the difference between breakpoints, which is set before or after a particular node in the graph, and dynamic breakpoints, which are triggered within a node based upon a particular condition. 
+The graph will *interrupt* again because this node will be *re-run* with the same graph state. We need to change the graph state such that the condition that triggers the dynamic breakpoint is no longer met. So, we can simply edit the graph state to an input that meets the condition of our dynamic breakpoint (< 5 characters) and re-run the node.
+
+```python 
+# Update the state to pass the dynamic breakpoint
+graph.update_state(config=thread_config, values={"input": "foo"})
+for event in graph.stream(None, thread_config, stream_mode="values"):
+    print(event)
+```
+
+Alternatively, what if we want to keep our current input and skip the node (`my_node`) that performs the check? To do this, we can simply perform the graph update with `as_node="my_node"` and pass in `None` for the values. This will make no update the graph state, but run the update as `my_node`, effectively skipping the node and bypassing the dynamic breakpoint.
+
+```python
+# This update will skip the node `my_node` altogether
+graph.update_state(config=thread_config, values=None, as_node="my_node")
+for event in graph.stream(None, thread_config, stream_mode="values"):
+    print(event)
+```
 
 See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a detailed how-to on doing this!
 
