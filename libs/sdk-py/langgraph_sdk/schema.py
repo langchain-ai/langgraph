@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal, Optional, Sequence, TypedDict, Union
+from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
 
 Json = Optional[dict[str, Any]]
 
@@ -189,3 +189,8 @@ class RunCreate(TypedDict):
     interrupt_after: Optional[list[str]]
     webhook: Optional[str]
     multitask_strategy: Optional[MultitaskStrategy]
+
+
+class StreamPart(NamedTuple):
+    event: str
+    data: dict

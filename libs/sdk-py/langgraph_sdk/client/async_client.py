@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import sys
 from typing import (
     Any,
     AsyncIterator,
     Dict,
     List,
-    NamedTuple,
     Optional,
     Union,
     overload,
@@ -20,7 +18,6 @@ import httpx_sse
 import orjson
 from httpx._types import QueryParamTypes
 
-import langgraph_sdk
 from langgraph_sdk.schema import (
     Assistant,
     AssistantVersion,
@@ -36,15 +33,14 @@ from langgraph_sdk.schema import (
     Run,
     RunCreate,
     StreamMode,
+    StreamPart,
     Thread,
     ThreadState,
     ThreadStatus,
 )
+from langgraph_sdk.utils import get_headers, orjson_default
 
 logger = logging.getLogger(__name__)
-
-
-RESERVED_HEADERS = ("x-api-key",)
 
 
 def get_client(
@@ -74,6 +70,7 @@ def get_client(
             transport = httpx.ASGITransport(app, root_path="/noauth")
         except Exception:
             url = "http://localhost:8123"
+
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
 
@@ -81,14 +78,9 @@ def get_client(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
-        headers=_get_headers(api_key, headers),
+        headers=get_headers(api_key, headers),
     )
     return LangGraphClient(client)
-
-
-class StreamPart(NamedTuple):
-    event: str
-    data: dict
 
 
 class LangGraphClient:
@@ -202,23 +194,12 @@ class HttpClient:
                 )
 
 
-def _orjson_default(obj: Any) -> Any:
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):
-        return obj.model_dump()
-    elif hasattr(obj, "dict") and callable(obj.dict):
-        return obj.dict()
-    elif isinstance(obj, (set, frozenset)):
-        return list(obj)
-    else:
-        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-
 async def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
         json,
-        _orjson_default,
+        orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
@@ -482,6 +463,7 @@ class AssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             metadata: Metadata to add to assistant.
+            name: The new name for the assistant.
 
         Returns:
             Assistant: The updated assistant.
@@ -751,6 +733,7 @@ class ThreadsClient:
 
         Args:
             metadata: Thread metadata to search for.
+            values: Thread values to search for.
             status: Status to search for.
                 Must be one of 'idle', 'busy', or 'interrupted'.
             limit: Limit on number of threads to return.
@@ -1038,8 +1021,8 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
-        webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -1059,9 +1042,9 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
@@ -1080,13 +1063,13 @@ class RunsClient:
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
-            on_disconnect: The disconnect mode to use.
-                Must be one of 'cancel' or 'continue'.
-            on_completion: The on completion behavior to use.
-                Must be one of 'delete' or 'keep'.
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1220,7 +1203,7 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
-            on_completion: The on completion behavior to use.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
@@ -1373,8 +1356,8 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
@@ -1391,12 +1374,12 @@ class RunsClient:
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
-            multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
-            on_completion: The on completion behavior to use.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
+            multitask_strategy: Multitask strategy to use.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1813,39 +1796,3 @@ class CronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post("/runs/crons/search", json=payload)
-
-
-def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
-    """Get the API key from the environment.
-    Precedence:
-        1. explicit argument
-        2. LANGGRAPH_API_KEY
-        3. LANGSMITH_API_KEY
-        4. LANGCHAIN_API_KEY
-    """
-    if api_key:
-        return api_key
-    for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
-        if env := os.getenv(f"{prefix}_API_KEY"):
-            return env.strip().strip('"').strip("'")
-    return None  # type: ignore
-
-
-def _get_headers(
-    api_key: Optional[str], custom_headers: Optional[dict[str, str]]
-) -> dict[str, str]:
-    """Combine api_key and custom user-provided headers."""
-    custom_headers = custom_headers or {}
-    for header in RESERVED_HEADERS:
-        if header in custom_headers:
-            raise ValueError(f"Cannot set reserved header '{header}'")
-
-    headers = {
-        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
-        **custom_headers,
-    }
-    api_key = _get_api_key(api_key)
-    if api_key:
-        headers["x-api-key"] = api_key
-
-    return headers
