@@ -50,28 +50,62 @@ By default, the graph will have the same input and output schemas. If you want t
 
 #### Multiple schemas
 
-Typically, all graph nodes communicate with a single schema. This means that they will read and write to the same state channels. But, there are cases where we may want a bit more control over this:
+Typically, all graph nodes communicate with a single schema. This means that they will read and write to the same state channels. But, there are cases where we want more control over this:
 
-* Internal nodes may pass information that is not required in the graph's input / output.
+* Internal nodes can pass information that is not required in the graph's input / output.
 * We may also want to use different input / output schemas for the graph. The output might, for example, only contain a single relevant output key.
 
-It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema and use a type hint -- e.g., `state: PrivateState` as shown below -- to specify it as the node input schema. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail. 
-
-```python
-class OverallState(TypedDict):
-    foo: int
-
-class PrivateState(TypedDict):
-    baz: int
-
-def node_1(state: OverallState) -> PrivateState:
-    ...
-
-def node_2(state: PrivateState) -> OverallState:
-    ...
-```
+It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail.  
 
 It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains *all* keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
+
+Let's look at an example:
+
+```python
+class InputState(TypedDict):
+    user_input: str
+
+class OutputState(TypedDict):
+    graph_output: str
+
+class OverallState(TypedDict):
+    foo: str
+    user_input: str
+    graph_output: str
+
+class PrivateState(TypedDict):
+    bar: str
+
+def node_1(state: InputState) -> OverallState:
+    # Write to OverallState
+    return {"foo": state["user_input"] + " name"}
+
+def node_2(state: OverallState) -> PrivateState:
+    # Read from OverallState, write to PrivateState
+    return {"bar": state["foo"] + " is"}
+
+def node_3(state: PrivateState) -> OutputState:
+    # Read from PrivateState, write to OutputState
+    return {"graph_output": state["bar"] + " Lance"}
+
+builder = StateGraph(OverallState,input=InputState,output=OutputState)
+builder.add_node("node_1", node_1)
+builder.add_node("node_2", node_2)
+builder.add_node("node_3", node_3)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+builder.add_edge("node_2", "node_3")
+builder.add_edge("node_3", END)
+
+graph = builder.compile()
+graph.invoke({"user_input":"My"})
+{'graph_output': 'My name is Lance'}
+```
+There are two subtle and important points to note here:
+
+1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node *can write to any state channel in the graph state.* The graph state is the union of of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
+
+2. We initialize the graph with `StateGraph(OverallState,input=InputState,output=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because *nodes can also declare additional state channels* as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
 
 ### Reducers
 
@@ -106,15 +140,11 @@ class State(TypedDict):
 
 In this example, we've used the `Annotated` type to specify a reducer function (`operator.add`) for the second key (`bar`). Note that the first key remains unchanged. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["hi", "bye"]}`. Notice here that the `bar` key is updated by adding the two lists together.
 
-#### Context Reducer
-
-You can use `Context` channels to define shared resources (such as database connections) that are managed outside of your graph's nodes and excluded from checkpointing. The context manager provided to the Context channel is entered before the first step of the graph execution and exited after the last step, allowing you to set up and clean up resources for the duration of the graph invocation. Read this [how to](https://langchain-ai.github.io/langgraph/how-tos/state-context-key) to see an example of using the `Context` channel in your graph.
-
 ### Working with Messages in Graph State
 
 #### Why use messages?
 
-Most modern LLM providers have a chat model interface that accepts a list of messages as input. LangChain's [`ChatModel`](https://python.langchain.com/v0.2/docs/concepts/#chat-models) in particular accepts a list of `Message` objects as inputs. These messages come in a variety of forms such as `HumanMessage` (user input) or `AIMessage` (LLM response). To read more about what message objects are, please refer to [this](https://python.langchain.com/v0.2/docs/concepts/#messages) conceptual guide.
+Most modern LLM providers have a chat model interface that accepts a list of messages as input. LangChain's [`ChatModel`](https://python.langchain.com/docs/concepts/#chat-models) in particular accepts a list of `Message` objects as inputs. These messages come in a variety of forms such as `HumanMessage` (user input) or `AIMessage` (LLM response). To read more about what message objects are, please refer to [this](https://python.langchain.com/docs/concepts/#messages) conceptual guide.
 
 #### Using Messages in your Graph
 
@@ -124,7 +154,7 @@ However, you might also want to manually update messages in your graph state (e.
 
 #### Serialization
 
-In addition to keeping track of message IDs, the `add_messages` function will also try to deserialize messages into LangChain `Message` objects whenever a state update is received on the `messages` channel. See more information on LangChain serialization/deserialization [here](https://python.langchain.com/v0.2/docs/how_to/serialization/). This allows sending graph inputs / state updates in the following format:
+In addition to keeping track of message IDs, the `add_messages` function will also try to deserialize messages into LangChain `Message` objects whenever a state update is received on the `messages` channel. See more information on LangChain serialization/deserialization [here](https://python.langchain.com/docs/how_to/serialization/). This allows sending graph inputs / state updates in the following format:
 
 ```python
 # this is supported

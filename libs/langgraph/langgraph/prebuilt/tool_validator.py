@@ -211,7 +211,7 @@ class ValidationNode(RunnableCallable):
         """Validate and run tool calls synchronously."""
         output_type, message = self._get_message(input)
 
-        def run_one(call: ToolCall):
+        def run_one(call: ToolCall) -> ToolMessage:
             schema = self.schemas_by_name[call["name"]]
             try:
                 if issubclass(schema, BaseModel):

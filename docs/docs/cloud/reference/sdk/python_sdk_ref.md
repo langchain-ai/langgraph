@@ -16,14 +16,14 @@ client = get_client(url="http://localhost:8123")
 assistants = await client.assistants.get(assistant_id="some_uuid")
 ```
 
-::: langgraph_sdk.client.get_client
+::: langgraph_sdk.client.async_client.get_client
     handler: python
 
 ## LangGraphClient
 
 `LangGraphClient` is the top-level client for accessing `AssistantsClient`, `ThreadsClient`, `RunsClient`, and `CronClient`.
 
-::: langgraph_sdk.client.LangGraphClient
+::: langgraph_sdk.client.async_client.LangGraphClient
     handler: python
 
 ## AssistantsClient
@@ -36,7 +36,7 @@ client = get_client(url="http://localhost:8123")
 await client.assistants.<method_name>()
 ```
 
-::: langgraph_sdk.client.AssistantsClient
+::: langgraph_sdk.client.async_client.AssistantsClient
     handler: python
 
 ## ThreadsClient
@@ -49,7 +49,7 @@ client = get_client(url="http://localhost:8123")
 await client.threads.<method_name>()
 ```
 
-::: langgraph_sdk.client.ThreadsClient
+::: langgraph_sdk.client.async_client.ThreadsClient
     handler: python
 
 ## RunsClient
@@ -62,7 +62,7 @@ client = get_client(url="http://localhost:8123")
 await client.runs.<method_name>()
 ```
 
-::: langgraph_sdk.client.RunsClient
+::: langgraph_sdk.client.async_client.RunsClient
     handler: python
 
 ## CronClient
@@ -75,5 +75,5 @@ client = get_client(url="http://localhost:8123")
 await client.crons.<method_name>()
 ```
 
-::: langgraph_sdk.client.CronClient
+::: langgraph_sdk.client.async_client.CronClient
     handler: python

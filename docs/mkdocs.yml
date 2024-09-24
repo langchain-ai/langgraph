@@ -84,8 +84,7 @@ plugins:
         - tutorials/llm-compiler/math_tools.py
         - tutorials/llm-compiler/output_parser.py
 nav:
-  - Home:
-      - "index.md"
+  - "index.md"
   - Tutorials:
       - "tutorials/index.md"
       - Quick Start: tutorials/introduction.ipynb
@@ -160,6 +159,7 @@ nav:
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
           - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
           - Stream from subgraphs: how-tos/streaming-subgraphs.ipynb
+          - Disable streaming for models that don't support it: how-tos/disable-streaming.ipynb
       - Tool calling:
           - Call tools using ToolNode: how-tos/tool-calling.ipynb
           - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
@@ -172,7 +172,6 @@ nav:
           - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
-          - Use a context object in state: how-tos/state-context-key.ipynb
           - Have a separate input and output schema: how-tos/input_output_schema.ipynb
           - Pass private state between nodes inside the graph: how-tos/pass_private_state.ipynb
       - Other:
@@ -182,6 +181,7 @@ nav:
           - Add node retries: how-tos/node-retries.ipynb
           - Return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
           - Pass custom LangSmith run ID for graph runs: how-tos/run-id-langsmith.ipynb
+          - Return state before hitting recursion limit: how-tos/return-when-recursion-limit-hits.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb

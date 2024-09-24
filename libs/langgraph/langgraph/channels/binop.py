@@ -14,7 +14,7 @@ from langgraph.errors import EmptyChannelError
 
 
 # Adapted from typing_extensions
-def _strip_extras(t):
+def _strip_extras(t):  # type: ignore[no-untyped-def]
     """Strips Annotated, Required and NotRequired from a given type."""
     if hasattr(t, "__origin__"):
         return _strip_extras(t.__origin__)

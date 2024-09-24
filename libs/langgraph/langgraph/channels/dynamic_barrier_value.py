@@ -1,4 +1,4 @@
-from typing import Generic, NamedTuple, Optional, Sequence, Type, Union
+from typing import Any, Generic, NamedTuple, Optional, Sequence, Type, Union
 
 from typing_extensions import Self
 
@@ -7,7 +7,7 @@ from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
 class WaitForNames(NamedTuple):
-    names: set[Value]
+    names: set[Any]
 
 
 class DynamicBarrierValue(

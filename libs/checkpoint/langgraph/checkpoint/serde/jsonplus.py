@@ -16,10 +16,10 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence, Union, cast
 from uuid import UUID
 
-import msgpack
+import msgpack  # type: ignore[import-untyped]
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
@@ -33,12 +33,12 @@ LC_REVIVER = Reviver()
 class JsonPlusSerializer(SerializerProtocol):
     def _encode_constructor_args(
         self,
-        constructor: type[Any],
+        constructor: Union[Callable, type[Any]],
         *,
-        method: Optional[str] = None,
+        method: Union[None, str, Sequence[Union[None, str]]] = None,
         args: Optional[Sequence[Any]] = None,
         kwargs: Optional[dict[str, Any]] = None,
-    ):
+    ) -> dict[str, Any]:
         out = {
             "lc": 2,
             "type": "constructor",
@@ -52,9 +52,9 @@ class JsonPlusSerializer(SerializerProtocol):
             out["kwargs"] = kwargs
         return out
 
-    def _default(self, obj):
+    def _default(self, obj: Any) -> Union[str, dict[str, Any]]:
         if isinstance(obj, Serializable):
-            return obj.to_json()
+            return cast(dict[str, Any], obj.to_json())
         elif hasattr(obj, "model_dump") and callable(obj.model_dump):
             return self._encode_constructor_args(
                 obj.__class__, method=(None, "model_construct"), kwargs=obj.model_dump()
@@ -87,7 +87,10 @@ class JsonPlusSerializer(SerializerProtocol):
                 datetime, method="fromisoformat", args=(obj.isoformat(),)
             )
         elif isinstance(obj, timezone):
-            return self._encode_constructor_args(timezone, args=obj.__getinitargs__())
+            return self._encode_constructor_args(
+                timezone,
+                args=obj.__getinitargs__(),  # type: ignore[attr-defined]
+            )
         elif isinstance(obj, ZoneInfo):
             return self._encode_constructor_args(ZoneInfo, args=(obj.key,))
         elif isinstance(obj, timedelta):
@@ -217,7 +220,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 
 
-def _msgpack_default(obj):
+def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return msgpack.ExtType(
             EXT_PYDANTIC_V2,
@@ -360,7 +363,7 @@ def _msgpack_default(obj):
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    obj.__getinitargs__(),
+                    obj.__getinitargs__(),  # type: ignore[attr-defined]
                 ),
             ),
         )
@@ -406,7 +409,7 @@ def _msgpack_default(obj):
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
 
-def _msgpack_ext_hook(code: int, data: bytes):
+def _msgpack_ext_hook(code: int, data: bytes) -> Any:
     if code == EXT_CONSTRUCTOR_SINGLE_ARG:
         try:
             tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
@@ -461,7 +464,7 @@ def _msgpack_ext_hook(code: int, data: bytes):
             return
 
 
-ENC_POOL = deque(maxlen=32)
+ENC_POOL: deque[msgpack.Packer] = deque(maxlen=32)
 
 
 def _msgpack_enc(data: Any) -> bytes:
