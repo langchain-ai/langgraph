@@ -5,21 +5,23 @@ from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, Result, Sear
 
 
 class MemoryStore(BaseStore):
+    __slots__ = ("_data",)
+
     def __init__(self) -> None:
-        self.data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
+        self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
 
     def batch(self, ops: list[Op]) -> list[Result]:
         results: list[Result] = []
         for op in ops:
             if isinstance(op, GetOp):
-                item = self.data[op.namespace].get(op.id)
+                item = self._data[op.namespace].get(op.id)
                 if item is not None:
                     item.last_accessed_at = datetime.now(timezone.utc)
                 results.append(item)
             elif isinstance(op, SearchOp):
                 candidates = [
                     item
-                    for namespace, items in self.data.items()
+                    for namespace, items in self._data.items()
                     if (
                         namespace[: len(op.namespace_prefix)] == op.namespace_prefix
                         if len(namespace) >= len(op.namespace_prefix)
@@ -40,14 +42,14 @@ class MemoryStore(BaseStore):
                 results.append(candidates[op.offset : op.offset + op.limit])
             elif isinstance(op, PutOp):
                 if op.value is None:
-                    self.data[op.namespace].pop(op.id, None)
-                elif op.id in self.data[op.namespace]:
-                    self.data[op.namespace][op.id].value = op.value
-                    self.data[op.namespace][op.id].updated_at = datetime.now(
+                    self._data[op.namespace].pop(op.id, None)
+                elif op.id in self._data[op.namespace]:
+                    self._data[op.namespace][op.id].value = op.value
+                    self._data[op.namespace][op.id].updated_at = datetime.now(
                         timezone.utc
                     )
                 else:
-                    self.data[op.namespace][op.id] = Item(
+                    self._data[op.namespace][op.id] = Item(
                         value=op.value,
                         scores={},
                         id=op.id,
