@@ -52,10 +52,10 @@ async def _run(aqueue: dict[asyncio.Future, Ops], store: BaseStore) -> None:
             if isinstance(ops[0], GetOp)
         }:
             try:
-                results = await store.aget([g for ops in gets.values() for g in ops])
-                for fut, ops in gets.items():
-                    fut.set_result(results[: len(ops)])
-                    results = results[len(ops) :]
+                gresults = await store.aget([g for ops in gets.values() for g in ops])
+                for fut, gops in gets.items():
+                    fut.set_result(gresults[: len(gops)])
+                    gresults = gresults[len(gops) :]
             except Exception as e:
                 for fut in gets:
                     fut.set_exception(e)
@@ -65,12 +65,12 @@ async def _run(aqueue: dict[asyncio.Future, Ops], store: BaseStore) -> None:
             if isinstance(ops[0], SearchOp)
         }:
             try:
-                results = await store.asearch(
+                sresults = await store.asearch(
                     [s for ops in searches.values() for s in ops]
                 )
-                for fut, ops in searches.items():
-                    fut.set_result(results[: len(ops)])
-                    results = results[len(ops) :]
+                for fut, sops in searches.items():
+                    fut.set_result(sresults[: len(sops)])
+                    sresults = sresults[len(sops) :]
             except Exception as e:
                 for fut in searches:
                     fut.set_exception(e)

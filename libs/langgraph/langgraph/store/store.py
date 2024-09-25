@@ -1,7 +1,7 @@
 from typing import Any, Optional
 from weakref import WeakKeyDictionary
 
-from langgraph.store.base import BaseStore, GetOp, Item, SearchOp
+from langgraph.store.base import BaseStore, GetOp, Item, PutOp, SearchOp
 
 CACHE: WeakKeyDictionary[BaseStore, "Store"] = WeakKeyDictionary()
 
@@ -48,21 +48,21 @@ class Store:
         id: str,
         value: dict[str, Any],
     ) -> None:
-        self._store.put([GetOp(namespace, id, value)])
+        self._store.put([PutOp(namespace, id, value)])
 
     def delete(
         self,
         namespace: tuple[str, ...],
         id: str,
     ) -> None:
-        self._store.put([GetOp(namespace, id, None)])
+        self._store.put([PutOp(namespace, id, None)])
 
     async def aget(
         self,
         namespace: tuple[str, ...],
         id: str,
     ) -> Optional[Item]:
-        return await self._store.aget([GetOp(namespace, id)])[0]
+        return (await self._store.aget([GetOp(namespace, id)]))[0]
 
     async def asearch(
         self,
@@ -89,11 +89,11 @@ class Store:
         id: str,
         value: dict[str, Any],
     ) -> None:
-        await self._store.aput([GetOp(namespace, id, value)])
+        await self._store.aput([PutOp(namespace, id, value)])
 
     async def adelete(
         self,
         namespace: tuple[str, ...],
         id: str,
     ) -> None:
-        await self._store.aput([GetOp(namespace, id, None)])
+        await self._store.aput([PutOp(namespace, id, None)])
