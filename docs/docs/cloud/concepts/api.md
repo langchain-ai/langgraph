@@ -19,6 +19,8 @@ In practice, an assistant is just an *instance* of a graph with a specific confi
 
 #### Versioning Assistants
 
+![assistant versions](./assistant_version.png)
+
 Once you've created an assistant, you can save and version it to track changes to the configuration over time. You can think about this at three levels:
 
 1) The graph lays out the general agent application logic 
