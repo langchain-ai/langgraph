@@ -1,6 +1,7 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, NamedTuple, Optional
+from typing import Any, Iterable, NamedTuple, Optional, Sequence, Union
 
 SCORE_RECENCY = "recency"
 SCORE_RELEVANCE = "relevance"
@@ -39,23 +40,105 @@ class PutOp(NamedTuple):
     value: Optional[dict[str, Any]]
 
 
-class BaseStore:
+Op = Union[GetOp, SearchOp, PutOp]
+Result = Union[Item, list[Item], None]
+
+
+class BaseStore(ABC):
     __slots__ = ("__weakref__",)
 
-    def get(self, ops: list[GetOp]) -> list[Optional[Item]]:
-        raise NotImplementedError
+    # abstract methods
 
-    def search(self, ops: list[SearchOp]) -> list[list[Item]]:
-        raise NotImplementedError
+    @abstractmethod
+    def batch(
+        self,
+        ops: Iterable[Op],
+    ) -> Sequence[Result]: ...
 
-    def put(self, ops: list[PutOp]) -> None:
-        raise NotImplementedError
+    @abstractmethod
+    async def abatch(
+        self,
+        ops: Iterable[Op],
+    ) -> Sequence[Result]: ...
 
-    async def aget(self, ops: list[GetOp]) -> list[Optional[Item]]:
-        raise NotImplementedError
+    # convenience methods
 
-    async def asearch(self, ops: list[SearchOp]) -> list[list[Item]]:
-        raise NotImplementedError
+    def get(
+        self,
+        namespace: tuple[str, ...],
+        id: str,
+    ) -> Optional[Item]:
+        return self.batch([GetOp(namespace, id)])[0]
 
-    async def aput(self, ops: list[PutOp]) -> None:
-        raise NotImplementedError
+    def search(
+        self,
+        namespace_prefix: tuple[str, ...],
+        /,
+        *,
+        query: Optional[str] = None,
+        filter: Optional[dict[str, Any]] = None,
+        weights: Optional[dict[str, float]] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> list[Item]:
+        return self.batch(
+            [
+                SearchOp(namespace_prefix, query, filter, weights, limit, offset),
+            ]
+        )[0]
+
+    def put(
+        self,
+        namespace: tuple[str, ...],
+        id: str,
+        value: dict[str, Any],
+    ) -> None:
+        self.batch([PutOp(namespace, id, value)])
+
+    def delete(
+        self,
+        namespace: tuple[str, ...],
+        id: str,
+    ) -> None:
+        self.batch([PutOp(namespace, id, None)])
+
+    async def aget(
+        self,
+        namespace: tuple[str, ...],
+        id: str,
+    ) -> Optional[Item]:
+        return (await self.abatch([GetOp(namespace, id)]))[0]
+
+    async def asearch(
+        self,
+        namespace_prefix: tuple[str, ...],
+        /,
+        *,
+        query: Optional[str] = None,
+        filter: Optional[dict[str, Any]] = None,
+        weights: Optional[dict[str, float]] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> list[Item]:
+        return (
+            await self.abatch(
+                [
+                    SearchOp(namespace_prefix, query, filter, weights, limit, offset),
+                ]
+            )
+        )[0]
+
+    async def aput(
+        self,
+        namespace: tuple[str, ...],
+        id: str,
+        value: dict[str, Any],
+    ) -> None:
+        await self.abatch([PutOp(namespace, id, value)])
+
+    async def adelete(
+        self,
+        namespace: tuple[str, ...],
+        id: str,
+    ) -> None:
+        await self.abatch([PutOp(namespace, id, None)])

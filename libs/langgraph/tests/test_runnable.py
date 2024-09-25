@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from langgraph.store.store import Store
+from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 from langgraph.utils.runnable import RunnableCallable
 
@@ -14,13 +14,13 @@ def test_runnable_callable_func_accepts():
     async def async_func(x: Any) -> str:
         return f"{x}"
 
-    def func_with_store(x: Any, store: Store) -> str:
+    def func_with_store(x: Any, store: BaseStore) -> str:
         return f"{x}"
 
     def func_with_writer(x: Any, writer: StreamWriter) -> str:
         return f"{x}"
 
-    async def afunc_with_store(x: Any, store: Store) -> str:
+    async def afunc_with_store(x: Any, store: BaseStore) -> str:
         return f"{x}"
 
     async def afunc_with_writer(x: Any, writer: StreamWriter) -> str:

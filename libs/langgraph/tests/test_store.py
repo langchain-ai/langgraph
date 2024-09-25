@@ -1,22 +1,25 @@
 import asyncio
 from datetime import datetime
-from typing import Optional
 
 import pytest
 from pytest_mock import MockerFixture
 
-from langgraph.store.base import BaseStore, GetOp, Item
-from langgraph.store.batch import AsyncBatchedStore
+from langgraph.store.base import GetOp, Item, Op, Result
+from langgraph.store.batch import AsyncBatchedBaseStore
 
 pytestmark = pytest.mark.anyio
 
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:
-    aget = mocker.stub()
+    abatch = mocker.stub()
 
-    class MockStore(BaseStore):
-        async def aget(self, ops: list[GetOp]) -> list[Optional[Item]]:
-            aget(ops)
+    class MockStore(AsyncBatchedBaseStore):
+        def batch(self, ops: list[Op]) -> list[Result]:
+            raise NotImplementedError
+
+        async def abatch(self, ops: list[Op]) -> list[Result]:
+            assert all(isinstance(op, GetOp) for op in ops)
+            abatch(ops)
             return [
                 Item(
                     value={},
@@ -30,42 +33,37 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
                 for op in ops
             ]
 
-    store = AsyncBatchedStore(MockStore())
+    store = MockStore()
 
     # concurrent calls are batched
     results = await asyncio.gather(
-        store.aget([GetOp(("a",), "b")]),
-        store.aget([GetOp(("c",), "d")]),
+        store.aget(namespace=("a",), id="b"),
+        store.aget(namespace=("c",), id="d"),
     )
     assert results == [
-        [
-            Item(
-                {},
-                {},
-                "b",
-                ("a",),
-                datetime(2024, 9, 24, 17, 29, 10, 128397),
-                datetime(2024, 9, 24, 17, 29, 10, 128397),
-                datetime(2024, 9, 24, 17, 29, 10, 128397),
-            )
-        ],
-        [
-            Item(
-                {},
-                {},
-                "d",
-                ("c",),
-                datetime(2024, 9, 24, 17, 29, 10, 128397),
-                datetime(2024, 9, 24, 17, 29, 10, 128397),
-                datetime(2024, 9, 24, 17, 29, 10, 128397),
-            )
-        ],
+        Item(
+            {},
+            {},
+            "b",
+            ("a",),
+            datetime(2024, 9, 24, 17, 29, 10, 128397),
+            datetime(2024, 9, 24, 17, 29, 10, 128397),
+            datetime(2024, 9, 24, 17, 29, 10, 128397),
+        ),
+        Item(
+            {},
+            {},
+            "d",
+            ("c",),
+            datetime(2024, 9, 24, 17, 29, 10, 128397),
+            datetime(2024, 9, 24, 17, 29, 10, 128397),
+            datetime(2024, 9, 24, 17, 29, 10, 128397),
+        ),
     ]
-    assert [c.args for c in aget.call_args_list] == [
+    assert abatch.call_count == 1
+    assert [tuple(c.args[0]) for c in abatch.call_args_list] == [
         (
-            [
-                GetOp(("a",), "b"),
-                GetOp(("c",), "d"),
-            ],
+            GetOp(("a",), "b"),
+            GetOp(("c",), "d"),
         ),
     ]

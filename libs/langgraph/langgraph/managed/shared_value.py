@@ -21,7 +21,7 @@ from langgraph.managed.base import (
     ConfiguredManagedValue,
     WritableManagedValue,
 )
-from langgraph.store.base import BaseStore, PutOp, SearchOp
+from langgraph.store.base import BaseStore, PutOp
 
 V = dict[str, Any]
 
@@ -58,8 +58,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
         with super().enter(config, **kwargs) as value:
             if value.store is not None:
-                saved = value.store.search([SearchOp(value.ns)])
-                value.value = {it.id: it.value for it in saved[0]}
+                saved = value.store.search(value.ns)
+                value.value = {it.id: it.value for it in saved}
             yield value
 
     @classmethod
@@ -67,8 +67,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
         async with super().aenter(config, **kwargs) as value:
             if value.store is not None:
-                saved = await value.store.asearch([SearchOp(value.ns)])
-                value.value = {it.id: it.value for it in saved[0]}
+                saved = await value.store.asearch(value.ns)
+                value.value = {it.id: it.value for it in saved}
             yield value
 
     def __init__(
@@ -115,10 +115,10 @@ class SharedValue(WritableManagedValue[Value, Update]):
         if self.store is None:
             self._process_update(values)
         else:
-            return self.store.put(self._process_update(values))
+            return self.store.batch(self._process_update(values))
 
     async def aupdate(self, writes: Sequence[Update]) -> None:
         if self.store is None:
             self._process_update(writes)
         else:
-            return await self.store.aput(self._process_update(writes))
+            return await self.store.abatch(self._process_update(writes))

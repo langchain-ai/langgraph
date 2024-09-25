@@ -35,7 +35,7 @@ from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
 from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
-from langgraph.store.store import Store, _get_store
+from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 from langgraph.utils.config import (
     ensure_config,
@@ -60,22 +60,18 @@ class StrEnum(str, enum.Enum):
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
-KWARGS_CONFIG_KEYS: tuple[
-    tuple[str, tuple[Any, ...], str, Any, Optional[Callable[[Any], Any]]], ...
-] = (
+KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         sys.intern("writer"),
         (StreamWriter, "StreamWriter", inspect.Parameter.empty),
         CONFIG_KEY_STREAM_WRITER,
         lambda _: None,
-        None,
     ),
     (
         sys.intern("store"),
-        (Store, "Store", inspect.Parameter.empty),
+        (BaseStore, "BaseStore", inspect.Parameter.empty),
         CONFIG_KEY_STORE,
         inspect.Parameter.empty,
-        _get_store,
     ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
@@ -124,7 +120,7 @@ class RunnableCallable(Runnable):
 
         self.func_accepts_config = "config" in params
         self.func_accepts: dict[str, bool] = {}
-        for kw, typ, _, _, _ in KWARGS_CONFIG_KEYS:
+        for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
             self.func_accepts[kw] = (
                 p is not None and p.annotation in typ and p.kind in VALID_KINDS
@@ -152,12 +148,15 @@ class RunnableCallable(Runnable):
         kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
-        for kw, _, ck, defv, map in KWARGS_CONFIG_KEYS:
+        _conf = config[CONF]
+        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
             if self.func_accepts[kw]:
-                if map is not None:
-                    kwargs[kw] = map(config[CONF].get(ck, defv))
+                if defv is inspect.Parameter.empty and ck not in _conf:
+                    raise ValueError(
+                        f"Missing required config key '{ck}' for '{self.name}'."
+                    )
                 else:
-                    kwargs[kw] = config[CONF].get(ck, defv)
+                    kwargs[kw] = _conf.get(ck, defv)
         context = copy_context()
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
@@ -194,12 +193,15 @@ class RunnableCallable(Runnable):
         kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
-        for kw, _, ck, defv, map in KWARGS_CONFIG_KEYS:
+        _conf = config[CONF]
+        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
             if self.func_accepts[kw]:
-                if map is not None:
-                    kwargs[kw] = map(config[CONF].get(ck, defv))
+                if defv is inspect.Parameter.empty and ck not in _conf:
+                    raise ValueError(
+                        f"Missing required config key '{ck}' for '{self.name}'."
+                    )
                 else:
-                    kwargs[kw] = config[CONF].get(ck, defv)
+                    kwargs[kw] = _conf.get(ck, defv)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)
