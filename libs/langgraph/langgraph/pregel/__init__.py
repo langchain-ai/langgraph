@@ -61,6 +61,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
@@ -166,9 +167,11 @@ class Channel:
         return ChannelWrite(
             [ChannelWriteEntry(c) for c in channels]
             + [
-                ChannelWriteEntry(k, mapper=v)
-                if callable(v)
-                else ChannelWriteEntry(k, value=v)
+                (
+                    ChannelWriteEntry(k, mapper=v)
+                    if callable(v)
+                    else ChannelWriteEntry(k, value=v)
+                )
                 for k, v in kwargs.items()
             ]
         )
@@ -1237,6 +1240,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
                     ((), "custom", c)
                 )
+            if self.store:
+                config[CONF][CONFIG_KEY_STORE] = self.store
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -1274,6 +1279,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                             return waiter
                         else:
                             return waiter
+
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1452,6 +1458,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put_nowait(
                     ((), "custom", c)
                 )
+            if self.store:
+                config[CONF][CONFIG_KEY_STORE] = self.store
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -1477,6 +1485,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())
+
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model

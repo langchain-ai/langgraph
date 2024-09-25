@@ -2,6 +2,7 @@ import json
 import operator
 import re
 import time
+import uuid
 import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -54,23 +55,16 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import ERROR, PULL, PUSH
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
-from langgraph.graph import END, Graph
+from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
-from langgraph.graph.state import StateGraph
 from langgraph.managed.shared_value import SharedValue
-from langgraph.prebuilt.chat_agent_executor import (
-    create_tool_calling_executor,
-)
+from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import (
-    Channel,
-    GraphRecursionError,
-    Pregel,
-    StateSnapshot,
-)
+from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.memory import MemoryStore
+from langgraph.store.store import Store
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
@@ -4891,11 +4885,7 @@ def test_message_graph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import (
-        AIMessage,
-        BaseMessage,
-        HumanMessage,
-    )
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
 
@@ -11329,3 +11319,53 @@ def test_subgraph_retries():
     app = parent.compile(checkpointer=checkpointer)
     with pytest.raises(RandomError):
         app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
+
+
+async def test_store_injected_async():
+    class State(TypedDict):
+        count: int
+
+    doc_id = str(uuid.uuid4())
+    doc = {"some-key": "this-is-a-val"}
+
+    async def node(input: State, store: Store):
+        assert isinstance(store, Store)
+        assert isinstance(store._store, MemoryStore)
+        await store.aput(("foo", "bar"), doc_id, doc)
+        return {"count": input["count"] + 1}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge("__start__", "node")
+    the_store = MemoryStore()
+    app = graph.compile(store=the_store)
+
+    result = await app.ainvoke({"count": 0})
+    assert result == {"count": 1}
+    my_store = Store(the_store)
+    assert (await my_store.aget(("foo", "bar"), doc_id)).value == doc
+
+
+def test_store_injected():
+    class State(TypedDict):
+        count: int
+
+    doc_id = str(uuid.uuid4())
+    doc = {"some-key": "this-is-a-val"}
+
+    def node(input: State, store: Store):
+        assert isinstance(store, Store)
+        assert isinstance(store._store, MemoryStore)
+        store.put(("foo", "bar"), doc_id, doc)
+        return {"count": input["count"] + 1}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge("__start__", "node")
+    the_store = MemoryStore()
+    app = graph.compile(store=the_store)
+
+    result = app.invoke({"count": 0})
+    assert result == {"count": 1}
+    my_store = Store(the_store)
+    assert my_store.get(("foo", "bar"), doc_id).value == doc
