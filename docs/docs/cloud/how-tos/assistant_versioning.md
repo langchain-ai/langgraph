@@ -1,11 +1,11 @@
 # How to version assistants
 
-In this how-to guide we will walk through how you can create and manage different assistant versions. If you haven't already, you can read [this] conceptual guide to gain a better understanding of what assistant versioning is. This how-to assumes you have a graph that is configurable, which means you have defined a config schema and passed it to your graph as follows:
+In this how-to guide we will walk through how you can create and manage different assistant versions. If you haven't already, you can read [this](../concepts/api.md/#versioning-assistants) conceptual guide to gain a better understanding of what assistant versioning is. This how-to assumes you have a graph that is configurable, which means you have defined a config schema and passed it to your graph as follows:
 
 === "Python"
 
     ```python
-    class onfig(BaseModel):
+    class Config(BaseModel):
         model_name: Literal["anthropic", "openai"] = "anthropic"
         system_prompt: str
 
