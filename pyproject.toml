@@ -33,6 +33,8 @@ click = "^8.1.7"
 [tool.poetry.group.test.dependencies]
 langchain-openai = "^0.1.23"
 langchain-anthropic = "^0.1.23"
+langchain_nomic = "^0.1.3"
+chromadb = "^0.5.5"
 numpy = "^1.26.4"
 redis = "^5.0.8"
 pymongo = "^4.8.0"
