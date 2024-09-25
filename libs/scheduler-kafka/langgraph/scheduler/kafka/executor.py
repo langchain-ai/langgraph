@@ -194,6 +194,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 step=saved.metadata["step"] + 1,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
+                store=self.graph.store,
             ):
                 # execute task, saving writes
                 runner = PregelRunner(

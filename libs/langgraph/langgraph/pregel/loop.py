@@ -367,6 +367,7 @@ class PregelLoop:
             self.step,
             for_execution=True,
             manager=manager,
+            store=self.store,
             checkpointer=self.checkpointer,
         )
         # we don't need to save the writes for the last task that completes
@@ -495,6 +496,7 @@ class PregelLoop:
                 self.config,
                 self.step,
                 for_execution=True,
+                store=None,
                 checkpointer=None,
                 manager=None,
             )
