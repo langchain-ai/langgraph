@@ -153,7 +153,7 @@ nav:
           - Stream state updates: how-tos/stream-updates.ipynb
           - Stream LLM tokens: how-tos/streaming-tokens.ipynb
           - Stream LLM tokens without LangChain models: how-tos/streaming-tokens-without-langchain.ipynb
-          - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
+          - Stream custom data: how-tos/streaming-content.ipynb
           - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
