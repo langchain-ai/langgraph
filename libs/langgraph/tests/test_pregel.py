@@ -8607,6 +8607,39 @@ def test_stream_subgraphs_during_execution(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_stream_buffering_single_node(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    def node(state: State, writer: StreamWriter):
+        writer("Before sleep")
+        time.sleep(0.2)
+        writer("After sleep")
+        return {"my_key": "got here"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.add_edge("node", END)
+    graph = builder.compile(checkpointer=checkpointer)
+
+    start = time.perf_counter()
+    chunks: list[tuple[float, Any]] = []
+    config = {"configurable": {"thread_id": "2"}}
+    for c in graph.stream({"my_key": ""}, config, stream_mode="custom"):
+        chunks.append((round(time.perf_counter() - start, 1), c))
+
+    assert chunks == [
+        (FloatBetween(0.0, 0.1), "Before sleep"),
+        (FloatBetween(0.2, 0.3), "After sleep"),
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_nested_graph_interrupts_parallel(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
