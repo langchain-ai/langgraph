@@ -247,6 +247,7 @@ nav:
               - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
               - Configure Agents: "cloud/how-tos/configuration_cloud.md"
+              - Versioning Assistants: "cloud/how-tos/assistant_versioning.md"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'

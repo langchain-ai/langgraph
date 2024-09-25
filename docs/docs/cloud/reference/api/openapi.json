@@ -334,6 +334,113 @@
         }
       }
     },
+    "/assistants/{assistant_id}/versions": {
+      "post": {
+        "tags": [
+          "assistants/manage"
+        ],
+        "summary": "Get Assistant Versions",
+        "description": "Get all versions of an assistant.",
+        "operationId": "get_assistant_versions_assistants__assistant_id__versions_get",
+        "parameters": [
+          {
+            "description": "The ID of the assistant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assistant Id",
+              "description": "The ID of the assistant."
+            },
+            "name": "assistant_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Assistant"
+                  },
+                  "type": "array",
+                  "title": "Response Search Assistants Assistants Search Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistants/{assistant_id}/change_version": {
+      "post": {
+        "tags": [
+          "assistants/manage"
+        ],
+        "summary": "Change Assistant Version",
+        "description": "Change the version of an assistant.",
+        "operationId": "change_assistant_version__assistant_id__change_version__version_post",
+        "parameters": [
+          {
+            "description": "The ID of the assistant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assistant Id",
+              "description": "The ID of the assistant."
+            },
+            "name": "assistant_id",
+            "in": "path"
+          },
+          {
+            "description": "The version to change to.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version",
+              "description": "The version of the assistant to change to."
+            },
+            "name": "version",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/threads": {
       "post": {
         "tags": [
@@ -1760,6 +1867,14 @@
           "metadata": {
             "type": "object",
             "title": "Metadata"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "name": {
+            "type": "string",
+            "title": "Assistant Name"
           }
         },
         "type": "object",
@@ -1820,11 +1935,28 @@
             "type": "object",
             "title": "Metadata",
             "description": "Metadata to merge with existing assistant metadata."
+          },
+          "name": {
+            "type": "string",
+            "title": "Assistant Name",
+            "description": "The assistant name."
           }
         },
         "type": "object",
         "title": "AssistantPatch",
         "description": "Payload for updating an assistant."
+      },
+      "AssistantVersionChange": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "The assistant version."
+          }
+        },
+        "type": "object",
+        "title": "AssistantVersionChange",
+        "description": "Payload for changing the version of an assistant."
       },
       "Config": {
         "properties": {
@@ -2268,7 +2400,8 @@
                     "messages",
                     "updates",
                     "events",
-                    "debug"
+                    "debug",
+                    "custom"
                   ]
                 },
                 "type": "array"
@@ -2280,7 +2413,8 @@
                   "messages",
                   "updates",
                   "events",
-                  "debug"
+                  "debug",
+                  "custom"
                 ]
               }
             ],
@@ -2315,6 +2449,11 @@
             ],
             "title": "Multitask Strategy",
             "default": "reject"
+          },
+          "after_seconds": {
+            "type": "integer",
+            "title": "After Seconds",
+            "description": "Number of seconds to wait before starting the run."
           }
         },
         "type": "object",
@@ -2442,7 +2581,8 @@
                     "messages",
                     "updates",
                     "events",
-                    "debug"
+                    "debug",
+                    "custom"
                   ]
                 },
                 "type": "array"
@@ -2454,7 +2594,8 @@
                   "messages",
                   "updates",
                   "events",
-                  "debug"
+                  "debug",
+                  "custom"
                 ]
               }
             ],
@@ -2487,6 +2628,11 @@
             ],
             "title": "On Disconnect",
             "default": "cancel"
+          },
+          "after_seconds": {
+            "type": "integer",
+            "title": "After Seconds",
+            "description": "Number of seconds to wait before starting the run."
           }
         },
         "type": "object",
@@ -2554,6 +2700,33 @@
         "type": "object",
         "title": "SearchRequest",
         "description": "Payload for listing assistants."
+      },
+      "AssistantVersionsSearchRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata to search for."
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number to return.",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Offset to start from.",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "type": "object",
+        "title": "SearchRequest",
+        "description": "Payload for listing assistant versions."
       },
       "ThreadSearchRequest": {
         "properties": {
