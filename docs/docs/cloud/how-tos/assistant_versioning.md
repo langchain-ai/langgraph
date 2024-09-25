@@ -96,7 +96,7 @@ To create an assistant using the studio do the following steps:
 
 ![view create](./img/create_assistant_view.png)
 
-4. Click on the edit button to manage your created assistant:
+4. Click on the edit button next to the selected assistant to manage your created assistant:
 
 ![create edit](./img/edit_created_assistant.png)
 
