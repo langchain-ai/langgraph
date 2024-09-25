@@ -21,7 +21,7 @@ from langgraph.managed.base import (
     ConfiguredManagedValue,
     WritableManagedValue,
 )
-from langgraph.store.base import BaseStore
+from langgraph.store.base import BaseStore, PutOp, SearchOp
 
 V = dict[str, Any]
 
@@ -58,8 +58,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
         with super().enter(config, **kwargs) as value:
             if value.store is not None:
-                saved = value.store.list([value.ns])
-                value.value = saved[value.ns] or {}
+                saved = value.store.search([SearchOp(value.ns)])
+                value.value = {it.id: it.value for it in saved[0]}
             yield value
 
     @classmethod
@@ -67,8 +67,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
         async with super().aenter(config, **kwargs) as value:
             if value.store is not None:
-                saved = await value.store.alist([value.ns])
-                value.value = saved[value.ns] or {}
+                saved = await value.store.asearch([SearchOp(value.ns)])
+                value.value = {it.id: it.value for it in saved[0]}
             yield value
 
     def __init__(
@@ -87,7 +87,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
         if self.store is None:
             pass
         elif scope_value := config[CONF].get(self.scope):
-            self.ns = f"scoped:{scope}:{key}:{scope_value}"
+            self.ns = ("scoped", scope, key, scope_value)
         else:
             raise ValueError(
                 f"Scope {scope} for shared state key not in config.configurable"
@@ -96,21 +96,19 @@ class SharedValue(WritableManagedValue[Value, Update]):
     def __call__(self, step: int) -> Value:
         return self.value.copy()
 
-    def _process_update(
-        self, values: Sequence[Update]
-    ) -> list[tuple[str, str, Optional[dict[str, Any]]]]:
-        writes: list[tuple[str, str, Optional[dict[str, Any]]]] = []
+    def _process_update(self, values: Sequence[Update]) -> list[PutOp]:
+        writes: list[PutOp] = []
         for vv in values:
             for k, v in vv.items():
                 if v is None:
                     if k in self.value:
                         del self.value[k]
-                        writes.append((self.ns, k, None))
+                        writes.append(PutOp(self.ns, k, None))
                 elif not isinstance(v, dict):
                     raise InvalidUpdateError("Received a non-dict value")
                 else:
                     self.value[k] = v
-                    writes.append((self.ns, k, v))
+                    writes.append(PutOp(self.ns, k, v))
         return writes
 
     def update(self, values: Sequence[Update]) -> None:
