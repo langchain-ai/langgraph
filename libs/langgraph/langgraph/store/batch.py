@@ -17,16 +17,22 @@ class AsyncBatchedStore(BaseStore):
         self._task.cancel()
 
     async def aget(self, ops: list[GetOp]) -> list[Optional[Item]]:
+        if any(not isinstance(op, GetOp) for op in ops):
+            raise TypeError("All operations must be GetOp")
         fut = self._loop.create_future()
         self._aqueue[fut] = ops
         return await fut
 
     async def asearch(self, ops: list[SearchOp]) -> list[list[Item]]:
+        if any(not isinstance(op, SearchOp) for op in ops):
+            raise TypeError("All operations must be SearchOp")
         fut = self._loop.create_future()
         self._aqueue[fut] = ops
         return await fut
 
     async def aput(self, ops: list[PutOp]) -> None:
+        if any(not isinstance(op, PutOp) for op in ops):
+            raise TypeError("All operations must be PutOp")
         fut = self._loop.create_future()
         self._aqueue[fut] = ops
         return await fut
