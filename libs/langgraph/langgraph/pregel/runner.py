@@ -49,8 +49,8 @@ class PregelRunner:
         tasks = tuple(tasks)
         # give control back to the caller
         yield
-        # fast path if single task with no timeout
-        if len(tasks) == 1 and timeout is None:
+        # fast path if single task with no timeout and no waiter
+        if len(tasks) == 1 and timeout is None and get_waiter is None:
             t = tasks[0]
             try:
                 run_with_retry(t, retry_policy)
