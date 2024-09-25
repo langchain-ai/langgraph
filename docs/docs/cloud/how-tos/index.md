@@ -81,4 +81,3 @@ Other guides that may prove helpful!
 - [How to integrate webhooks](./webhooks.md)
 - [How to copy threads](./copy_threads.md)
 - [How to check status of your threads](./check_thread_status.md)
-- [How to share state between threads](./shared_state.md)
