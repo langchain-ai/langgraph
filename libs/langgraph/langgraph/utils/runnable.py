@@ -65,14 +65,14 @@ KWARGS_CONFIG_KEYS: tuple[
 ] = (
     (
         sys.intern("writer"),
-        (StreamWriter, inspect.Parameter.empty),
+        (StreamWriter, "StreamWriter", inspect.Parameter.empty),
         CONFIG_KEY_STREAM_WRITER,
         lambda _: None,
         None,
     ),
     (
         sys.intern("store"),
-        (Store, inspect.Parameter.empty),
+        (Store, "Store", inspect.Parameter.empty),
         CONFIG_KEY_STORE,
         inspect.Parameter.empty,
         _get_store,
@@ -120,9 +120,7 @@ class RunnableCallable(Runnable):
         # check signature
         if func is None and afunc is None:
             raise ValueError("At least one of func or afunc must be provided.")
-        params = inspect.signature(
-            cast(Callable, func or afunc), eval_str=True
-        ).parameters
+        params = inspect.signature(cast(Callable, func or afunc)).parameters
 
         self.func_accepts_config = "config" in params
         self.func_accepts: dict[str, bool] = {}
