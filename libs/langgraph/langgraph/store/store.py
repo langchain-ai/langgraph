@@ -27,7 +27,7 @@ class Store:
 
     def search(
         self,
-        namesapce_prefix: tuple[str, ...],
+        namespace_prefix: tuple[str, ...],
         /,
         *,
         query: Optional[str],
@@ -38,7 +38,7 @@ class Store:
     ) -> list[Item]:
         return self._store.search(
             [
-                SearchOp(namesapce_prefix, query, filter, weights, limit, offset),
+                SearchOp(namespace_prefix, query, filter, weights, limit, offset),
             ]
         )[0]
 
@@ -66,7 +66,7 @@ class Store:
 
     async def asearch(
         self,
-        namesapce_prefix: tuple[str, ...],
+        namespace_prefix: tuple[str, ...],
         /,
         *,
         query: Optional[str],
@@ -78,7 +78,7 @@ class Store:
         return (
             await self._store.asearch(
                 [
-                    SearchOp(namesapce_prefix, query, filter, weights, limit, offset),
+                    SearchOp(namespace_prefix, query, filter, weights, limit, offset),
                 ]
             )
         )[0]
