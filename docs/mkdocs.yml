@@ -115,6 +115,8 @@ nav:
               - Reflexion: tutorials/reflexion/reflexion.ipynb
               - Language Agent Tree Search: tutorials/lats/lats.ipynb
               - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
+      - Memory:
+          - Long-term memory: tutorials/memory/long-term-memory-agent.ipynb
       - Evaluation & Analysis:
           - Chatbot Evaluation via Simulation:
               - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
