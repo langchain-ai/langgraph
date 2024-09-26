@@ -37,7 +37,8 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",
     "docs/docs/tutorials/rag/langgraph_self_rag.ipynb",
-    "docs/docs/tutorials/rag/langgraph_agentic_rag.ipynb"
+    "docs/docs/tutorials/rag/langgraph_agentic_rag.ipynb",
+    "docs/docs/tutorials/plan-and-execute/plan-and-execute.ipynb"  # langsmith issue
 ]
 
 
