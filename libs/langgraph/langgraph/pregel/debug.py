@@ -1,3 +1,5 @@
+from typing_extensions import TypedDict
+
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -10,7 +12,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    TypedDict,
+    
     Union,
 )
 from uuid import UUID

@@ -9,7 +9,7 @@ from typing import (
     List,
     Literal,
     Optional,
-    TypedDict,
+    
     TypeVar,
     Union,
 )
@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
-from typing_extensions import Annotated, NotRequired, Required
+from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph

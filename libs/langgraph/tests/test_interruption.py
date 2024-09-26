@@ -1,4 +1,6 @@
-from typing import TypedDict
+from typing_extensions import TypedDict
+
+
 
 import pytest
 from pytest_mock import MockerFixture

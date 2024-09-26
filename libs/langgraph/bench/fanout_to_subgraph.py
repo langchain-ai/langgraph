@@ -1,5 +1,7 @@
+from typing_extensions import TypedDict
+
 import operator
-from typing import Annotated, TypedDict
+from typing import Annotated 
 
 from langgraph.constants import END, START, Send
 from langgraph.graph.state import StateGraph

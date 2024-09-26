@@ -1,3 +1,5 @@
+from typing_extensions import TypedDict
+
 import asyncio
 import operator
 import re
@@ -16,7 +18,7 @@ from typing import (
     Literal,
     Optional,
     Tuple,
-    TypedDict,
+    
     Union,
     cast,
 )

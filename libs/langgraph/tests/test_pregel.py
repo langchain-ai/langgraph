@@ -1,3 +1,5 @@
+from typing_extensions import TypedDict
+
 import json
 import operator
 import re
@@ -18,7 +20,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    TypedDict,
+    
     Union,
     cast,
     get_type_hints,

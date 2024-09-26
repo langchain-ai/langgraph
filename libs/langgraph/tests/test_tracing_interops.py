@@ -1,7 +1,9 @@
+from typing_extensions import TypedDict
+
 import json
 import sys
 import time
-from typing import Any, Callable, Tuple, TypedDict, TypeVar
+from typing import Any, Callable, Tuple,  TypeVar
 from unittest.mock import MagicMock
 
 import langsmith as ls
