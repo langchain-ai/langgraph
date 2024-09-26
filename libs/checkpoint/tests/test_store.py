@@ -1,31 +1,29 @@
 import asyncio
 from datetime import datetime
+from typing import Iterable
 
-import pytest
 from pytest_mock import MockerFixture
 
 from langgraph.store.base import GetOp, Item, Op, Result
 from langgraph.store.batch import AsyncBatchedBaseStore
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:
     abatch = mocker.stub()
 
     class MockStore(AsyncBatchedBaseStore):
-        def batch(self, ops: list[Op]) -> list[Result]:
+        def batch(self, ops: Iterable[Op]) -> list[Result]:
             raise NotImplementedError
 
-        async def abatch(self, ops: list[Op]) -> list[Result]:
+        async def abatch(self, ops: Iterable[Op]) -> list[Result]:
             assert all(isinstance(op, GetOp) for op in ops)
             abatch(ops)
             return [
                 Item(
                     value={},
                     scores={},
-                    id=op.id,
-                    namespace=op.namespace,
+                    id=getattr(op, "id", ""),
+                    namespace=getattr(op, "namespace", ()),
                     created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
                     updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
                     last_accessed_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
