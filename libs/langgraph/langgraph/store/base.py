@@ -1,16 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, Sequence, Union
-
-SCORE_RECENCY = "recency"
-SCORE_RELEVANCE = "relevance"
-
-
-class Weight(NamedTuple):
-    field: Union[str, Literal["recency"], Literal["relevance"]]
-    weight: float
-    default: float = 0.0
+from typing import Any, Iterable, NamedTuple, Optional, Sequence, Union
 
 
 @dataclass
