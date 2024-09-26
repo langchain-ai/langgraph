@@ -55,7 +55,7 @@ Learn from example implementations of graphs designed for specific scenarios and
 
 #### Memory
 
-- [Long-term memory](memory/long-term-memory-agent.ipynb): Build an agent that can store, retrieve, and use memories to enhance its interactions with users.
+- [Long-term memory](memory/long_term_memory_agent.ipynb): Build an agent that can store, retrieve, and use memories to enhance its interactions with users.
 
 #### Evaluation
 
