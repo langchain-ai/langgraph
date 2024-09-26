@@ -6,6 +6,8 @@ from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, SearchOp
 
 
 class AsyncBatchedBaseStore(BaseStore):
+    """Efficiently batch operations in a background task."""
+
     __slots__ = ("_loop", "_aqueue", "_task")
 
     def __init__(self) -> None:
