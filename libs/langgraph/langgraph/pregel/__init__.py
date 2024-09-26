@@ -1071,6 +1071,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         Union[All, Sequence[str]],
         Union[All, Sequence[str]],
         Optional[BaseCheckpointSaver],
+        Optional[BaseStore],
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")

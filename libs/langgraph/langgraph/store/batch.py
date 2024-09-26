@@ -37,9 +37,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
     ) -> list[Item]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(
-            namespace_prefix, query, filter, weights, limit, offset
-        )
+        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset)
         return await fut
 
     async def aput(
