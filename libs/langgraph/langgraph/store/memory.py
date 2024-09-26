@@ -29,16 +29,12 @@ class MemoryStore(BaseStore):
                     )
                     for item in items.values()
                 ]
-                if op.query is not None:
-                    raise NotImplementedError("Search queries are not supported")
                 if op.filter:
                     candidates = [
                         item
                         for item in candidates
                         if item.value.items() >= op.filter.items()
                     ]
-                if op.weights:
-                    raise NotImplementedError("Search weights are not supported")
                 results.append(candidates[op.offset : op.offset + op.limit])
             elif isinstance(op, PutOp):
                 if op.value is None:

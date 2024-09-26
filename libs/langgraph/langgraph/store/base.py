@@ -33,9 +33,7 @@ class GetOp(NamedTuple):
 
 class SearchOp(NamedTuple):
     namespace_prefix: tuple[str, ...]
-    query: Optional[str] = None
     filter: Optional[dict[str, Any]] = None
-    weights: Optional[list[Weight]] = None
     limit: int = 10
     offset: int = 0
 
@@ -81,15 +79,13 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
-        weights: Optional[dict[str, float]] = None,
         limit: int = 10,
         offset: int = 0,
     ) -> list[Item]:
         return self.batch(
             [
-                SearchOp(namespace_prefix, query, filter, weights, limit, offset),
+                SearchOp(namespace_prefix, filter, limit, offset),
             ]
         )[0]
 
@@ -120,16 +116,14 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
-        weights: Optional[dict[str, float]] = None,
         limit: int = 10,
         offset: int = 0,
     ) -> list[Item]:
         return (
             await self.abatch(
                 [
-                    SearchOp(namespace_prefix, query, filter, weights, limit, offset),
+                    SearchOp(namespace_prefix, filter, limit, offset),
                 ]
             )
         )[0]
