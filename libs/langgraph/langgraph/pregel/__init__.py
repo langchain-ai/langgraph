@@ -61,6 +61,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
@@ -1096,6 +1097,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             raise ValueError(
                 f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in checkpointer.config_specs]}"
             )
+        if CONFIG_KEY_STORE in config.get(CONF, {}):
+            store: Optional[BaseStore] = config[CONF][CONFIG_KEY_STORE]
+        else:
+            store = self.store
         return (
             debug,
             set(stream_mode),
@@ -1103,6 +1108,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             interrupt_before,
             interrupt_after,
             checkpointer,
+            store,
         )
 
     def stream(
@@ -1219,6 +1225,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 interrupt_before_,
                 interrupt_after_,
                 checkpointer,
+                store,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1241,7 +1248,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
                 config=config,
-                store=self.store,
+                store=store,
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
@@ -1434,6 +1441,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 interrupt_before_,
                 interrupt_after_,
                 checkpointer,
+                store,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1456,7 +1464,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
-                store=self.store,
+                store=store,
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,

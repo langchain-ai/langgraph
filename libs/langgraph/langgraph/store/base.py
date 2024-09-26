@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, NamedTuple, Optional, Sequence, Union
+from typing import Any, Iterable, Literal, NamedTuple, Optional, Sequence, Union
 
 SCORE_RECENCY = "recency"
 SCORE_RELEVANCE = "relevance"
+
+
+class Weight(NamedTuple):
+    field: Union[str, Literal["recency"], Literal["relevance"]]
+    weight: float
+    default: float = 0.0
 
 
 @dataclass
@@ -29,7 +35,7 @@ class SearchOp(NamedTuple):
     namespace_prefix: tuple[str, ...]
     query: Optional[str] = None
     filter: Optional[dict[str, Any]] = None
-    weights: Optional[dict[str, float]] = None
+    weights: Optional[list[Weight]] = None
     limit: int = 10
     offset: int = 0
 

@@ -556,6 +556,9 @@ def prepare_single_task(
                                     PregelTaskWrites(name, writes, triggers),
                                     config,
                                 ),
+                                CONFIG_KEY_STORE: (
+                                    store or configurable.get(CONFIG_KEY_STORE)
+                                ),
                                 CONFIG_KEY_CHECKPOINTER: (
                                     checkpointer
                                     or configurable.get(CONFIG_KEY_CHECKPOINTER)
