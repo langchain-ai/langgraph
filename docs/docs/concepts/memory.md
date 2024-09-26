@@ -2,7 +2,15 @@
 
 ## What is Memory?
 
-xxx
+Memory refers to the processing of data from the past to make it more useful for an application. Examples include:
+
+- Managing what messages (e.g., from a long message history) are sent to a chat model;
+- Summarizing or distilling past conversations or other information to inform model responses;
+- Fetching structured information gleaned from previous conversations to inform model responses.
+
+These features are common used to accommodate restricted LLM context windows, manage latency and costs,
+and to tune the quality of an application's output.
+
 
 ## Tiers of memory 
 
@@ -47,6 +55,9 @@ https://python.langchain.com/docs/how_to/chatbots_memory/#trimming-messages
 Summarizing messages
 https://github.com/langchain-ai/langchain-academy/blob/main/module-2/chatbot-summarization.ipynb
 https://python.langchain.com/docs/how_to/chatbots_memory/#summary-memory
+
+Storing and retrieving facts or observations from a database during a conversation
+https://github.com/langchain-ai/langgraph/pull/1850
 
 Chatbot memory 
 https://python.langchain.com/docs/how_to/chatbots_memory/
