@@ -61,7 +61,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
-from langgraph.store.memory import MemoryStore
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
@@ -5416,7 +5416,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         tool_two = tool_two_graph.compile(
-            store=MemoryStore(),
+            store=InMemoryStore(),
             checkpointer=checkpointer,
             interrupt_before=["tool_two_fast", "tool_two_slow"],
         )
@@ -9650,7 +9650,7 @@ async def test_store_injected_async(checkpointer_name: str) -> None:
 
     async def node(input: State, config: RunnableConfig, store: BaseStore):
         assert isinstance(store, BaseStore)
-        assert isinstance(store, MemoryStore)
+        assert isinstance(store, InMemoryStore)
         await store.aput(
             ("foo", "bar"),
             doc_id,
@@ -9665,7 +9665,7 @@ async def test_store_injected_async(checkpointer_name: str) -> None:
     builder = StateGraph(State)
     builder.add_node("node", node)
     builder.add_edge("__start__", "node")
-    the_store = MemoryStore()
+    the_store = InMemoryStore()
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(store=the_store, checkpointer=checkpointer)
 

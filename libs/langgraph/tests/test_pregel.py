@@ -72,7 +72,7 @@ from langgraph.pregel import (
 )
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
-from langgraph.store.memory import MemoryStore
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
@@ -6808,7 +6808,7 @@ def test_start_branch_then(
     }
 
     tool_two = tool_two_graph.compile(
-        store=MemoryStore(),
+        store=InMemoryStore(),
         checkpointer=checkpointer,
         interrupt_before=["tool_two_fast", "tool_two_slow"],
     )
@@ -11378,7 +11378,7 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
 
     def node(input: State, config: RunnableConfig, store: BaseStore):
         assert isinstance(store, BaseStore)
-        assert isinstance(store, MemoryStore)
+        assert isinstance(store, InMemoryStore)
         store.put(
             ("foo", "bar"),
             doc_id,
@@ -11393,7 +11393,7 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
     builder = StateGraph(State)
     builder.add_node("node", node)
     builder.add_edge("__start__", "node")
-    the_store = MemoryStore()
+    the_store = InMemoryStore()
     graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
     thread_1 = str(uuid.uuid4())

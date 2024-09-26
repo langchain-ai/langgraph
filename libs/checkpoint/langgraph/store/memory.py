@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, Result, SearchOp
 
 
-class MemoryStore(BaseStore):
+class InMemoryStore(BaseStore):
+    """A KV store backed by an in-memory python dictionary.
+
+    Useful for testing/experimentation and lightweight PoC's.
+    For actual persistence, use a Store backed by a proper database.
+    """
+
     __slots__ = ("_data",)
 
     def __init__(self) -> None:
