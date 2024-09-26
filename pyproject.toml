@@ -31,6 +31,7 @@ vcrpy = "^6.0.1"
 click = "^8.1.7"
 
 [tool.poetry.group.test.dependencies]
+langchain = "^0.3.1"
 langchain-openai = "^0.2.0"
 langchain-anthropic = "^0.2.1"
 langchain-nomic = "^0.1.3"
