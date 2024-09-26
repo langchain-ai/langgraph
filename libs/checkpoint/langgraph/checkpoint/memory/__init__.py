@@ -29,8 +29,8 @@ class MemorySaver(
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
     Note:
-        Only use MemorySaver for debugging or testing purposes.
-        For production use cases we recommend installing langgraph-checkpoint-postgres and using PostgresSaver / AsyncPostgresSaver.
+        Only use `MemorySaver` for debugging or testing purposes.
+        For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresSaver` / `AsyncPostgresSaver`.
 
     Args:
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
