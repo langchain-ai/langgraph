@@ -19,6 +19,11 @@ NOTEBOOKS_NO_CASSETTES = (
 NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/customer-support/customer-support.ipynb",
     "docs/docs/tutorials/usaco/usaco.ipynb",
+    "docs/docs/tutorials/introduction.ipynb", # this uses input()
+    "docs/docs/tutorials/chatbots/information-gather-prompting.ipynb", # this uses input()
+    "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb", # this uses a user provided project name for langsmith
+    "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb", # this uses helper code
+    "docs/docs/tutorials/web-navigation/web_voyager.ipynb", # this uses helper code
 ]
 
 
@@ -107,8 +112,11 @@ def add_vcr_to_notebook(
         "",
         "def filter_cassette_data(cassette_dict):",
         "    for interaction in cassette_dict['interactions']:",
-        "        if len(interaction['response']['body']['string']) > 1000:",
-        "            interaction['response']['body']['string'] = interaction['response']['body']['string'][:1000] + '... (truncated)'",
+        "        body = interaction['response']['body']['string']",
+        "        if isinstance(body, bytes):",
+        "            body = body.decode('utf-8', errors='replace')",
+        "        if len(body) > 1000:",
+        "            interaction['response']['body']['string'] = body[:1000] + '... (truncated)'",
         "        for req_or_res in [interaction['request'], interaction['response']]:",
         "            headers_to_remove = ['date', 'server', 'content-length']",
         "            for header in headers_to_remove:",
@@ -131,6 +139,8 @@ def add_vcr_to_notebook(
         "            normalize_body(r1.body) == normalize_body(r2.body))",
         "",
         "def normalize_body(body):",
+        "    if isinstance(body, bytes):",
+        "        body = body.decode('utf-8', errors='ignore')",
         "    return re.sub(r'\\s+', '', body.lower()) if body else ''",
         "",
         "nest_asyncio.apply()",
