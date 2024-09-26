@@ -24,6 +24,9 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb", # this uses a user provided project name for langsmith
     "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb", # this uses helper code
     "docs/docs/tutorials/web-navigation/web_voyager.ipynb", # this uses helper code
+    "docs/docs/tutorials/rag/langgraph_adaptive_rag_local.ipynb", # this uses an ollama model which we would need to download
+    "docs/docs/tutorials/rag/langgraph_crag_local.ipynb", # this uses an ollama model which we would need to download
+    "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb", # this uses an ollama model which we would need to download
 ]
 
 
