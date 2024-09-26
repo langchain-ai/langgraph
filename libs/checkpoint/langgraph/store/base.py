@@ -7,7 +7,7 @@ scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, NamedTuple, Optional, Sequence, Union
+from typing import Any, Iterable, NamedTuple, Optional, Union
 
 
 @dataclass
@@ -73,11 +73,11 @@ class BaseStore(ABC):
     __slots__ = ("__weakref__",)
 
     @abstractmethod
-    def batch(self, ops: Iterable[Op]) -> Sequence[Result]:
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations synchronously."""
 
     @abstractmethod
-    async def abatch(self, ops: Iterable[Op]) -> Sequence[Result]:
+    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously."""
 
     def get(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
