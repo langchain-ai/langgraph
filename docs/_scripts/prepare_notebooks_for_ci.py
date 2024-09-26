@@ -17,14 +17,19 @@ NOTEBOOKS_NO_CASSETTES = (
 )
 
 NOTEBOOKS_NO_EXECUTION = [
+    # this uses a user provided project name for langsmith
+    "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb",
+    # this uses browser APIs
+    "docs/docs/tutorials/web-navigation/web_voyager.ipynb",
+    # these RAG guides use an ollama model
+    "docs/docs/tutorials/rag/langgraph_adaptive_rag_local.ipynb",
+    "docs/docs/tutorials/rag/langgraph_crag_local.ipynb",
+    "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb",
+    # TODO: need to update these notebooks to make sure they are runnable in CI
+    "docs/docs/tutorials/storm/storm.ipynb",  # need to fix structured output issue -- happens only when running with VCR
+    "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",  # taking a very long time to run
     "docs/docs/tutorials/customer-support/customer-support.ipynb",
     "docs/docs/tutorials/usaco/usaco.ipynb",
-    "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb", # this uses a user provided project name for langsmith
-    "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb", # this uses helper code
-    "docs/docs/tutorials/web-navigation/web_voyager.ipynb", # this uses helper code
-    "docs/docs/tutorials/rag/langgraph_adaptive_rag_local.ipynb", # this uses an ollama model which we would need to download
-    "docs/docs/tutorials/rag/langgraph_crag_local.ipynb", # this uses an ollama model which we would need to download
-    "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb", # this uses an ollama model which we would need to download
 ]
 
 
