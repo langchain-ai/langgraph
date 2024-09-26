@@ -118,7 +118,7 @@ These two examples show how to use the default reducer:
 **Example A:**
 
 ```python
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 class State(TypedDict):
     foo: int
@@ -130,7 +130,8 @@ In this example, no reducer functions are specified for any key. Let's assume th
 **Example B:**
 
 ```python
-from typing import TypedDict, Annotated
+from typing import Annotated
+from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):
@@ -169,7 +170,8 @@ Since the state updates are always deserialized into LangChain `Messages` when u
 ```python
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-from typing import Annotated, TypedDict
+from typing import Annotated
+from typing_extensions import TypedDict
 
 class GraphState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
