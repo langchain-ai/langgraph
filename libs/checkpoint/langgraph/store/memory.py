@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import Iterable
 
 from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, Result, SearchOp
 
@@ -16,7 +17,7 @@ class InMemoryStore(BaseStore):
     def __init__(self) -> None:
         self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
 
-    def batch(self, ops: list[Op]) -> list[Result]:
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
         results: list[Result] = []
         for op in ops:
             if isinstance(op, GetOp):
@@ -63,5 +64,5 @@ class InMemoryStore(BaseStore):
                 results.append(None)
         return results
 
-    async def abatch(self, ops: list[Op]) -> list[Result]:
+    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         return self.batch(ops)
