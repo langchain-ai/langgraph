@@ -11390,21 +11390,21 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
         )
         return {"count": 1}
 
-    graph = StateGraph(State)
-    graph.add_node("node", node)
-    graph.add_edge("__start__", "node")
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge("__start__", "node")
     the_store = MemoryStore()
-    app = graph.compile(store=the_store, checkpointer=checkpointer)
+    graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
     thread_1 = str(uuid.uuid4())
-    result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
     assert result == {"count": 1}
     returned_doc = the_store.get(("foo", "bar"), doc_id).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
     assert len(the_store.search(("foo", "bar"))) == 1
 
     # Check update on existing thread
-    result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
     assert result == {"count": 2}
     returned_doc = the_store.get(("foo", "bar"), doc_id).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
@@ -11412,12 +11412,12 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
 
     thread_2 = str(uuid.uuid4())
 
-    result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
+    result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
     assert result == {"count": 1}
     returned_doc = the_store.get(("foo", "bar"), doc_id).value
     assert returned_doc == {
         **doc,
         "from_thread": thread_2,
-        "some_val": 1,
+        "some_val": 0,
     }  # Overwrites the whole doc
     assert len(the_store.search(("foo", "bar"))) == 1  # still overwriting the same one
