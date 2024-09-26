@@ -1,19 +1,10 @@
-from typing import (
-    Annotated,
-    Callable,
-    Literal,
-    Optional,
-    Sequence,
-    Type,
-    TypedDict,
-    TypeVar,
-    Union,
-)
+from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
+from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
 from langgraph.graph import StateGraph
