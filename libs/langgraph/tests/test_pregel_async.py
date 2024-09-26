@@ -9610,11 +9610,7 @@ async def test_checkpointer_null_pending_writes() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_store_injected_async(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
+async def test_store_injected_async(checkpointer_name: str) -> None:
     class State(TypedDict):
         count: Annotated[int, operator.add]
 
@@ -9635,36 +9631,43 @@ async def test_store_injected_async(
         )
         return {"count": 1}
 
-    graph = StateGraph(State)
-    graph.add_node("node", node)
-    graph.add_edge("__start__", "node")
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge("__start__", "node")
     the_store = MemoryStore()
-    app = graph.compile(store=the_store, checkpointer=checkpointer)
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
-    thread_1 = str(uuid.uuid4())
-    result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
-    assert result == {"count": 1}
-    returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
-    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-    assert len((await the_store.asearch(("foo", "bar")))) == 1
+        thread_1 = str(uuid.uuid4())
+        result = await graph.ainvoke(
+            {"count": 0}, {"configurable": {"thread_id": thread_1}}
+        )
+        assert result == {"count": 1}
+        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
+        assert len((await the_store.asearch(("foo", "bar")))) == 1
 
-    # Check update on existing thread
-    result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
-    assert result == {"count": 2}
-    returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
-    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
-    assert len((await the_store.asearch(("foo", "bar")))) == 1
+        # Check update on existing thread
+        result = await graph.ainvoke(
+            {"count": 0}, {"configurable": {"thread_id": thread_1}}
+        )
+        assert result == {"count": 2}
+        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
+        assert len((await the_store.asearch(("foo", "bar")))) == 1
 
-    thread_2 = str(uuid.uuid4())
+        thread_2 = str(uuid.uuid4())
 
-    result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
-    assert result == {"count": 1}
-    returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
-    assert returned_doc == {
-        **doc,
-        "from_thread": thread_2,
-        "some_val": 1,
-    }  # Overwrites the whole doc
-    assert (
-        len((await the_store.asearch(("foo", "bar")))) == 1
-    )  # still overwriting the same one
+        result = await graph.ainvoke(
+            {"count": 0}, {"configurable": {"thread_id": thread_2}}
+        )
+        assert result == {"count": 1}
+        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert returned_doc == {
+            **doc,
+            "from_thread": thread_2,
+            "some_val": 0,
+        }  # Overwrites the whole doc
+        assert (
+            len((await the_store.asearch(("foo", "bar")))) == 1
+        )  # still overwriting the same one
