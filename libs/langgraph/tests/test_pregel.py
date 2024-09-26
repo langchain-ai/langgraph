@@ -11368,14 +11368,14 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
     assert result == {"count": 1}
     returned_doc = the_store.get(("foo", "bar"), doc_id).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-    assert len(the_store.search(("foo", "bar"), doc_id)) == 1
+    assert len(the_store.search(("foo", "bar"))) == 1
 
     # Check update on existing thread
     result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
     assert result == {"count": 2}
     returned_doc = the_store.get(("foo", "bar"), doc_id).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
-    assert len(the_store.search(("foo", "bar"), doc_id)) == 1
+    assert len(the_store.search(("foo", "bar"))) == 1
 
     thread_2 = str(uuid.uuid4())
 
@@ -11387,6 +11387,4 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
         "from_thread": thread_2,
         "some_val": 1,
     }  # Overwrites the whole doc
-    assert (
-        len(the_store.search(("foo", "bar"), doc_id)) == 1
-    )  # still overwriting the same one
+    assert len(the_store.search(("foo", "bar"))) == 1  # still overwriting the same one

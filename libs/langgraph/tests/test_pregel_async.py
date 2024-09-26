@@ -9646,14 +9646,14 @@ async def test_store_injected_async(
     assert result == {"count": 1}
     returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-    assert len((await the_store.asearch(("foo", "bar"), doc_id))) == 1
+    assert len((await the_store.asearch(("foo", "bar")))) == 1
 
     # Check update on existing thread
     result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
     assert result == {"count": 2}
     returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
-    assert len((await the_store.asearch(("foo", "bar"), doc_id))) == 1
+    assert len((await the_store.asearch(("foo", "bar")))) == 1
 
     thread_2 = str(uuid.uuid4())
 
@@ -9666,5 +9666,5 @@ async def test_store_injected_async(
         "some_val": 1,
     }  # Overwrites the whole doc
     assert (
-        len((await the_store.asearch(("foo", "bar"), doc_id))) == 1
+        len((await the_store.asearch(("foo", "bar")))) == 1
     )  # still overwriting the same one
