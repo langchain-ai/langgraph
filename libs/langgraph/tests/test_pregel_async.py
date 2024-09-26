@@ -2,6 +2,7 @@ import asyncio
 import operator
 import re
 import sys
+import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from time import perf_counter
@@ -24,9 +25,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from langchain_core.messages import (
-    ToolCall,
-)
+from langchain_core.messages import ToolCall
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -57,17 +56,11 @@ from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.managed.shared_value import SharedValue
-from langgraph.prebuilt.chat_agent_executor import (
-    create_tool_calling_executor,
-)
+from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import (
-    Channel,
-    GraphRecursionError,
-    Pregel,
-    StateSnapshot,
-)
+from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
+from langgraph.store.base import BaseStore
 from langgraph.store.memory import MemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
@@ -9645,3 +9638,64 @@ async def test_checkpointer_null_pending_writes() -> None:
     assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
         "1"
     ] * 4
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_store_injected_async(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        count: Annotated[int, operator.add]
+
+    doc_id = str(uuid.uuid4())
+    doc = {"some-key": "this-is-a-val"}
+
+    async def node(input: State, config: RunnableConfig, store: BaseStore):
+        assert isinstance(store, BaseStore)
+        assert isinstance(store, MemoryStore)
+        await store.aput(
+            ("foo", "bar"),
+            doc_id,
+            {
+                **doc,
+                "from_thread": config["configurable"]["thread_id"],
+                "some_val": input["count"],
+            },
+        )
+        return {"count": 1}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge("__start__", "node")
+    the_store = MemoryStore()
+    app = graph.compile(store=the_store, checkpointer=checkpointer)
+
+    thread_1 = str(uuid.uuid4())
+    result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    assert result == {"count": 1}
+    returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
+    assert len((await the_store.asearch(("foo", "bar")))) == 1
+
+    # Check update on existing thread
+    result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    assert result == {"count": 2}
+    returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
+    assert len((await the_store.asearch(("foo", "bar")))) == 1
+
+    thread_2 = str(uuid.uuid4())
+
+    result = await app.ainvoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
+    assert result == {"count": 1}
+    returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+    assert returned_doc == {
+        **doc,
+        "from_thread": thread_2,
+        "some_val": 1,
+    }  # Overwrites the whole doc
+    assert (
+        len((await the_store.asearch(("foo", "bar")))) == 1
+    )  # still overwriting the same one

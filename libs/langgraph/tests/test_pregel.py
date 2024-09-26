@@ -2,6 +2,7 @@ import json
 import operator
 import re
 import time
+import uuid
 import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -70,6 +71,7 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
+from langgraph.store.base import BaseStore
 from langgraph.store.memory import MemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
@@ -11362,3 +11364,60 @@ def test_subgraph_retries():
     app = parent.compile(checkpointer=checkpointer)
     with pytest.raises(RandomError):
         app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        count: Annotated[int, operator.add]
+
+    doc_id = str(uuid.uuid4())
+    doc = {"some-key": "this-is-a-val"}
+
+    def node(input: State, config: RunnableConfig, store: BaseStore):
+        assert isinstance(store, BaseStore)
+        assert isinstance(store, MemoryStore)
+        store.put(
+            ("foo", "bar"),
+            doc_id,
+            {
+                **doc,
+                "from_thread": config["configurable"]["thread_id"],
+                "some_val": input["count"],
+            },
+        )
+        return {"count": 1}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge("__start__", "node")
+    the_store = MemoryStore()
+    app = graph.compile(store=the_store, checkpointer=checkpointer)
+
+    thread_1 = str(uuid.uuid4())
+    result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    assert result == {"count": 1}
+    returned_doc = the_store.get(("foo", "bar"), doc_id).value
+    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
+    assert len(the_store.search(("foo", "bar"))) == 1
+
+    # Check update on existing thread
+    result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    assert result == {"count": 2}
+    returned_doc = the_store.get(("foo", "bar"), doc_id).value
+    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
+    assert len(the_store.search(("foo", "bar"))) == 1
+
+    thread_2 = str(uuid.uuid4())
+
+    result = app.invoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
+    assert result == {"count": 1}
+    returned_doc = the_store.get(("foo", "bar"), doc_id).value
+    assert returned_doc == {
+        **doc,
+        "from_thread": thread_2,
+        "some_val": 1,
+    }  # Overwrites the whole doc
+    assert len(the_store.search(("foo", "bar"))) == 1  # still overwriting the same one

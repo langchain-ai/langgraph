@@ -35,6 +35,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
     EMPTY_SEQ,
     INTERRUPT,
@@ -54,6 +55,7 @@ from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
+from langgraph.store.base import BaseStore
 from langgraph.types import All, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
@@ -274,6 +276,7 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: Literal[False],
+    store: Literal[None] = None,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
 ) -> dict[str, PregelTask]: ...
@@ -289,6 +292,7 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: Literal[True],
+    store: Optional[BaseStore],
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
 ) -> dict[str, PregelExecutableTask]: ...
@@ -303,6 +307,7 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
+    store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
@@ -322,6 +327,7 @@ def prepare_next_tasks(
             config=config,
             step=step,
             for_execution=for_execution,
+            store=store,
             checkpointer=checkpointer,
             manager=manager,
         ):
@@ -339,6 +345,7 @@ def prepare_next_tasks(
             config=config,
             step=step,
             for_execution=for_execution,
+            store=store,
             checkpointer=checkpointer,
             manager=manager,
         ):
@@ -357,6 +364,7 @@ def prepare_single_task(
     config: RunnableConfig,
     step: int,
     for_execution: bool,
+    store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
@@ -437,6 +445,9 @@ def prepare_single_task(
                                 managed,
                                 PregelTaskWrites(packet.node, writes, triggers),
                                 config,
+                            ),
+                            CONFIG_KEY_STORE: (
+                                store or configurable.get(CONFIG_KEY_STORE)
                             ),
                             CONFIG_KEY_CHECKPOINTER: (
                                 checkpointer
@@ -544,6 +555,9 @@ def prepare_single_task(
                                     managed,
                                     PregelTaskWrites(name, writes, triggers),
                                     config,
+                                ),
+                                CONFIG_KEY_STORE: (
+                                    store or configurable.get(CONFIG_KEY_STORE)
                                 ),
                                 CONFIG_KEY_CHECKPOINTER: (
                                     checkpointer
