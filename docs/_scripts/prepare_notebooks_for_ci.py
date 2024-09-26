@@ -19,8 +19,6 @@ NOTEBOOKS_NO_CASSETTES = (
 NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/customer-support/customer-support.ipynb",
     "docs/docs/tutorials/usaco/usaco.ipynb",
-    "docs/docs/tutorials/introduction.ipynb", # this uses input()
-    "docs/docs/tutorials/chatbots/information-gather-prompting.ipynb", # this uses input()
     "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb", # this uses a user provided project name for langsmith
     "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb", # this uses helper code
     "docs/docs/tutorials/web-navigation/web_voyager.ipynb", # this uses helper code
