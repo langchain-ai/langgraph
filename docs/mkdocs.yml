@@ -142,7 +142,6 @@ nav:
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
-          - Share state between threads: how-tos/memory/shared-state.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
@@ -155,7 +154,7 @@ nav:
           - Stream state updates: how-tos/stream-updates.ipynb
           - Stream LLM tokens: how-tos/streaming-tokens.ipynb
           - Stream LLM tokens without LangChain models: how-tos/streaming-tokens-without-langchain.ipynb
-          - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
+          - Stream custom data: how-tos/streaming-content.ipynb
           - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
@@ -249,11 +248,11 @@ nav:
               - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
               - Configure Agents: "cloud/how-tos/configuration_cloud.md"
+              - Versioning Assistants: "cloud/how-tos/assistant_versioning.md"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'
               - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
-              - Share State Between Threads: "cloud/how-tos/shared_state.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"
