@@ -8,7 +8,7 @@ Memory refers to the processing of data from the past to make it more useful for
 - Summarizing or distilling past conversations or other information to inform model responses;
 - Fetching structured information gleaned from previous conversations to inform model responses.
 
-These features are common used to accommodate restricted LLM context windows, manage latency and costs,
+These features are commonly used to accommodate restricted LLM context windows, manage latency and costs,
 and to tune the quality of an application's output.
 
 
