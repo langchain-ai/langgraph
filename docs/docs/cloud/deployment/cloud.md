@@ -91,4 +91,4 @@ Starting from the `Deployment` view...
 1. Update the `Git Branch` to the desired branch.
 1. Check/uncheck checkbox to `Automatically update deployment on push to branch`.
     1. Branch creation/deletion and tag creation/deletion events will not trigger an update. Only pushes to an existing branch will trigger an update.
-    1. Pushes in quick succession to a branch will not trigger subsequent updates. In the future, this functionality make be changed/improved.
+    1. Pushes in quick succession to a branch will not trigger subsequent updates. In the future, this functionality may be changed/improved.
