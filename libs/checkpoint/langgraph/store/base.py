@@ -123,7 +123,19 @@ class ListNamespacesOp(NamedTuple):
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
-Result = Union[Item, list[Item], tuple[str, ...], None]
+Result = Union[Item, list[Item], list[tuple[str, ...]], None]
+
+
+class InvalidNamespaceError(ValueError):
+    """Provided namespace is invalid."""
+
+
+def _validate_namespace(namespace: tuple[str, ...]) -> None:
+    for label in namespace:
+        if "." in label:
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+            )
 
 
 class BaseStore(ABC):
@@ -181,6 +193,7 @@ class BaseStore(ABC):
             id: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
         """
+        _validate_namespace(namespace)
         self.batch([PutOp(namespace, id, value)])
 
     def delete(self, namespace: tuple[str, ...], id: str) -> None:
@@ -289,6 +302,7 @@ class BaseStore(ABC):
             id: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
         """
+        _validate_namespace(namespace)
         await self.abatch([PutOp(namespace, id, value)])
 
     async def adelete(self, namespace: tuple[str, ...], id: str) -> None:

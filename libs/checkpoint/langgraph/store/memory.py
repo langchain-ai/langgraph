@@ -32,8 +32,6 @@ class InMemoryStore(BaseStore):
         for op in ops:
             if isinstance(op, GetOp):
                 item = self._data[op.namespace].get(op.id)
-                if item is not None:
-                    item.last_accessed_at = datetime.now(timezone.utc)
                 results.append(item)
             elif isinstance(op, SearchOp):
                 candidates = [
@@ -69,7 +67,6 @@ class InMemoryStore(BaseStore):
                         namespace=op.namespace,
                         created_at=datetime.now(timezone.utc),
                         updated_at=datetime.now(timezone.utc),
-                        last_accessed_at=datetime.now(timezone.utc),
                     )
                 results.append(None)
             elif isinstance(op, ListNamespacesOp):
