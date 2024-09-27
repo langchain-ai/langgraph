@@ -229,7 +229,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
         serialized_metadata = self.jsonplus_serde.dumps(metadata)
-        return serialized_metadata.decode()
+        # NOTE: we're using JSON serializer (not msgpack), so we need to remove null characters before writing
+        return serialized_metadata.decode().replace("\\u0000", "")
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
