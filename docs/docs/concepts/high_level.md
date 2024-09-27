@@ -1,8 +1,8 @@
 # Why LangGraph?
 
-LLMs are extremely powerful, particularly when connected to other systems such as a retriever or APIs. This is why many LLM applications use a control flow of steps before and / or after LLM calls. As an example [RAG](https://github.com/langchain-ai/rag-from-scratch) performs retrieval of relevant documents to a question, and passes those documents to an LLM in order to ground the response. Often a control flow of steps before and / or after an LLM is called a "chain." Chains are a popular paradigm for programming with LLMs and offer a high degree of reliability; the same set of steps runs with each chain invocation.
+LLMs are extremely powerful, particularly when connected to data or APIs. This is why many LLM applications use a control flow of steps before and / or after LLM calls. As an example, [Retrieval Augmented Generation (RAG)](https://github.com/langchain-ai/rag-from-scratch) performs retrieval of relevant documents to a question, and passes those documents to an LLM in order to ground the response. Often a control flow of steps before and / or after an LLM is called a "chain." Chains are a popular paradigm for programming with LLMs and offer a high degree of reliability; the same set of steps runs with each chain invocation.
 
-However, we often want LLM systems that can pick their own control flow! This is one definition of an [agent](https://blog.langchain.dev/what-is-an-agent/): an agent is a system that uses an LLM to decide the control flow of an application. Unlike a chain, an agent given an LLM some degree of control over the sequence of steps in the application. Examples of using an LLM to decide the control of an application:
+Chains, however, are a bit limiting in what they can handle. To address this, we often want LLM systems that can pick their own control flow! This is one definition of an [agent](https://blog.langchain.dev/what-is-an-agent/): an agent is a system that uses an LLM to decide the control flow of an application. Unlike a chain, an agent given an LLM some degree of control over the sequence of steps in the application. Examples of using an LLM to decide the control of an application:
 
 - Using an LLM to route between two potential paths
 - Using an LLM to decide which of many tools to call
@@ -33,7 +33,7 @@ The motivation of LangGraph is to help bend the curve, preserving higher reliabi
 
 **Controllability**
 
-LangGraph gives the developer a high degree of [control](../how-tos/index.md#controllability) by expressing the flow of the application as a set of nodes and edges. All nodes can access and modify a common state (memory). The control flow of the application can set using edges that connect nodes, either deterministically or via conditional logic. 
+LangGraph gives the developer a high degree of [control](../how-tos/index.md#controllability) by expressing the flow of the application as a set of nodes and edges. All nodes can access and modify a common state (memory). The control flow of the application is set via edges that connect nodes, either deterministically or via conditional logic. All nodes and edges are nothing more than Python functions!
 
 **Persistence**
 
