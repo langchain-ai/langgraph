@@ -22,7 +22,6 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
             return [
                 Item(
                     value={},
-                    scores={},
                     id=getattr(op, "id", ""),
                     namespace=getattr(op, "namespace", ()),
                     created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),

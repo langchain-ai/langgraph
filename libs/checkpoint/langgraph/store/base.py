@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Iterable, Literal, NamedTuple, Optional, Union
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Item:
     """Represents a stored item with metadata."""
 
@@ -18,14 +18,6 @@ class Item:
     """The stored data as a dictionary.
     
     Keys are filterable.
-    """
-
-    scores: dict[str, float]
-    """Relevance scores for the item.
-    
-    Keys can include built-in scores like 'recency' and 'relevance',
-    as well as any key present in the 'value' dictionary. This allows
-    for multi-dimensional scoring of items.
     """
 
     id: str

@@ -62,7 +62,6 @@ class InMemoryStore(BaseStore):
                 else:
                     self._data[op.namespace][op.id] = Item(
                         value=op.value,
-                        scores={},
                         id=op.id,
                         namespace=op.namespace,
                         created_at=datetime.now(timezone.utc),
