@@ -4,82 +4,22 @@
 
 Memory refers to the processing of data from the past to make it more useful for an application. Examples include:
 
-- Managing what messages (e.g., from a long message history) are sent to a chat model;
-- Summarizing or distilling past conversations or other information to inform chat model responses;
-- Personalizing applications with structured information (e.g., about a specific user) gleaned from previous conversations to inform chat model responses.
+- Managing what messages (e.g., from a long message history) are sent to a chat model to limit token usage;
+- Summarizing past conversations to give a chat model context from prior interaction;
+- Selecting few shot examples (e.g, from a dataset) to guide model responses;
+- Personalizing applications with specific information (e.g., user attributes) gleaned from previous conversations;
+- Allowing an LLM to update its own prompt using past information (e.g., meta-prompting);
 
-These features are commonly used to accommodate restricted chat model context windows, manage latency and costs,
-and to improve the quality or personalization of an application's output.
+Below, we'll discuss each of these examples in some detail. 
 
-## Timescales of memory  
+## Managing Messages
 
-![](./img/memory.png)
+Chat models accept instructions through [messages](https://python.langchain.com/docs/concepts/#messages), which can serve as general instructions (e.g., a system message) or specific user-provided information (e.g., human messages). In chat applications, messages often alternate between human input and model responses, accumulating in a list over time. Because context windows are limited and token-rich message lists are costly, many applications can benefit from approaches to actively manage messages.    
 
-AI systems can utilize different types of memory, each operating on different timescales and serving distinct purposes:
-
-**1. LLM Working Memory**
-* Mechanism: LLM context window
-* Timescale: Single LLM invocation (typically seconds to minutes)
-* Purpose: Holds immediate context for processing and generating responses
-
-**2. Short-term Application Memory**
-* Mechanism: In-memory data structures (e.g., message history, session variables)
-* Timescale: Duration of a user session or application runtime (minutes to hours)
-* Purpose: Maintains conversation context and temporary application state
-
-**3. Long-term Application Memory**
-* Mechanism: Persistent storage (e.g., databases, file systems)
-* Timescale: Extends beyond individual sessions (days to years)
-* Purpose: Stores user data, learned information, and application state across multiple interactions
-
-## LLM Working Memory
-
-### Motivation
-
-Chat models utilize context to inform their responses, which is why they have context windows that allow for the insertion of external information through [messages](https://python.langchain.com/docs/concepts/#messages). These messages serve as instructions and provide the model's working memory during inference time. This working memory is [analogous to RAM](https://x.com/karpathy/status/1723140519554105733) in traditional computing systems, as it represents the tokens immediately available to the LLM for processing and generating responses. Various techniques such as in-context learning, few-shot learning, and chain-of-thought reasoning, enable the model to adapt and perform tasks based on the provided information without changing its underlying parameters.
-
-### Approaches 
-
-**Few shot learning**
-
-Few-shot learning is a powerful technique where LLMs can be "programmed" inside the prompt with input-output examples to perform diverse tasks. This was one of the most exciting results demonstrated in the [GPT-3 paper](https://x.com/karpathy/status/1627366413840322562).
-
-**Reasoning prompts**
-
-Chain of Thought (CoT) and related prompting techniques have shown that an LLM's reasoning capabilities can be significantly improved by guiding its thought process. These approaches encourage the model to break down complex problems into steps and [reason over time](https://www.youtube.com/watch?v=bZQun8Y4L2A&t=1533s), often leading to more accurate and explainable outputs.
-
-**Conditioning generations with external information**
-
-RAG (Retrieval Augmented Generation) is a technique that allows LLMs to condition their generations using external information. 
-
-### Use-cases
-
-**Few shot learning**
-
-Few-shot prompting involves including example model inputs and desired outputs in the model prompt, which can greatly boost model performance on a wide range of tasks without the need to fine-tune. See our blog and documentation on [few-shot example selection](https://blog.langchain.dev/dynamic-few-shot-examples-langsmith-datasets/).
-
-**Reasoning prompts**
-
-Nearly all [LLM-powered agents](https://lilianweng.github.io/posts/2023-06-23-agent/#component-one-planning) utilize planning to decompose complex tasks into simpler steps. Promoting techniques that encourage agents to decompose tasks and reflect on past steps have become very common. See our detailed guide on agent [architectures and approaches](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/). 
-
-**Conditioning generations with external information**
-
-RAG is particularly useful when the LLM's working memory is limited or when the application requires access to a specific knowledge base. It can be more cost effective than fine-tuning. See our course on [RAG](https://www.youtube.com/watch?v=sVcwVQRHIc8) and [associated code examples](https://github.com/langchain-ai/rag-from-scratch).
-
-## Short-term application memory
-
-### Motivation
-
-Applications that use chat models can range from RAG to agents. In most cases, the application will use some form of in-memory data structure to store the interactions with the chat model. Frequently this data structure is a list of chat [messages](https://python.langchain.com/docs/concepts/#messages), often alternating between user messages and model responses. These messages persist for the duration of a user session or [application runtime](https://github.com/langchain-ai/langgraph/discussions/352#discussioncomment-9291220) (minutes to hours). Because context windows are limited and tokens cost both time and money, applications must frequently manage memory.    
-
-### Approaches    
-
-**Trimming and filtering messages**
-
-LangChain provides some useful general utilities for trimming or deleting messages from a messages list. As an example, we can use [`trim_messages`](https://python.langchain.com/v0.2/docs/how_to/trim_messages/#getting-the-last-max_tokens-tokens) to trim messages based upon a specific number of tokens. 
+One approach is simply to remove messages (e.g., based upon recency) from a message list. To do this based upon a particular number of tokens, we can use [`trim_messages`](https://python.langchain.com/v0.2/docs/how_to/trim_messages/#getting-the-last-max_tokens-tokens). As an example, we can use this utility to keep the last `max_tokens` from the total list of Messages 
 
 ```python
-# Get the last max_tokens in the list of Messages 
+from langchain_core.messages import trim_messages
 trim_messages(
             messages,
             max_tokens=100,
@@ -88,7 +28,7 @@ trim_messages(
         )
 ```
 
-As a second example, [RemoveMessage](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/#manually-deleting-messages) can be used to remove messages from a list by message id.
+In some cases, we want to remove specific messages from a list. This can be done using [RemoveMessage](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/#manually-deleting-messages) based upon `id`, a unique identifier for each message. In the below example, we keep only the last two messages in the list but we can also select specific messages to remove based upon their `id`.
 
 ```python
 from langchain_core.messages import RemoveMessage
@@ -105,39 +45,77 @@ print(delete_messages)
 [RemoveMessage(content='', id='1'), RemoveMessage(content='', id='2')]
 ```
 
-Building on these examples, LangGraph has various built-in utilities for working with messages in your application. [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) is a built-in graph state schema that includes a `messages` key for a list of messages and a built-in `add_messages` reducer for updating that messages list. The `add_messages` reducer allows us to [append](https://github.com/langchain-ai/langchain-academy/blob/main/module-2/state-reducers.ipynb) messages and, additionally, [works with the `RemoveMessage` utility to remove messages from the list](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/). 
+When building agents in LangGraph, we commonly want to manage message in state. [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) is a built-in LangGraph state schema that includes a `messages` key, which is a list of messages, and an `add_messages` reducer for updating the messages list with new messages as the application runs. The `add_messages` reducer allows us to [append](https://langchain-ai.github.io/langgraph/concepts/low_level/#serialization) new messages to `messages` state key as shown here as a state update in a graph node.
+
+```
+{"messages": [HumanMessage(content="message")]}
+```
+
+Additionally, the `add_messages` reducer [works with the `RemoveMessage` utility to remove messages from the `messages` state key](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/). Using `messages` and `delete_messages` defined above, we can remove the first two messages from the list as shown below. We pass the list of `delete_messages` (`[RemoveMessage(content='', id='1'), RemoveMessage(content='', id='2')]`) to the `add_messages` reducer.
 
 ```python
 from langgraph.graph.message import add_messages
-# Using messages and delete_messages defined above
 add_messages(messages , delete_messages)
 ```
 
-**Summarizing messages**
+See this how-to [guide](https://langchain-ai.github.io/langgraph/how-tos/memory/manage-conversation-history/) and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
 
-The problem with trimming messages is that we may be too aggressive and remove important information. Instead, we can create a running summary of the chat history to reduce the number of tokens while simply compressing the prior into the running summary. In the context of a simple chain, [here](https://python.langchain.com/docs/how_to/chatbots_memory/#summary-memory) is an example of how to summarize messages. In the context of a more complex LangGraph agent, [here](https://github.com/langchain-ai/langchain-academy/blob/main/module-2/chatbot-summarization.ipynb) is an example chatbot that uses message summarization to sustain long-running conversations. In both cases, we're simply prompting the LLM to summarize the chat history into a running summary. 
+## Summarizing Past Conversations
 
-### Use-cases
+The problem with trimming or removing messages, as shown above, is that we may loose information from culling of the message queue. Because of this, some applications benefit from a more sophisticated approach of summarizing the message history using a chat model. 
 
-**Trimming, filtering, summarizing messages**
+Fairly simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph we can extend the [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) to include a `summary` key. 
 
-A primary application enabled by is long-running chatbots. See our LangChain Academy course [focused on building agents with LangGraph](https://github.com/langchain-ai/langchain-academy/blob/main/module-2/trim-filter-messages.ipynb) for a concrete example of a chatbot that uses trimming, filtering, and summarizing to manage memory.
+```python
+from langgraph.graph import MessagesState
+class State(MessagesState):
+    summary: str
+```
 
-## Long-term application memory
+Then, we can simply generate a summary of the chat history, using any existing summary as context for the next summary. This summarize_conversation node can be called after some number of messages have accumulated in the `messages` state key.
 
-### Motivation
+```python   
+def summarize_conversation(state: State):
+    
+    # First, we get any existing summary
+    summary = state.get("summary", "")
 
-Short-term memory is typically limited to an individual user session or [graph execution](https://github.com/langchain-ai/langgraph/discussions/352#discussioncomment-9291220). However, applications may require long-term memory to store user data, learned information, and application state across multiple interactions. 
+    # Create our summarization prompt 
+    if summary:
+        
+        # A summary already exists
+        summary_message = (
+            f"This is summary of the conversation to date: {summary}\n\n"
+            "Extend the summary by taking into account the new messages above:"
+        )
+        
+    else:
+        summary_message = "Create a summary of the conversation above:"
 
-### Approaches
+    # Add prompt to our history
+    messages = state["messages"] + [HumanMessage(content=summary_message)]
+    response = model.invoke(messages)
+    
+    # Delete all but the 2 most recent messages
+    delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
+    return {"summary": response.content, "messages": delete_messages}
+```
 
-**Using prompt caching**
+See this how-to [here](https://langchain-ai.github.io/langgraph/how-tos/memory/add-summary-conversation-history/) and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
 
-Several different model providers offer prompt caching. This allows particular messages, such as a system message with a large amount of context, to the cached and re-used across application executions without incurring additional token cost. See our guide [here](https://x.com/LangChainAI/status/1823756691739164840) for an example of how to use prompt caching with [Anthropic's](https://www.anthropic.com/news/prompt-caching) Claude models.
+## Selecting Few Shot Examples
 
-**Using LangGraph's persistence layer**
+Few-shot learning is a powerful technique where LLMs can be ["programmed"](https://x.com/karpathy/status/1627366413840322562) inside the prompt with input-output examples to perform diverse tasks. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input. 
 
-In LangGraph, long-term memory is built upon the [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence). LangGraph's built-in persistence layer offers checkpointers that utilize various storage systems, including an in-memory key-value store or several different databases. These checkpoints write the graph state at each execution step into a thread, which can be accessed at a later time using a thread ID. 
+LangChain [`ExampleSelectors`](https://python.langchain.com/docs/how_to/#example-selectors) can be used to customize few-shot example selection from a collection of examples using criteria such as length, semantic similarity, semantic ngram overlap, or maximal marginal relevance.
+
+If few-shot examples are stored in a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets), then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity scores). 
+
+See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) example usage of dynamic few-shot example selection in LangSmith.
+
+## Personalizing Applications 
+
+LangGraph's [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) has checkpointers that utilize various storage systems, including an in-memory key-value store or different databases. These checkpoints write the graph state at each execution step into a thread, which can be accessed at a later time using a thread ID to resume a previous graph execution. 
 
 ```python
 # Compile the graph with a checkpointer
@@ -153,20 +131,14 @@ config = {"configurable": {"thread_id": "1"}}
 graph.get_state(config)
 ```
 
-**Using LangGraph's new memory API**
+While persistance is critical for long-running user sessions that may have interruptions, some applications benefit from sharing specific information across *many* graph executions. 
 
-LangGraph's persistence layer uses threads to encapsulate graph state across specific graph executions. This is very useful for long-running user sessions with interruptions. However, some applications benefit from sharing specific information across multiple graph executions. The new memory API build on persistence, allowing for specific keys in a graph schema to be shared across multiple graph executions based upon a specific identifier (e.g., user ID). 
+< TODO: Here we can show an example of a personalization use-case using new memory API. >
 
-### Use-cases
+## Meta-prompting
 
-**Using prompt caching**
+Meta-prompting is an advanced technique where an AI system, typically a large language model (LLM), is used to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. A central consideration in meta-prompting is the source of past information used to improve the prompt. 
 
-RAG is a good use-case for prompt caching. < Here we may show Chat-LangGraph, for example, if we use prompt caching to store the documents. >
+One source of past information for prompt improvement is human feedback. As an example, this [how-to guide](https://www.youtube.com/watch?v=Vn8A3BxfplE) shows how to improve a prompt for summarization using human feedback. This particular uses a LangSmith dataset to house the test cases and captures human feedback to grade summaries using the LangSmith Annotation Queue. The process is repeated in a loop until the prompts perform well based upon the human review of the summaries. 
 
-**Using LangGraph's persistence layer**
-
-One of the most popular use-cases for long-term memory using LangGraph's persistence layer is multi-turn chat applications with interruptions. In short, this allows interruptions and continuation  of a particular chat session over time. See our how-to guide on [building a multi-turn chatbot with interruptions](https://langchain-ai.github.io/langgraph/how-tos/memory/manage-conversation-history/).
-
-**Using LangGraph's new memory API**
-
-Application personalization is one of the most important use-cases enabled by the new memory, because it's possible to store and retrieve information about a user or organization in a structured format across multiple chat sessions. < Here link to how-to guide and video. >
+< TODO: Add update examples of meta-prompting with LangSmith. >
