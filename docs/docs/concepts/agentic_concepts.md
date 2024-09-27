@@ -60,16 +60,6 @@ Human involvement can significantly enhance agent reliability, especially for se
 
 Human-in-the-loop patterns are crucial when full automation isn't feasible or desirable. Learn more in our [human-in-the-loop guide](./human_in_the_loop.md).
 
-## Parallelization 
-
-Parallel processing is vital for efficient multi-agent systems and complex tasks. LangGraph supports parallelization through its [Send](./low_level.md#send) API, enabling:
-
-- Concurrent processing of multiple states
-- Implementation of map-reduce-like operations
-- Efficient handling of independent subtasks
-
-For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduce.ipynb).
-
 ## Sub-graphs
 
 Sub-graphs are essential for managing complex agent architectures, particularly in multi-agent systems. They allow:
