@@ -44,9 +44,6 @@ class Item:
     updated_at: datetime
     """Timestamp of last update."""
 
-    last_accessed_at: datetime
-    """Timestamp of last access."""
-
 
 class GetOp(NamedTuple):
     """Operation to retrieve an item by namespace and ID."""

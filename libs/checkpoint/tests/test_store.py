@@ -27,7 +27,6 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
                     namespace=getattr(op, "namespace", ()),
                     created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
                     updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-                    last_accessed_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
                 )
                 for op in ops
             ]
