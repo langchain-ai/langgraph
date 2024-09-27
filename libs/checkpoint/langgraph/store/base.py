@@ -4,10 +4,11 @@ Stores enable persistence and memory that can be shared across threads,
 scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, NamedTuple, Optional, Union
+from typing import Any, Iterable, Literal, NamedTuple, Optional, Union
 
 
 @dataclass
@@ -97,6 +98,34 @@ class PutOp(NamedTuple):
     """
 
 
+NameSpacePath = tuple[Union[str, Literal["*"]], ...]
+
+NamespaceMatchType = Literal["prefix", "suffix"]
+
+
+class MatchCondition(NamedTuple):
+    """Represents a single match condition."""
+
+    match_type: NamespaceMatchType
+    path: NameSpacePath
+
+
+class ListNamespacesOp(NamedTuple):
+    """Operation to list namespaces with optional match conditions."""
+
+    match_conditions: Optional[tuple[MatchCondition, ...]] = None
+    """A tuple of match conditions to apply to namespaces."""
+
+    max_depth: Optional[int] = None
+    """Return namespaces up to this depth in the hierarchy."""
+
+    limit: int = 100
+    """Maximum number of namespaces to return."""
+
+    offset: int = 0
+    """Number of namespaces to skip before returning results."""
+
+
 Op = Union[GetOp, SearchOp, PutOp]
 Result = Union[Item, list[Item], None]
 
@@ -113,6 +142,22 @@ class BaseStore(ABC):
     @abstractmethod
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously."""
+
+    def batch_namespaces(
+        self, ops: Iterable[ListNamespacesOp]
+    ) -> list[tuple[str, ...]]:
+        """Execute a batch of namespace operations synchronously."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement batch_namespaces"
+        )
+
+    async def abatch_namespace(
+        self, ops: Iterable[ListNamespacesOp]
+    ) -> list[tuple[str, ...]]:
+        """Execute a batch of namespace operations asynchronously."""
+        return asyncio.get_event_loop().run_in_executor(
+            None, self.batch_namespaces, ops
+        )
 
     def get(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
         """Retrieve a single item.
@@ -166,6 +211,57 @@ class BaseStore(ABC):
             id: Unique identifier within the namespace.
         """
         self.batch([PutOp(namespace, id, None)])
+
+    def list_namespaces(
+        self,
+        *,
+        prefix: Optional[NameSpacePath] = None,
+        suffix: Optional[NameSpacePath] = None,
+        max_depth: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[tuple[str, ...]]:
+        """List and filter namespaces in the store.
+
+        Used to explore the organization of data,
+        find specific collections, or navigate the namespace hierarchy.
+
+        Args:
+            prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
+            suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
+            max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
+                Namespaces deeper than this level will be truncated to this depth.
+            limit (int): Maximum number of namespaces to return (default 100).
+            offset (int): Number of namespaces to skip for pagination (default 0).
+
+        Returns:
+            List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
+            Each tuple represents a full namespace path up to `max_depth`.
+
+        Examples:
+
+            Setting max_depth=3. Given the namespaces:
+                # ("a", "b", "c")
+                # ("a", "b", "d", "e")
+                # ("a", "b", "d", "i")
+                # ("a", "b", "f")
+                # ("a", "c", "f")
+                store.list_namespaces(prefix=("a", "b"), max_depth=3)
+                # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+        """
+        match_conditions = []
+        if prefix:
+            match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
+        if suffix:
+            match_conditions.append(MatchCondition(match_type="suffix", path=suffix))
+
+        op = ListNamespacesOp(
+            match_conditions=tuple(match_conditions),
+            max_depth=max_depth,
+            limit=limit,
+            offset=offset,
+        )
+        return self.batch_namespaces([op])[0]
 
     async def aget(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
         """Asynchronously retrieve a single item.
@@ -223,3 +319,54 @@ class BaseStore(ABC):
             id: Unique identifier within the namespace.
         """
         await self.abatch([PutOp(namespace, id, None)])
+
+    async def alist_namespaces(
+        self,
+        *,
+        prefix: Optional[NameSpacePath] = None,
+        suffix: Optional[NameSpacePath] = None,
+        max_depth: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[tuple[str, ...]]:
+        """List and filter namespaces in the store asynchronously.
+
+        Used to explore the organization of data,
+        find specific collections, or navigate the namespace hierarchy.
+
+        Args:
+            prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
+            suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
+            max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
+                Namespaces deeper than this level will be truncated to this depth.
+            limit (int): Maximum number of namespaces to return (default 100).
+            offset (int): Number of namespaces to skip for pagination (default 0).
+
+        Returns:
+            List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
+            Each tuple represents a full namespace path up to `max_depth`.
+
+        Examples:
+
+            Setting max_depth=3. Given the namespaces:
+                # ("a", "b", "c")
+                # ("a", "b", "d", "e")
+                # ("a", "b", "d", "i")
+                # ("a", "b", "f")
+                # ("a", "c", "f")
+                await store.alist_namespaces(prefix=("a", "b"), max_depth=3)
+                # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+        """
+        match_conditions = []
+        if prefix:
+            match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
+        if suffix:
+            match_conditions.append(MatchCondition(match_type="suffix", path=suffix))
+
+        op = ListNamespacesOp(
+            match_conditions=tuple(match_conditions),
+            max_depth=max_depth,
+            limit=limit,
+            offset=offset,
+        )
+        return (await self.abatch_namespace([op]))[0]
