@@ -39,7 +39,7 @@ While a router allows an LLM to make a single decision, more complex agent archi
 2. `Memory`: Enabling the agent to retain and use information from previous steps.
 3. `Planning`: Empowering the LLM to create and follow multi-step plans to achieve goals.
 
-This architecture allows for more complex and flexible agent behaviors, going beyond simple routing to enable dynamic problem-solving across multiple steps. You can use it with [`create_react_agent`](../reference/prebuilt.md#create_react_agent).
+This architecture allows for more complex and flexible agent behaviors, going beyond simple routing to enable dynamic problem-solving across multiple steps. You can use it with [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent].
 
 ### Tool calling
 
@@ -71,7 +71,7 @@ In the ReAct architecture, an LLM is called repeatedly in a while-loop. At each 
 
 ### ReAct implementation 
 
-There are several differences between this paper and the pre-built [`create_react_agent`](../reference/prebuilt.md#create_react_agent) implementation:
+There are several differences between this paper and the pre-built [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] implementation:
 
 - First, we use [tool-calling](#tool-calling) to have LLMs call tools, whereas the paper used prompting + parsing of raw output. This is because tool calling did not exist when the paper was written, but is generally better and more reliable.
 - Second, we use messages to prompt the LLM, whereas the paper used string formatting. This is because at the time of writing, LLMs didn't even expose a message-based interface, whereas now that's the only interface they expose.

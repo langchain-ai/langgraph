@@ -205,6 +205,7 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
+      - Channels: reference/channels.md
       - Errors: reference/errors.md
       - Types: reference/types.md
       - Constants: reference/constants.md
