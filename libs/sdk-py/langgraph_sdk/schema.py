@@ -214,6 +214,10 @@ class ListNamespaceResponse(TypedDict):
     namespaces: list[list[str]]
 
 
+class SearchItemsResponse(TypedDict):
+    items: list[Item]
+
+
 class StreamPart(NamedTuple):
     event: str
     data: dict

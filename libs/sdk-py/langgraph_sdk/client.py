@@ -11,6 +11,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Union,
     overload,
 )
@@ -37,6 +38,7 @@ from langgraph_sdk.schema import (
     OnConflictBehavior,
     Run,
     RunCreate,
+    SearchItemsResponse,
     StreamMode,
     StreamPart,
     Subgraphs,
@@ -1882,13 +1884,13 @@ class StoreClient:
         self.http = http
 
     async def put_item(
-        self, namespace: List[str], id: str, value: dict[str, Any]
+        self, namespace: Sequence[str], key: str, value: dict[str, Any]
     ) -> None:
         """Store or update an item.
 
         Args:
             namespace: A list of strings representing the namespace path.
-            id: The unique identifier for the item within the namespace.
+            key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
 
         Returns:
@@ -1898,22 +1900,22 @@ class StoreClient:
 
             await client.store.put_item(
                 namespace=["documents", "user123"],
-                id="item456",
+                key="item456",
                 value={"title": "My Document", "content": "Hello World"}
             )
         """
         payload = {
             "namespace": namespace,
-            "id": id,
+            "key": key,
             "value": value,
         }
         await self.http.post("/store/items", json=payload)
 
-    async def get_item(self, namespace: Optional[List[str]], id: str) -> Item:
+    async def get_item(self, namespace: Optional[Sequence[str]], key: str) -> Item:
         """Retrieve a single item.
 
         Args:
-            id: The unique identifier for the item.
+            key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
 
         Returns:
@@ -1922,7 +1924,7 @@ class StoreClient:
         Example Usage:
 
             item = await client.store.get_item(
-                id="item456",
+                key="item456",
                 namespace=["documents", "user123"]
             )
             print(item)
@@ -1931,7 +1933,7 @@ class StoreClient:
 
             {
                 'namespace': ['documents', 'user123'],
-                'id': 'item456',
+                'key': 'item456',
                 'value': {'title': 'My Document', 'content': 'Hello World'},
                 'created_at': '2024-07-30T12:00:00Z',
                 'updated_at': '2024-07-30T12:00:00Z'
@@ -1941,13 +1943,13 @@ class StoreClient:
         if namespace is not None:
             namespace_str = "/".join(namespace)
             params["namespace"] = namespace_str
-        return await self.http.get(f"/store/items/{id}", params=params)
+        return await self.http.get(f"/store/items/{key}", params=params)
 
-    async def delete_item(self, namespace: Optional[List[str]], id: str) -> None:
+    async def delete_item(self, namespace: Optional[Sequence[str]], key: str) -> None:
         """Delete an item.
 
         Args:
-            id: The unique identifier for the item.
+            key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
 
         Returns:
@@ -1956,7 +1958,7 @@ class StoreClient:
         Example Usage:
 
             await client.store.delete_item(
-                id="item456",
+                key="item456",
                 namespace=["documents", "user123"]
             )
         """
@@ -1964,7 +1966,7 @@ class StoreClient:
         if namespace is not None:
             namespace_str = "/".join(namespace)
             params["namespace"] = namespace_str
-        await self.http.delete(f"/store/items/{id}", params=params)
+        await self.http.delete(f"/store/items/{key}", params=params)
 
     async def search_items(
         self,
@@ -1972,7 +1974,7 @@ class StoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> List[Item]:
+    ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
         Args:
@@ -1996,16 +1998,21 @@ class StoreClient:
 
             ----------------------------------------------------------------
 
-            [
-                {
-                    'namespace': ['documents', 'user123'],
-                    'id': 'item789',
-                    'value': {'title': 'Another Document', 'author': 'John Doe'},
-                    'created_at': '2024-07-30T12:00:00Z',
-                    'updated_at': '2024-07-30T12:00:00Z'
-                },
-                ...
-            ]
+            {
+                "items": [
+                    {
+                        "namespace": ["documents", "user123"],
+                        "key": "item789",
+                        "value": {
+                            "title": "Another Document",
+                            "author": "John Doe"
+                        },
+                        "created_at": "2024-07-30T12:00:00Z",
+                        "updated_at": "2024-07-30T12:00:00Z"
+                    },
+                    # ... additional items ...
+                ]
+            }
         """
         payload = {
             "namespace_prefix": namespace_prefix,
@@ -3824,12 +3831,14 @@ class SyncStoreClient:
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
-    def put_item(self, namespace: List[str], id: str, value: dict[str, Any]) -> None:
+    def put_item(
+        self, namespace: Sequence[str], key: str, value: dict[str, Any]
+    ) -> None:
         """Store or update an item.
 
         Args:
             namespace: A list of strings representing the namespace path.
-            id: The unique identifier for the item within the namespace.
+            key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
 
         Returns:
@@ -3839,22 +3848,22 @@ class SyncStoreClient:
 
             client.store.put_item(
                 namespace=["documents", "user123"],
-                id="item456",
+                key="item456",
                 value={"title": "My Document", "content": "Hello World"}
             )
         """
         payload = {
             "namespace": namespace,
-            "id": id,
+            "key": key,
             "value": value,
         }
         self.http.post("/store/items", json=payload)
 
-    def get_item(self, namespace: Optional[List[str]], id: str) -> Item:
+    def get_item(self, namespace: Optional[Sequence[str]], key: str) -> Item:
         """Retrieve a single item.
 
         Args:
-            id: The unique identifier for the item.
+            key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
 
         Returns:
@@ -3863,7 +3872,7 @@ class SyncStoreClient:
         Example Usage:
 
             item = client.store.get_item(
-                id="item456",
+                key="item456",
                 namespace=["documents", "user123"]
             )
             print(item)
@@ -3872,7 +3881,7 @@ class SyncStoreClient:
 
             {
                 'namespace': ['documents', 'user123'],
-                'id': 'item456',
+                'key': 'item456',
                 'value': {'title': 'My Document', 'content': 'Hello World'},
                 'created_at': '2024-07-30T12:00:00Z',
                 'updated_at': '2024-07-30T12:00:00Z'
@@ -3882,13 +3891,13 @@ class SyncStoreClient:
         if namespace is not None:
             namespace_str = "/".join(namespace)
             params["namespace"] = namespace_str
-        return self.http.get(f"/store/items/{id}", params=params)
+        return self.http.get(f"/store/items/{key}", params=params)
 
-    def delete_item(self, namespace: Optional[List[str]], id: str) -> None:
+    def delete_item(self, namespace: Optional[Sequence[str]], key: str) -> None:
         """Delete an item.
 
         Args:
-            id: The unique identifier for the item.
+            key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
 
         Returns:
@@ -3897,7 +3906,7 @@ class SyncStoreClient:
         Example Usage:
 
             client.store.delete_item(
-                id="item456",
+                key="item456",
                 namespace=["documents", "user123"]
             )
         """
@@ -3905,7 +3914,7 @@ class SyncStoreClient:
         if namespace is not None:
             namespace_str = "/".join(namespace)
             params["namespace"] = namespace_str
-        self.http.delete(f"/store/items/{id}", params=params)
+        self.http.delete(f"/store/items/{key}", params=params)
 
     def search_items(
         self,
@@ -3913,7 +3922,7 @@ class SyncStoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> List[Item]:
+    ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
         Args:
@@ -3937,16 +3946,21 @@ class SyncStoreClient:
 
             ----------------------------------------------------------------
 
-            [
-                {
-                    'namespace': ['documents', 'user123'],
-                    'id': 'item789',
-                    'value': {'title': 'Another Document', 'author': 'John Doe'},
-                    'created_at': '2024-07-30T12:00:00Z',
-                    'updated_at': '2024-07-30T12:00:00Z'
-                },
-                ...
-            ]
+            {
+                "items": [
+                    {
+                        "namespace": ["documents", "user123"],
+                        "key": "item789",
+                        "value": {
+                            "title": "Another Document",
+                            "author": "John Doe"
+                        },
+                        "created_at": "2024-07-30T12:00:00Z",
+                        "updated_at": "2024-07-30T12:00:00Z"
+                    },
+                    # ... additional items ...
+                ]
+            }
         """
         payload = {
             "namespace_prefix": namespace_prefix,
