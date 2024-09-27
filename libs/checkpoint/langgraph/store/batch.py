@@ -21,10 +21,10 @@ class AsyncBatchedBaseStore(BaseStore):
     async def aget(
         self,
         namespace: tuple[str, ...],
-        id: str,
+        key: str,
     ) -> Optional[Item]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = GetOp(namespace, id)
+        self._aqueue[fut] = GetOp(namespace, key)
         return await fut
 
     async def asearch(
@@ -32,9 +32,7 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
-        weights: Optional[dict[str, float]] = None,
         limit: int = 10,
         offset: int = 0,
     ) -> list[Item]:
@@ -45,20 +43,20 @@ class AsyncBatchedBaseStore(BaseStore):
     async def aput(
         self,
         namespace: tuple[str, ...],
-        id: str,
+        key: str,
         value: dict[str, Any],
     ) -> None:
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, id, value)
+        self._aqueue[fut] = PutOp(namespace, key, value)
         return await fut
 
     async def adelete(
         self,
         namespace: tuple[str, ...],
-        id: str,
+        key: str,
     ) -> None:
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, id, None)
+        self._aqueue[fut] = PutOp(namespace, key, None)
         return await fut
 
 

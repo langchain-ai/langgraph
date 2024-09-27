@@ -15,6 +15,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.store.base import Item
 
 
 class InnerPydantic(BaseModel):
@@ -121,6 +122,13 @@ def test_serde_jsonplus() -> None:
         "a_float": 1.1,
         "a_bytes": b"my bytes",
         "a_bytearray": bytearray([42]),
+        "my_item": Item(
+            value={},
+            key="my-key",
+            namespace=("a", "name", " "),
+            created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+        ),
     }
 
     serde = JsonPlusSerializer()
