@@ -39,6 +39,20 @@ class Item:
         self.created_at = created_at
         self.updated_at = updated_at
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Item):
+            return False
+        return (
+            self.value == other.value
+            and self.key == other.key
+            and self.namespace == other.namespace
+            and self.created_at == other.created_at
+            and self.updated_at == other.updated_at
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.namespace, self.key))
+
 
 class GetOp(NamedTuple):
     """Operation to retrieve an item by namespace and key."""
