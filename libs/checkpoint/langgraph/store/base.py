@@ -35,7 +35,7 @@ class Item:
     ):
         self.value = value
         self.key = key
-        self.namespace = namespace
+        self.namespace = tuple(namespace)
         self.created_at = created_at
         self.updated_at = updated_at
 
