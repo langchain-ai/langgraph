@@ -115,6 +115,16 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
+def _clear_unanswered_tool_calls(messages: Sequence[BaseMessage]) -> Sequence[BaseMessage]:
+    """Clear unanswered tool calls from the messages."""
+    tool_call_id_to_tool_message = {
+        tool_call.id
+        for message in messages if isinstance(message, AIMessage)
+        for tool_call in message.tool_calls 
+    }
+    return messages
+
+
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
     model: BaseChatModel,
