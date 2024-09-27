@@ -1,10 +1,5 @@
 # Graph Definitions
 
-::: langgraph.graph.message
-    options:
-      members:
-        - add_messages
-
 ::: langgraph.graph.graph
     options:
       members:
@@ -16,3 +11,8 @@
       members:
         - StateGraph
         - CompiledStateGraph
+
+::: langgraph.graph.message
+    options:
+      members:
+        - add_messages
