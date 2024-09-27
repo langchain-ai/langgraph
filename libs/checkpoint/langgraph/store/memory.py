@@ -31,7 +31,7 @@ class InMemoryStore(BaseStore):
         results: list[Result] = []
         for op in ops:
             if isinstance(op, GetOp):
-                item = self._data[op.namespace].get(op.id)
+                item = self._data[op.namespace].get(op.key)
                 results.append(item)
             elif isinstance(op, SearchOp):
                 candidates = [
@@ -53,16 +53,16 @@ class InMemoryStore(BaseStore):
                 results.append(candidates[op.offset : op.offset + op.limit])
             elif isinstance(op, PutOp):
                 if op.value is None:
-                    self._data[op.namespace].pop(op.id, None)
-                elif op.id in self._data[op.namespace]:
-                    self._data[op.namespace][op.id].value = op.value
-                    self._data[op.namespace][op.id].updated_at = datetime.now(
+                    self._data[op.namespace].pop(op.key, None)
+                elif op.key in self._data[op.namespace]:
+                    self._data[op.namespace][op.key].value = op.value
+                    self._data[op.namespace][op.key].updated_at = datetime.now(
                         timezone.utc
                     )
                 else:
-                    self._data[op.namespace][op.id] = Item(
+                    self._data[op.namespace][op.key] = Item(
                         value=op.value,
-                        id=op.id,
+                        key=op.key,
                         namespace=op.namespace,
                         created_at=datetime.now(timezone.utc),
                         updated_at=datetime.now(timezone.utc),
