@@ -27,7 +27,8 @@ Let's see what checkpoints are saved when a simple graph is invoked as follows:
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from typing import TypedDict, Annotated
+from typing import Annotated
+from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):
@@ -180,7 +181,8 @@ These are the values that will be used to update the state. Note that this updat
 Let's assume you have defined the state of your graph with the following schema (see full example above):
 
 ```python
-from typing import TypedDict, Annotated
+from typing import Annotated
+from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):

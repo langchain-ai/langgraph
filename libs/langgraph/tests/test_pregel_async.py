@@ -7209,6 +7209,37 @@ async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_stream_buffering_single_node(checkpointer_name: str) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    async def node(state: State, writer: StreamWriter):
+        writer("Before sleep")
+        await asyncio.sleep(0.2)
+        writer("After sleep")
+        return {"my_key": "got here"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.add_edge("node", END)
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+
+        start = perf_counter()
+        chunks: list[tuple[float, Any]] = []
+        config = {"configurable": {"thread_id": "2"}}
+        async for c in graph.astream({"my_key": ""}, config, stream_mode="custom"):
+            chunks.append((round(perf_counter() - start, 1), c))
+
+        assert chunks == [
+            (FloatBetween(0.0, 0.1), "Before sleep"),
+            (FloatBetween(0.2, 0.3), "After sleep"),
+        ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]

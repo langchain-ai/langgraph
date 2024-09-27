@@ -110,7 +110,8 @@ Example `agent.py` file, which shows how to import from other modules you define
 
 ```python
 # my_agent/agent.py
-from typing import TypedDict, Literal
+from typing import Literal
+from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, END, START
 from my_agent.utils.nodes import call_model, should_continue, tool_node # import nodes

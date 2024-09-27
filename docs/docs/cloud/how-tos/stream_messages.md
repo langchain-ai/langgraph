@@ -7,7 +7,8 @@ E.g., the state should look something like:
 === "Python"
 
     ```python
-    from typing import TypedDict, Annotated
+    from typing import Annotated
+    from typing_extensions import TypedDict
     from langgraph.graph import add_messages
     from langchain_core.messages import AnyMessage
 
