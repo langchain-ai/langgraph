@@ -115,14 +115,34 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
-def _clear_unanswered_tool_calls(messages: Sequence[BaseMessage]) -> Sequence[BaseMessage]:
-    """Clear unanswered tool calls from the messages."""
-    tool_call_id_to_tool_message = {
-        tool_call.id
-        for message in messages if isinstance(message, AIMessage)
-        for tool_call in message.tool_calls 
+def _clear_unanswered_tool_calls(
+    messages: Sequence[BaseMessage],
+) -> AgentState:
+    """Clear unanswered tool calls from the messages and return updated messages."""
+    answered_tool_call_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
     }
-    return messages
+
+    updated_messages = []
+    for message in messages:
+        updated_tool_calls = []
+        if isinstance(message, AIMessage):
+            updated_tool_calls = [
+                tool_call
+                for tool_call in message.tool_calls
+                if tool_call["id"] in answered_tool_call_ids
+            ]
+            if updated_tool_calls != message.tool_calls:
+                updated_message = message.model_copy()
+                updated_message.tool_calls = updated_tool_calls
+                updated_message.additional_kwargs.pop("tool_calls", None)
+                updated_messages.append(updated_message)
+            else:
+                updated_messages.append(message)
+        else:
+            updated_messages.append(message)
+
+    return updated_messages
 
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
@@ -442,6 +462,9 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        # "Update" the messages in the state before sending the state to the model runnable
+        # This will only update the input to the runnable and will not alter the original state
+        state["messages"] = _clear_unanswered_tool_calls(state["messages"])
         response = model_runnable.invoke(state, config)
         if (
             state["is_last_step"]
@@ -460,6 +483,9 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        # "Update" the messages in the state before sending the state to the model runnable
+        # This will only update the input to the runnable and will not alter the original state
+        state["messages"] = _clear_unanswered_tool_calls(state["messages"])
         response = await model_runnable.ainvoke(state, config)
         if (
             state["is_last_step"]
