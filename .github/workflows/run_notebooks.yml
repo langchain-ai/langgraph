@@ -34,7 +34,7 @@ jobs:
 
       - name: Pre-download tiktoken files
         run: |
-          poetry run python docs/scripts/download_tiktoken.py
+          poetry run python docs/_scripts/download_tiktoken.py
 
       - name: Prepare notebooks
         run: |
