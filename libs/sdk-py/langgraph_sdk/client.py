@@ -2073,11 +2073,14 @@ class SyncAssistantsClient:
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}")
 
-    def get_graph(self, assistant_id: str) -> dict[str, list[dict[str, Any]]]:
+    def get_graph(
+        self, assistant_id: str, *, xray: bool = False
+    ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
+            xray: Include graph representation of subgraphs.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -2107,7 +2110,7 @@ class SyncAssistantsClient:
 
 
         """  # noqa: E501
-        return self.http.get(f"/assistants/{assistant_id}/graph")
+        return self.http.get(f"/assistants/{assistant_id}/graph", params={"xray": xray})
 
     def get_schemas(self, assistant_id: str) -> GraphSchema:
         """Get the schemas of an assistant by ID.
