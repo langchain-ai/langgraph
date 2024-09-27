@@ -63,15 +63,14 @@ plugins:
             allow_inspection: true
             heading_level: 3
             show_bases: true
+            show_source: true
+            show_root_heading: true
             summary: true
             inherited_members: true
-            # merge_init_into_class: true
             selection:
               docstring_style: google
             docstring_section_style: list
             show_root_toc_entry: false
-            # show_signature_annotations: true
-            # show_symbol_type_heading: true
             show_symbol_type_toc: true
             signature_crossrefs: true
   - mkdocs-jupyter:
