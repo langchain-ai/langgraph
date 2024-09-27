@@ -99,6 +99,11 @@ export interface RunsStreamPayload extends RunsInvokePayload {
   streamMode?: StreamMode | Array<StreamMode>;
 
   /**
+   * Stream output from subgraphs. By default, streams only the top graph.
+   */
+  streamSubgraphs?: boolean;
+
+  /**
    * Pass one or more feedbackKeys if you want to request short-lived signed URLs
    * for submitting feedback to LangSmith with this key for this run.
    */
