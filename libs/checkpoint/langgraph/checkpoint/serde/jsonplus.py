@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
+from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
 
@@ -403,6 +404,18 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
                 ),
             ),
         )
+    elif isinstance(obj, Item):
+        return msgpack.ExtType(
+            EXT_CONSTRUCTOR_KW_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    {k: getattr(obj, k) for k in obj.__slots__},
+                ),
+            ),
+        )
+
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:

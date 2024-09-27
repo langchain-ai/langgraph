@@ -5,44 +5,61 @@ scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Literal, NamedTuple, Optional, Union
 
 
-@dataclass(kw_only=True)
 class Item:
-    """Represents a stored item with metadata."""
+    """Represents a stored item with metadata.
 
-    value: dict[str, Any]
-    """The stored data as a dictionary.
-    
-    Keys are filterable.
+    Args:
+        value (dict[str, Any]): The stored data as a dictionary. Keys are filterable.
+        (str): Unique identifier within the namespace.
+        namespace (tuple[str, ...]): Hierarchical path defining the collection in which this document resides.
+            Represented as a tuple of strings, allowing for nested categorization.
+            For example: ("documents", 'user123')
+        created_at (datetime): Timestamp of item creation.
+        updated_at (datetime): Timestamp of last update.
     """
 
-    id: str
-    """Unique identifier within the namespace."""
+    __slots__ = ("value", "key", "namespace", "created_at", "updated_at")
 
-    namespace: tuple[str, ...]
-    """Hierarchical path defining the collection in which this document resides.
-    
-    Represented as a tuple of strings, allowing for nested categorization.
-    For example: ("documents", 'user123')
-    """
+    def __init__(
+        self,
+        *,
+        value: dict[str, Any],
+        key: str,
+        namespace: tuple[str, ...],
+        created_at: datetime,
+        updated_at: datetime,
+    ):
+        self.value = value
+        self.key = key
+        self.namespace = tuple(namespace)
+        self.created_at = created_at
+        self.updated_at = updated_at
 
-    created_at: datetime
-    """Timestamp of item creation."""
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Item):
+            return False
+        return (
+            self.value == other.value
+            and self.key == other.key
+            and self.namespace == other.namespace
+            and self.created_at == other.created_at
+            and self.updated_at == other.updated_at
+        )
 
-    updated_at: datetime
-    """Timestamp of last update."""
+    def __hash__(self) -> int:
+        return hash((self.namespace, self.key))
 
 
 class GetOp(NamedTuple):
-    """Operation to retrieve an item by namespace and ID."""
+    """Operation to retrieve an item by namespace and key."""
 
     namespace: tuple[str, ...]
     """Hierarchical path for the item."""
-    id: str
+    key: str
     """Unique identifier within the namespace."""
 
 
@@ -69,7 +86,7 @@ class PutOp(NamedTuple):
     For example: ("documents", "user123")
     """
 
-    id: str
+    key: str
     """Unique identifier for the document.
     
     Should be distinct within its namespace.
@@ -143,17 +160,17 @@ class BaseStore(ABC):
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously."""
 
-    def get(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
+    def get(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
         """Retrieve a single item.
 
         Args:
             namespace: Hierarchical path for the item.
-            id: Unique identifier within the namespace.
+            key: Unique identifier within the namespace.
 
         Returns:
             The retrieved item or None if not found.
         """
-        return self.batch([GetOp(namespace, id)])[0]
+        return self.batch([GetOp(namespace, key)])[0]
 
     def search(
         self,
@@ -177,25 +194,25 @@ class BaseStore(ABC):
         """
         return self.batch([SearchOp(namespace_prefix, filter, limit, offset)])[0]
 
-    def put(self, namespace: tuple[str, ...], id: str, value: dict[str, Any]) -> None:
+    def put(self, namespace: tuple[str, ...], key: str, value: dict[str, Any]) -> None:
         """Store or update an item.
 
         Args:
             namespace: Hierarchical path for the item.
-            id: Unique identifier within the namespace.
+            key: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
         """
         _validate_namespace(namespace)
-        self.batch([PutOp(namespace, id, value)])
+        self.batch([PutOp(namespace, key, value)])
 
-    def delete(self, namespace: tuple[str, ...], id: str) -> None:
+    def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
 
         Args:
             namespace: Hierarchical path for the item.
-            id: Unique identifier within the namespace.
+            key: Unique identifier within the namespace.
         """
-        self.batch([PutOp(namespace, id, None)])
+        self.batch([PutOp(namespace, key, None)])
 
     def list_namespaces(
         self,
@@ -248,17 +265,17 @@ class BaseStore(ABC):
         )
         return self.batch([op])[0]
 
-    async def aget(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
+    async def aget(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
         """Asynchronously retrieve a single item.
 
         Args:
             namespace: Hierarchical path for the item.
-            id: Unique identifier within the namespace.
+            key: Unique identifier within the namespace.
 
         Returns:
             The retrieved item or None if not found.
         """
-        return (await self.abatch([GetOp(namespace, id)]))[0]
+        return (await self.abatch([GetOp(namespace, key)]))[0]
 
     async def asearch(
         self,
@@ -285,26 +302,26 @@ class BaseStore(ABC):
         ]
 
     async def aput(
-        self, namespace: tuple[str, ...], id: str, value: dict[str, Any]
+        self, namespace: tuple[str, ...], key: str, value: dict[str, Any]
     ) -> None:
         """Asynchronously store or update an item.
 
         Args:
             namespace: Hierarchical path for the item.
-            id: Unique identifier within the namespace.
+            key: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, id, value)])
+        await self.abatch([PutOp(namespace, key, value)])
 
-    async def adelete(self, namespace: tuple[str, ...], id: str) -> None:
+    async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
 
         Args:
             namespace: Hierarchical path for the item.
-            id: Unique identifier within the namespace.
+            key: Unique identifier within the namespace.
         """
-        await self.abatch([PutOp(namespace, id, None)])
+        await self.abatch([PutOp(namespace, key, None)])
 
     async def alist_namespaces(
         self,

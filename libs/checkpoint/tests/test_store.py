@@ -22,7 +22,7 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
             return [
                 Item(
                     value={},
-                    id=getattr(op, "id", ""),
+                    key=getattr(op, "key", ""),
                     namespace=getattr(op, "namespace", ()),
                     created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
                     updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
@@ -34,25 +34,23 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
 
     # concurrent calls are batched
     results = await asyncio.gather(
-        store.aget(namespace=("a",), id="b"),
-        store.aget(namespace=("c",), id="d"),
+        store.aget(namespace=("a",), key="b"),
+        store.aget(namespace=("c",), key="d"),
     )
     assert results == [
         Item(
-            {},
-            {},
-            "b",
-            ("a",),
-            datetime(2024, 9, 24, 17, 29, 10, 128397),
-            datetime(2024, 9, 24, 17, 29, 10, 128397),
+            value={},
+            key="b",
+            namespace=("a",),
+            created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
         ),
         Item(
-            {},
-            {},
-            "d",
-            ("c",),
-            datetime(2024, 9, 24, 17, 29, 10, 128397),
-            datetime(2024, 9, 24, 17, 29, 10, 128397),
+            value={},
+            key="d",
+            namespace=("c",),
+            created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
         ),
     ]
     assert abatch.call_count == 1
@@ -80,7 +78,7 @@ def test_list_namespaces_basic() -> None:
     ]
 
     for i, ns in enumerate(namespaces):
-        store.put(namespace=ns, id=f"id_{i}", value={"data": f"value_{i:02d}"})
+        store.put(namespace=ns, key=f"id_{i}", value={"data": f"value_{i:02d}"})
 
     result = store.list_namespaces(prefix=("a", "b"))
     expected = [
@@ -166,7 +164,7 @@ def test_list_namespaces_with_wildcards() -> None:
     ]
 
     for i, ns in enumerate(namespaces):
-        store.put(namespace=ns, id=f"id_{i}", value={"data": f"value_{i:02d}"})
+        store.put(namespace=ns, key=f"id_{i}", value={"data": f"value_{i:02d}"})
 
     result = store.list_namespaces(prefix=("users", "*"))
     expected = [
@@ -188,7 +186,7 @@ def test_list_namespaces_with_wildcards() -> None:
 
     store.put(
         namespace=("admin", "users", "settings", "789"),
-        id="foo",
+        key="foo",
         value={"data": "some_val"},
     )
     expected = [
@@ -201,7 +199,7 @@ def test_list_namespaces_pagination() -> None:
 
     for i in range(20):
         ns = ("namespace", f"sub_{i:02d}")
-        store.put(namespace=ns, id=f"id_{i:02d}", value={"data": f"value_{i:02d}"})
+        store.put(namespace=ns, key=f"id_{i:02d}", value={"data": f"value_{i:02d}"})
 
     result = store.list_namespaces(prefix=("namespace",), limit=5, offset=0)
     expected = [("namespace", f"sub_{i:02d}") for i in range(5)]
@@ -228,7 +226,7 @@ def test_list_namespaces_max_depth() -> None:
     ]
 
     for i, ns in enumerate(namespaces):
-        store.put(namespace=ns, id=f"id_{i}", value={"data": f"value_{i:02d}"})
+        store.put(namespace=ns, key=f"id_{i}", value={"data": f"value_{i:02d}"})
 
     result = store.list_namespaces(max_depth=2)
     expected = [
@@ -249,7 +247,7 @@ def test_list_namespaces_no_conditions() -> None:
     ]
 
     for i, ns in enumerate(namespaces):
-        store.put(namespace=ns, id=f"id_{i}", value={"data": f"value_{i:02d}"})
+        store.put(namespace=ns, key=f"id_{i}", value={"data": f"value_{i:02d}"})
 
     result = store.list_namespaces()
     expected = namespaces
