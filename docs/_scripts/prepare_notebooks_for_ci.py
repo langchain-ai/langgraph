@@ -91,6 +91,10 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
+        # skip if has WebBaseLoader to avoid caching web pages
+        if "WebBaseLoader" in cell.source:
+            continue
+
         cell_id = cell.get("id", idx)
         cassette_name = f"{cassette_prefix}_{cell_id}.msgpack.zlib"
         cell.source = f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='advanced_compressed'):\n" + "\n".join(
