@@ -1083,8 +1083,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -1104,8 +1103,7 @@ class RunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
         self,
@@ -1225,8 +1223,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     @overload
     async def create(
@@ -1246,8 +1243,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     async def create(
         self,
@@ -1406,8 +1402,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
     async def wait(
@@ -1424,8 +1419,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
         self,
@@ -3036,8 +3030,7 @@ class SyncRunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
-    ) -> Iterator[StreamPart]:
-        ...
+    ) -> Iterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -3057,8 +3050,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
-    ) -> Iterator[StreamPart]:
-        ...
+    ) -> Iterator[StreamPart]: ...
 
     def stream(
         self,
@@ -3178,8 +3170,7 @@ class SyncRunsClient:
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     @overload
     def create(
@@ -3199,8 +3190,7 @@ class SyncRunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     def create(
         self,
@@ -3359,8 +3349,7 @@ class SyncRunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
     def wait(
@@ -3377,8 +3366,7 @@ class SyncRunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     def wait(
         self,
