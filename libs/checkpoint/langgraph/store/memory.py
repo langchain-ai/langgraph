@@ -1,16 +1,23 @@
 from collections import defaultdict
 from datetime import datetime, timezone
+from typing import Iterable
 
 from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, Result, SearchOp
 
 
-class MemoryStore(BaseStore):
+class InMemoryStore(BaseStore):
+    """A KV store backed by an in-memory python dictionary.
+
+    Useful for testing/experimentation and lightweight PoC's.
+    For actual persistence, use a Store backed by a proper database.
+    """
+
     __slots__ = ("_data",)
 
     def __init__(self) -> None:
         self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
 
-    def batch(self, ops: list[Op]) -> list[Result]:
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
         results: list[Result] = []
         for op in ops:
             if isinstance(op, GetOp):
@@ -29,16 +36,12 @@ class MemoryStore(BaseStore):
                     )
                     for item in items.values()
                 ]
-                if op.query is not None:
-                    raise NotImplementedError("Search queries are not supported")
                 if op.filter:
                     candidates = [
                         item
                         for item in candidates
                         if item.value.items() >= op.filter.items()
                     ]
-                if op.weights:
-                    raise NotImplementedError("Search weights are not supported")
                 results.append(candidates[op.offset : op.offset + op.limit])
             elif isinstance(op, PutOp):
                 if op.value is None:
@@ -61,5 +64,5 @@ class MemoryStore(BaseStore):
                 results.append(None)
         return results
 
-    async def abatch(self, ops: list[Op]) -> list[Result]:
+    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         return self.batch(ops)

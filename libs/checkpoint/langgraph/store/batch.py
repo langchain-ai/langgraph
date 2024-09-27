@@ -6,6 +6,8 @@ from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, SearchOp
 
 
 class AsyncBatchedBaseStore(BaseStore):
+    """Efficiently batch operations in a background task."""
+
     __slots__ = ("_loop", "_aqueue", "_task")
 
     def __init__(self) -> None:
@@ -37,9 +39,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
     ) -> list[Item]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(
-            namespace_prefix, query, filter, weights, limit, offset
-        )
+        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset)
         return await fut
 
     async def aput(
