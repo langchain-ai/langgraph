@@ -1,4 +1,5 @@
 import tiktoken
 
 # This will trigger the download and caching of the necessary files
-encoding = tiktoken.encoding_for_model("gpt2")
+for encoding in ("gpt2", "cl100k_base"):
+    tiktoken.encoding_for_model(encoding)
