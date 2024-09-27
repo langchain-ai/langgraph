@@ -223,8 +223,13 @@ export class AssistantsClient extends BaseClient {
    * @param assistantId The ID of the assistant.
    * @returns Serialized graph
    */
-  async getGraph(assistantId: string): Promise<AssistantGraph> {
-    return this.fetch<AssistantGraph>(`/assistants/${assistantId}/graph`);
+  async getGraph(
+    assistantId: string,
+    options?: { xray?: boolean },
+  ): Promise<AssistantGraph> {
+    return this.fetch<AssistantGraph>(`/assistants/${assistantId}/graph`, {
+      params: { xray: options?.xray },
+    });
   }
 
   /**
