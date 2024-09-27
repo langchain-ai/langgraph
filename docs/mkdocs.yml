@@ -206,6 +206,7 @@ nav:
       - Prebuilt Components: reference/prebuilt.md
       - Errors: reference/errors.md
       - Types: reference/types.md
+      - Constants: reference/constants.md
   - "Cloud (beta)":
       - "cloud/index.md"
       - Tutorials:
