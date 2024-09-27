@@ -19,6 +19,8 @@ NOTEBOOKS_NO_CASSETTES = (
 NOTEBOOKS_NO_EXECUTION = [
     # this uses a user provided project name for langsmith
     "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb",
+    # this uses langsmith datasets
+    "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb"
     # this uses browser APIs
     "docs/docs/tutorials/web-navigation/web_voyager.ipynb",
     # these RAG guides use an ollama model
