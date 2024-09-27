@@ -7,7 +7,7 @@ Memory refers to the processing of data from the past to make it more useful for
 - Managing what messages (e.g., from a long message history) are sent to a chat model to limit token usage;
 - Summarizing past conversations to give a chat model context from prior interaction;
 - Selecting few shot examples (e.g, from a dataset) to guide model responses;
-- Personalizing applications with specific information (e.g., user attributes) gleaned from previous conversations;
+- Maintaining persistent data (e.g., user preferences or conversation context) across multiple chat sessions;
 - Allowing an LLM to update its own prompt using past information (e.g., meta-prompting);
 
 Below, we'll discuss each of these examples in some detail. 
@@ -103,7 +103,7 @@ def summarize_conversation(state: State):
 
 See this how-to [here](https://langchain-ai.github.io/langgraph/how-tos/memory/add-summary-conversation-history/) and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
 
-## Selecting Few Shot Examples
+## Few Shot Examples
 
 Few-shot learning is a powerful technique where LLMs can be ["programmed"](https://x.com/karpathy/status/1627366413840322562) inside the prompt with input-output examples to perform diverse tasks. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input. 
 
@@ -113,9 +113,9 @@ If few-shot examples are stored in a [LangSmith Dataset](https://docs.smith.lang
 
 See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) example usage of dynamic few-shot example selection in LangSmith.
 
-## Personalizing Applications 
+## Maintaining Data Across Chat Sessions
 
-LangGraph's [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) has checkpointers that utilize various storage systems, including an in-memory key-value store or different databases. These checkpoints write the graph state at each execution step into a thread, which can be accessed at a later time using a thread ID to resume a previous graph execution. 
+LangGraph's [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) has checkpointers that utilize various storage systems, including an in-memory key-value store or different databases. These checkpoints capture the graph state at each execution step and accumulate in a thread, which can be accessed at a later time using a thread ID to resume a previous graph execution. We add persistence to our graph by passing a checkpointer to the `compile` method, as shown here.
 
 ```python
 # Compile the graph with a checkpointer
@@ -131,14 +131,18 @@ config = {"configurable": {"thread_id": "1"}}
 graph.get_state(config)
 ```
 
-While persistance is critical for long-running user sessions that may have interruptions, some applications benefit from sharing specific information across *many* graph executions. 
+Persistance is critical sustaining a long-running chat sessions. For example, a chat between a user and an AI assistant may have interruptions. Persistance ensures that a user can continue that particular chat session at any point in time. However, what happens if a user initiates a new chat session with an assistant? This spawns a new thread, and the information from the previous chat (thread) is not retained. 
 
-< TODO: Here we can show an example of a personalization use-case using new memory API. >
+Sometimes we want to maintain data across chat sessions. Certain user preferences, for example, are relevant across all chat sessions with that particular user. LangGraph enables this using the memory API, which allows specific keys in a state schema to be accessible across all threads. For example, we can define a state schema with a `user_preferences` key that is associated with a `user_id`. 
+
+To highlight this, we built a writing assistant using the memory API to store learned writing preferences for a user. It writes user-directed content (e.g., blog posts or tweets), allows a user to make edits, reflects on the edits, and uses reflection to update a set of writing style heuristics. These heuristics are saved by the memory API and accessible across all user sessions with the assistant.
+
+See this video for more context on the memory API and this video for an overview of the writing assistant.
 
 ## Meta-prompting
 
-Meta-prompting is an advanced technique where an AI system, typically a large language model (LLM), is used to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. A central consideration in meta-prompting is the source of past information used to improve the prompt. 
+Meta-prompting uses an LLM to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify in advance. 
 
-One source of past information for prompt improvement is human feedback. As an example, this [how-to guide](https://www.youtube.com/watch?v=Vn8A3BxfplE) shows how to improve a prompt for summarization using human feedback. This particular uses a LangSmith dataset to house the test cases and captures human feedback to grade summaries using the LangSmith Annotation Queue. The process is repeated in a loop until the prompts perform well based upon the human review of the summaries. 
+As with the writing assistant discussed above, human feedback is often a useful component of meta-prompting. With the writing assistant, feedback was used to create a set of rules that the memory API shared with all sessions with the user. With meta-prompting, human feedback can be used to re-write a task-specific prompt directly.
 
-< TODO: Add update examples of meta-prompting with LangSmith. >
+As an example, we created this [tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) that used meta-prompting to generate the summarization prompt. In this  particular case, we used a LangSmith dataset to house several summarization test cases, captured human feedback on these test cases using the LangSmith Annotation Queue, and used the feedback to refine the summarization prompt. The process was repeated in a loop until the summaries met our criteria in human review.
