@@ -32,6 +32,10 @@ jobs:
       - name: Start services
         run: make start-services
 
+      - name: Pre-download tiktoken files
+        run: |
+          poetry run python docs/scripts/download_tiktoken.py
+
       - name: Prepare notebooks
         run: |
           if [ "${{ matrix.lib-version }}" = "development" ]; then
