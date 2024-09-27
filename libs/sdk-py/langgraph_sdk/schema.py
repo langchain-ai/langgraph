@@ -197,6 +197,23 @@ class RunCreate(TypedDict):
     multitask_strategy: Optional[MultitaskStrategy]
 
 
+class Item(TypedDict):
+    namespace: list[str]
+    """The namespace of the item."""
+    id: str
+    """The unique identifier of the item within its namespace."""
+    value: Any
+    """The value stored in the item."""
+    created_at: datetime
+    """The timestamp when the item was created."""
+    updated_at: datetime
+    """The timestamp when the item was last updated."""
+
+
+class ListNamespaceResponse(TypedDict):
+    namespaces: list[list[str]]
+
+
 class StreamPart(NamedTuple):
     event: str
     data: dict
