@@ -2,7 +2,17 @@ from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pprint import pformat
-from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypedDict, Union
+from typing import (
+    Any,
+    Iterable,
+    Iterator,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    TypedDict,
+    Union,
+)
 from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
@@ -12,7 +22,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.types import PregelExecutableTask, PregelTask, StateSnapshot
+from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 
 
 class TaskPayload(TypedDict):
@@ -48,8 +58,6 @@ class CheckpointPayload(TypedDict):
 class DebugOutputBase(TypedDict):
     timestamp: str
     step: int
-    type: str
-    payload: dict[str, Any]
 
 
 class DebugOutputTask(DebugOutputBase):
@@ -74,8 +82,9 @@ TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
 
 def map_debug_tasks(
-    step: int, tasks: list[PregelExecutableTask]
+    step: int, tasks: Iterable[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
+    """Produce "task" events for stream_mode=debug."""
     ts = datetime.now(timezone.utc).isoformat()
     for task in tasks:
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
@@ -99,6 +108,7 @@ def map_debug_task_results(
     task_tup: tuple[PregelExecutableTask, Sequence[tuple[str, Any]]],
     stream_keys: Union[str, Sequence[str]],
 ) -> Iterator[DebugOutputTaskResult]:
+    """Produce "task_result" events for stream_mode=debug."""
     stream_channels_list = (
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
@@ -124,9 +134,10 @@ def map_debug_checkpoint(
     stream_channels: Union[str, Sequence[str]],
     metadata: CheckpointMetadata,
     checkpoint: Checkpoint,
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
 ) -> Iterator[DebugOutputCheckpoint]:
+    """Produce "checkpoint" events for stream_mode=debug."""
     yield {
         "type": "checkpoint",
         "timestamp": checkpoint["ts"],
@@ -201,10 +212,11 @@ def print_step_checkpoint(
 
 
 def tasks_w_writes(
-    tasks: list[PregelExecutableTask],
+    tasks: Iterable[Union[PregelTask, PregelExecutableTask]],
     pending_writes: Optional[list[PendingWrite]],
     states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
 ) -> tuple[PregelTask, ...]:
+    """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
     pending_writes = pending_writes or []
     return tuple(
         PregelTask(

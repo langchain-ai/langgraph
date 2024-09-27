@@ -19,13 +19,17 @@ handler: python
 
 ::: langgraph.graph.message.MessageGraph
 
+## `add_messages`
+
+::: langgraph.graph.message.add_messages
+
 ## CompiledGraph
 
 ::: langgraph.graph.graph.CompiledGraph
 
 ## StreamMode
 
-::: langgraph.pregel.StreamMode
+::: langgraph.types.StreamMode
 
 ## Constants
 
@@ -65,8 +69,12 @@ builder.add_conditional_edges("my_node", my_condition)
 
 ## Send
 
-::: langgraph.constants.Send
+::: langgraph.types.Send
+
+## Interrupt
+
+::: langgraph.types.Interrupt
 
 ## RetryPolicy
 
-::: langgraph.pregel.types.RetryPolicy
+::: langgraph.types.RetryPolicy

@@ -4,7 +4,7 @@ from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
@@ -22,15 +22,15 @@ from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 
 class MemorySaver(
-    BaseCheckpointSaver, AbstractContextManager, AbstractAsyncContextManager
+    BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
 
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
     Note:
-        Since checkpoints are saved in memory, they will be lost when the program exits.
-        Only use this saver for debugging or testing purposes.
+        Only use `MemorySaver` for debugging or testing purposes.
+        For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresSaver` / `AsyncPostgresSaver`.
 
     Args:
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
@@ -54,9 +54,14 @@ class MemorySaver(
     """
 
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
-    storage: defaultdict[str, dict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]]
+    storage: defaultdict[
+        str,
+        dict[
+            str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], Optional[str]]]
+        ],
+    ]
     writes: defaultdict[
-        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, bytes]]
+        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, tuple[str, bytes]]]
     ]
 
     def __init__(
@@ -316,7 +321,7 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         c = checkpoint.copy()
-        c.pop("pending_sends")
+        c.pop("pending_sends")  # type: ignore[misc]
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         self.storage[thread_id][checkpoint_ns].update(
@@ -339,9 +344,9 @@ class MemorySaver(
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
-    ) -> RunnableConfig:
+    ) -> None:
         """Save a list of writes to the in-memory storage.
 
         This method saves a list of writes to the in-memory storage. The writes are associated
@@ -442,9 +447,9 @@ class MemorySaver(
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
-    ) -> RunnableConfig:
+    ) -> None:
         """Asynchronous version of put_writes.
 
         This method is an asynchronous wrapper around put_writes that runs the synchronous

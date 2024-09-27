@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Literal, Optional, Sequence, TypedDict, Union
+from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
 
 Json = Optional[dict[str, Any]]
 
@@ -41,6 +41,15 @@ class Config(TypedDict, total=False):
     """
 
 
+class Checkpoint(TypedDict):
+    """Checkpoint model."""
+
+    thread_id: str
+    checkpoint_ns: str
+    checkpoint_id: Optional[str]
+    checkpoint_map: Optional[dict[str, Any]]
+
+
 class GraphSchema(TypedDict):
     """Graph model."""
 
@@ -48,6 +57,9 @@ class GraphSchema(TypedDict):
     """The ID of the graph."""
     input_schema: Optional[dict]
     """The schema for the graph state.
+    Missing if unable to generate JSON schema from graph."""
+    output_schema: Optional[dict]
+    """The schema for the graph output.
     Missing if unable to generate JSON schema from graph."""
     state_schema: Optional[dict]
     """The schema for the graph state.
@@ -57,8 +69,11 @@ class GraphSchema(TypedDict):
     Missing if unable to generate JSON schema from graph."""
 
 
-class Assistant(TypedDict):
-    """Assistant model."""
+Subgraphs = dict[str, GraphSchema]
+
+
+class AssistantBase(TypedDict):
+    """Assistant base model."""
 
     assistant_id: str
     """The ID of the assistant."""
@@ -68,10 +83,25 @@ class Assistant(TypedDict):
     """The assistant config."""
     created_at: datetime
     """The time the assistant was created."""
-    updated_at: datetime
-    """The last time the assistant was updated."""
     metadata: Json
     """The assistant metadata."""
+    version: int
+    """The version of the assistant"""
+
+
+class AssistantVersion(AssistantBase):
+    """Assistant version model."""
+
+    pass
+
+
+class Assistant(AssistantBase):
+    """Assistant model."""
+
+    updated_at: datetime
+    """The last time the assistant was updated."""
+    name: str
+    """The name of the assistant"""
 
 
 class Thread(TypedDict):
@@ -89,20 +119,31 @@ class Thread(TypedDict):
     """The current state of the thread."""
 
 
+class ThreadTask(TypedDict):
+    id: str
+    name: str
+    error: Optional[str]
+    interrupts: list[dict]
+    checkpoint: Optional[Checkpoint]
+    state: Optional["ThreadState"]
+
+
 class ThreadState(TypedDict):
     values: Union[list[dict], dict[str, Any]]
     """The state values."""
     next: Sequence[str]
     """The next nodes to execute. If empty, the thread is done until new input is 
     received."""
-    checkpoint_id: str
+    checkpoint: Checkpoint
     """The ID of the checkpoint."""
     metadata: Json
     """Metadata for this state"""
     created_at: Optional[str]
     """Timestamp of state creation"""
-    parent_checkpoint_id: Optional[str]
+    parent_checkpoint: Optional[Checkpoint]
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
+    tasks: Sequence[ThreadTask]
+    """Tasks to execute in this step. If already attempted, may contain an error."""
 
 
 class Run(TypedDict):
@@ -154,3 +195,8 @@ class RunCreate(TypedDict):
     interrupt_after: Optional[list[str]]
     webhook: Optional[str]
     multitask_strategy: Optional[MultitaskStrategy]
+
+
+class StreamPart(NamedTuple):
+    event: str
+    data: dict

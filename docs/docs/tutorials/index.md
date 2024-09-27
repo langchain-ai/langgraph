@@ -53,6 +53,10 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Language Agent Tree Search](lats/lats.ipynb): Use reflection and rewards to drive a tree search over agents
 - [Self-Discover Agent](self-discover/self-discover.ipynb): Analyze an agent that learns about its own capabilities
 
+#### Memory
+
+- [Long-term memory](memory/long_term_memory_agent.ipynb): Build an agent that can store, retrieve, and use memories to enhance its interactions with users.
+
 #### Evaluation
 
 - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluate chatbots via simulated user interactions

@@ -1,6 +1,28 @@
 import re
 from typing import Any, Sequence, Union
 
+from typing_extensions import Self
+
+
+class FloatBetween(float):
+    def __new__(cls, min_value: float, max_value: float) -> Self:
+        return super().__new__(cls, min_value)
+
+    def __init__(self, min_value: float, max_value: float) -> None:
+        super().__init__()
+        self.min_value = min_value
+        self.max_value = max_value
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, float)
+            and other >= self.min_value
+            and other <= self.max_value
+        )
+
+    def __hash__(self) -> int:
+        return hash((float(self), self.min_value, self.max_value))
+
 
 class AnyStr(str):
     def __init__(self, prefix: Union[str, re.Pattern] = "") -> None:

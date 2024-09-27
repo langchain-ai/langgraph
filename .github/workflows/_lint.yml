@@ -27,8 +27,7 @@ jobs:
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
         python-version:
-          - "3.9"
-          - "3.11"
+          - "3.12"
     name: "lint #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4

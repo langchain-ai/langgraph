@@ -84,8 +84,7 @@ plugins:
         - tutorials/llm-compiler/math_tools.py
         - tutorials/llm-compiler/output_parser.py
 nav:
-  - Home:
-      - "index.md"
+  - "index.md"
   - Tutorials:
       - "tutorials/index.md"
       - Quick Start: tutorials/introduction.ipynb
@@ -116,6 +115,8 @@ nav:
               - Reflexion: tutorials/reflexion/reflexion.ipynb
               - Language Agent Tree Search: tutorials/lats/lats.ipynb
               - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
+      - Memory:
+          - Long-term memory: tutorials/memory/long_term_memory_agent.ipynb
       - Evaluation & Analysis:
           - Chatbot Evaluation via Simulation:
               - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
@@ -141,7 +142,6 @@ nav:
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
-          - Share state between threads: how-tos/memory/shared-state.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
@@ -154,12 +154,13 @@ nav:
           - Stream state updates: how-tos/stream-updates.ipynb
           - Stream LLM tokens: how-tos/streaming-tokens.ipynb
           - Stream LLM tokens without LangChain models: how-tos/streaming-tokens-without-langchain.ipynb
-          - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
+          - Stream custom data: how-tos/streaming-content.ipynb
           - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
           - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
           - Stream from subgraphs: how-tos/streaming-subgraphs.ipynb
+          - Disable streaming for models that don't support it: how-tos/disable-streaming.ipynb
       - Tool calling:
           - Call tools using ToolNode: how-tos/tool-calling.ipynb
           - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
@@ -172,7 +173,6 @@ nav:
           - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
-          - Use a context object in state: how-tos/state-context-key.ipynb
           - Have a separate input and output schema: how-tos/input_output_schema.ipynb
           - Pass private state between nodes inside the graph: how-tos/pass_private_state.ipynb
       - Other:
@@ -182,6 +182,7 @@ nav:
           - Add node retries: how-tos/node-retries.ipynb
           - Return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
           - Pass custom LangSmith run ID for graph runs: how-tos/run-id-langsmith.ipynb
+          - Return state before hitting recursion limit: how-tos/return-when-recursion-limit-hits.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
@@ -247,11 +248,11 @@ nav:
               - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
               - Configure Agents: "cloud/how-tos/configuration_cloud.md"
+              - Versioning Assistants: "cloud/how-tos/assistant_versioning.md"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'
               - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
-              - Share State Between Threads: "cloud/how-tos/shared_state.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"

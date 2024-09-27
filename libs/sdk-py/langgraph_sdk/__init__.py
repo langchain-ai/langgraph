@@ -1,4 +1,4 @@
-from langgraph_sdk.client import get_client
+from langgraph_sdk.client import get_client, get_sync_client
 
 try:
     from importlib import metadata
@@ -7,4 +7,4 @@ try:
 except metadata.PackageNotFoundError:
     __version__ = "unknown"
 
-__all__ = ["get_client"]
+__all__ = ["get_client", "get_sync_client"]

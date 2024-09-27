@@ -43,9 +43,20 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def str_output(output: Any) -> str:
+def msg_content_output(output: Any) -> str | List[dict]:
+    recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
         return output
+    elif all(
+        [
+            isinstance(x, dict) and x.get("type") in recognized_content_block_types
+            for x in output
+        ]
+    ):
+        return output
+    # Technically a list of strings is also valid message content but it's not currently
+    # well tested that all chat models support this. And for backwards compatibility
+    # we want to make sure we don't break any existing ToolNode usage.
     else:
         try:
             return json.dumps(output, ensure_ascii=False)
@@ -94,7 +105,7 @@ class ToolNode(RunnableCallable):
         self.handle_tool_errors = handle_tool_errors
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
-                tool_ = create_tool(tool_)
+                tool_ = cast(BaseTool, create_tool(tool_))
             self.tools_by_name[tool_.name] = tool_
 
     def _func(
@@ -138,8 +149,9 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
                 input, config
             )
-            # TODO: handle this properly in core
-            tool_message.content = str_output(tool_message.content)
+            tool_message.content = cast(
+                Union[str, list], msg_content_output(tool_message.content)
+            )
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
@@ -155,8 +167,9 @@ class ToolNode(RunnableCallable):
             tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
                 input, config
             )
-            # TODO: handle this properly in core
-            tool_message.content = str_output(tool_message.content)
+            tool_message.content = cast(
+                Union[str, list], msg_content_output(tool_message.content)
+            )
             return tool_message
         except Exception as e:
             if not self.handle_tool_errors:
@@ -188,10 +201,7 @@ class ToolNode(RunnableCallable):
         if not isinstance(message, AIMessage):
             raise ValueError("Last message is not an AIMessage")
 
-        tool_calls = [
-            self._inject_state(call, input)
-            for call in cast(AIMessage, message).tool_calls
-        ]
+        tool_calls = [self._inject_state(call, input) for call in message.tool_calls]
         return tool_calls, output_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
@@ -385,7 +395,7 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
 
-    def _is_injection(type_arg: Any):
+    def _is_injection(type_arg: Any) -> bool:
         if isinstance(type_arg, InjectedState) or (
             isinstance(type_arg, type) and issubclass(type_arg, InjectedState)
         ):

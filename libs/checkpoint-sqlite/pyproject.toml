@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-sqlite"
-version = "1.0.3"
+version = "1.0.4"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"
@@ -10,7 +10,7 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0"
-langgraph-checkpoint = "^1.0.8"
+langgraph-checkpoint = "^1.0.11"
 aiosqlite = "^0.20.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -53,3 +53,13 @@ now = true
 delay = 0.1
 runner_args = ["--ff", "-v", "--tb", "short"]
 patterns = ["*.py"]
+
+[tool.mypy]
+# https://mypy.readthedocs.io/en/stable/config_file.html
+disallow_untyped_defs = "True"
+explicit_package_bases = "True"
+warn_no_return = "False"
+warn_unused_ignores = "True"
+warn_redundant_casts = "True"
+allow_redefinition = "True"
+disable_error_code = "typeddict-item, return-value"
