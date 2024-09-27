@@ -31,6 +31,7 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",  # taking a very long time to run
     "docs/docs/tutorials/customer-support/customer-support.ipynb",  # user input - update
     "docs/docs/tutorials/usaco/usaco.ipynb",
+    "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
 ]
 
