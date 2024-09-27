@@ -4,7 +4,6 @@ Stores enable persistence and memory that can be shared across threads,
 scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 """
 
-import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -126,8 +125,8 @@ class ListNamespacesOp(NamedTuple):
     """Number of namespaces to skip before returning results."""
 
 
-Op = Union[GetOp, SearchOp, PutOp]
-Result = Union[Item, list[Item], None]
+Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
+Result = Union[Item, list[Item], tuple[str, ...], None]
 
 
 class BaseStore(ABC):
@@ -142,22 +141,6 @@ class BaseStore(ABC):
     @abstractmethod
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously."""
-
-    def batch_namespaces(
-        self, ops: Iterable[ListNamespacesOp]
-    ) -> list[tuple[str, ...]]:
-        """Execute a batch of namespace operations synchronously."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement batch_namespaces"
-        )
-
-    async def abatch_namespace(
-        self, ops: Iterable[ListNamespacesOp]
-    ) -> list[tuple[str, ...]]:
-        """Execute a batch of namespace operations asynchronously."""
-        return asyncio.get_event_loop().run_in_executor(
-            None, self.batch_namespaces, ops
-        )
 
     def get(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
         """Retrieve a single item.
@@ -261,7 +244,7 @@ class BaseStore(ABC):
             limit=limit,
             offset=offset,
         )
-        return self.batch_namespaces([op])[0]
+        return self.batch([op])[0]
 
     async def aget(self, namespace: tuple[str, ...], id: str) -> Optional[Item]:
         """Asynchronously retrieve a single item.
@@ -369,4 +352,4 @@ class BaseStore(ABC):
             limit=limit,
             offset=offset,
         )
-        return (await self.abatch_namespace([op]))[0]
+        return (await self.abatch([op]))[0]

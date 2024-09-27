@@ -72,23 +72,12 @@ class InMemoryStore(BaseStore):
                         last_accessed_at=datetime.now(timezone.utc),
                     )
                 results.append(None)
+            elif isinstance(op, ListNamespacesOp):
+                results.append(self._handle_list_namespaces(op))
         return results
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         return self.batch(ops)
-
-    def batch_namespaces(
-        self, ops: Iterable[ListNamespacesOp]
-    ) -> list[tuple[str, ...]]:
-        results = []
-        for op in ops:
-            results.append(self._handle_list_namespaces(op))
-        return results
-
-    async def abatch_namespace(
-        self, ops: Iterable[ListNamespacesOp]
-    ) -> list[tuple[str, ...]]:
-        return self.batch_namespaces(ops)
 
     def _handle_list_namespaces(self, op: ListNamespacesOp) -> list[tuple[str, ...]]:
         all_namespaces = list(
