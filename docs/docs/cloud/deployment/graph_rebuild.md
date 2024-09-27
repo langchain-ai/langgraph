@@ -58,7 +58,8 @@ To make the server aware of your graph, you need to specify a path to the variab
 To make your graph rebuild on each new run with custom configuration, you need to rewrite `openai_agent.py` to instead provide a _function_ that takes a config and returns a graph (or compiled graph) instance. Let's say we want to return our existing graph for user ID '1', and a tool-calling agent for other users. We can modify `openai_agent.py` as follows:
 
 ```python
-from typing import Annotated, TypedDict
+from typing import Annotated
+from typing_extensions import TypedDict
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, MessageGraph
 from langgraph.graph.state import StateGraph
