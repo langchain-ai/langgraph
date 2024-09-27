@@ -1,11 +1,18 @@
 # Prebuilt
 
-::: langgraph.prebuilt.create_react_agent
+::: langgraph.prebuilt.chat_agent_executor
+    options:
+      members:
+        - create_react_agent
 
-::: langgraph.prebuilt.ToolNode
+::: langgraph.prebuilt.tool_node
+    options:
+      members:
+        - ToolNode
+        - InjectedState
+        - tools_condition
 
-::: langgraph.prebuilt.tools_condition
-
-::: langgraph.prebuilt.ValidationNode
-
-::: langgraph.prebuilt.InjectedState
+::: langgraph.prebuilt.tool_validator
+    options:
+      members:
+        - ValidationNode
