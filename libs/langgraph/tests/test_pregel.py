@@ -11311,6 +11311,51 @@ def test_xray_issue(snapshot: SnapshotAssertion) -> None:
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
 
 
+def test_xray_bool(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    def node(name):
+        def _node(state: State):
+            return {"messages": [("human", f"entered {name} node")]}
+
+        return _node
+
+    grand_parent = StateGraph(State)
+
+    child = StateGraph(State)
+
+    child.add_node("c_one", node("c_one"))
+    child.add_node("c_two", node("c_two"))
+
+    child.add_edge("__start__", "c_one")
+    child.add_edge("c_two", "c_one")
+
+    child.add_conditional_edges(
+        "c_one", lambda x: str(randrange(0, 2)), {"0": "c_two", "1": "__end__"}
+    )
+
+    parent = StateGraph(State)
+    parent.add_node("p_one", node("p_one"))
+    parent.add_node("p_two", child.compile())
+    parent.add_edge("__start__", "p_one")
+    parent.add_edge("p_two", "p_one")
+    parent.add_conditional_edges(
+        "p_one", lambda x: str(randrange(0, 2)), {"0": "p_two", "1": "__end__"}
+    )
+
+    grand_parent.add_node("gp_one", node("gp_one"))
+    grand_parent.add_node("gp_two", parent.compile())
+    grand_parent.add_edge("__start__", "gp_one")
+    grand_parent.add_edge("gp_two", "gp_one")
+    grand_parent.add_conditional_edges(
+        "gp_one", lambda x: str(randrange(0, 2)), {"0": "gp_two", "1": "__end__"}
+    )
+
+    app = grand_parent.compile()
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+
+
 def test_subgraph_retries():
     class State(TypedDict):
         count: int
