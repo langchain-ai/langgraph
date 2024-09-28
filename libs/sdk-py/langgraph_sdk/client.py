@@ -1939,11 +1939,9 @@ class StoreClient:
                 'updated_at': '2024-07-30T12:00:00Z'
             }
         """
-        params = {}
-        if namespace is not None:
-            namespace_str = "/".join(namespace)
-            params["namespace"] = namespace_str
-        return await self.http.get(f"/store/items/{key}", params=params)
+        return await self.http.post(
+            "/store/items/get", json={"namespace": namespace, "key": key}
+        )
 
     async def delete_item(self, namespace: Optional[Sequence[str]], key: str) -> None:
         """Delete an item.
@@ -1958,15 +1956,13 @@ class StoreClient:
         Example Usage:
 
             await client.store.delete_item(
+                namespace=["documents", "user123"],
                 key="item456",
-                namespace=["documents", "user123"]
             )
         """
-        params = {}
-        if namespace is not None:
-            namespace_str = "/".join(namespace)
-            params["namespace"] = namespace_str
-        await self.http.delete(f"/store/items/{key}", params=params)
+        await self.http.post(
+            "/store/items/delete", json={"namespace": namespace, "key": key}
+        )
 
     async def search_items(
         self,
@@ -3887,11 +3883,9 @@ class SyncStoreClient:
                 'updated_at': '2024-07-30T12:00:00Z'
             }
         """
-        params = {}
-        if namespace is not None:
-            namespace_str = "/".join(namespace)
-            params["namespace"] = namespace_str
-        return self.http.get(f"/store/items/{key}", params=params)
+        return self.http.post(
+            "/store/items/get", json={"key": key, "namespace": namespace}
+        )
 
     def delete_item(self, namespace: Optional[Sequence[str]], key: str) -> None:
         """Delete an item.
@@ -3906,15 +3900,11 @@ class SyncStoreClient:
         Example Usage:
 
             client.store.delete_item(
+                namespace=["documents", "user123"],
                 key="item456",
-                namespace=["documents", "user123"]
             )
         """
-        params = {}
-        if namespace is not None:
-            namespace_str = "/".join(namespace)
-            params["namespace"] = namespace_str
-        self.http.delete(f"/store/items/{key}", params=params)
+        self.http.post("/store/items/delete", json={"key": key, "namespace": namespace})
 
     def search_items(
         self,
