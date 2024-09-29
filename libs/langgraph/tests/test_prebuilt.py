@@ -268,9 +268,9 @@ def test_runnable_state_modifier():
     assert response == expected_response
 
 
-def test_model_with_tools():
-    model = FakeToolCallingModel()
-    agent = create_react_agent(model, [])
+@pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
+def test_model_with_tools(tool_style: str):
+    model = FakeToolCallingModel(tool_style=tool_style)
 
     @dec_tool
     def tool1(some_val: int) -> str:
