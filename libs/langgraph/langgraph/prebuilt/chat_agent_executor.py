@@ -136,7 +136,6 @@ def _clear_unanswered_tool_calls(
 
     updated_messages: list[BaseMessage] = []
     for message in messages:
-        updated_tool_calls = []
         if isinstance(message, AIMessage):
             updated_tool_calls = [
                 tool_call
