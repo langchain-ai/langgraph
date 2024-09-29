@@ -1,4 +1,15 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union
+from itertools import filterfalse
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -123,7 +134,7 @@ def _clear_unanswered_tool_calls(
         message.tool_call_id for message in messages if isinstance(message, ToolMessage)
     }
 
-    updated_messages = []
+    updated_messages: list[BaseMessage] = []
     for message in messages:
         updated_tool_calls = []
         if isinstance(message, AIMessage):
@@ -132,10 +143,33 @@ def _clear_unanswered_tool_calls(
                 for tool_call in message.tool_calls
                 if tool_call["id"] in answered_tool_call_ids
             ]
+
+            # update content blocks (e.g. Anthropic)
+            if isinstance(message.content, list):
+
+                def is_tool_content_block(content_block: str | dict[str, Any]) -> bool:
+                    if not isinstance(content_block, dict):
+                        return False
+                    return content_block.get("type") == "tool_use"
+
+                tool_content_blocks = [
+                    content_block
+                    for content_block in filter(is_tool_content_block, message.content)
+                    if cast(dict[str, Any], content_block)["id"]
+                    in answered_tool_call_ids
+                ]
+                updated_content: list[str | dict[str, Any]] | str = (
+                    list(filterfalse(is_tool_content_block, message.content))
+                    + tool_content_blocks
+                )
+            else:
+                updated_content = message.content
+
             if updated_tool_calls != message.tool_calls:
                 updated_message = message.model_copy()
                 updated_message.tool_calls = updated_tool_calls
                 updated_message.additional_kwargs.pop("tool_calls", None)
+                updated_message.content = updated_content
                 updated_messages.append(updated_message)
             else:
                 updated_messages.append(message)
