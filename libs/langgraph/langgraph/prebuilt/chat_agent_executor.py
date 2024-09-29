@@ -2,7 +2,12 @@ from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
-from langchain_core.runnables import Runnable, RunnableBinding, RunnableConfig, RunnableLambda
+from langchain_core.runnables import (
+    Runnable,
+    RunnableBinding,
+    RunnableConfig,
+    RunnableLambda,
+)
 from langchain_core.tools import BaseTool
 from typing_extensions import Annotated, TypedDict
 
@@ -115,7 +120,7 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
-def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+def _should_bind_tools(model: BaseChatModel, tools: Sequence[BaseTool]) -> bool:
     if not isinstance(model, RunnableBinding):
         return False
 
@@ -446,8 +451,9 @@ def create_react_agent(
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
-        tool_classes = tools
-        tool_node = ToolNode(tool_classes)
+        tool_node = ToolNode(tools)
+        # get the tool functions wrapped in a tool class from the ToolNode
+        tool_classes = list(tool_node.tools_by_name.values())
 
     if _should_bind_tools(model, tool_classes):
         model = model.bind_tools(tool_classes)
