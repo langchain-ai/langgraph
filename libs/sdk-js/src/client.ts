@@ -221,11 +221,12 @@ export class AssistantsClient extends BaseClient {
   /**
    * Get the JSON representation of the graph assigned to a runnable
    * @param assistantId The ID of the assistant.
+   * @param options.xray Whether to include subgraphs in the serialized graph representation.
    * @returns Serialized graph
    */
   async getGraph(
     assistantId: string,
-    options?: { xray?: boolean },
+    options?: { xray?: boolean | number },
   ): Promise<AssistantGraph> {
     return this.fetch<AssistantGraph>(`/assistants/${assistantId}/graph`, {
       params: { xray: options?.xray },

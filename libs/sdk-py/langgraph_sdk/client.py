@@ -305,7 +305,7 @@ class AssistantsClient:
         return await self.http.get(f"/assistants/{assistant_id}")
 
     async def get_graph(
-        self, assistant_id: str, *, xray: bool = False
+        self, assistant_id: str, *, xray: Union[int, bool] = False
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -2074,7 +2074,7 @@ class SyncAssistantsClient:
         return self.http.get(f"/assistants/{assistant_id}")
 
     def get_graph(
-        self, assistant_id: str, *, xray: bool = False
+        self, assistant_id: str, *, xray: Union[int, bool] = False
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
