@@ -17,8 +17,26 @@ NOTEBOOKS_NO_CASSETTES = (
 )
 
 NOTEBOOKS_NO_EXECUTION = [
-    "docs/docs/tutorials/customer-support/customer-support.ipynb",
+    # this uses a user provided project name for langsmith
+    "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb",
+    # this uses langsmith datasets
+    "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb",
+    # this uses browser APIs
+    "docs/docs/tutorials/web-navigation/web_voyager.ipynb",
+    # these RAG guides use an ollama model
+    "docs/docs/tutorials/rag/langgraph_adaptive_rag_local.ipynb",
+    "docs/docs/tutorials/rag/langgraph_crag_local.ipynb",
+    "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb",
+    # this loads a massive dataset from gcp
     "docs/docs/tutorials/usaco/usaco.ipynb",
+    # TODO: need to update these notebooks to make sure they are runnable in CI
+    "docs/docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
+    "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
+    "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",  # taking a very long time to run
+    "docs/docs/tutorials/customer-support/customer-support.ipynb",  # user input - update
+    "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
+    "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
+    "docs/docs/how-tos/map-reduce.ipynb"  # flakiness from structured output, only when running with VCR
 ]
 
 
@@ -75,6 +93,10 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
+        # skip if has WebBaseLoader to avoid caching web pages
+        if "WebBaseLoader" in cell.source:
+            continue
+
         cell_id = cell.get("id", idx)
         cassette_name = f"{cassette_prefix}_{cell_id}.msgpack.zlib"
         cell.source = f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='advanced_compressed'):\n" + "\n".join(
@@ -83,13 +105,12 @@ def add_vcr_to_notebook(
 
     # Add import statement
     vcr_import_lines = [
+        "import nest_asyncio",
+        "nest_asyncio.apply()",
         "import vcr",
         "import msgpack",
-        "import nest_asyncio",
         "import base64",
         "import zlib",
-        "import re",
-        "",
         "custom_vcr = vcr.VCR()",
         "",
         "def compress_data(data, compression_level=9):",
@@ -98,49 +119,19 @@ def add_vcr_to_notebook(
         "    return base64.b64encode(compressed).decode('utf-8')",
         "",
         "def decompress_data(compressed_string):",
-        "    try:",
-        "        decoded = base64.b64decode(compressed_string)",
-        "        decompressed = zlib.decompress(decoded)",
-        "        return msgpack.unpackb(decompressed, raw=False)",
-        "    except (ValueError, zlib.error, msgpack.exceptions.ExtraData, msgpack.exceptions.UnpackValueError):",
-        "        return {\"requests\": [], \"responses\": []}",
-        "",
-        "def filter_cassette_data(cassette_dict):",
-        "    for interaction in cassette_dict['interactions']:",
-        "        if len(interaction['response']['body']['string']) > 1000:",
-        "            interaction['response']['body']['string'] = interaction['response']['body']['string'][:1000] + '... (truncated)'",
-        "        for req_or_res in [interaction['request'], interaction['response']]:",
-        "            headers_to_remove = ['date', 'server', 'content-length']",
-        "            for header in headers_to_remove:",
-        "                req_or_res['headers'].pop(header, None)",
-        "    return cassette_dict",
+        "    decoded = base64.b64decode(compressed_string)",
+        "    decompressed = zlib.decompress(decoded)",
+        "    return msgpack.unpackb(decompressed, raw=False)",
         "",
         "class AdvancedCompressedSerializer:",
         "    def serialize(self, cassette_dict):",
-        "        filtered_dict = filter_cassette_data(cassette_dict)",
-        "        return compress_data(filtered_dict)",
+        "        return compress_data(cassette_dict)",
         "",
         "    def deserialize(self, cassette_string):",
         "        return decompress_data(cassette_string)",
         "",
         "custom_vcr.register_serializer('advanced_compressed', AdvancedCompressedSerializer())",
-        "",
-        "def custom_matcher(r1, r2):",
-        "    return (r1.method == r2.method and",
-        "            r1.url == r2.url and",
-        "            normalize_body(r1.body) == normalize_body(r2.body))",
-        "",
-        "def normalize_body(body):",
-        "    return re.sub(r'\\s+', '', body.lower()) if body else ''",
-        "",
-        "nest_asyncio.apply()",
-        "",
         "custom_vcr.serializer = 'advanced_compressed'",
-        "custom_vcr.record_mode = 'new_episodes'",
-        "custom_vcr.match_on = ['custom']",
-        "custom_vcr.register_matcher('custom', custom_matcher)",
-        "custom_vcr.filter_headers = ['authorization', 'user-agent', 'date', 'server']",
-        "custom_vcr.filter_post_data_parameters = ['password', 'token']",
     ]
     import_cell = nbformat.v4.new_code_cell(source="\n".join(vcr_import_lines))
     import_cell.pop("id", None)

@@ -27,7 +27,8 @@ Let's see what checkpoints are saved when a simple graph is invoked as follows:
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from typing import TypedDict, Annotated
+from typing import Annotated
+from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):
@@ -180,7 +181,8 @@ These are the values that will be used to update the state. Note that this updat
 Let's assume you have defined the state of your graph with the following schema (see full example above):
 
 ```python
-from typing import TypedDict, Annotated
+from typing import Annotated
+from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):
@@ -216,15 +218,15 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ## Checkpointer libraries
 
-Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][basecheckpointsaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
+Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
 
-* `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][basecheckpointsaver]) and serialization/deserialization interface ([SerializerProtocol][serializerprotocol]). Includes in-memory checkpointer implementation ([MemorySaver][memorysaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
-* `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][sqlitesaver] / [AsyncSqliteSaver][asyncsqlitesaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
-* `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][postgressaver] / [AsyncPostgresSaver][asyncpostgressaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
+* `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([MemorySaver][langgraph.checkpoint.memory.MemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
+* `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][langgraph.checkpoint.sqlite.SqliteSaver] / [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
+* `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
 
 ### Checkpointer interface
 
-Each checkpointer conforms to [BaseCheckpointSaver][basecheckpointsaver] interface and implements the following methods:
+Each checkpointer conforms to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface and implements the following methods:
 
 * `.put` - Store a checkpoint with its configuration and metadata.  
 * `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. [pending writes](#pending-writes)).  
@@ -239,7 +241,7 @@ If the checkpointer is used with asynchronous graph execution (i.e. executing th
 ### Serializer
 
 When checkpointers save the graph state, they need to serialize the channel values in the state. This is done using serializer objects. 
-`langgraph_checkpoint` defines [protocol][serializerprotocol] for implementing serializers provides a default implementation ([JsonPlusSerializer][jsonplusserializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+`langgraph_checkpoint` defines [protocol][langgraph.checkpoint.serde.base.SerializerProtocol] for implementing serializers provides a default implementation ([JsonPlusSerializer][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
 
 ## Capabilities
 

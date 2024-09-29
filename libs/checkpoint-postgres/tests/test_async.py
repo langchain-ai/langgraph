@@ -101,3 +101,13 @@ class TestAsyncPostgresSaver:
             } == {"", "inner"}
 
             # TODO: test before and limit params
+
+    async def test_null_chars(self) -> None:
+        async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+            config = await saver.aput(
+                self.config_1, self.chkpnt_1, {"my_key": "\x00abc"}, {}
+            )
+            assert (await saver.aget_tuple(config)).metadata["my_key"] == "abc"
+            assert [c async for c in saver.alist(None, filter={"my_key": "abc"})][
+                0
+            ].metadata["my_key"] == "abc"

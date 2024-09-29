@@ -1,19 +1,10 @@
-from typing import (
-    Annotated,
-    Callable,
-    Literal,
-    Optional,
-    Sequence,
-    Type,
-    TypedDict,
-    TypeVar,
-    Union,
-)
+from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
+from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
 from langgraph.graph import StateGraph
@@ -199,7 +190,7 @@ def create_react_agent(
     ```
 
     The "agent" node calls the language model with the messages list (after applying the messages modifier).
-    If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][toolnode].
+    If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
     The process repeats until no more `tool_calls` are present in the response.

@@ -233,6 +233,17 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
                 ),
             ),
         )
+    elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
+        return msgpack.ExtType(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    obj.get_secret_value(),
+                ),
+            ),
+        )
     elif hasattr(obj, "dict") and callable(obj.dict):  # pydantic v1
         return msgpack.ExtType(
             EXT_PYDANTIC_V1,
