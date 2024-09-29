@@ -173,11 +173,27 @@ class BaseStore(ABC):
 
     @abstractmethod
     def batch(self, ops: Iterable[Op]) -> list[Result]:
-        """Execute a batch of operations synchronously."""
+        """Execute multiple operations synchronously in a single batch.
+
+        Args:
+            ops: An iterable of operations to execute.
+
+        Returns:
+            A list of results, where each result corresponds to an operation in the input.
+            The order of results matches the order of input operations.
+        """
 
     @abstractmethod
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        """Execute a batch of operations asynchronously."""
+        """Execute multiple operations asynchronously in a single batch.
+
+        Args:
+            ops: An iterable of operations to execute.
+
+        Returns:
+            A list of results, where each result corresponds to an operation in the input.
+            The order of results matches the order of input operations.
+        """
 
     def get(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
         """Retrieve a single item.
