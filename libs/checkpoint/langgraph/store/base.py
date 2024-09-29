@@ -6,7 +6,7 @@ scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, Union
+from typing import Any, Iterable, Literal, NamedTuple, Optional, Union, cast
 
 
 class Item:
@@ -35,9 +35,19 @@ class Item:
     ):
         self.value = value
         self.key = key
+        # The casting from json-like types is for if this object is
+        # deserialized.
         self.namespace = tuple(namespace)
-        self.created_at = created_at
-        self.updated_at = updated_at
+        self.created_at = (
+            datetime.fromisoformat(cast(str, created_at))
+            if isinstance(created_at, str)
+            else created_at
+        )
+        self.updated_at = (
+            datetime.fromisoformat(cast(str, created_at))
+            if isinstance(updated_at, str)
+            else updated_at
+        )
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Item):
@@ -52,6 +62,15 @@ class Item:
 
     def __hash__(self) -> int:
         return hash((self.namespace, self.key))
+
+    def dict(self) -> dict:
+        return {
+            "value": self.value,
+            "key": self.key,
+            "namespace": list(self.namespace),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
 
 
 class GetOp(NamedTuple):

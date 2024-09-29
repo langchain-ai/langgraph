@@ -1884,7 +1884,7 @@ class StoreClient:
         self.http = http
 
     async def put_item(
-        self, namespace: Sequence[str], key: str, value: dict[str, Any]
+        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
     ) -> None:
         """Store or update an item.
 
@@ -1899,7 +1899,7 @@ class StoreClient:
         Example Usage:
 
             await client.store.put_item(
-                namespace=["documents", "user123"],
+                ["documents", "user123"],
                 key="item456",
                 value={"title": "My Document", "content": "Hello World"}
             )
@@ -1911,7 +1911,7 @@ class StoreClient:
         }
         await self.http.post("/store/items", json=payload)
 
-    async def get_item(self, namespace: Optional[Sequence[str]], key: str) -> Item:
+    async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
         """Retrieve a single item.
 
         Args:
@@ -1924,8 +1924,8 @@ class StoreClient:
         Example Usage:
 
             item = await client.store.get_item(
+                ["documents", "user123"],
                 key="item456",
-                namespace=["documents", "user123"]
             )
             print(item)
 
@@ -1943,7 +1943,7 @@ class StoreClient:
             "/store/items/get", json={"namespace": namespace, "key": key}
         )
 
-    async def delete_item(self, namespace: Optional[Sequence[str]], key: str) -> None:
+    async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
 
         Args:
@@ -1956,7 +1956,7 @@ class StoreClient:
         Example Usage:
 
             await client.store.delete_item(
-                namespace=["documents", "user123"],
+                ["documents", "user123"],
                 key="item456",
             )
         """
@@ -1966,7 +1966,8 @@ class StoreClient:
 
     async def search_items(
         self,
-        namespace_prefix: List[str],
+        namespace_prefix: Sequence[str],
+        /,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
@@ -1985,7 +1986,7 @@ class StoreClient:
         Example Usage:
 
             items = await client.store.search_items(
-                namespace_prefix=["documents"],
+                ["documents"],
                 filter={"author": "John Doe"},
                 limit=5,
                 offset=0
@@ -2016,7 +2017,8 @@ class StoreClient:
             "limit": limit,
             "offset": offset,
         }
-        return await self.http.post("/store/items/search", json=payload)
+
+        return await self.http.post("/store/items/search", json=_provided_vals(payload))
 
     async def list_namespaces(
         self,
@@ -2063,7 +2065,7 @@ class StoreClient:
             "limit": limit,
             "offset": offset,
         }
-        return await self.http.post("/store/namespaces", json=payload)
+        return await self.http.post("/store/namespaces", json=_provided_vals(payload))
 
 
 def get_sync_client(
@@ -3828,7 +3830,7 @@ class SyncStoreClient:
         self.http = http
 
     def put_item(
-        self, namespace: Sequence[str], key: str, value: dict[str, Any]
+        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
     ) -> None:
         """Store or update an item.
 
@@ -3843,7 +3845,7 @@ class SyncStoreClient:
         Example Usage:
 
             client.store.put_item(
-                namespace=["documents", "user123"],
+                ["documents", "user123"],
                 key="item456",
                 value={"title": "My Document", "content": "Hello World"}
             )
@@ -3855,7 +3857,7 @@ class SyncStoreClient:
         }
         self.http.post("/store/items", json=payload)
 
-    def get_item(self, namespace: Optional[Sequence[str]], key: str) -> Item:
+    def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
         """Retrieve a single item.
 
         Args:
@@ -3868,8 +3870,8 @@ class SyncStoreClient:
         Example Usage:
 
             item = client.store.get_item(
+                ["documents", "user123"],
                 key="item456",
-                namespace=["documents", "user123"]
             )
             print(item)
 
@@ -3887,7 +3889,7 @@ class SyncStoreClient:
             "/store/items/get", json={"key": key, "namespace": namespace}
         )
 
-    def delete_item(self, namespace: Optional[Sequence[str]], key: str) -> None:
+    def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
 
         Args:
@@ -3900,7 +3902,7 @@ class SyncStoreClient:
         Example Usage:
 
             client.store.delete_item(
-                namespace=["documents", "user123"],
+                ["documents", "user123"],
                 key="item456",
             )
         """
@@ -3908,7 +3910,8 @@ class SyncStoreClient:
 
     def search_items(
         self,
-        namespace_prefix: List[str],
+        namespace_prefix: Sequence[str],
+        /,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
@@ -3927,7 +3930,7 @@ class SyncStoreClient:
         Example Usage:
 
             items = client.store.search_items(
-                namespace_prefix=["documents"],
+                ["documents"],
                 filter={"author": "John Doe"},
                 limit=5,
                 offset=0
@@ -3958,7 +3961,7 @@ class SyncStoreClient:
             "limit": limit,
             "offset": offset,
         }
-        return self.http.post("/store/items/search", json=payload)
+        return self.http.post("/store/items/search", json=_provided_vals(payload))
 
     def list_namespaces(
         self,
@@ -4005,4 +4008,8 @@ class SyncStoreClient:
             "limit": limit,
             "offset": offset,
         }
-        return self.http.post("/store/namespaces", json=payload)
+        return self.http.post("/store/namespaces", json=_provided_vals(payload))
+
+
+def _provided_vals(d: dict):
+    return {k: v for k, v in d.items() if v is not None}
