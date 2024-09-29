@@ -39,7 +39,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         (demos and small projects) and does not
         scale to multiple threads.
         For a similar sqlite saver with `async` support,
-        consider using [AsyncSqliteSaver][asyncsqlitesaver].
+        consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
@@ -461,7 +461,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use get_tuple() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
+            Use get_tuple() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -477,7 +477,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use list() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
+            Use list() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
@@ -493,7 +493,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use put() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
+            Use put() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 

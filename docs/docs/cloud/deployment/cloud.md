@@ -19,6 +19,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
         1. Specify a name for the deployment.
         1. Specify the desired `Git Branch`. A deployment is linked to a branch. When a new revision is created, code for the linked branch will be deployed. The branch can be updated later in the [Deployment Settings](#deployment-settings).
         1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the repository, simply specify `langgraph.json`.
+        1. Check/uncheck checkbox to `Automatically update deployment on push to branch`. If checked, the deployment will automatically be updated when changes are pushed to the specified `Git Branch`. This setting can be enabled/disabled later in the [Deployment Settings](#deployment-settings).
     1. Select the desired `Deployment Type`.
         1. `Development` deployments are meant for non-production use cases and are provisioned with minimal resources.
         1. `Production` deployments can serve up to 500 requests/second and are provisioned with highly available storage with automatic backups.
@@ -88,3 +89,6 @@ Starting from the `Deployment` view...
 
 1. In the top-right corner, select the gear icon (`Deployment Settings`).
 1. Update the `Git Branch` to the desired branch.
+1. Check/uncheck checkbox to `Automatically update deployment on push to branch`.
+    1. Branch creation/deletion and tag creation/deletion events will not trigger an update. Only pushes to an existing branch will trigger an update.
+    1. Pushes in quick succession to a branch will not trigger subsequent updates. In the future, this functionality may be changed/improved.

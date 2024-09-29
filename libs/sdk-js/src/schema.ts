@@ -75,6 +75,8 @@ export interface GraphSchema {
   config_schema?: JSONSchema7;
 }
 
+export type Subgraphs = Record<string, GraphSchema>;
+
 export type Metadata = Optional<Record<string, unknown>>;
 
 export interface AssistantBase {

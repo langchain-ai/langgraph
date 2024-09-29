@@ -28,14 +28,13 @@ jobs:
         run: |
           poetry install --with test
           poetry run pip install jupyter
-          if [ "${{ matrix.lib-version }}" = "latest" ]; then
-            poetry add chromadb pandas langchain_nomic
-            poetry remove langchain-openai langchain-anthropic langchain-community
-            poetry add langchain-openai@latest langchain-anthropic@latest langchain-community@latest
-          fi
 
       - name: Start services
         run: make start-services
+
+      - name: Pre-download tiktoken files
+        run: |
+          poetry run python docs/_scripts/download_tiktoken.py
 
       - name: Prepare notebooks
         run: |
@@ -54,6 +53,8 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           NOMIC_API_KEY: ${{ secrets.NOMIC_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
         run: |
           ./docs/_scripts/execute_notebooks.sh
 

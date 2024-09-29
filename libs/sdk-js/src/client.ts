@@ -10,6 +10,8 @@ import {
   ThreadState,
   Cron,
   AssistantVersion,
+  Subgraphs,
+  Checkpoint,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import {
@@ -221,8 +223,13 @@ export class AssistantsClient extends BaseClient {
    * @param assistantId The ID of the assistant.
    * @returns Serialized graph
    */
-  async getGraph(assistantId: string): Promise<AssistantGraph> {
-    return this.fetch<AssistantGraph>(`/assistants/${assistantId}/graph`);
+  async getGraph(
+    assistantId: string,
+    options?: { xray?: boolean },
+  ): Promise<AssistantGraph> {
+    return this.fetch<AssistantGraph>(`/assistants/${assistantId}/graph`, {
+      params: { xray: options?.xray },
+    });
   }
 
   /**
@@ -232,6 +239,31 @@ export class AssistantsClient extends BaseClient {
    */
   async getSchemas(assistantId: string): Promise<GraphSchema> {
     return this.fetch<GraphSchema>(`/assistants/${assistantId}/schemas`);
+  }
+
+  /**
+   * Get the schemas of an assistant by ID.
+   *
+   * @param assistantId The ID of the assistant to get the schema of.
+   * @param options Additional options for getting subgraphs, such as namespace or recursion extraction.
+   * @returns The subgraphs of the assistant.
+   */
+  async getSubgraphs(
+    assistantId: string,
+    options?: {
+      namespace?: string;
+      recurse?: boolean;
+    },
+  ): Promise<Subgraphs> {
+    if (options?.namespace) {
+      return this.fetch<Subgraphs>(
+        `/assistants/${assistantId}/subgraphs/${options.namespace}`,
+        { params: { recurse: options?.recurse } },
+      );
+    }
+    return this.fetch<Subgraphs>(`/assistants/${assistantId}/subgraphs`, {
+      params: { recurse: options?.recurse },
+    });
   }
 
   /**
@@ -479,13 +511,30 @@ export class ThreadsClient extends BaseClient {
    */
   async getState<ValuesType = DefaultValues>(
     threadId: string,
-    checkpointId?: string,
+    checkpoint?: Checkpoint | string,
+    options?: { subgraphs?: boolean },
   ): Promise<ThreadState<ValuesType>> {
-    return this.fetch<ThreadState<ValuesType>>(
-      checkpointId != null
-        ? `/threads/${threadId}/state/${checkpointId}`
-        : `/threads/${threadId}/state`,
-    );
+    if (checkpoint != null) {
+      if (typeof checkpoint !== "string") {
+        return this.fetch<ThreadState<ValuesType>>(
+          `/threads/${threadId}/state/checkpoint`,
+          {
+            method: "POST",
+            json: { checkpoint, subgraphs: options?.subgraphs },
+          },
+        );
+      }
+
+      // deprecated
+      return this.fetch<ThreadState<ValuesType>>(
+        `/threads/${threadId}/state/${checkpoint}`,
+        { params: { subgraphs: options?.subgraphs } },
+      );
+    }
+
+    return this.fetch<ThreadState<ValuesType>>(`/threads/${threadId}/state`, {
+      params: { subgraphs: options?.subgraphs },
+    });
   }
 
   /**
@@ -496,7 +545,12 @@ export class ThreadsClient extends BaseClient {
    */
   async updateState<ValuesType = DefaultValues>(
     threadId: string,
-    options: { values: ValuesType; checkpointId?: string; asNode?: string },
+    options: {
+      values: ValuesType;
+      checkpoint?: Checkpoint;
+      checkpointId?: string;
+      asNode?: string;
+    },
   ): Promise<Pick<Config, "configurable">> {
     return this.fetch<Pick<Config, "configurable">>(
       `/threads/${threadId}/state`,
@@ -505,6 +559,7 @@ export class ThreadsClient extends BaseClient {
         json: {
           values: options.values,
           checkpoint_id: options.checkpointId,
+          checkpoint: options.checkpoint,
           as_node: options?.asNode,
         },
       },
@@ -608,6 +663,7 @@ export class RunsClient extends BaseClient {
       config: payload?.config,
       metadata: payload?.metadata,
       stream_mode: payload?.streamMode,
+      stream_subgraphs: payload?.streamSubgraphs,
       feedback_keys: payload?.feedbackKeys,
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
