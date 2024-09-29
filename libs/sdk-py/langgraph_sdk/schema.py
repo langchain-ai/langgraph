@@ -200,10 +200,13 @@ class RunCreate(TypedDict):
 class Item(TypedDict):
     namespace: list[str]
     """The namespace of the item."""
-    id: str
-    """The unique identifier of the item within its namespace."""
-    value: Any
-    """The value stored in the item."""
+    key: str
+    """The unique identifier of the item within its namespace.
+    
+    In general, keys are not globally unique.
+    """
+    value: dict[str, Any]
+    """The value stored in the item. This is the document itself."""
     created_at: datetime
     """The timestamp when the item was created."""
     updated_at: datetime
