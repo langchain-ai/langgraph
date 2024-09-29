@@ -1,7 +1,10 @@
 # How to kick off background runs
+ 
 
 This guide covers how to kick off background runs for your agent.
 This can be useful for long running jobs.
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -52,6 +55,8 @@ Output:
         'values': None
     }
 
+## Check runs on thread
+
 If we list the current runs on this thread, we will see that it's empty:
 
 === "Python"
@@ -79,19 +84,21 @@ Output:
 
     []
 
+## Start runs on thread
+
 Now let's kick off a run:
 
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]}
+    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     run = await client.runs.create(thread["thread_id"], assistant_id, input=input)
     ```
 
 === "Javascript"
 
     ```js
-    let input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]};
+    let input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]};
     let run = await client.runs.create(thread["thread_id"], assistantID, { input });
     ```
 
@@ -141,7 +148,7 @@ Output:
                 "input": {
                     "messages": [
                         {
-                            "role": "human",
+                            "role": "user",
                             "content": "what's the weather in sf"
                         }
                     ]
@@ -212,7 +219,7 @@ Output:
             "input": {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": "what's the weather in sf"
                     }
                 ]

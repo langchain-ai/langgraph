@@ -77,7 +77,7 @@ Let's look at an example when no review is required (because no tools are called
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "hi!" }] };
+    const input = { "messages": [{ "role": "user", "content": "hi!" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

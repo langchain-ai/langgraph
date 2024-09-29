@@ -27,14 +27,13 @@ jobs:
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
         python-version:
-          - "3.9"
-          - "3.11"
+          - "3.12"
     name: "lint #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Get changed files
         id: changed-files
-        uses: Ana06/get-changed-files@v2.2.0
+        uses: Ana06/get-changed-files@v2.3.0
         with:
           filter: "${{ inputs.working-directory }}/**"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
@@ -44,7 +43,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
           working-directory: ${{ inputs.working-directory }}
-          cache-key: lint-with-extras
+          cache-key: lint-${{ inputs.working-directory }}
 
       - name: Check Poetry File
         if: steps.changed-files.outputs.all

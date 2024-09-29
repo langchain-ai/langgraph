@@ -1,7 +1,7 @@
+import random
 import sqlite3
 import threading
 from contextlib import closing, contextmanager
-from hashlib import md5
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
@@ -13,7 +13,6 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    EmptyChannelError,
     SerializerProtocol,
     get_checkpoint_id,
 )
@@ -32,7 +31,7 @@ _AIO_ERROR_MSG = (
 )
 
 
-class SqliteSaver(BaseCheckpointSaver):
+class SqliteSaver(BaseCheckpointSaver[str]):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
     Note:
@@ -40,7 +39,7 @@ class SqliteSaver(BaseCheckpointSaver):
         (demos and small projects) and does not
         scale to multiple threads.
         For a similar sqlite saver with `async` support,
-        consider using [AsyncSqliteSaver][asyncsqlitesaver].
+        consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
@@ -435,9 +434,14 @@ class SqliteSaver(BaseCheckpointSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
+        query = (
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            if all(w[0] in WRITES_IDX_MAP for w in writes)
+            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
         with self.cursor() as cur:
             cur.executemany(
-                "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                query,
                 [
                     (
                         str(config["configurable"]["thread_id"]),
@@ -457,7 +461,7 @@ class SqliteSaver(BaseCheckpointSaver):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use get_tuple() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
+            Use get_tuple() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -473,7 +477,7 @@ class SqliteSaver(BaseCheckpointSaver):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use list() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
+            Use list() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
@@ -483,12 +487,13 @@ class SqliteSaver(BaseCheckpointSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to the database asynchronously.
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use put() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
+            Use put() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -506,11 +511,10 @@ class SqliteSaver(BaseCheckpointSaver):
         """
         if current is None:
             current_v = 0
+        elif isinstance(current, int):
+            current_v = current
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        try:
-            next_h = md5(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"

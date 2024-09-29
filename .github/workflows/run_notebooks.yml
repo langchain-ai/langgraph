@@ -1,0 +1,62 @@
+name: Run notebooks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lib-version:
+          - "development"
+          - "latest"
+
+    name: "test (langgraph: ${{ matrix.lib-version }})"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python + Poetry
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: 3.11
+          poetry-version: 1.7.1
+          cache-key: test-langgraph-notebooks
+
+      - name: Install dependencies
+        run: |
+          poetry install --with test
+          poetry run pip install jupyter
+
+      - name: Start services
+        run: make start-services
+
+      - name: Pre-download tiktoken files
+        run: |
+          poetry run python docs/_scripts/download_tiktoken.py
+
+      - name: Prepare notebooks
+        run: |
+          if [ "${{ matrix.lib-version }}" = "development" ]; then
+            poetry run python docs/_scripts/prepare_notebooks_for_ci.py --comment-install-cells
+          else
+            poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+          fi
+
+      - name: Run notebooks
+        env:
+          # these won't actually be used because of the VCR cassettes
+          # but need to set them to avoid triggering getpass()
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          NOMIC_API_KEY: ${{ secrets.NOMIC_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+        run: |
+          ./docs/_scripts/execute_notebooks.sh
+
+      - name: Stop services
+        run: make stop-services

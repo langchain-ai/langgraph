@@ -36,9 +36,9 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 
 ```
-langgraph>=0.2.7,<0.3.0
-langgraph-checkpoint>=1.0.4
-langchain-core>=0.2.27,<0.3.0
+langgraph>=0.2.18,<0.3.0
+langgraph-checkpoint>=1.0.9
+langchain-core>=0.2.38,<0.4.0
 langsmith>=0.1.63
 orjson>=3.9.7
 httpx>=0.25.0
@@ -95,13 +95,14 @@ my-app/
 
 ## Define Graphs
 
-Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledGraph][compiledgraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
+Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledGraph][langgraph.graph.graph.CompiledGraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
 
 Example `agent.py` file, which shows how to import from other modules you define (code for the modules is not shown here, please see [this repo](https://github.com/langchain-ai/langgraph-example) to see their implementation):
 
 ```python
 # my_agent/agent.py
-from typing import TypedDict, Literal
+from typing import Literal
+from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, END, START
 from my_agent.utils.nodes import call_model, should_continue, tool_node # import nodes

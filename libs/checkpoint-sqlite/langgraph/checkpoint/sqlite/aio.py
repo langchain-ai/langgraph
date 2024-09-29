@@ -1,11 +1,12 @@
 import asyncio
+import random
 from contextlib import asynccontextmanager
 from typing import (
     Any,
     AsyncIterator,
+    Callable,
     Dict,
     Iterator,
-    List,
     Optional,
     Sequence,
     Tuple,
@@ -26,12 +27,13 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
-T = TypeVar("T", bound=callable)
+T = TypeVar("T", bound=Callable)
 
 
-class AsyncSqliteSaver(BaseCheckpointSaver):
+class AsyncSqliteSaver(BaseCheckpointSaver[str]):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
     This class provides an asynchronous interface for saving and retrieving checkpoints
@@ -151,6 +153,18 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
+        try:
+            # check if we are in the main thread, only bg threads can block
+            # we don't check in other methods to avoid the overhead
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface."
+                    "For example, use `await checkpointer.aget_tuple(...)` or `await "
+                    "graph.ainvoke(...)`."
+                )
+        except RuntimeError:
+            pass
         return asyncio.run_coroutine_threadsafe(
             self.aget_tuple(config), self.loop
         ).result()
@@ -181,7 +195,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_), self.loop
+                    anext(aiter_),
+                    self.loop,
                 ).result()
             except StopAsyncIteration:
                 break
@@ -212,7 +227,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         ).result()
 
     def put_writes(
-        self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+        self, config: RunnableConfig, writes: Sequence[Tuple[str, Any]], task_id: str
     ) -> None:
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id), self.loop
@@ -476,10 +491,15 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
+        query = (
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            if all(w[0] in WRITES_IDX_MAP for w in writes)
+            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
         await self.setup()
         async with self.lock, self.conn.cursor() as cur:
             await cur.executemany(
-                "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                query,
                 [
                     (
                         str(config["configurable"]["thread_id"]),
@@ -493,3 +513,25 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                     for idx, (channel, value) in enumerate(writes)
                 ],
             )
+
+    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+        """Generate the next version ID for a channel.
+
+        This method creates a new version identifier for a channel based on its current version.
+
+        Args:
+            current (Optional[str]): The current version identifier of the channel.
+            channel (BaseChannel): The channel being versioned.
+
+        Returns:
+            str: The next version identifier, which is guaranteed to be monotonically increasing.
+        """
+        if current is None:
+            current_v = 0
+        elif isinstance(current, int):
+            current_v = current
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"

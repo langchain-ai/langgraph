@@ -19,7 +19,10 @@ from tests.memory_assert import MemorySaverAssertImmutable
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 # TODO: fix this once core is released
-SHOULD_CHECK_SNAPSHOTS = version.parse(core_version) >= version.parse("0.3.0.dev0")
+IS_LANGCHAIN_CORE_030_OR_GREATER = version.parse(core_version) >= version.parse(
+    "0.3.0.dev0"
+)
+SHOULD_CHECK_SNAPSHOTS = IS_LANGCHAIN_CORE_030_OR_GREATER
 
 
 @pytest.fixture

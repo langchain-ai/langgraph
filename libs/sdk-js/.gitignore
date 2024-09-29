@@ -1,4 +1,6 @@
 /docs
+/*.tgz
+/*.tar
 ## GENERATED create-entrypoints.js
 /client.cjs
 /client.js

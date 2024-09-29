@@ -64,7 +64,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "Please search the weather in SF" }] }
+    const input = { "messages": [{ "role": "user", "content": "Please search the weather in SF" }] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

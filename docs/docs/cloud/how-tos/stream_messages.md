@@ -7,7 +7,8 @@ E.g., the state should look something like:
 === "Python"
 
     ```python
-    from typing import TypedDict, Annotated
+    from typing import Annotated
+    from typing_extensions import TypedDict
     from langgraph.graph import add_messages
     from langchain_core.messages import AnyMessage
 
@@ -37,6 +38,8 @@ With `stream_mode="messages"` two things will be streamed back:
 - It outputs messages returned from nodes (to allow for nodes to return `ToolMessages` and the like)
 
 Read more about how the `messages` streaming mode works [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#modemessages)
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -179,6 +182,7 @@ Let's also define a helper function for better formatting of the tool calls in m
     done
     ```
 
+## Stream graph in messages mode
 
 Now we can stream by messages, which will return complete messages (at the end of node execution) as well as tokens for any messages generated inside a node:
 

@@ -17,11 +17,15 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
     1. `Deployment details`
         1. Select `Import from GitHub` and follow the GitHub OAuth workflow to install and authorize LangChain's `hosted-langserve` GitHub app to  access the selected repositories. After installation is complete, return to the `Create New Deployment` panel and select the GitHub repository to deploy from the dropdown menu.
         1. Specify a name for the deployment.
+        1. Specify the desired `Git Branch`. A deployment is linked to a branch. When a new revision is created, code for the linked branch will be deployed. The branch can be updated later in the [Deployment Settings](#deployment-settings).
         1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the repository, simply specify `langgraph.json`.
-        1. Specify the desired `git` reference (e.g. branch name). For example, different branches of the repository can be deployed.
+        1. Check/uncheck checkbox to `Automatically update deployment on push to branch`. If checked, the deployment will automatically be updated when changes are pushed to the specified `Git Branch`. This setting can be enabled/disabled later in the [Deployment Settings](#deployment-settings).
     1. Select the desired `Deployment Type`.
         1. `Development` deployments are meant for non-production use cases and are provisioned with minimal resources.
         1. `Production` deployments can serve up to 500 requests/second and are provisioned with highly available storage with automatic backups.
+    1. Determine if the deployment should be `Shareable through LangGraph Studio`.
+        1. If unchecked, the deployment will only be accessible with a valid LangSmith API key for the workspace.
+        1. If checked, the deployment will be accessible through LangGraph Studio to any LangSmith user. A direct URL to LangGraph Studio for the deployment will be provided to share with other LangSmith users.
     1. Specify `Environment Variables` and secrets. See the [Environment Variables reference](../reference/env_var.md) to configure additional variables for the deployment.
         1. Sensitive values such as API keys (e.g. `OPENAI_API_KEY`) should be specified as secrets.
         1. Additional non-secret environment variables can be specified as well.
@@ -39,7 +43,9 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 1. In the `Deployment` view, in the top-right corner, select `+ New Revision`.
 1. In the `New Revision` modal, fill out the required fields.
     1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the repository, simply specify `langgraph.json`.
-    1. Specify the desired `git` reference (e.g. branch name). For example, different branches of the repository can be deployed.
+    1. Determine if the deployment should be `Shareable through LangGraph Studio`.
+        1. If unchecked, the deployment will only be accessible with a valid LangSmith API key for the workspace.
+        1. If checked, the deployment will be accessible through LangGraph Studio to any LangSmith user. A direct URL to LangGraph Studio for the deployment will be provided to share with other LangSmith users.
     1. Specify `Environment Variables` and secrets. Existing secrets and environment variables are prepopulated. See the [Environment Variables reference](../reference/env_var.md) to configure additional variables for the revision.
         1. Add new secrets or environment variables.
         1. Remove existing secrets or environment variables.
@@ -76,3 +82,13 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 1. In the left-hand navigation panel, select `Deployments`. The `Deployments` view contains a list of existing LangGraph Cloud deployments.
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired deployment and select `Delete`.
 1. A `Confirmation` modal will appear. Select `Delete`.
+
+## Deployment Settings
+
+Starting from the `Deployment` view...
+
+1. In the top-right corner, select the gear icon (`Deployment Settings`).
+1. Update the `Git Branch` to the desired branch.
+1. Check/uncheck checkbox to `Automatically update deployment on push to branch`.
+    1. Branch creation/deletion and tag creation/deletion events will not trigger an update. Only pushes to an existing branch will trigger an update.
+    1. Pushes in quick succession to a branch will not trigger subsequent updates. In the future, this functionality may be changed/improved.

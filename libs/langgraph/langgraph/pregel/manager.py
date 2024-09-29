@@ -28,8 +28,8 @@ def ChannelsManager(
 ) -> Iterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     config_for_managed = patch_configurable(config, {CONFIG_KEY_STORE: store})
-    channel_specs: Mapping[str, BaseChannel] = {}
-    managed_specs: Mapping[str, ManagedValueSpec] = {}
+    channel_specs: dict[str, BaseChannel] = {}
+    managed_specs: dict[str, ManagedValueSpec] = {}
     for k, v in specs.items():
         if isinstance(v, BaseChannel):
             channel_specs[k] = v
@@ -42,9 +42,7 @@ def ChannelsManager(
     with ExitStack() as stack:
         yield (
             {
-                k: stack.enter_context(
-                    v.from_checkpoint_named(checkpoint["channel_values"].get(k), config)
-                )
+                k: v.from_checkpoint(checkpoint["channel_values"].get(k))
                 for k, v in channel_specs.items()
             },
             ManagedValueMapping(
@@ -68,11 +66,11 @@ async def AsyncChannelsManager(
     store: Optional[BaseStore] = None,
     *,
     skip_context: bool = False,
-) -> AsyncIterator[Mapping[str, BaseChannel]]:
+) -> AsyncIterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     config_for_managed = patch_configurable(config, {CONFIG_KEY_STORE: store})
-    channel_specs: Mapping[str, BaseChannel] = {}
-    managed_specs: Mapping[str, ManagedValueSpec] = {}
+    channel_specs: dict[str, BaseChannel] = {}
+    managed_specs: dict[str, ManagedValueSpec] = {}
     for k, v in specs.items():
         if isinstance(v, BaseChannel):
             channel_specs[k] = v
@@ -100,11 +98,7 @@ async def AsyncChannelsManager(
         yield (
             # channels: enter each channel with checkpoint
             {
-                k: await stack.enter_async_context(
-                    v.afrom_checkpoint_named(
-                        checkpoint["channel_values"].get(k), config
-                    )
-                )
+                k: v.from_checkpoint(checkpoint["channel_values"].get(k))
                 for k, v in channel_specs.items()
             },
             # managed: build mapping from spec to result

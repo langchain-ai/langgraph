@@ -3,12 +3,14 @@ from typing import (
     Any,
     AsyncIterator,
     Dict,
+    Generic,
     Iterator,
     List,
     Literal,
     Mapping,
     NamedTuple,
     Optional,
+    Sequence,
     Tuple,
     TypedDict,
     TypeVar,
@@ -37,12 +39,14 @@ class CheckpointMetadata(TypedDict, total=False):
 
     source: Literal["input", "loop", "update"]
     """The source of the checkpoint.
+
     - "input": The checkpoint was created from an input to invoke/stream/batch.
     - "loop": The checkpoint was created from inside the pregel loop.
     - "update": The checkpoint was created from a manual state update.
     """
     step: int
     """The step number of the checkpoint.
+
     -1 for the first "input" checkpoint.
     0 for the first "loop" checkpoint.
     ... for the nth checkpoint afterwards.
@@ -78,24 +82,20 @@ class Checkpoint(TypedDict):
     """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
     """The values of the channels at the time of the checkpoint.
-
-    Mapping from channel name to channel snapshot value.
+    Mapping from channel name to deserialized channel snapshot value.
     """
     channel_versions: ChannelVersions
     """The versions of the channels at the time of the checkpoint.
-
-    The keys are channel names and the values are the logical time step
-    at which the channel was last updated.
+    The keys are channel names and the values are monotonically increasing
+    version strings for each channel.
     """
     versions_seen: dict[str, ChannelVersions]
     """Map from node ID to map from channel name to version seen.
-
     This keeps track of the versions of the channels that each node has seen.
-
     Used to determine which nodes to execute next.
     """
     pending_sends: List[SendProtocol]
-    """List of packets sent to nodes but not yet processed.
+    """List of inputs pushed to nodes but not yet processed.
     Cleared by the next checkpoint."""
 
 
@@ -135,7 +135,7 @@ def create_checkpoint(
     if channels is None:
         values = checkpoint["channel_values"]
     else:
-        values: dict[str, Any] = {}
+        values = {}
         for k, v in channels.items():
             if k not in checkpoint["channel_versions"]:
                 continue
@@ -192,7 +192,7 @@ CheckpointId = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver:
+class BaseCheckpointSaver(Generic[V]):
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
@@ -300,7 +300,7 @@ class BaseCheckpointSaver:
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
@@ -392,7 +392,7 @@ class BaseCheckpointSaver:
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: List[Tuple[str, Any]],
+        writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Asynchronously store intermediate writes linked to a checkpoint.
@@ -420,7 +420,12 @@ class BaseCheckpointSaver:
         Returns:
             V: The next version identifier, which must be increasing.
         """
-        return current + 1 if current is not None else 1
+        if isinstance(current, str):
+            raise NotImplementedError
+        elif current is None:
+            return 1
+        else:
+            return current + 1
 
 
 class EmptyChannelError(Exception):

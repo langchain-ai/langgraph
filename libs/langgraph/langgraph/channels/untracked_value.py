@@ -1,7 +1,5 @@
-from contextlib import contextmanager
-from typing import Generator, Generic, Optional, Sequence, Type
+from typing import Generic, Optional, Sequence, Type
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -11,8 +9,10 @@ from langgraph.errors import EmptyChannelError, InvalidUpdateError
 class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, never checkpointed."""
 
+    __slots__ = ("value", "guard")
+
     def __init__(self, typ: Type[Value], guard: bool = True) -> None:
-        self.typ = typ
+        super().__init__(typ)
         self.guard = guard
 
     def __eq__(self, value: object) -> bool:
@@ -31,18 +31,10 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def checkpoint(self) -> Value:
         raise EmptyChannelError()
 
-    @contextmanager
-    def from_checkpoint(
-        self, checkpoint: Optional[Value], config: RunnableConfig
-    ) -> Generator[Self, None, None]:
+    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
         empty = self.__class__(self.typ, self.guard)
-        try:
-            yield empty
-        finally:
-            try:
-                del empty.value
-            except AttributeError:
-                pass
+        empty.key = self.key
+        return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:

@@ -27,7 +27,6 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
-- [How to share state between threads](memory/shared-state.ipynb)
 
 ## Human in the Loop
 
@@ -50,12 +49,13 @@ These guides show how to use different streaming modes.
 - [How to stream state updates of your graph](stream-updates.ipynb)
 - [How to stream LLM tokens](streaming-tokens.ipynb)
 - [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)
-- [How to stream arbitrarily nested content](streaming-content.ipynb)
+- [How to stream custom data](streaming-content.ipynb)
 - [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
 - [How to stream from subgraphs](streaming-subgraphs.ipynb)
+- [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 
 ## Tool calling
 
@@ -74,7 +74,6 @@ These guides show how to use different streaming modes.
 ## State Management
 
 - [Use Pydantic model as state](state-model.ipynb)
-- [Use a context object in state](state-context-key.ipynb)
 - [Have a separate input and output schema](input_output_schema.ipynb)
 - [Pass private state between nodes inside the graph](pass_private_state.ipynb)
 
@@ -84,9 +83,10 @@ These guides show how to use different streaming modes.
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
 - [How to use a Pydantic model as your state](state-model.ipynb)
-- [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
+- [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ## Prebuilt ReAct Agent
 
@@ -97,3 +97,4 @@ Please note that here will we use a **prebuilt agent**. One of the big benefits 
 - [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
+- [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)

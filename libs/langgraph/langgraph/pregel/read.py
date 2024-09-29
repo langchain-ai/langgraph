@@ -18,19 +18,22 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnableSerializable,
 )
-from langchain_core.runnables.base import Input, Other, Output, coerce_to_runnable
+from langchain_core.runnables.base import Input, Other, coerce_to_runnable
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONFIG_KEY_READ
+from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
-READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
+READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
 
 
 class ChannelRead(RunnableCallable):
+    """Implements the logic for reading state from CONFIG_KEY_READ.
+    Usable both as a runnable as well as a static method to call imperatively."""
+
     channel: Union[str, list[str]]
 
     fresh: bool = False
@@ -92,7 +95,7 @@ class ChannelRead(RunnableCallable):
         mapper: Optional[Callable[[Any], Any]] = None,
     ) -> Any:
         try:
-            read: READ_TYPE = config["configurable"][CONFIG_KEY_READ]
+            read: READ_TYPE = config[CONF][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
                 "Not configured with a read function"
@@ -108,19 +111,39 @@ DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
 class PregelNode(Runnable):
+    """A node in a Pregel graph. This won't be invoked as a runnable by the graph
+    itself, but instead acts as a container for the components necessary to make
+    a PregelExecutableTask for a node."""
+
     channels: Union[list[str], Mapping[str, str]]
+    """The channels that will be passed as input to `bound`.
+    If a list, the node will be invoked with the first of that isn't empty.
+    If a dict, the keys are the names of the channels, and the values are the keys
+    to use in the input to `bound`."""
 
     triggers: list[str]
+    """If any of these channels is written to, this node will be triggered in
+    the next step."""
 
     mapper: Optional[Callable[[Any], Any]]
+    """A function to transform the input before passing it to `bound`."""
 
     writers: list[Runnable]
+    """A list of writers that will be executed after `bound`, responsible for
+    taking the output of `bound` and writing it to the appropriate channels."""
 
     bound: Runnable[Any, Any]
+    """The main logic of the node. This will be invoked with the input from 
+    `channels`."""
 
     retry_policy: Optional[RetryPolicy]
+    """The retry policy to use when invoking the node."""
 
-    config: RunnableConfig
+    tags: Optional[Sequence[str]]
+    """Tags to attach to the node for tracing."""
+
+    metadata: Optional[Mapping[str, Any]]
+    """Metadata to attach to the node for tracing."""
 
     def __init__(
         self,
@@ -133,7 +156,6 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
-        config: Optional[RunnableConfig] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -141,9 +163,8 @@ class PregelNode(Runnable):
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         self.retry_policy = retry_policy
-        self.config = merge_configs(
-            config, {"tags": tags or [], "metadata": metadata or {}}
-        )
+        self.tags = tags
+        self.metadata = metadata
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
@@ -151,7 +172,7 @@ class PregelNode(Runnable):
 
     @cached_property
     def flat_writers(self) -> list[Runnable]:
-        """Get writers with optimizations applied."""
+        """Get writers with optimizations applied. Dedupes consecutive ChannelWrites."""
         writers = self.writers.copy()
         while (
             len(writers) > 1
@@ -162,7 +183,7 @@ class PregelNode(Runnable):
             # careful to not modify the original writers list or ChannelWrite
             writers[-2] = ChannelWrite(
                 writes=writers[-2].writes + writers[-1].writes,
-                tags=writers[-2].config["tags"] if writers[-2].config else None,
+                tags=writers[-2].tags,
                 require_at_least_one_of=writers[-2].require_at_least_one_of,
             )
             writers.pop()
@@ -170,6 +191,7 @@ class PregelNode(Runnable):
 
     @cached_property
     def node(self) -> Optional[Runnable[Any, Any]]:
+        """Get a runnable that combines `bound` and `writers`."""
         writers = self.flat_writers
         if self.bound is DEFAULT_BOUND and not writers:
             return None
@@ -206,7 +228,7 @@ class PregelNode(Runnable):
             Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
         ],
     ) -> PregelNode:
-        if ChannelWrite.is_writer(other):
+        if isinstance(other, Runnable) and ChannelWrite.is_writer(other):
             return self.copy(update=dict(writers=[*self.writers, other]))
         elif self.bound is DEFAULT_BOUND:
             return self.copy(update=dict(bound=coerce_to_runnable(other)))
@@ -237,17 +259,23 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Output:
-        return self.bound.invoke(input, merge_configs(self.config, config), **kwargs)
+    ) -> Any:
+        return self.bound.invoke(
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
+        )
 
     async def ainvoke(
         self,
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Output:
+    ) -> Any:
         return await self.bound.ainvoke(
-            input, merge_configs(self.config, config), **kwargs
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
         )
 
     def stream(
@@ -255,9 +283,11 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Iterator[Output]:
+    ) -> Iterator[Any]:
         yield from self.bound.stream(
-            input, merge_configs(self.config, config), **kwargs
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
         )
 
     async def astream(
@@ -265,8 +295,10 @@ class PregelNode(Runnable):
         input: Input,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> AsyncIterator[Output]:
+    ) -> AsyncIterator[Any]:
         async for item in self.bound.astream(
-            input, merge_configs(self.config, config), **kwargs
+            input,
+            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            **kwargs,
         ):
             yield item

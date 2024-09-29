@@ -1,6 +1,6 @@
 # API Concepts
 
-This page describes the high-level concepts of the LangGraph Cloud API. The conceptual guide of LangGraph (Python library) is [here](../../concepts/index.md).
+This page describes the high-level concepts of the LangGraph Cloud API. The conceptual guide of LangGraph (Python library) is [here](../../concepts/high_level.md).
 
 ## Data Models
 
@@ -8,13 +8,26 @@ The LangGraph Cloud API consists of a few core data models: [Assistants](#assist
 
 ### Assistants
 
-An assistant is a configured instance of a [`CompiledGraph`][compiledgraph]. It abstracts the cognitive architecture of the graph and contains instance specific configuration and metadata. Multiple assistants can reference the same graph but can contain different configuration and metadata, which may differentiate the behavior of the assistants. An assistant (i.e. the graph) is invoked as part of a run.
+When building agents, it is fairly common to make rapid changes that *do not* alter the graph logic. For example, simply changing prompts or the LLM selection can have significant impacts on the behavior of the agents. Assistants offer an easy way to make and save these types of changes to agent configuration. This can have at least two use-cases:
 
-The LangGraph Cloud API provides several endpoints for creating and managing assistants. See the [API reference](../reference/api/api_ref.html#tag/assistantscreate) for more details.
+* Assistants give developers a quick and easy way to modify and version graph version for experimentation.
+* Assistants can be modified via LangGraph Studio, offering a no-code way to configure agents  (e.g., for business users). 
 
 #### Configuring Assistants
 
-You can save custom assistants from the same graph to set different default prompts, models, and other configurations without changing a line of code in your graph. This allows you the ability to quickly test out different configurations without having to rewrite your graph every time, and also give users the flexibility to select different configurations when using your LangGraph application. See <a href="https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/configuration_cloud/">this</a> how-to for information on how to configure a deployed graph. 
+In practice, an assistant is just an *instance* of a graph with a specific configuration. Because of this, multiple assistants can reference the same graph but can contain different configurations, such as prompts, models, and other graph configuration options. The LangGraph Cloud API provides several endpoints for creating and managing assistants. See the [API reference](../reference/api/api_ref.html#tag/assistantscreate) and [this how-to](../how-tos/configuration_cloud.md) for more details on how to create assistants.
+
+#### Versioning Assistants
+
+![assistant versions](./assistant_version.png)
+
+Once you've created an assistant, you can save and version it to track changes to the configuration over time. You can think about this at three levels:
+
+1) The graph lays out the general agent application logic 
+2) The agent configuration options represent parameters that can be changed 
+3) Assistant versions save and track specific settings of the agent configuration options 
+
+For example, if you have an agent that helps for planning trips, you can create a new assistant *for each user* that passes specific user preferences (e.g., desired airline and car service). As each user interacts with their own assistant, assistant versions can be saved that track the specific desires of the user. Read [this how-to](../how-tos/assistant_versioning.md) to learn how you can use assistant versioning through both the [Studio](../how-tos/index.md/#langgraph-studio) and the SDK.
 
 ### Threads
 
@@ -22,7 +35,7 @@ A thread contains the accumulated state of a group of runs. If a run is executed
 
 The state of a thread at a particular point in time is called a checkpoint.
 
-For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](../../concepts/low_level.md#checkpointer).
+For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](../../concepts/low_level.md#persistence).
 
 The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../reference/api/api_ref.html#tag/threadscreate) for more details.
 
