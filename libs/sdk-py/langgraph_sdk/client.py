@@ -216,9 +216,9 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, json: Optional[Any] = None) -> None:
         """Make a DELETE request."""
-        r = await self.client.delete(path)
+        r = await self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -1904,12 +1904,17 @@ class StoreClient:
                 value={"title": "My Document", "content": "Hello World"}
             )
         """
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
         payload = {
             "namespace": namespace,
             "key": key,
             "value": value,
         }
-        await self.http.post("/store/items", json=payload)
+        await self.http.put("/store/items", json=payload)
 
     async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
         """Retrieve a single item.
@@ -1939,8 +1944,13 @@ class StoreClient:
                 'updated_at': '2024-07-30T12:00:00Z'
             }
         """
-        return await self.http.post(
-            "/store/items/get", json={"namespace": namespace, "key": key}
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
+        return await self.http.get(
+            "/store/items", params={"namespace": namespace, "key": key}
         )
 
     async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
@@ -1960,8 +1970,8 @@ class StoreClient:
                 key="item456",
             )
         """
-        await self.http.post(
-            "/store/items/delete", json={"namespace": namespace, "key": key}
+        await self.http.delete(
+            "/store/items", json={"namespace": namespace, "key": key}
         )
 
     async def search_items(
@@ -2176,9 +2186,9 @@ class SyncHttpClient:
             raise e
         return decode_json(r)
 
-    def delete(self, path: str) -> None:
+    def delete(self, path: str, *, json: Optional[Any] = None) -> None:
         """Make a DELETE request."""
-        r = self.client.delete(path)
+        r = self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -3850,12 +3860,17 @@ class SyncStoreClient:
                 value={"title": "My Document", "content": "Hello World"}
             )
         """
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
         payload = {
             "namespace": namespace,
             "key": key,
             "value": value,
         }
-        self.http.post("/store/items", json=payload)
+        self.http.put("/store/items", json=payload)
 
     def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
         """Retrieve a single item.
@@ -3885,8 +3900,14 @@ class SyncStoreClient:
                 'updated_at': '2024-07-30T12:00:00Z'
             }
         """
-        return self.http.post(
-            "/store/items/get", json={"key": key, "namespace": namespace}
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
+
+        return self.http.get(
+            "/store/items", params={"key": key, "namespace": ".".join(namespace)}
         )
 
     def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
@@ -3906,7 +3927,7 @@ class SyncStoreClient:
                 key="item456",
             )
         """
-        self.http.post("/store/items/delete", json={"key": key, "namespace": namespace})
+        self.http.delete("/store/items", json={"key": key, "namespace": namespace})
 
     def search_items(
         self,
