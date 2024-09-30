@@ -35,7 +35,7 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
-from langgraph.prebuilt.chat_agent_executor import _clear_unanswered_tool_calls
+from langgraph.prebuilt.chat_agent_executor import _remove_unanswered_tool_calls
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -243,10 +243,10 @@ def test_runnable_state_modifier():
     assert response == expected_response
 
 
-def test_clear_unanswered_tool_calls():
+def test_remove_unanswered_tool_calls():
     # No tool calls
     messages = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
-    result = _clear_unanswered_tool_calls(messages)
+    result = _remove_unanswered_tool_calls(messages)
     assert result == messages
 
     # Answered tool calls
@@ -259,7 +259,7 @@ def test_clear_unanswered_tool_calls():
         ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
         AIMessage(content="The weather is sunny and 75°F."),
     ]
-    result = _clear_unanswered_tool_calls(messages)
+    result = _remove_unanswered_tool_calls(messages)
     assert result == messages
 
     # Unanswered tool calls
@@ -275,7 +275,7 @@ def test_clear_unanswered_tool_calls():
         ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
         AIMessage(content="The weather is sunny and 75°F. Let me check the time."),
     ]
-    result = _clear_unanswered_tool_calls(messages)
+    result = _remove_unanswered_tool_calls(messages)
     assert len(result) == 4
     assert result[0] == messages[0]
     assert result[1].tool_calls == [
@@ -300,7 +300,7 @@ def test_clear_unanswered_tool_calls():
         ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
         AIMessage(content="The weather is sunny and 75°F. Let me check the time."),
     ]
-    result = _clear_unanswered_tool_calls(messages)
+    result = _remove_unanswered_tool_calls(messages)
     assert result[0] == messages[0]
     assert len(result) == 4
     assert result[1].tool_calls == [

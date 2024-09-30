@@ -126,7 +126,7 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
-def _clear_unanswered_tool_calls(
+def _remove_unanswered_tool_calls(
     messages: Sequence[BaseMessage],
 ) -> AgentState:
     """Clear unanswered tool calls from the messages and return updated messages."""
@@ -178,6 +178,34 @@ def _clear_unanswered_tool_calls(
     return updated_messages
 
 
+def _add_responses_to_unanswered_tool_calls(
+    messages: Sequence[BaseMessage],
+) -> AgentState:
+    """Add responses (ToolMessages) to unanswered tool calls and return updated messages."""
+    answered_tool_call_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    }
+
+    updated_messages: list[BaseMessage] = []
+    for message in messages:
+        updated_messages.append(message)
+        if isinstance(message, AIMessage):
+            unanswered_tool_calls = [
+                tool_call
+                for tool_call in message.tool_calls
+                if tool_call["id"] not in answered_tool_call_ids
+            ]
+            for unanswered_tool_call in unanswered_tool_calls:
+                tool_message = ToolMessage(
+                    content="",
+                    name=unanswered_tool_call["name"],
+                    tool_call_id=unanswered_tool_call["id"],
+                )
+                updated_messages.append(tool_message)
+
+    return updated_messages
+
+
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
     model: BaseChatModel,
@@ -186,6 +214,9 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
+    handle_unanswered_tool_calls: Literal[
+        "remove_tool_calls", "add_tool_responses", False
+    ] = False,
     checkpointer: Checkpointer = None,
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
@@ -497,7 +528,15 @@ def create_react_agent(
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         # "Update" the messages in the state before sending the state to the model runnable
         # This will only update the input to the runnable and will not alter the original state
-        state["messages"] = _clear_unanswered_tool_calls(state["messages"])
+        if handle_unanswered_tool_calls == "remove_tool_calls":
+            state["messages"] = _remove_unanswered_tool_calls(state["messages"])
+        elif handle_unanswered_tool_calls == "add_tool_responses":
+            state["messages"] = _add_responses_to_unanswered_tool_calls(
+                state["messages"]
+            )
+        else:
+            pass
+
         response = model_runnable.invoke(state, config)
         if (
             state["is_last_step"]
@@ -518,7 +557,15 @@ def create_react_agent(
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         # "Update" the messages in the state before sending the state to the model runnable
         # This will only update the input to the runnable and will not alter the original state
-        state["messages"] = _clear_unanswered_tool_calls(state["messages"])
+        if handle_unanswered_tool_calls == "remove_tool_calls":
+            state["messages"] = _remove_unanswered_tool_calls(state["messages"])
+        elif handle_unanswered_tool_calls == "add_tool_responses":
+            state["messages"] = _add_responses_to_unanswered_tool_calls(
+                state["messages"]
+            )
+        else:
+            pass
+
         response = await model_runnable.ainvoke(state, config)
         if (
             state["is_last_step"]
