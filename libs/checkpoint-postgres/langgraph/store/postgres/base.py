@@ -322,7 +322,7 @@ class PostgresStore(BasePostgresStore[Connection]):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time the store is used.
         """
-        with self.conn.cursor() as cur:
+        with self.conn.cursor(binary=True) as cur:
             try:
                 cur.execute("SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1")
                 row = cast(dict, cur.fetchone())
@@ -331,6 +331,7 @@ class PostgresStore(BasePostgresStore[Connection]):
                 else:
                     version = row["v"]
             except UndefinedTable:
+                self.conn.rollback()
                 version = -1
                 # Create store_migrations table if it doesn't exist
                 cur.execute(
