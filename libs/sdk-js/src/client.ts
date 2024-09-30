@@ -986,6 +986,17 @@ export class RunsClient extends BaseClient {
   }
 }
 
+interface APIItem {
+  namespace: string[];
+  key: string;
+  value: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+interface APISearchItemsResponse {
+  items: APIItem[];
+}
+
 export class StoreClient extends BaseClient {
   /**
    * Store or update an item.
@@ -1027,7 +1038,7 @@ export class StoreClient extends BaseClient {
    * @param key The unique identifier for the item.
    * @returns Promise<Item>
    */
-  async getItem(namespace: string[], key: string): Promise<Item> {
+  async getItem(namespace: string[], key: string): Promise<Item | null> {
     namespace.forEach((label) => {
       if (label.includes(".")) {
         throw new Error(
@@ -1036,9 +1047,14 @@ export class StoreClient extends BaseClient {
       }
     });
 
-    return this.fetch<Item>("/store/items", {
+    const response = await this.fetch<APIItem>("/store/items", {
       params: { namespace: namespace.join("."), key },
     });
+    return {
+      ...response,
+      createdAt: response.created_at,
+      updatedAt: response.updated_at,
+    };
   }
 
   /**
@@ -1049,6 +1065,14 @@ export class StoreClient extends BaseClient {
    * @returns Promise<void>
    */
   async deleteItem(namespace: string[], key: string): Promise<void> {
+    namespace.forEach((label) => {
+      if (label.includes(".")) {
+        throw new Error(
+          `Invalid namespace label '${label}'. Namespace labels cannot contain periods ('.')`,
+        );
+      }
+    });
+
     return this.fetch<void>("/store/items", {
       method: "DELETE",
       json: { namespace, key },
@@ -1079,10 +1103,20 @@ export class StoreClient extends BaseClient {
       offset: options?.offset ?? 0,
     };
 
-    return this.fetch<SearchItemsResponse>("/store/items/search", {
-      method: "POST",
-      json: payload,
-    });
+    const response = await this.fetch<APISearchItemsResponse>(
+      "/store/items/search",
+      {
+        method: "POST",
+        json: payload,
+      },
+    );
+    return {
+      items: response.items.map((item) => ({
+        ...item,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      })),
+    };
   }
 
   /**
