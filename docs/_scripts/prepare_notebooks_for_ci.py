@@ -62,6 +62,9 @@ def is_magic_command(code: str) -> bool:
 def is_comment(code: str) -> bool:
     return code.strip().startswith("#")
 
+def is_mermaid_command(code: str) -> bool:
+    return "draw_mermaid_png" in code.strip()
+
 
 def add_vcr_to_notebook(
     notebook: nbformat.NotebookNode, cassette_prefix: str
@@ -82,6 +85,10 @@ def add_vcr_to_notebook(
 
         # skip if all magic
         if all(are_magic_lines):
+            continue
+
+        # skip if using mermaid
+        if any(is_mermaid_command(line) for line in lines):
             continue
 
         if any(are_magic_lines):
