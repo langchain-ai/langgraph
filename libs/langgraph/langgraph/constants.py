@@ -13,11 +13,11 @@ EMPTY_SEQ: tuple[str, ...] = tuple()
 
 # --- Public constants ---
 TAG_HIDDEN = sys.intern("langsmith:hidden")
-# tag to hide a node/edge from certain tracing/streaming environments
+"""Tag to hide a node/edge from certain tracing/streaming environments."""
 START = sys.intern("__start__")
-# the first (maybe virtual) node in graph-style Pregel
+"""The first (maybe virtual) node in graph-style Pregel."""
 END = sys.intern("__end__")
-# the last (maybe virtual) node in graph-style Pregel
+"""The last (maybe virtual) node in graph-style Pregel."""
 
 # --- Reserved write keys ---
 INPUT = sys.intern("__input__")

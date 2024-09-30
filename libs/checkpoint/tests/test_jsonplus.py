@@ -10,11 +10,13 @@ from enum import Enum
 from ipaddress import IPv4Address
 
 import dataclasses_json
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
+from pydantic.v1 import SecretStr as SecretStrV1
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.store.base import Item
 
 
 class InnerPydantic(BaseModel):
@@ -109,6 +111,8 @@ def test_serde_jsonplus() -> None:
         "my_pydantic_v1": MyPydanticV1(
             foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
         ),
+        "my_secret_str": SecretStr("meow"),
+        "my_secret_str_v1": SecretStrV1("meow"),
         "person": Person(name="foo"),
         "a_bool": True,
         "a_none": None,
@@ -121,6 +125,13 @@ def test_serde_jsonplus() -> None:
         "a_float": 1.1,
         "a_bytes": b"my bytes",
         "a_bytearray": bytearray([42]),
+        "my_item": Item(
+            value={},
+            key="my-key",
+            namespace=("a", "name", " "),
+            created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+        ),
     }
 
     serde = JsonPlusSerializer()

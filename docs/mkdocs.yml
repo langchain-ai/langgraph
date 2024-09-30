@@ -61,19 +61,22 @@ plugins:
           options:
             members_order: source
             allow_inspection: true
-            heading_level: 3
+            heading_level: 2
             show_bases: true
+            show_source: true
             summary: true
             inherited_members: true
-            # merge_init_into_class: true
             selection:
               docstring_style: google
             docstring_section_style: list
             show_root_toc_entry: false
-            # show_signature_annotations: true
-            # show_symbol_type_heading: true
+            show_signature_annotations: true
+            show_symbol_type_heading: true
             show_symbol_type_toc: true
             signature_crossrefs: true
+            options:
+              filters:
+                - "!^_"
   - mkdocs-jupyter:
       ignore_h1_titles: true
       execute: false
@@ -115,6 +118,8 @@ nav:
               - Reflexion: tutorials/reflexion/reflexion.ipynb
               - Language Agent Tree Search: tutorials/lats/lats.ipynb
               - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
+      - Memory:
+          - Long-term memory: tutorials/memory/long_term_memory_agent.ipynb
       - Evaluation & Analysis:
           - Chatbot Evaluation via Simulation:
               - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
@@ -200,7 +205,10 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
+      - Channels: reference/channels.md
       - Errors: reference/errors.md
+      - Types: reference/types.md
+      - Constants: reference/constants.md
   - "Cloud (beta)":
       - "cloud/index.md"
       - Tutorials:

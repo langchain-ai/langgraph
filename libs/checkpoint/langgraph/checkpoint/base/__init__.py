@@ -39,12 +39,14 @@ class CheckpointMetadata(TypedDict, total=False):
 
     source: Literal["input", "loop", "update"]
     """The source of the checkpoint.
+
     - "input": The checkpoint was created from an input to invoke/stream/batch.
     - "loop": The checkpoint was created from inside the pregel loop.
     - "update": The checkpoint was created from a manual state update.
     """
     step: int
     """The step number of the checkpoint.
+
     -1 for the first "input" checkpoint.
     0 for the first "loop" checkpoint.
     ... for the nth checkpoint afterwards.
