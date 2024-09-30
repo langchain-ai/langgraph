@@ -101,7 +101,6 @@ from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
-from langgraph.store.batch import AsyncBatchedStore
 from langgraph.types import All, PregelExecutableTask, StreamMode
 from langgraph.utils.config import patch_configurable
 
@@ -177,6 +176,7 @@ class PregelLoop:
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
+    prev_checkpoint_config: Optional[RunnableConfig]
 
     step: int
     stop: int
@@ -249,6 +249,13 @@ class PregelLoop:
             tuple(cast(str, self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP))
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
             else ()
+        )
+        self.prev_checkpoint_config = (
+            self.checkpoint_config
+            if self.checkpoint_config
+            and CONF in self.checkpoint_config
+            and CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
+            else None
         )
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
@@ -367,6 +374,7 @@ class PregelLoop:
             self.step,
             for_execution=True,
             manager=manager,
+            store=self.store,
             checkpointer=self.checkpointer,
         )
         # we don't need to save the writes for the last task that completes
@@ -386,6 +394,7 @@ class PregelLoop:
                 self.checkpoint,
                 self.tasks.values(),
                 self.checkpoint_pending_writes,
+                self.prev_checkpoint_config,
             )
 
         # if no more tasks, we're done
@@ -495,6 +504,7 @@ class PregelLoop:
                 self.config,
                 self.step,
                 for_execution=True,
+                store=None,
                 checkpointer=None,
                 manager=None,
             )
@@ -534,6 +544,12 @@ class PregelLoop:
         self.checkpoint = create_checkpoint(self.checkpoint, self.channels, self.step)
         # bail if no checkpointer
         if self._checkpointer_put_after_previous is not None:
+            self.prev_checkpoint_config = (
+                self.checkpoint_config
+                if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
+                and self.checkpoint_config[CONF][CONFIG_KEY_CHECKPOINT_ID]
+                else None
+            )
             self.checkpoint_metadata = metadata
             self.checkpoint_config = {
                 **self.checkpoint_config,
@@ -783,7 +799,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             check_subgraphs=check_subgraphs,
             debug=debug,
         )
-        self.store = AsyncBatchedStore(self.store) if self.store else None
         self.stack = AsyncExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
