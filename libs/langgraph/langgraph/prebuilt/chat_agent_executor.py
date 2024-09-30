@@ -1,8 +1,13 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union
+from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
+from langchain_core.runnables import (
+    Runnable,
+    RunnableBinding,
+    RunnableConfig,
+    RunnableLambda,
+)
 from langchain_core.tools import BaseTool
 from typing_extensions import Annotated, TypedDict
 
@@ -115,9 +120,43 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
+def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+    if not isinstance(model, RunnableBinding):
+        return False
+
+    if "tools" not in model.kwargs:
+        return False
+
+    bound_tools = model.kwargs["tools"]
+    if len(tools) != len(bound_tools):
+        raise ValueError(
+            "Number of tools in the model.bind_tools() and tools passed to create_react_agent must match"
+        )
+
+    tool_names = set(tool.name for tool in tools)
+    bound_tool_names = set()
+    for bound_tool in bound_tools:
+        # OpenAI-style tool
+        if bound_tool.get("type") == "function":
+            bound_tool_name = bound_tool["function"]["name"]
+        # Anthropic-style tool
+        elif bound_tool.get("name"):
+            bound_tool_name = bound_tool["name"]
+        else:
+            # unknown tool type so we'll ignore it
+            continue
+
+        bound_tool_names.add(bound_tool_name)
+
+    if missing_tools := tool_names - bound_tool_names:
+        raise ValueError(f"Missing tools '{missing_tools}' in the model.bind_tools()")
+
+    return True
+
+
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
-    model: BaseChatModel,
+    model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
@@ -412,9 +451,12 @@ def create_react_agent(
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
-        tool_classes = tools
-        tool_node = ToolNode(tool_classes)
-    model = model.bind_tools(tool_classes)
+        tool_node = ToolNode(tools)
+        # get the tool functions wrapped in a tool class from the ToolNode
+        tool_classes = list(tool_node.tools_by_name.values())
+
+    if _should_bind_tools(model, tool_classes):
+        model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
