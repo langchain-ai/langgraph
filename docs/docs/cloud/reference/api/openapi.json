@@ -255,6 +255,18 @@
             },
             "name": "assistant_id",
             "in": "path"
+          },
+          {
+            "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.",
+            "required": false,
+            "schema": {
+              "oneOf": [{ "type": "boolean" }, { "type": "integer" }],
+              "title": "Xray",
+              "default": false,
+              "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included."
+            },
+            "name": "xray",
+            "in": "query"
           }
         ],
         "responses": {
@@ -629,37 +641,24 @@
         }
       }
     },
-    "/threads/{thread_id}/state/{checkpoint_id}": {
-      "get": {
+    "/threads/{thread_id}/state/checkpoint": {
+      "post": {
         "tags": [
           "threads/state"
         ],
         "summary": "Get Thread State At Checkpoint",
-        "description": "Get state for a thread.",
-        "operationId": "get_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
-        "parameters": [
-          {
-            "description": "The ID of the thread.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Thread Id",
-              "description": "The ID of the thread."
-            },
-            "name": "thread_id",
-            "in": "path"
+        "description": "Get state for a thread at a specific checkpoint.",
+        "operationId": "post_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateCheckpointRequest"
+              }
+            }
           },
-          {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Checkpoint Id"
-            },
-            "name": "checkpoint_id",
-            "in": "path"
-          }
-        ],
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2847,6 +2846,26 @@
         "title": "ThreadPatch",
         "description": "Payload for creating a thread."
       },
+      "ThreadStateCheckpointRequest": {
+        "properties": {
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint",
+            "description": "The checkpoint to get the state for."
+          },
+          "subgraphs": {
+            "type": "boolean",
+            "title": "Subgraphs",
+            "description": "Include subgraph states."
+          }
+        },
+        "required": [
+          "checkpoint"
+        ],
+        "type": "object",
+        "title": "ThreadStateCheckpointRequest",
+        "description": "Payload for getting the state of a thread at a checkpoint."
+      },
       "ThreadState": {
         "properties": {
           "values": {
@@ -2889,6 +2908,13 @@
                 "interrupts": {
                   "type": "array",
                   "items": {}
+                },
+                "checkpoint": {
+                  "type": "object",
+                  "title": "Checkpoint"
+                },
+                "state": {
+                  "$ref": "#/components/schemas/ThreadState"
                 }
               },
               "required": [
@@ -2899,9 +2925,9 @@
             "type": "array",
             "title": "Tasks"
           },
-          "checkpoint_id": {
-            "type": "string",
-            "title": "Checkpoint Id"
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
           },
           "metadata": {
             "type": "object",
@@ -2911,16 +2937,16 @@
             "type": "string",
             "title": "Created At"
           },
-          "parent_checkpoint_id": {
-            "type": "string",
-            "title": "Parent Checkpoint Id"
+          "parent_checkpoint": {
+            "type": "object",
+            "title": "Parent Checkpoint"
           }
         },
         "type": "object",
         "required": [
           "values",
           "next",
-          "checkpoint_id",
+          "checkpoint",
           "metadata",
           "created_at"
         ],
@@ -2969,9 +2995,9 @@
             ],
             "title": "Values"
           },
-          "checkpoint_id": {
-            "type": "string",
-            "title": "Checkpoint Id"
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
           },
           "as_node": {
             "type": "string",
@@ -2984,18 +3010,14 @@
       },
       "ThreadStateUpdateResponse": {
         "properties": {
-          "checkpoint_id": {
-            "type": "string",
-            "title": "Checkpoint Id"
-          },
-          "as_node": {
-            "type": "string",
-            "title": "As Node"
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
           }
         },
         "type": "object",
-        "title": "ThreadStateUpdate",
-        "description": "Payload for adding state to a thread."
+        "title": "ThreadStateUpdateResponse",
+        "description": "Response for adding state to a thread."
       },
       "ValidationError": {
         "properties": {
