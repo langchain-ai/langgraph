@@ -20,6 +20,7 @@ from langchain_core.runnables import (
     RunnableLambda,
 )
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
@@ -170,7 +171,11 @@ def _remove_unanswered_tool_calls(
                 updated_content = message.content
 
             if updated_tool_calls != message.tool_calls:
-                updated_message = message.model_copy()
+                updated_message = (
+                    message.model_copy()
+                    if isinstance(message, BaseModel)
+                    else message.copy()
+                )
                 updated_message.tool_calls = updated_tool_calls
                 updated_message.additional_kwargs.pop("tool_calls", None)
                 updated_message.content = updated_content
