@@ -8,7 +8,7 @@ from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 
 from langgraph.store.base import GetOp, ListNamespacesOp, Op, PutOp, Result, SearchOp
-from langgraph.store.postgres.base_store import (
+from langgraph.store.postgres.base import (
     BasePostgresStore,
     Row,
     _group_ops,
