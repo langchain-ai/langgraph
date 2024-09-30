@@ -28,15 +28,35 @@ execute_notebook() {
 export -f execute_notebook
 
 # Find all notebooks and filter out those in the skip list
-notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
+notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints") | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
+
+# Display the found notebooks in a more readable way
+echo "====================================="
+echo "Notebooks to be executed:"
+echo "====================================="
+for notebook in $notebooks; do
+    echo "- $notebook"
+done
+
+echo
+echo "================================================================="
+echo "Starting notebook execution with concurrency level: $CONCURRENCY"
+echo "================================================================="
+echo
 
 # Run notebooks in parallel with controllable concurrency
 echo "$notebooks" | xargs -n 1 -P "$CONCURRENCY" bash -c 'execute_notebook "$@"' _
 
 # Check exit status and handle any errors
 if [ $? -ne 0 ]; then
-    echo "One or more notebooks failed to execute." >&2
+    echo "====================================="
+    echo "One or more notebooks failed to execute."
+    echo "====================================="
+    echo >&2
     exit 1
 fi
 
-echo "All notebooks processed."
+echo
+echo "====================================="
+echo "All notebooks processed successfully."
+echo "====================================="
