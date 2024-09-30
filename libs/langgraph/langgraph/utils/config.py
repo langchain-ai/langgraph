@@ -120,6 +120,8 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                     base["recursion_limit"] = config["recursion_limit"]
             else:
                 base[key] = config[key]  # type: ignore[literal-required]
+    if CONF not in base:
+        base[CONF] = {}
     return base
 
 
