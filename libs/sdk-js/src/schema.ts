@@ -219,3 +219,19 @@ export interface Checkpoint {
   checkpoint_id: Optional<string>;
   checkpoint_map: Optional<Record<string, unknown>>;
 }
+
+export interface ListNamespaceResponse {
+  namespaces: string[][];
+}
+
+export interface SearchItemsResponse {
+  items: Item[];
+}
+
+export interface Item {
+  namespace: string[];
+  key: string;
+  value: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}

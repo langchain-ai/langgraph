@@ -12,6 +12,9 @@ import {
   AssistantVersion,
   Subgraphs,
   Checkpoint,
+  SearchItemsResponse,
+  ListNamespaceResponse,
+  Item,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import {
@@ -983,6 +986,137 @@ export class RunsClient extends BaseClient {
   }
 }
 
+export class StoreClient extends BaseClient {
+  /**
+   * Store or update an item.
+   *
+   * @param namespace A list of strings representing the namespace path.
+   * @param key The unique identifier for the item within the namespace.
+   * @param value A dictionary containing the item's data.
+   * @returns Promise<void>
+   */
+  async putItem(
+    namespace: string[],
+    key: string,
+    value: Record<string, any>,
+  ): Promise<void> {
+    namespace.forEach((label) => {
+      if (label.includes(".")) {
+        throw new Error(
+          `Invalid namespace label '${label}'. Namespace labels cannot contain periods ('.')`,
+        );
+      }
+    });
+
+    const payload = {
+      namespace,
+      key,
+      value,
+    };
+
+    return this.fetch<void>("/store/items", {
+      method: "PUT",
+      json: payload,
+    });
+  }
+
+  /**
+   * Retrieve a single item.
+   *
+   * @param namespace A list of strings representing the namespace path.
+   * @param key The unique identifier for the item.
+   * @returns Promise<Item>
+   */
+  async getItem(namespace: string[], key: string): Promise<Item> {
+    namespace.forEach((label) => {
+      if (label.includes(".")) {
+        throw new Error(
+          `Invalid namespace label '${label}'. Namespace labels cannot contain periods ('.')`,
+        );
+      }
+    });
+
+    return this.fetch<Item>("/store/items", {
+      params: { namespace: namespace.join("."), key },
+    });
+  }
+
+  /**
+   * Delete an item.
+   *
+   * @param namespace A list of strings representing the namespace path.
+   * @param key The unique identifier for the item.
+   * @returns Promise<void>
+   */
+  async deleteItem(namespace: string[], key: string): Promise<void> {
+    return this.fetch<void>("/store/items", {
+      method: "DELETE",
+      json: { namespace, key },
+    });
+  }
+
+  /**
+   * Search for items within a namespace prefix.
+   *
+   * @param namespacePrefix List of strings representing the namespace prefix.
+   * @param options.filter Optional dictionary of key-value pairs to filter results.
+   * @param options.limit Maximum number of items to return (default is 10).
+   * @param options.offset Number of items to skip before returning results (default is 0).
+   * @returns Promise<SearchItemsResponse>
+   */
+  async searchItems(
+    namespacePrefix: string[],
+    options?: {
+      filter?: Record<string, any>;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<SearchItemsResponse> {
+    const payload = {
+      namespace_prefix: namespacePrefix,
+      filter: options?.filter,
+      limit: options?.limit ?? 10,
+      offset: options?.offset ?? 0,
+    };
+
+    return this.fetch<SearchItemsResponse>("/store/items/search", {
+      method: "POST",
+      json: payload,
+    });
+  }
+
+  /**
+   * List namespaces with optional match conditions.
+   *
+   * @param options.prefix Optional list of strings representing the prefix to filter namespaces.
+   * @param options.suffix Optional list of strings representing the suffix to filter namespaces.
+   * @param options.maxDepth Optional integer specifying the maximum depth of namespaces to return.
+   * @param options.limit Maximum number of namespaces to return (default is 100).
+   * @param options.offset Number of namespaces to skip before returning results (default is 0).
+   * @returns Promise<ListNamespaceResponse>
+   */
+  async listNamespaces(options?: {
+    prefix?: string[];
+    suffix?: string[];
+    maxDepth?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListNamespaceResponse> {
+    const payload = {
+      prefix: options?.prefix,
+      suffix: options?.suffix,
+      max_depth: options?.maxDepth,
+      limit: options?.limit ?? 100,
+      offset: options?.offset ?? 0,
+    };
+
+    return this.fetch<ListNamespaceResponse>("/store/namespaces", {
+      method: "POST",
+      json: payload,
+    });
+  }
+}
+
 export class Client {
   /**
    * The client for interacting with assistants.
@@ -1004,10 +1138,16 @@ export class Client {
    */
   public crons: CronsClient;
 
+  /**
+   * The client for interacting with the KV store.
+   */
+  public store: StoreClient;
+
   constructor(config?: ClientConfig) {
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
     this.crons = new CronsClient(config);
+    this.store = new StoreClient(config);
   }
 }
