@@ -5,7 +5,7 @@ from typing import Iterable
 from pytest_mock import MockerFixture
 
 from langgraph.store.base import GetOp, Item, Op, Result
-from langgraph.store.batch import AsyncBatchedBaseStore
+from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
 
 
