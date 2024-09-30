@@ -122,10 +122,10 @@ def _get_model_preprocessing_runnable(
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
     if not isinstance(model, RunnableBinding):
-        return False
+        return True
 
     if "tools" not in model.kwargs:
-        return False
+        return True
 
     bound_tools = model.kwargs["tools"]
     if len(tools) != len(bound_tools):
@@ -151,7 +151,7 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     if missing_tools := tool_names - bound_tool_names:
         raise ValueError(f"Missing tools '{missing_tools}' in the model.bind_tools()")
 
-    return True
+    return False
 
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
