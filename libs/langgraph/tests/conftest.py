@@ -224,17 +224,17 @@ async def awith_checkpointer(
 
 ALL_CHECKPOINTERS_SYNC = [
     "memory",
-    # "sqlite",
-    # "postgres",
-    # "postgres_pipe",
-    # "postgres_pool",
+    "sqlite",
+    "postgres",
+    "postgres_pipe",
+    "postgres_pool",
 ]
 ALL_CHECKPOINTERS_ASYNC = [
     "memory",
-    # "sqlite_aio",
-    # "postgres_aio",
-    # "postgres_aio_pipe",
-    # "postgres_aio_pool",
+    "sqlite_aio",
+    "postgres_aio",
+    "postgres_aio_pipe",
+    "postgres_aio_pool",
 ]
 ALL_CHECKPOINTERS_ASYNC_PLUS_NONE = [
     *ALL_CHECKPOINTERS_ASYNC,
