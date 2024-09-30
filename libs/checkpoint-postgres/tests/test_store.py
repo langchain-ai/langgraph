@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 from conftest import DEFAULT_URI  # type: ignore
 
-from langgraph.checkpoint.postgres import PostgresStore
 from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
+from langgraph.store.postgres import PostgresStore
 
 
 class MockCursor:
