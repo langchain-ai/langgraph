@@ -17,9 +17,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.postgres.base import (
-    BasePostgresSaver,
-)
+from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = Union[Connection[DictRow], ConnectionPool[Connection[DictRow]]]
@@ -167,15 +165,17 @@ class PostgresSaver(BasePostgresSaver):
                         value["pending_sends"],
                     ),
                     self._load_metadata(value["metadata"]),
-                    {
-                        "configurable": {
-                            "thread_id": value["thread_id"],
-                            "checkpoint_ns": value["checkpoint_ns"],
-                            "checkpoint_id": value["parent_checkpoint_id"],
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": value["thread_id"],
+                                "checkpoint_ns": value["checkpoint_ns"],
+                                "checkpoint_id": value["parent_checkpoint_id"],
+                            }
                         }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None,
+                        if value["parent_checkpoint_id"]
+                        else None
+                    ),
                     self._load_writes(value["pending_writes"]),
                 )
 
@@ -246,15 +246,17 @@ class PostgresSaver(BasePostgresSaver):
                         value["pending_sends"],
                     ),
                     self._load_metadata(value["metadata"]),
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["parent_checkpoint_id"],
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": value["parent_checkpoint_id"],
+                            }
                         }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None,
+                        if value["parent_checkpoint_id"]
+                        else None
+                    ),
                     self._load_writes(value["pending_writes"]),
                 )
 
@@ -384,3 +386,6 @@ class PostgresSaver(BasePostgresSaver):
             else:
                 with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
+
+
+__all__ = ["PostgresSaver", "Conn"]

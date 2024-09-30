@@ -67,8 +67,10 @@ from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSeq
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
+    ALL_STORES_ASYNC,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
+    awith_store,
 )
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
@@ -9709,7 +9711,8 @@ async def test_checkpointer_null_pending_writes() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_store_injected_async(checkpointer_name: str) -> None:
+@pytest.mark.parametrize("store_name", ALL_STORES_ASYNC)
+async def test_store_injected_async(checkpointer_name: str, store_name: str) -> None:
     class State(TypedDict):
         count: Annotated[int, operator.add]
 
@@ -9718,7 +9721,6 @@ async def test_store_injected_async(checkpointer_name: str) -> None:
 
     async def node(input: State, config: RunnableConfig, store: BaseStore):
         assert isinstance(store, BaseStore)
-        assert isinstance(store, InMemoryStore)
         await store.aput(
             ("foo", "bar"),
             doc_id,
@@ -9733,8 +9735,9 @@ async def test_store_injected_async(checkpointer_name: str) -> None:
     builder = StateGraph(State)
     builder.add_node("node", node)
     builder.add_edge("__start__", "node")
-    the_store = InMemoryStore()
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
+    async with awith_checkpointer(checkpointer_name) as checkpointer, awith_store(
+        store_name
+    ) as the_store:
         graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
         thread_1 = str(uuid.uuid4())
