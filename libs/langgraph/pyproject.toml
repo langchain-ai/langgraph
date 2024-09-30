@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.2.29"
+version = "0.2.30"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -10,7 +10,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
 langchain-core = ">=0.2.39,<0.4"
-langgraph-checkpoint = "^1.0.13"
+langgraph-checkpoint = "^1.0.14"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
