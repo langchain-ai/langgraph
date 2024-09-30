@@ -1,6 +1,6 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union
+from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import (
     Runnable,
@@ -120,7 +120,7 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
-def _should_bind_tools(model: BaseChatModel, tools: Sequence[BaseTool]) -> bool:
+def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
     if not isinstance(model, RunnableBinding):
         return False
 
@@ -156,7 +156,7 @@ def _should_bind_tools(model: BaseChatModel, tools: Sequence[BaseTool]) -> bool:
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
-    model: BaseChatModel,
+    model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
@@ -456,7 +456,7 @@ def create_react_agent(
         tool_classes = list(tool_node.tools_by_name.values())
 
     if _should_bind_tools(model, tool_classes):
-        model = model.bind_tools(tool_classes)
+        model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
