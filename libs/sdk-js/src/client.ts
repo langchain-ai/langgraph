@@ -221,7 +221,7 @@ export class AssistantsClient extends BaseClient {
   /**
    * Get the JSON representation of the graph assigned to a runnable
    * @param assistantId The ID of the assistant.
-   * @param options.xray Whether to include subgraphs in the serialized graph representation.
+   * @param options.xray Whether to include subgraphs in the serialized graph representation. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
    * @returns Serialized graph
    */
   async getGraph(
