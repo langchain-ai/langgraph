@@ -17,7 +17,16 @@ def test_prepare_next_tasks() -> None:
         )
         assert (
             prepare_next_tasks(
-                checkpoint, processes, channels, managed, config, 0, for_execution=True
+                checkpoint,
+                processes,
+                channels,
+                managed,
+                config,
+                0,
+                for_execution=True,
+                checkpointer=None,
+                store=None,
+                manager=None,
             )
             == {}
         )

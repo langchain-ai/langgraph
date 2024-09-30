@@ -197,6 +197,30 @@ class RunCreate(TypedDict):
     multitask_strategy: Optional[MultitaskStrategy]
 
 
+class Item(TypedDict):
+    namespace: list[str]
+    """The namespace of the item."""
+    key: str
+    """The unique identifier of the item within its namespace.
+    
+    In general, keys are not globally unique.
+    """
+    value: dict[str, Any]
+    """The value stored in the item. This is the document itself."""
+    created_at: datetime
+    """The timestamp when the item was created."""
+    updated_at: datetime
+    """The timestamp when the item was last updated."""
+
+
+class ListNamespaceResponse(TypedDict):
+    namespaces: list[list[str]]
+
+
+class SearchItemsResponse(TypedDict):
+    items: list[Item]
+
+
 class StreamPart(NamedTuple):
     event: str
     data: dict

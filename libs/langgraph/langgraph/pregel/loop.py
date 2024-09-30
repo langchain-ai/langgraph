@@ -101,7 +101,6 @@ from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
-from langgraph.store.batch import AsyncBatchedStore
 from langgraph.types import All, PregelExecutableTask, StreamMode
 from langgraph.utils.config import patch_configurable
 
@@ -367,6 +366,7 @@ class PregelLoop:
             self.step,
             for_execution=True,
             manager=manager,
+            store=self.store,
             checkpointer=self.checkpointer,
         )
         # we don't need to save the writes for the last task that completes
@@ -495,6 +495,7 @@ class PregelLoop:
                 self.config,
                 self.step,
                 for_execution=True,
+                store=None,
                 checkpointer=None,
                 manager=None,
             )
@@ -783,7 +784,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             check_subgraphs=check_subgraphs,
             debug=debug,
         )
-        self.store = AsyncBatchedStore(self.store) if self.store else None
         self.stack = AsyncExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version

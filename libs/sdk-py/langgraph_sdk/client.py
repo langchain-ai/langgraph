@@ -11,6 +11,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Union,
     overload,
 )
@@ -29,12 +30,15 @@ from langgraph_sdk.schema import (
     Cron,
     DisconnectMode,
     GraphSchema,
+    Item,
     Json,
+    ListNamespaceResponse,
     MultitaskStrategy,
     OnCompletionBehavior,
     OnConflictBehavior,
     Run,
     RunCreate,
+    SearchItemsResponse,
     StreamMode,
     StreamPart,
     Subgraphs,
@@ -143,6 +147,7 @@ class LangGraphClient:
         self.threads = ThreadsClient(self.http)
         self.runs = RunsClient(self.http)
         self.crons = CronClient(self.http)
+        self.store = StoreClient(self.http)
 
 
 class HttpClient:
@@ -211,9 +216,9 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, json: Optional[Any] = None) -> None:
         """Make a DELETE request."""
-        r = await self.client.delete(path)
+        r = await self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -1879,6 +1884,205 @@ class CronClient:
         return await self.http.post("/runs/crons/search", json=payload)
 
 
+class StoreClient:
+    def __init__(self, http: HttpClient) -> None:
+        self.http = http
+
+    async def put_item(
+        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+    ) -> None:
+        """Store or update an item.
+
+        Args:
+            namespace: A list of strings representing the namespace path.
+            key: The unique identifier for the item within the namespace.
+            value: A dictionary containing the item's data.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.store.put_item(
+                ["documents", "user123"],
+                key="item456",
+                value={"title": "My Document", "content": "Hello World"}
+            )
+        """
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
+        payload = {
+            "namespace": namespace,
+            "key": key,
+            "value": value,
+        }
+        await self.http.put("/store/items", json=payload)
+
+    async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+        """Retrieve a single item.
+
+        Args:
+            key: The unique identifier for the item.
+            namespace: Optional list of strings representing the namespace path.
+
+        Returns:
+            Item: The retrieved item.
+
+        Example Usage:
+
+            item = await client.store.get_item(
+                ["documents", "user123"],
+                key="item456",
+            )
+            print(item)
+
+            ----------------------------------------------------------------
+
+            {
+                'namespace': ['documents', 'user123'],
+                'key': 'item456',
+                'value': {'title': 'My Document', 'content': 'Hello World'},
+                'created_at': '2024-07-30T12:00:00Z',
+                'updated_at': '2024-07-30T12:00:00Z'
+            }
+        """
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
+        return await self.http.get(
+            "/store/items", params={"namespace": ".".join(namespace), "key": key}
+        )
+
+    async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
+        """Delete an item.
+
+        Args:
+            key: The unique identifier for the item.
+            namespace: Optional list of strings representing the namespace path.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.store.delete_item(
+                ["documents", "user123"],
+                key="item456",
+            )
+        """
+        await self.http.delete(
+            "/store/items", json={"namespace": namespace, "key": key}
+        )
+
+    async def search_items(
+        self,
+        namespace_prefix: Sequence[str],
+        /,
+        filter: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> SearchItemsResponse:
+        """Search for items within a namespace prefix.
+
+        Args:
+            namespace_prefix: List of strings representing the namespace prefix.
+            filter: Optional dictionary of key-value pairs to filter results.
+            limit: Maximum number of items to return (default is 10).
+            offset: Number of items to skip before returning results (default is 0).
+
+        Returns:
+            List[Item]: A list of items matching the search criteria.
+
+        Example Usage:
+
+            items = await client.store.search_items(
+                ["documents"],
+                filter={"author": "John Doe"},
+                limit=5,
+                offset=0
+            )
+            print(items)
+
+            ----------------------------------------------------------------
+
+            {
+                "items": [
+                    {
+                        "namespace": ["documents", "user123"],
+                        "key": "item789",
+                        "value": {
+                            "title": "Another Document",
+                            "author": "John Doe"
+                        },
+                        "created_at": "2024-07-30T12:00:00Z",
+                        "updated_at": "2024-07-30T12:00:00Z"
+                    },
+                    # ... additional items ...
+                ]
+            }
+        """
+        payload = {
+            "namespace_prefix": namespace_prefix,
+            "filter": filter,
+            "limit": limit,
+            "offset": offset,
+        }
+
+        return await self.http.post("/store/items/search", json=_provided_vals(payload))
+
+    async def list_namespaces(
+        self,
+        prefix: Optional[List[str]] = None,
+        suffix: Optional[List[str]] = None,
+        max_depth: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ListNamespaceResponse:
+        """List namespaces with optional match conditions.
+
+        Args:
+            prefix: Optional list of strings representing the prefix to filter namespaces.
+            suffix: Optional list of strings representing the suffix to filter namespaces.
+            max_depth: Optional integer specifying the maximum depth of namespaces to return.
+            limit: Maximum number of namespaces to return (default is 100).
+            offset: Number of namespaces to skip before returning results (default is 0).
+
+        Returns:
+            List[List[str]]: A list of namespaces matching the criteria.
+
+        Example Usage:
+
+            namespaces = await client.store.list_namespaces(
+                prefix=["documents"],
+                max_depth=3,
+                limit=10,
+                offset=0
+            )
+            print(namespaces)
+
+            ----------------------------------------------------------------
+
+            [
+                ["documents", "user123", "reports"],
+                ["documents", "user456", "invoices"],
+                ...
+            ]
+        """
+        payload = {
+            "prefix": prefix,
+            "suffix": suffix,
+            "max_depth": max_depth,
+            "limit": limit,
+            "offset": offset,
+        }
+        return await self.http.post("/store/namespaces", json=_provided_vals(payload))
+
+
 def get_sync_client(
     *,
     url: Optional[str] = None,
@@ -1918,6 +2122,7 @@ class SyncLangGraphClient:
         self.threads = SyncThreadsClient(self.http)
         self.runs = SyncRunsClient(self.http)
         self.crons = SyncCronClient(self.http)
+        self.store = SyncStoreClient(self.http)
 
 
 class SyncHttpClient:
@@ -1986,9 +2191,9 @@ class SyncHttpClient:
             raise e
         return decode_json(r)
 
-    def delete(self, path: str) -> None:
+    def delete(self, path: str, *, json: Optional[Any] = None) -> None:
         """Make a DELETE request."""
-        r = self.client.delete(path)
+        r = self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -3636,3 +3841,204 @@ class SyncCronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post("/runs/crons/search", json=payload)
+
+
+class SyncStoreClient:
+    def __init__(self, http: SyncHttpClient) -> None:
+        self.http = http
+
+    def put_item(
+        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+    ) -> None:
+        """Store or update an item.
+
+        Args:
+            namespace: A list of strings representing the namespace path.
+            key: The unique identifier for the item within the namespace.
+            value: A dictionary containing the item's data.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            client.store.put_item(
+                ["documents", "user123"],
+                key="item456",
+                value={"title": "My Document", "content": "Hello World"}
+            )
+        """
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
+        payload = {
+            "namespace": namespace,
+            "key": key,
+            "value": value,
+        }
+        self.http.put("/store/items", json=payload)
+
+    def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+        """Retrieve a single item.
+
+        Args:
+            key: The unique identifier for the item.
+            namespace: Optional list of strings representing the namespace path.
+
+        Returns:
+            Item: The retrieved item.
+
+        Example Usage:
+
+            item = client.store.get_item(
+                ["documents", "user123"],
+                key="item456",
+            )
+            print(item)
+
+            ----------------------------------------------------------------
+
+            {
+                'namespace': ['documents', 'user123'],
+                'key': 'item456',
+                'value': {'title': 'My Document', 'content': 'Hello World'},
+                'created_at': '2024-07-30T12:00:00Z',
+                'updated_at': '2024-07-30T12:00:00Z'
+            }
+        """
+        for label in namespace:
+            if "." in label:
+                raise ValueError(
+                    f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                )
+
+        return self.http.get(
+            "/store/items", params={"key": key, "namespace": ".".join(namespace)}
+        )
+
+    def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
+        """Delete an item.
+
+        Args:
+            key: The unique identifier for the item.
+            namespace: Optional list of strings representing the namespace path.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            client.store.delete_item(
+                ["documents", "user123"],
+                key="item456",
+            )
+        """
+        self.http.delete("/store/items", json={"key": key, "namespace": namespace})
+
+    def search_items(
+        self,
+        namespace_prefix: Sequence[str],
+        /,
+        filter: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> SearchItemsResponse:
+        """Search for items within a namespace prefix.
+
+        Args:
+            namespace_prefix: List of strings representing the namespace prefix.
+            filter: Optional dictionary of key-value pairs to filter results.
+            limit: Maximum number of items to return (default is 10).
+            offset: Number of items to skip before returning results (default is 0).
+
+        Returns:
+            List[Item]: A list of items matching the search criteria.
+
+        Example Usage:
+
+            items = client.store.search_items(
+                ["documents"],
+                filter={"author": "John Doe"},
+                limit=5,
+                offset=0
+            )
+            print(items)
+
+            ----------------------------------------------------------------
+
+            {
+                "items": [
+                    {
+                        "namespace": ["documents", "user123"],
+                        "key": "item789",
+                        "value": {
+                            "title": "Another Document",
+                            "author": "John Doe"
+                        },
+                        "created_at": "2024-07-30T12:00:00Z",
+                        "updated_at": "2024-07-30T12:00:00Z"
+                    },
+                    # ... additional items ...
+                ]
+            }
+        """
+        payload = {
+            "namespace_prefix": namespace_prefix,
+            "filter": filter,
+            "limit": limit,
+            "offset": offset,
+        }
+        return self.http.post("/store/items/search", json=_provided_vals(payload))
+
+    def list_namespaces(
+        self,
+        prefix: Optional[List[str]] = None,
+        suffix: Optional[List[str]] = None,
+        max_depth: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ListNamespaceResponse:
+        """List namespaces with optional match conditions.
+
+        Args:
+            prefix: Optional list of strings representing the prefix to filter namespaces.
+            suffix: Optional list of strings representing the suffix to filter namespaces.
+            max_depth: Optional integer specifying the maximum depth of namespaces to return.
+            limit: Maximum number of namespaces to return (default is 100).
+            offset: Number of namespaces to skip before returning results (default is 0).
+
+        Returns:
+            List[List[str]]: A list of namespaces matching the criteria.
+
+        Example Usage:
+
+            namespaces = client.store.list_namespaces(
+                prefix=["documents"],
+                max_depth=3,
+                limit=10,
+                offset=0
+            )
+            print(namespaces)
+
+            ----------------------------------------------------------------
+
+            [
+                ["documents", "user123", "reports"],
+                ["documents", "user456", "invoices"],
+                ...
+            ]
+        """
+        payload = {
+            "prefix": prefix,
+            "suffix": suffix,
+            "max_depth": max_depth,
+            "limit": limit,
+            "offset": offset,
+        }
+        return self.http.post("/store/namespaces", json=_provided_vals(payload))
+
+
+def _provided_vals(d: dict):
+    return {k: v for k, v in d.items() if v is not None}
