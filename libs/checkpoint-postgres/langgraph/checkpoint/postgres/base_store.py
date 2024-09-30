@@ -4,7 +4,7 @@ import logging
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Generic, Iterable, Iterator, Sequence, TypeVar, cast
+from typing import Any, Generic, Iterable, Iterator, Sequence, TypeVar, Union, cast
 
 import orjson
 from psycopg import BaseConnection, Connection, Cursor
@@ -25,14 +25,6 @@ from langgraph.store.base import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class Row(TypedDict):
-    key: str
-    value: Any
-    prefix: bytes
-    created_at: datetime
-    updated_at: datetime
 
 
 MIGRATIONS = [
@@ -355,6 +347,14 @@ class PostgresStore(BasePostgresStore[Connection]):
                 cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
 
 
+class Row(TypedDict):
+    key: str
+    value: Any
+    prefix: bytes
+    created_at: datetime
+    updated_at: datetime
+
+
 def _namespace_to_ltree(namespace: tuple[str, ...]) -> str:
     """Convert namespace tuple to ltree-compatible string."""
     return ".".join(namespace)
@@ -381,7 +381,7 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     return grouped_ops, tot
 
 
-def _json_loads(content: bytes | orjson.Fragment) -> Any:
+def _json_loads(content: Union[bytes, orjson.Fragment]) -> Any:
     if isinstance(content, orjson.Fragment):
         if hasattr(content, "buf"):
             content = content.buf

@@ -43,13 +43,13 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
-# lint.select = [
-#   "E",  # pycodestyle
-#   "F",  # Pyflakes
-#   "UP", # pyupgrade
-#   "B",  # flake8-bugbear
-#   "I",  # isort
-# ]
+lint.select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+]
 lint.ignore = ["E501", "B008", "UP007", "UP006"]
 
 [tool.mypy]
