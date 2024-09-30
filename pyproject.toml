@@ -30,6 +30,7 @@ markdown-callouts = "^0.4.0"
 mkdocs-exclude = "^1.0.2"
 vcrpy = "^6.0.1"
 click = "^8.1.7"
+ruff = "^0.6.8"
 
 [tool.poetry.group.test.dependencies]
 langchain = "^0.3.1"
@@ -59,3 +60,18 @@ optional = true
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint.per-file-ignores]
+"docs/*" = [
+    "E402", # allow imports to appear anywhere in docs
+    "F401", # allow "imported but unused" example code
+    "F811", # allow re-importing the same module, so that cells can stay independent
+    "F841", # allow assignments to variables that are never read -- it's example code
+    # The issues below should be cleaned up when there's time
+    "E722", # allow base imports in notebooks
+]
+

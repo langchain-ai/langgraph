@@ -2,6 +2,7 @@ import asyncio
 import operator
 import re
 import sys
+import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from time import perf_counter
@@ -24,9 +25,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from langchain_core.messages import (
-    ToolCall,
-)
+from langchain_core.messages import ToolCall
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -57,25 +56,21 @@ from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.managed.shared_value import SharedValue
-from langgraph.prebuilt.chat_agent_executor import (
-    create_tool_calling_executor,
-)
+from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import (
-    Channel,
-    GraphRecursionError,
-    Pregel,
-    StateSnapshot,
-)
+from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
-from langgraph.store.memory import MemoryStore
+from langgraph.store.base import BaseStore
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
+    ALL_STORES_ASYNC,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
+    awith_store,
 )
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
@@ -5423,7 +5418,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         tool_two = tool_two_graph.compile(
-            store=MemoryStore(),
+            store=InMemoryStore(),
             checkpointer=checkpointer,
             interrupt_before=["tool_two_fast", "tool_two_slow"],
         )
@@ -5658,6 +5653,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "step": -1,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                     },
+                    "parent_config": None,
                     "next": ["__start__"],
                     "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
                 },
@@ -5687,6 +5683,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 0,
                         "writes": None,
+                    },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "10",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
                     },
                     "next": ["prepare"],
                     "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
@@ -5740,6 +5747,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
+                    },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "10",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
                     },
                     "next": ["tool_two_slow"],
                     "tasks": [
@@ -5796,6 +5814,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "step": 2,
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "10",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
+                    },
                     "next": ["finish"],
                     "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
                 },
@@ -5849,6 +5878,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "step": 3,
                         "writes": {"finish": {"my_key": " finished"}},
                     },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "10",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
+                    },
                     "next": [],
                     "tasks": [],
                 },
@@ -5895,6 +5935,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "step": -1,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                     },
+                    "parent_config": None,
                     "next": ["__start__"],
                     "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
                 },
@@ -5924,6 +5965,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 0,
                         "writes": None,
+                    },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "11"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "11",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
                     },
                     "next": ["prepare"],
                     "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
@@ -5977,6 +6029,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
+                    },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "11"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "11",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
                     },
                     "next": ["tool_two_slow"],
                     "tasks": [
@@ -9645,3 +9708,68 @@ async def test_checkpointer_null_pending_writes() -> None:
     assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
         "1"
     ] * 4
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("store_name", ALL_STORES_ASYNC)
+async def test_store_injected_async(checkpointer_name: str, store_name: str) -> None:
+    class State(TypedDict):
+        count: Annotated[int, operator.add]
+
+    doc_id = str(uuid.uuid4())
+    doc = {"some-key": "this-is-a-val"}
+
+    async def node(input: State, config: RunnableConfig, store: BaseStore):
+        assert isinstance(store, BaseStore)
+        await store.aput(
+            ("foo", "bar"),
+            doc_id,
+            {
+                **doc,
+                "from_thread": config["configurable"]["thread_id"],
+                "some_val": input["count"],
+            },
+        )
+        return {"count": 1}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge("__start__", "node")
+    async with awith_checkpointer(checkpointer_name) as checkpointer, awith_store(
+        store_name
+    ) as the_store:
+        graph = builder.compile(store=the_store, checkpointer=checkpointer)
+
+        thread_1 = str(uuid.uuid4())
+        result = await graph.ainvoke(
+            {"count": 0}, {"configurable": {"thread_id": thread_1}}
+        )
+        assert result == {"count": 1}
+        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
+        assert len((await the_store.asearch(("foo", "bar")))) == 1
+
+        # Check update on existing thread
+        result = await graph.ainvoke(
+            {"count": 0}, {"configurable": {"thread_id": thread_1}}
+        )
+        assert result == {"count": 2}
+        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
+        assert len((await the_store.asearch(("foo", "bar")))) == 1
+
+        thread_2 = str(uuid.uuid4())
+
+        result = await graph.ainvoke(
+            {"count": 0}, {"configurable": {"thread_id": thread_2}}
+        )
+        assert result == {"count": 1}
+        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert returned_doc == {
+            **doc,
+            "from_thread": thread_2,
+            "some_val": 0,
+        }  # Overwrites the whole doc
+        assert (
+            len((await the_store.asearch(("foo", "bar")))) == 1
+        )  # still overwriting the same one

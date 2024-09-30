@@ -6,6 +6,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Literal,
     Optional,
     Sequence,
     Type,
@@ -50,6 +51,7 @@ pytestmark = pytest.mark.anyio
 class FakeToolCallingModel(BaseChatModel):
     tool_calls: Optional[list[list[ToolCall]]] = None
     index: int = 0
+    tool_style: Literal["openai", "anthropic"] = "openai"
 
     def _generate(
         self,
@@ -80,7 +82,31 @@ class FakeToolCallingModel(BaseChatModel):
         tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        return self
+        tool_dicts = []
+        for tool in tools:
+            if not isinstance(tool, BaseTool):
+                raise TypeError(
+                    "Only BaseTool is supported by FakeToolCallingModel.bind_tools"
+                )
+
+            # NOTE: this is a simplified tool spec for testing purposes only
+            if self.tool_style == "openai":
+                tool_dicts.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                        },
+                    }
+                )
+            elif self.tool_style == "anthropic":
+                tool_dicts.append(
+                    {
+                        "name": tool.name,
+                    }
+                )
+
+        return self.bind(tools=tool_dicts)
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -315,6 +341,58 @@ def test_remove_unanswered_tool_calls():
         "input": {},
     }
     assert result[2:] == messages[2:]
+
+
+@pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
+def test_model_with_tools(tool_style: str):
+    model = FakeToolCallingModel(tool_style=tool_style)
+
+    @dec_tool
+    def tool1(some_val: int) -> str:
+        """Tool 1 docstring."""
+        return f"Tool 1: {some_val}"
+
+    @dec_tool
+    def tool2(some_val: int) -> str:
+        """Tool 2 docstring."""
+        return f"Tool 2: {some_val}"
+
+    # check valid agent constructor
+    agent = create_react_agent(model.bind_tools([tool1, tool2]), [tool1, tool2])
+    result = agent.nodes["tools"].invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 2},
+                            "id": "some 1",
+                        },
+                        {
+                            "name": "tool2",
+                            "args": {"some_val": 2},
+                            "id": "some 2",
+                        },
+                    ],
+                )
+            ]
+        }
+    )
+    tool_messages: ToolMessage = result["messages"][-2:]
+    for tool_message in tool_messages:
+        assert tool_message.type == "tool"
+        assert tool_message.content in {"Tool 1: 2", "Tool 2: 2"}
+        assert tool_message.tool_call_id in {"some 1", "some 2"}
+
+    # test mismatching tool lengths
+    with pytest.raises(ValueError):
+        create_react_agent(model.bind_tools([tool1]), [tool1, tool2])
+
+    # test missing bound tools
+    with pytest.raises(ValueError):
+        create_react_agent(model.bind_tools([tool1]), [tool2])
 
 
 async def test_tool_node():
