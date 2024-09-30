@@ -41,3 +41,21 @@ def test_runnable_callable_func_accepts():
     for name, runnable in runnables.items():
         assert runnable.func_accepts["writer"] == expected_writer.get(name, False)
         assert runnable.func_accepts["store"] == expected_store.get(name, False)
+
+
+async def test_runnable_callable_basic():
+    def sync_func(x: Any) -> str:
+        return f"{x}"
+
+    async def async_func(x: Any) -> str:
+        return f"{x}"
+
+    runnable_sync = RunnableCallable(sync_func)
+    runnable_async = RunnableCallable(func=None, afunc=async_func)
+
+    result_sync = runnable_sync.invoke("test")
+    assert result_sync == "test"
+
+    # Test asynchronous ainvoke
+    result_async = await runnable_async.ainvoke("test")
+    assert result_async == "test"
