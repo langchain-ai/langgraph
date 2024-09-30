@@ -1,3 +1,4 @@
+import enum
 import json
 import operator
 import re
@@ -7,7 +8,6 @@ import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-import enum
 from random import randrange
 from typing import (
     Annotated,

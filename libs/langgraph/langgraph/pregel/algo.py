@@ -13,8 +13,8 @@ from typing import (
     Protocol,
     Sequence,
     Union,
+    cast,
     overload,
-    cast
 )
 from uuid import UUID
 
