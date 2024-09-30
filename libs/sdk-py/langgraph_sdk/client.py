@@ -310,13 +310,13 @@ class AssistantsClient:
         return await self.http.get(f"/assistants/{assistant_id}")
 
     async def get_graph(
-        self, assistant_id: str, *, xray: bool = False
+        self, assistant_id: str, *, xray: Union[int, bool] = False
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
-            xray: Include graph representation of subgraphs.
+            xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -2282,13 +2282,13 @@ class SyncAssistantsClient:
         return self.http.get(f"/assistants/{assistant_id}")
 
     def get_graph(
-        self, assistant_id: str, *, xray: bool = False
+        self, assistant_id: str, *, xray: Union[int, bool] = False
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
-            xray: Include graph representation of subgraphs.
+            xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
