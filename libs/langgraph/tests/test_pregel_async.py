@@ -5933,6 +5933,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "step": -1,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                     },
+                    "parent_config": None,
                     "next": ["__start__"],
                     "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
                 },
@@ -5962,6 +5963,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 0,
                         "writes": None,
+                    },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "11"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "11",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
                     },
                     "next": ["prepare"],
                     "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
@@ -6015,6 +6027,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
+                    },
+                    "parent_config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "11"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "11",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
                     },
                     "next": ["tool_two_slow"],
                     "tasks": [
