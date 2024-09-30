@@ -14,6 +14,7 @@ from typing import (
     Sequence,
     Union,
     overload,
+    cast
 )
 from uuid import UUID
 
@@ -471,7 +472,7 @@ def prepare_single_task(
         else:
             return PregelTask(task_id, packet.node, task_path)
     elif task_path[0] == PULL:
-        name = str(task_path[1])
+        name = cast(str, task_path[1])
         if name not in processes:
             return
         proc = processes[name]

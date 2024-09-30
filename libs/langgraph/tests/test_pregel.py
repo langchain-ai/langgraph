@@ -7,6 +7,7 @@ import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import enum
 from random import randrange
 from typing import (
     Annotated,
@@ -11517,3 +11518,23 @@ def test_store_injected(
         "some_val": 0,
     }  # Overwrites the whole doc
     assert len(the_store.search(("foo", "bar"))) == 1  # still overwriting the same one
+
+
+def test_enum_node_names():
+    class NodeName(str, enum.Enum):
+        BAZ = "baz"
+
+    class State(TypedDict):
+        foo: str
+        bar: str
+
+    def baz(state: State):
+        return {"bar": state["foo"] + "!"}
+
+    graph = StateGraph(State)
+    graph.add_node(NodeName.BAZ, baz)
+    graph.add_edge(START, NodeName.BAZ)
+    graph.add_edge(NodeName.BAZ, END)
+    graph = graph.compile()
+
+    assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
