@@ -52,6 +52,7 @@ class CheckpointPayload(TypedDict):
     metadata: CheckpointMetadata
     values: dict[str, Any]
     next: list[str]
+    parent_config: Optional[RunnableConfig]
     tasks: list[CheckpointTask]
 
 
@@ -136,6 +137,7 @@ def map_debug_checkpoint(
     checkpoint: Checkpoint,
     tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
+    parent_config: Optional[RunnableConfig],
 ) -> Iterator[DebugOutputCheckpoint]:
     """Produce "checkpoint" events for stream_mode=debug."""
     yield {
@@ -144,6 +146,7 @@ def map_debug_checkpoint(
         "step": step,
         "payload": {
             "config": config,
+            "parent_config": parent_config,
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
