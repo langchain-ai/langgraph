@@ -310,13 +310,13 @@ class AssistantsClient:
         return await self.http.get(f"/assistants/{assistant_id}")
 
     async def get_graph(
-        self, assistant_id: str, *, xray: bool = False
+        self, assistant_id: str, *, xray: Union[int, bool] = False
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
-            xray: Include graph representation of subgraphs.
+            xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -1031,17 +1031,20 @@ class ThreadsClient:
     async def get_history(
         self,
         thread_id: str,
+        *,
         limit: int = 10,
-        before: Optional[str] = None,
+        before: Optional[str | Checkpoint] = None,
         metadata: Optional[dict] = None,
+        checkpoint: Optional[Checkpoint] = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
         Args:
             thread_id: The ID of the thread to get the state of.
+            checkpoint: Get history for this subgraph. If empty defaults to root.
             limit: The maximum number of results to return.
-            before: Thread timestamp to get history before.
-            metadata: The metadata of the thread history to get.
+            before: Get history before this checkpoint.
+            metadata: Filter checkpoints by metadata.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -1051,8 +1054,6 @@ class ThreadsClient:
             thread_state = await client.threads.get_history(
                 thread_id="my_thread_id",
                 limit=5,
-                before="my_timestamp",
-                metadata={"name":"my_name"}
             )
 
         """  # noqa: E501
@@ -1063,6 +1064,8 @@ class ThreadsClient:
             payload["before"] = before
         if metadata:
             payload["metadata"] = metadata
+        if checkpoint:
+            payload["checkpoint"] = checkpoint
         return await self.http.post(f"/threads/{thread_id}/history", json=payload)
 
 
@@ -2279,13 +2282,13 @@ class SyncAssistantsClient:
         return self.http.get(f"/assistants/{assistant_id}")
 
     def get_graph(
-        self, assistant_id: str, *, xray: bool = False
+        self, assistant_id: str, *, xray: Union[int, bool] = False
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
-            xray: Include graph representation of subgraphs.
+            xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -2994,17 +2997,20 @@ class SyncThreadsClient:
     def get_history(
         self,
         thread_id: str,
+        *,
         limit: int = 10,
-        before: Optional[str] = None,
+        before: Optional[str | Checkpoint] = None,
         metadata: Optional[dict] = None,
+        checkpoint: Optional[Checkpoint] = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
         Args:
             thread_id: The ID of the thread to get the state of.
+            checkpoint: Get history for this subgraph. If empty defaults to root.
             limit: The maximum number of results to return.
-            before: Thread timestamp to get history before.
-            metadata: The metadata of the thread history to get.
+            before: Get history before this checkpoint.
+            metadata: Filter checkpoints by metadata.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -3026,6 +3032,8 @@ class SyncThreadsClient:
             payload["before"] = before
         if metadata:
             payload["metadata"] = metadata
+        if checkpoint:
+            payload["checkpoint"] = checkpoint
         return self.http.post(f"/threads/{thread_id}/history", json=payload)
 
 
