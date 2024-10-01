@@ -4,7 +4,18 @@ import logging
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Generic, Iterable, Iterator, Sequence, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    Iterator,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import orjson
 from psycopg import BaseConnection, Connection, Cursor
@@ -54,6 +65,17 @@ C = TypeVar("C", bound=BaseConnection)
 class BasePostgresStore(BaseStore, Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
+    __slots__ = ("_deserializer",)
+
+    def __init__(
+        self,
+        *,
+        deserializer: Optional[
+            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
+        ] = None,
+    ) -> None:
+        super().__init__()
+        self._deserializer = deserializer
 
     def _get_batch_GET_ops_queries(
         self,
@@ -191,7 +213,15 @@ class BasePostgresStore(BaseStore, Generic[C]):
 
 
 class PostgresStore(BasePostgresStore[Connection]):
-    def __init__(self, conn: Connection[Any]) -> None:
+    def __init__(
+        self,
+        conn: Connection[Any],
+        *,
+        deserializer: Optional[
+            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
+        ] = None,
+    ) -> None:
+        super().__init__(deserializer=deserializer)
         self.conn = conn
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
@@ -246,7 +276,9 @@ class PostgresStore(BasePostgresStore[Connection]):
             for idx, key in items:
                 row = key_to_row.get(key)
                 if row:
-                    results[idx] = _row_to_item(namespace, row)
+                    results[idx] = _row_to_item(
+                        namespace, row, loader=self._deserializer
+                    )
                 else:
                     results[idx] = None
 
@@ -274,7 +306,10 @@ class PostgresStore(BasePostgresStore[Connection]):
 
         for cur, idx, op in cursors:
             rows = cast(list[Row], cur.fetchall())
-            items = [_row_to_item(op.namespace_prefix, row) for row in rows]
+            items = [
+                _row_to_item(op.namespace_prefix, row, loader=self._deserializer)
+                for row in rows
+            ]
             results[idx] = items
 
     def _batch_list_namespaces_ops(
@@ -361,11 +396,17 @@ def _namespace_to_ltree(namespace: tuple[str, ...]) -> str:
     return ".".join(namespace)
 
 
-def _row_to_item(namespace: tuple[str, ...], row: Row) -> Item:
+def _row_to_item(
+    namespace: tuple[str, ...],
+    row: Row,
+    *,
+    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
+) -> Item:
     """Convert a row from the database into an Item."""
+    loader = loader or _json_loads
     val = row["value"]
     return Item(
-        value=val if isinstance(val, dict) else _json_loads(val),
+        value=val if isinstance(val, dict) else loader(val),
         key=row["key"],
         namespace=namespace,
         created_at=row["created_at"],
