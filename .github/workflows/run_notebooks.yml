@@ -60,12 +60,8 @@ jobs:
           NOMIC_API_KEY: ${{ secrets.NOMIC_API_KEY }}
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-          NOTEBOOKS_CHANGED: ${{ inputs.changed-files != null }}
         run: |
-          if [ "$NOTEBOOKS_CHANGED" = "false" ]; then
-            echo "Running all notebooks"
-            ./docs/_scripts/execute_notebooks.sh
-          else
+          if [ "${{ github.event_name }}" = "workflow_call" ]; then
             CHANGED_FILES='${{ inputs.changed-files }}'
             NOTEBOOK_FILES=$(echo $CHANGED_FILES | jq -r '.[] | select(endswith(".ipynb"))')
             if [ -n "$NOTEBOOK_FILES" ]; then
@@ -74,6 +70,9 @@ jobs:
             else
               echo "No notebook files changed, skipping execution"
             fi
+          else
+            echo "Running all notebooks"
+            ./docs/_scripts/execute_notebooks.sh
           fi
 
       - name: Stop services
