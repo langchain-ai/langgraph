@@ -22,6 +22,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  run-changed-notebooks:
+    uses: ./.github/workflows/run_notebooks.yml
+    secrets: inherit
+
   deploy:
     runs-on: ubuntu-latest
     steps:
@@ -45,9 +49,6 @@ jobs:
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
-
-      - name: check-notebooks
-        uses: ./.github/workflows/run_notebooks.yml
 
       - name: Check links in notebooks
         env:
