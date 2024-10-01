@@ -22,7 +22,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  get-changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-files: ${{ steps.changed-files.outputs.all }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "docs/docs/**"
+
+  run-changed-notebooks:
+    needs: get-changed-files
+    uses: ./.github/workflows/run_notebooks.yml
+    secrets: inherit
+    with:
+      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
+
   deploy:
+    needs: run-changed-notebooks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +61,10 @@ jobs:
           poetry install --with docs
           poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
 
+      - name: Lint Docs
+        # This step lints the docs using the existing linting set up.
+        # It should be very fast and should not require any external services.
+        run: make lint-docs
       - name: Build site
         run: make build-docs
         env:
