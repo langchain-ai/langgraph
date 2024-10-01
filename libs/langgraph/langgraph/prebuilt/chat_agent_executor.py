@@ -284,7 +284,7 @@ def create_react_agent(
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
             !!! Warning
-                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.2.0
+                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.3.0
         state_modifier: An optional
             state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
 
@@ -294,6 +294,14 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+        handle_unanswered_tool_calls: An optional parameter that defines how to handle AIMessages with tool calls that
+            do not have corresponding ToolMessages. This is useful to handle errors from LLM providers that require
+            AIMessages with tool calls to be followed by ToolMessages with corresponding tool call IDs.
+            If provided, the list of messages sent to the model will be modified according to the specified strategy:
+
+            - "remove_tool_calls": modify AIMessages to remove tool_calls that do not have corresponding ToolMessages
+            - "add_tool_messages": add a ToolMessage for each unanswered tool call, following each AIMessage with unanswered tool calls
+            - False: do nothing (default)
         checkpointer: An optional checkpoint saver object. This is useful for persisting
             the state of the graph (e.g., as chat memory).
         interrupt_before: An optional list of node names to interrupt before.

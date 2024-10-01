@@ -36,7 +36,10 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
-from langgraph.prebuilt.chat_agent_executor import _remove_unanswered_tool_calls
+from langgraph.prebuilt.chat_agent_executor import (
+    _add_responses_to_unanswered_tool_calls,
+    _remove_unanswered_tool_calls,
+)
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -341,6 +344,70 @@ def test_remove_unanswered_tool_calls():
         "input": {},
     }
     assert result[2:] == messages[2:]
+
+
+def test_add_responses_to_unanswered_tool_calls():
+    # No tool calls
+    messages = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert result == messages
+
+    # Answered tool calls
+    messages = [
+        HumanMessage(content="What's the weather?"),
+        AIMessage(
+            content="Let me check that for you.",
+            tool_calls=[{"id": "call1", "name": "get_weather", "args": {}}],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F."),
+    ]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert result == messages
+
+    # Unanswered tool calls
+    messages = [
+        HumanMessage(content="What's the weather and time?"),
+        AIMessage(
+            content="I'll check that for you.",
+            tool_calls=[
+                {"id": "call1", "name": "get_weather", "args": {}},
+                {"id": "call2", "name": "get_time", "args": {}},
+            ],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F. Let me check the time."),
+    ]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert len(result) == 5
+    assert result[:2] == messages[:2]
+    # we insert tool message right after the AIMessage with unanswered tool call
+    assert isinstance(result[2], ToolMessage)
+    assert result[2].tool_call_id == "call2"
+    assert result[2].content == ""
+    assert result[3:] == messages[2:]
+
+    # Flipped order
+    messages = [
+        HumanMessage(content="What's the weather and time?"),
+        AIMessage(
+            content="I'll check that for you.",
+            tool_calls=[
+                {"id": "call2", "name": "get_time", "args": {}},
+                {"id": "call1", "name": "get_weather", "args": {}},
+            ],
+        ),
+        ToolMessage(content="6pm", tool_call_id="call2"),
+        AIMessage(content="The time is 6pm. Let me check the weather."),
+    ]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert len(result) == 5
+    assert result[:2] == messages[:2]
+    # we insert tool message right after the AIMessage with unanswered tool call
+    assert isinstance(result[2], ToolMessage)
+    assert result[2].tool_call_id == "call1"
+    assert result[2].content == ""
+    assert result[3:] == messages[2:]
 
 
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
