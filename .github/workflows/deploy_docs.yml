@@ -41,6 +41,10 @@ jobs:
           poetry install --with docs
           poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
 
+      - name: Lint Docs
+        # This step lints the docs using the existing linting set up.
+        # It should be very fast and should not require any external services.
+        run: make lint-docs
       - name: Build site
         run: make build-docs
         env:
