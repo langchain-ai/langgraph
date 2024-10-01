@@ -22,8 +22,13 @@ execute_notebook() {
 
 export -f execute_notebook
 
-# Find all notebooks and filter out those in the skip list
-notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
+# Check if custom notebook paths are provided
+if [ $# -gt 0 ]; then
+    notebooks="$@"
+else
+    # Find all notebooks and filter out those in the skip list
+    notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
+fi
 
 # Execute notebooks sequentially
 for file in $notebooks; do
