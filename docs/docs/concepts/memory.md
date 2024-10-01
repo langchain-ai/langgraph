@@ -131,23 +131,10 @@ config = {"configurable": {"thread_id": "1"}}
 graph.get_state(config)
 ```
 
-Persistence is critical sustaining a long-running chat sessions. For example, a chat between a user and an AI assistant may have interruptions. Persistence ensures that a user can continue that particular chat session at any later point in time. However, what happens if a user initiates a new chat session with an assistant? This spawns a new thread, and the information from the previous session (thread) is not retained. 
-
-But, sometimes we want to maintain data across chat sessions (threads). For example, certain user preferences are relevant across all chat sessions with that particular user. The LangGraph memory API enables this, allowing specific keys in a state schema to be accessible across all threads. For example, we can define a state schema with a `user_preferences` key that is associated with a `user_id`. Any thread can access the value of the `user_preferences` key as long as the `user_id` is supplied.
-
-```python
-class State(MessagesState):
-    user_preferences: Annotated[dict, SharedValue.on("user_id")]
-```
-
-For a specific example, we built a writing assistant using the memory API that learns and remembers the user's writing preferences. It writes content (e.g., blog posts or tweets), allows a user to make edits, reflects on the edits, and uses reflection to update a set of writing style heuristics. These heuristics are saved by the memory API to a particular key in the assistant's state schema and are accessible across all user sessions with the assistant.
-
-See this video for more context on the memory API and this video for an overview of the writing assistant.
+Persistence is critical sustaining a long-running chat sessions. For example, a chat between a user and an AI assistant may have interruptions. Persistence ensures that a user can continue that particular chat session at any later point in time. However, what happens if a user initiates a new chat session with an assistant? This spawns a new thread, and the information from the previous session (thread) is not retained. This motivates the need for a memory service that can maintain data across chat sessions (threads). 
 
 ## Meta-prompting
 
 Meta-prompting uses an LLM to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori. 
-
-As with the writing assistant discussed above, human feedback is often a useful component of meta-prompting. With the writing assistant, feedback was used to create a set of rules that the memory API made accessible across all sessions with the user. With meta-prompting, human feedback is used slightly differently: it is used to re-write a task-specific prompt.
 
 As an example, we created this [tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) that used meta-prompting to iteratively improve the tweet generation prompt. In this case, we used a LangSmith dataset to house several summarization test cases, captured human feedback on these test cases using the LangSmith Annotation Queue, and used the feedback to refine the summarization prompt directly. The process was repeated in a loop until the summaries met our criteria in human review.
