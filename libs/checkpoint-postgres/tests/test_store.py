@@ -78,9 +78,9 @@ def test_batch_order(store: PostgresStore) -> None:
 
         def execute_side_effect(query: str, *params: Any) -> None:
             # My super sophisticated database.
-            if "WHERE prefix <@" in query:
+            if "SELECT prefix, key, value" in query:
                 cursor.fetchall = mock_search_cursor.fetchall
-            elif "SELECT DISTINCT subltree" in query:
+            elif "SELECT DISTINCT ON (truncated_prefix)" in query:
                 cursor.fetchall = mock_list_namespaces_cursor.fetchall
             elif "WHERE prefix = %s AND key" in query:
                 cursor.fetchall = mock_get_cursor.fetchall

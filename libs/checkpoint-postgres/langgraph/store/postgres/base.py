@@ -40,12 +40,9 @@ logger = logging.getLogger(__name__)
 
 MIGRATIONS = [
     """
-CREATE EXTENSION IF NOT EXISTS ltree;
-""",
-    """
 CREATE TABLE IF NOT EXISTS store (
     -- 'prefix' represents the doc's 'namespace'
-    prefix ltree NOT NULL,
+    prefix text NOT NULL,
     key text NOT NULL,
     value jsonb NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -54,8 +51,8 @@ CREATE TABLE IF NOT EXISTS store (
 );
 """,
     """
--- For faster listing of namespaces & lookups by namespace with prefix/suffix matching
-CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING gist (prefix);
+-- For faster lookups by prefix
+CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
 """,
 ]
 
@@ -93,7 +90,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
                 FROM store
                 WHERE prefix = %s AND key IN ({keys_to_query})
             """
-            params = (_namespace_to_ltree(namespace), *keys)
+            params = (_namespace_to_text(namespace), *keys)
             results.append((query, params, namespace, items))
         return results
 
@@ -120,7 +117,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
                 query = (
                     f"DELETE FROM store WHERE prefix = %s AND key IN ({placeholders})"
                 )
-                params = (_namespace_to_ltree(namespace), *keys)
+                params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
         if inserts:
             values = []
@@ -129,7 +126,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
                 values.append("(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
                 insertion_params.extend(
                     [
-                        _namespace_to_ltree(op.namespace),
+                        _namespace_to_text(op.namespace),
                         op.key,
                         Jsonb(op.value),
                     ]
@@ -152,11 +149,11 @@ class BasePostgresStore(BaseStore, Generic[C]):
         queries: list[tuple[str, Sequence]] = []
         for _, op in search_ops:
             query = """
-                SELECT prefix, key, value, created_at, updated_at, prefix
+                SELECT prefix, key, value, created_at, updated_at
                 FROM store
-                WHERE prefix <@ %s
+                WHERE prefix LIKE %s
             """
-            params: list = [_namespace_to_ltree(op.namespace_prefix)]
+            params: list = [f"{_namespace_to_text(op.namespace_prefix)}%"]
 
             if op.filter:
                 filter_conditions = []
@@ -181,22 +178,39 @@ class BasePostgresStore(BaseStore, Generic[C]):
     ) -> list[tuple[str, Sequence]]:
         queries: list[tuple[str, Sequence]] = []
         for _, op in list_ops:
-            query = "SELECT DISTINCT subltree(prefix, 0, LEAST(nlevel(prefix), %s)) AS truncated_prefix FROM store"
-            # https://www.postgresql.org/docs/current/ltree.html
-            # The length of a label path cannot exceed 65535 labels.
-            params: list[Any] = [op.max_depth if op.max_depth is not None else 65536]
+            query = """
+                SELECT DISTINCT ON (truncated_prefix) truncated_prefix, prefix
+                FROM (
+                    SELECT
+                        prefix,
+                        CASE
+                            WHEN %s::integer IS NOT NULL THEN
+                                (SELECT STRING_AGG(part, '.' ORDER BY idx)
+                                 FROM (
+                                     SELECT part, ROW_NUMBER() OVER () AS idx
+                                     FROM UNNEST(REGEXP_SPLIT_TO_ARRAY(prefix, '\.')) AS part
+                                     LIMIT %s::integer
+                                 ) subquery
+                                )
+                            ELSE prefix
+                        END AS truncated_prefix
+                    FROM store
+            """
+            params: list[Any] = [op.max_depth, op.max_depth]
 
             conditions = []
             if op.match_conditions:
                 for condition in op.match_conditions:
                     if condition.match_type == "prefix":
-                        conditions.append("prefix ~ %s::lquery")
-                        lquery_pattern = f"{_namespace_to_ltree(condition.path)}.*"
-                        params.append(lquery_pattern)
+                        conditions.append("prefix LIKE %s")
+                        params.append(
+                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
+                        )
                     elif condition.match_type == "suffix":
-                        conditions.append("prefix ~ %s::lquery")
-                        lquery_pattern = f"*.{_namespace_to_ltree(condition.path)}"
-                        params.append(lquery_pattern)
+                        conditions.append("prefix LIKE %s")
+                        params.append(
+                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
+                        )
                     else:
                         logger.warning(
                             f"Unknown match_type in list_namespaces: {condition.match_type}"
@@ -204,11 +218,12 @@ class BasePostgresStore(BaseStore, Generic[C]):
 
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
+            query += ") AS subquery "
 
             query += " ORDER BY truncated_prefix LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
-
             queries.append((query, params))
+
         return queries
 
 
@@ -386,13 +401,17 @@ class PostgresStore(BasePostgresStore[Connection]):
 class Row(TypedDict):
     key: str
     value: Any
-    prefix: bytes
+    prefix: str
     created_at: datetime
     updated_at: datetime
 
 
-def _namespace_to_ltree(namespace: tuple[str, ...]) -> str:
-    """Convert namespace tuple to ltree-compatible string."""
+def _namespace_to_text(
+    namespace: tuple[str, ...], handle_wildcards: bool = False
+) -> str:
+    """Convert namespace tuple to text string."""
+    if handle_wildcards:
+        namespace = tuple("%" if val == "*" else val for val in namespace)
     return ".".join(namespace)
 
 
@@ -435,7 +454,9 @@ def _json_loads(content: Union[bytes, orjson.Fragment]) -> Any:
     return orjson.loads(cast(bytes, content))
 
 
-def _decode_ns_bytes(namespace: Union[str, bytes]) -> tuple[str, ...]:
+def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
+    if isinstance(namespace, list):
+        return tuple(namespace)
     if isinstance(namespace, bytes):
         namespace = namespace.decode()[1:]
     return tuple(namespace.split("."))
