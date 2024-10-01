@@ -152,7 +152,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
         queries: list[tuple[str, Sequence]] = []
         for _, op in search_ops:
             query = """
-                SELECT key, value, created_at, updated_at
+                SELECT key, value, created_at, updated_at, prefix
                 FROM store
                 WHERE prefix <@ %s
             """

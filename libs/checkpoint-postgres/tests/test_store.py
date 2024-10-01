@@ -423,7 +423,7 @@ class TestPostgresStore:
 
             docs_result = store.search(["test_search", "documents"])
             assert len(docs_result) == 2
-            assert all(item.namespace[1] == "documents" for item in docs_result)
+            assert all([item.namespace[1] == "documents" for item in docs_result]), docs_result
 
             reports_result = store.search(["test_search", "reports"])
             assert len(reports_result) == 2
