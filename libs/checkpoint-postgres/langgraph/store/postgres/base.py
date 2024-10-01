@@ -179,13 +179,19 @@ class BasePostgresStore(BaseStore, Generic[C]):
         queries: list[tuple[str, Sequence]] = []
         for _, op in list_ops:
             query = """
-                SELECT DISTINCT prefix
+                SELECT DISTINCT ON (truncated_prefix) truncated_prefix, prefix
                 FROM (
-                    SELECT 
+                    SELECT
                         prefix,
-                        CASE 
-                            WHEN %s::integer IS NOT NULL THEN 
-                                SPLIT_PART(prefix, '.', LEAST(%s::integer, ARRAY_LENGTH(REGEXP_SPLIT_TO_ARRAY(prefix, '\.'), 1)))
+                        CASE
+                            WHEN %s::integer IS NOT NULL THEN
+                                (SELECT STRING_AGG(part, '.' ORDER BY idx)
+                                 FROM (
+                                     SELECT part, ROW_NUMBER() OVER () AS idx
+                                     FROM UNNEST(REGEXP_SPLIT_TO_ARRAY(prefix, '\.')) AS part
+                                     LIMIT %s::integer
+                                 ) subquery
+                                )
                             ELSE prefix
                         END AS truncated_prefix
                     FROM store
@@ -214,10 +220,10 @@ class BasePostgresStore(BaseStore, Generic[C]):
                 query += " WHERE " + " AND ".join(conditions)
             query += ") AS subquery "
 
-            query += " ORDER BY prefix LIMIT %s OFFSET %s"
+            query += " ORDER BY truncated_prefix LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
-
             queries.append((query, params))
+
         return queries
 
 
@@ -337,7 +343,7 @@ class PostgresStore(BasePostgresStore[Connection]):
 
         for cur, idx in cursors:
             rows = cast(list[dict], cur.fetchall())
-            namespaces = [_decode_ns_bytes(row["prefix"]) for row in rows]
+            namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
             results[idx] = namespaces
 
     @classmethod
@@ -448,7 +454,9 @@ def _json_loads(content: Union[bytes, orjson.Fragment]) -> Any:
     return orjson.loads(cast(bytes, content))
 
 
-def _decode_ns_bytes(namespace: Union[str, bytes]) -> tuple[str, ...]:
+def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
+    if isinstance(namespace, list):
+        return tuple(namespace)
     if isinstance(namespace, bytes):
         namespace = namespace.decode()[1:]
     return tuple(namespace.split("."))

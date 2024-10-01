@@ -67,7 +67,7 @@ def test_batch_order(store: PostgresStore) -> None:
     )
     mock_list_namespaces_cursor = MockCursor(
         [
-            {"prefix": b"\x01test"},
+            {"truncated_prefix": b"\x01test"},
         ]
     )
 
@@ -78,9 +78,9 @@ def test_batch_order(store: PostgresStore) -> None:
 
         def execute_side_effect(query: str, *params: Any) -> None:
             # My super sophisticated database.
-            if "WHERE prefix <@" in query:
+            if "SELECT prefix, key, value" in query:
                 cursor.fetchall = mock_search_cursor.fetchall
-            elif "SELECT DISTINCT subltree" in query:
+            elif "SELECT DISTINCT ON (truncated_prefix)" in query:
                 cursor.fetchall = mock_list_namespaces_cursor.fetchall
             elif "WHERE prefix = %s AND key" in query:
                 cursor.fetchall = mock_get_cursor.fetchall
@@ -239,8 +239,8 @@ def test_batch_list_namespaces_ops(store: PostgresStore) -> None:
     mock_connection = store.conn
     mock_cursor = MockCursor(
         [
-            {"prefix": b"\x01test.namespace1"},
-            {"prefix": b"\x01test.namespace2"},
+            {"truncated_prefix": b"\x01test.namespace1"},
+            {"truncated_prefix": b"\x01test.namespace2"},
         ]
     )
     mock_connection.cursor.return_value = mock_cursor
