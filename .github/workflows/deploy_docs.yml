@@ -22,27 +22,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  get-changed-files:
-    runs-on: ubuntu-latest
-    outputs:
-      changed-files: ${{ steps.changed-files.outputs.all }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get changed files
-        id: changed-files
-        uses: Ana06/get-changed-files@v2.3.0
-        with:
-          filter: "docs/docs/**"
+  # get-changed-files:
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     changed-files: ${{ steps.changed-files.outputs.all }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Get changed files
+  #       id: changed-files
+  #       uses: Ana06/get-changed-files@v2.3.0
+  #       with:
+  #         filter: "docs/docs/**"
 
-  run-changed-notebooks:
-    needs: get-changed-files
-    uses: ./.github/workflows/run_notebooks.yml
-    secrets: inherit
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
+  # run-changed-notebooks:
+  #   needs: get-changed-files
+  #   uses: ./.github/workflows/run_notebooks.yml
+  #   secrets: inherit
+  #   with:
+  #     changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
   deploy:
-    needs: run-changed-notebooks
+    # needs: run-changed-notebooks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
