@@ -11,6 +11,13 @@ NOTEBOOK_DIRS = ("docs/docs/how-tos","docs/docs/tutorials")
 DOCS_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
+BLOCKLIST_COMMANDS = (
+    # skip if has WebBaseLoader to avoid caching web pages
+    "WebBaseLoader",
+    # skip if has draw_mermaid_png to avoid generating mermaid images via API
+    "draw_mermaid_png",
+)
+
 NOTEBOOKS_NO_CASSETTES = (
     "docs/docs/how-tos/visualization.ipynb",
     "docs/docs/how-tos/many-tools.ipynb"
@@ -62,8 +69,13 @@ def is_magic_command(code: str) -> bool:
 def is_comment(code: str) -> bool:
     return code.strip().startswith("#")
 
-def is_mermaid_command(code: str) -> bool:
-    return "draw_mermaid_png" in code.strip()
+
+def has_blocklisted_command(code: str) -> bool:
+    code = code.strip()
+    for blocklisted_command in BLOCKLIST_COMMANDS:
+        if blocklisted_command in code:
+            return True
+    return False
 
 
 def add_vcr_to_notebook(
@@ -87,10 +99,6 @@ def add_vcr_to_notebook(
         if all(are_magic_lines):
             continue
 
-        # skip if using mermaid
-        if any(is_mermaid_command(line) for line in lines):
-            continue
-
         if any(are_magic_lines):
             raise ValueError(
                 "Cannot process code cells with mixed magic and non-magic code."
@@ -100,8 +108,7 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
-        # skip if has WebBaseLoader to avoid caching web pages
-        if "WebBaseLoader" in cell.source:
+        if has_blocklisted_command(cell.source):
             continue
 
         cell_id = cell.get("id", idx)

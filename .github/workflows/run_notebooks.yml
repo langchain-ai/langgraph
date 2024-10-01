@@ -2,6 +2,12 @@ name: Run notebooks
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      changed-files:
+        required: false
+        type: string
+        description: "JSON string of changed files"
   schedule:
     - cron: '0 13 * * *'
 
@@ -14,7 +20,6 @@ jobs:
           - "development"
           - "latest"
 
-    name: "test (langgraph: ${{ matrix.lib-version }})"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python + Poetry
@@ -56,7 +61,19 @@ jobs:
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
         run: |
-          ./docs/_scripts/execute_notebooks.sh
+          if [ -n "${{ inputs.changed-files }}" ]; then
+            CHANGED_FILES='${{ inputs.changed-files }}'
+            NOTEBOOK_FILES=$(echo $CHANGED_FILES | jq -r '.[] | select(endswith(".ipynb"))')
+            if [ -n "$NOTEBOOK_FILES" ]; then
+              echo "Running changed notebooks: $NOTEBOOK_FILES"
+              ./docs/_scripts/execute_notebooks.sh $NOTEBOOK_FILES
+            else
+              echo "No notebook files changed, skipping execution"
+            fi
+          else
+            echo "Running all notebooks"
+            ./docs/_scripts/execute_notebooks.sh
+          fi
 
       - name: Stop services
         run: make stop-services
