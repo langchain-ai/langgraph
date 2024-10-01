@@ -1050,6 +1050,11 @@ export class StoreClient extends BaseClient {
     const response = await this.fetch<APIItem>("/store/items", {
       params: { namespace: namespace.join("."), key },
     });
+
+    if (!response) {
+      return null;
+    }
+
     return {
       ...response,
       createdAt: response.created_at,
