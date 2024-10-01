@@ -159,7 +159,7 @@ class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
 
         for cur, idx in cursors:
             rows = cast(list[dict], await cur.fetchall())
-            namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
+            namespaces = [_decode_ns_bytes(row["prefix"]) for row in rows]
             results[idx] = namespaces
 
     @classmethod

@@ -67,7 +67,7 @@ def test_batch_order(store: PostgresStore) -> None:
     )
     mock_list_namespaces_cursor = MockCursor(
         [
-            {"truncated_prefix": b"\x01test"},
+            {"prefix": b"\x01test"},
         ]
     )
 
@@ -239,8 +239,8 @@ def test_batch_list_namespaces_ops(store: PostgresStore) -> None:
     mock_connection = store.conn
     mock_cursor = MockCursor(
         [
-            {"truncated_prefix": b"\x01test.namespace1"},
-            {"truncated_prefix": b"\x01test.namespace2"},
+            {"prefix": b"\x01test.namespace1"},
+            {"prefix": b"\x01test.namespace2"},
         ]
     )
     mock_connection.cursor.return_value = mock_cursor
