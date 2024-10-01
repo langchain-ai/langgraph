@@ -16,10 +16,10 @@ test:
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
-
+TEST ?= .
 test_watch:
 	make start-postgres; \
-	poetry run ptw .; \
+	poetry run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
