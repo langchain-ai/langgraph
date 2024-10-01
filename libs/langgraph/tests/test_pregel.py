@@ -1,3 +1,4 @@
+import enum
 import json
 import operator
 import re
@@ -75,7 +76,11 @@ from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
-from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
+from tests.conftest import (
+    ALL_CHECKPOINTERS_SYNC,
+    ALL_STORES_SYNC,
+    SHOULD_CHECK_SNAPSHOTS,
+)
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
@@ -11457,8 +11462,12 @@ def test_subgraph_retries():
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+@pytest.mark.parametrize("store_name", ALL_STORES_SYNC)
+def test_store_injected(
+    request: pytest.FixtureRequest, checkpointer_name: str, store_name: str
+) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    the_store = request.getfixturevalue(f"store_{store_name}")
 
     class State(TypedDict):
         count: Annotated[int, operator.add]
@@ -11468,7 +11477,6 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
 
     def node(input: State, config: RunnableConfig, store: BaseStore):
         assert isinstance(store, BaseStore)
-        assert isinstance(store, InMemoryStore)
         store.put(
             ("foo", "bar"),
             doc_id,
@@ -11483,7 +11491,6 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
     builder = StateGraph(State)
     builder.add_node("node", node)
     builder.add_edge("__start__", "node")
-    the_store = InMemoryStore()
     graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
     thread_1 = str(uuid.uuid4())
@@ -11511,3 +11518,23 @@ def test_store_injected(request: pytest.FixtureRequest, checkpointer_name: str) 
         "some_val": 0,
     }  # Overwrites the whole doc
     assert len(the_store.search(("foo", "bar"))) == 1  # still overwriting the same one
+
+
+def test_enum_node_names():
+    class NodeName(str, enum.Enum):
+        BAZ = "baz"
+
+    class State(TypedDict):
+        foo: str
+        bar: str
+
+    def baz(state: State):
+        return {"bar": state["foo"] + "!"}
+
+    graph = StateGraph(State)
+    graph.add_node(NodeName.BAZ, baz)
+    graph.add_edge(START, NodeName.BAZ)
+    graph.add_edge(NodeName.BAZ, END)
+    graph = graph.compile()
+
+    assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
