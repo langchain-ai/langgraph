@@ -152,7 +152,9 @@ def _remove_unanswered_tool_calls(
             # update content blocks (e.g. Anthropic)
             if isinstance(message.content, list):
 
-                def is_tool_content_block(content_block: str | dict[str, Any]) -> bool:
+                def is_tool_content_block(
+                    content_block: Union[str, dict[str, Any]],
+                ) -> bool:
                     if not isinstance(content_block, dict):
                         return False
                     return content_block.get("type") == "tool_use"
@@ -163,7 +165,7 @@ def _remove_unanswered_tool_calls(
                     if cast(dict[str, Any], content_block)["id"]
                     in answered_tool_call_ids
                 ]
-                updated_content: list[str | dict[str, Any]] | str = (
+                updated_content: Union[list[Union[str, dict[str, Any]]], str] = (
                     list(filterfalse(is_tool_content_block, message.content))
                     + tool_content_blocks
                 )
