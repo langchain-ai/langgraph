@@ -1,8 +1,18 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Iterable, Sequence, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Iterable,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
+import orjson
 from psycopg import AsyncConnection, AsyncCursor
 from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
@@ -19,7 +29,16 @@ logger = logging.getLogger(__name__)
 
 
 class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
-    def __init__(self, conn: AsyncConnection[Any]) -> None:
+    def __init__(
+        self,
+        conn: AsyncConnection[Any],
+        *,
+        deserializer: Optional[
+            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
+        ] = None,
+    ) -> None:
+        super().__init__(deserializer=deserializer)
+        self.conn = conn
         self.conn = conn
         self.loop = asyncio.get_running_loop()
 
@@ -87,7 +106,9 @@ class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
             for idx, key in items:
                 row = key_to_row.get(key)
                 if row:
-                    results[idx] = _row_to_item(namespace, row)
+                    results[idx] = _row_to_item(
+                        namespace, row, loader=self._deserializer
+                    )
                 else:
                     results[idx] = None
 
@@ -115,7 +136,10 @@ class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
 
         for cur, idx, op in cursors:
             rows = cast(list[Row], await cur.fetchall())
-            items = [_row_to_item(op.namespace_prefix, row) for row in rows]
+            items = [
+                _row_to_item(op.namespace_prefix, row, loader=self._deserializer)
+                for row in rows
+            ]
             results[idx] = items
 
     async def _batch_list_namespaces_ops(
