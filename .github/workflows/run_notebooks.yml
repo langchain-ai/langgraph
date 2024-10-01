@@ -3,6 +3,11 @@ name: Run notebooks
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      changed-files:
+        required: false
+        type: string
+        description: "JSON string of changed files"
   schedule:
     - cron: '0 13 * * *'
 
@@ -60,13 +65,11 @@ jobs:
             echo "Running all notebooks"
             ./docs/_scripts/execute_notebooks.sh
           else
-            echo "Fetching changes from origin/main..."
-            git fetch origin main
-            echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' || true)
-            if [ -n "$CHANGED_FILES" ]; then
-              echo "Running changed notebooks: $CHANGED_FILES"
-              ./docs/_scripts/execute_notebooks.sh $CHANGED_FILES
+            CHANGED_FILES='${{ inputs.changed-files }}'
+            NOTEBOOK_FILES=$(echo $CHANGED_FILES | jq -r '.[] | select(endswith(".ipynb"))')
+            if [ -n "$NOTEBOOK_FILES" ]; then
+              echo "Running changed notebooks: $NOTEBOOK_FILES"
+              ./docs/_scripts/execute_notebooks.sh $NOTEBOOK_FILES
             else
               echo "No notebook files changed, skipping execution"
             fi

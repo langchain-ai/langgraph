@@ -22,9 +22,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  get-changed-notebooks:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-files: ${{ steps.changed-files.outputs.all_changed_files }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "docs/docs/**"
+
   run-changed-notebooks:
+    needs: get-changed-notebooks
     uses: ./.github/workflows/run_notebooks.yml
     secrets: inherit
+    with:
+      changed-files: ${{ needs.get-changed-notebooks.outputs.changed-files }}
 
   deploy:
     runs-on: ubuntu-latest
