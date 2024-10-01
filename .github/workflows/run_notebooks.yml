@@ -60,8 +60,9 @@ jobs:
           NOMIC_API_KEY: ${{ secrets.NOMIC_API_KEY }}
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          NOTEBOOKS_CHANGED: ${{ inputs.changed-files != null }}
         run: |
-          if [ -z "${{ inputs.changed-files }}" ]; then
+          if [ "$NOTEBOOKS_CHANGED" = "false" ]; then
             echo "Running all notebooks"
             ./docs/_scripts/execute_notebooks.sh
           else
