@@ -102,6 +102,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     version = row["v"]
             except UndefinedTable:
                 version = -1
+                cur.connection.rollback()
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
