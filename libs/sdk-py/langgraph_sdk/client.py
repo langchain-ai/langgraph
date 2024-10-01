@@ -1961,26 +1961,26 @@ class StoreClient:
             "/store/items", params={"namespace": ".".join(namespace), "key": key}
         )
 
-    async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
-        """Delete an item.
+    # async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
+    #     """Delete an item.
 
-        Args:
-            key: The unique identifier for the item.
-            namespace: Optional list of strings representing the namespace path.
+    #     Args:
+    #         key: The unique identifier for the item.
+    #         namespace: Optional list of strings representing the namespace path.
 
-        Returns:
-            None
+    #     Returns:
+    #         None
 
-        Example Usage:
+    #     Example Usage:
 
-            await client.store.delete_item(
-                ["documents", "user123"],
-                key="item456",
-            )
-        """
-        await self.http.delete(
-            "/store/items", json={"namespace": namespace, "key": key}
-        )
+    #         await client.store.delete_item(
+    #             ["documents", "user123"],
+    #             key="item456",
+    #         )
+    #     """
+    #     await self.http.delete(
+    #         "/store/items", json={"namespace": namespace, "key": key}
+    #     )
 
     async def search_items(
         self,
@@ -3710,66 +3710,66 @@ class SyncCronClient:
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(f"/threads/{thread_id}/runs/crons", json=payload)
 
-    def create(
-        self,
-        assistant_id: str,
-        *,
-        schedule: str,
-        input: Optional[dict] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[str] = None,
-    ) -> Run:
-        """Create a cron run.
+    # def create(
+    #     self,
+    #     assistant_id: str,
+    #     *,
+    #     schedule: str,
+    #     input: Optional[dict] = None,
+    #     metadata: Optional[dict] = None,
+    #     config: Optional[Config] = None,
+    #     interrupt_before: Optional[list[str]] = None,
+    #     interrupt_after: Optional[list[str]] = None,
+    #     webhook: Optional[str] = None,
+    #     multitask_strategy: Optional[str] = None,
+    # ) -> Run:
+    #     """Create a cron run.
 
-        Args:
-            assistant_id: The assistant ID or graph name to use for the cron job.
-                If using graph name, will default to first assistant created from that graph.
-            schedule: The cron schedule to execute this job on.
-            input: The input to the graph.
-            metadata: Metadata to assign to the cron job runs.
-            config: The configuration for the assistant.
-            interrupt_before: Nodes to interrupt immediately before they get executed.
-            interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-            webhook: Webhook to call after LangGraph API call is done.
-            multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+    #     Args:
+    #         assistant_id: The assistant ID or graph name to use for the cron job.
+    #             If using graph name, will default to first assistant created from that graph.
+    #         schedule: The cron schedule to execute this job on.
+    #         input: The input to the graph.
+    #         metadata: Metadata to assign to the cron job runs.
+    #         config: The configuration for the assistant.
+    #         interrupt_before: Nodes to interrupt immediately before they get executed.
+    #         interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
+    #         webhook: Webhook to call after LangGraph API call is done.
+    #         multitask_strategy: Multitask strategy to use.
+    #             Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
 
-        Returns:
-            Run: The cron run.
+    #     Returns:
+    #         Run: The cron run.
 
-        Example Usage:
+    #     Example Usage:
 
-            cron_run = client.crons.create(
-                assistant_id="agent",
-                schedule="27 15 * * *",
-                input={"messages": [{"role": "user", "content": "hello!"}]},
-                metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
-                interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
-                interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
-                webhook="https://my.fake.webhook.com",
-                multitask_strategy="interrupt"
-            )
+    #         cron_run = client.crons.create(
+    #             assistant_id="agent",
+    #             schedule="27 15 * * *",
+    #             input={"messages": [{"role": "user", "content": "hello!"}]},
+    #             metadata={"name":"my_run"},
+    #             config={"configurable": {"model_name": "openai"}},
+    #             interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
+    #             interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
+    #             webhook="https://my.fake.webhook.com",
+    #             multitask_strategy="interrupt"
+    #         )
 
-        """  # noqa: E501
-        payload = {
-            "schedule": schedule,
-            "input": input,
-            "config": config,
-            "metadata": metadata,
-            "assistant_id": assistant_id,
-            "interrupt_before": interrupt_before,
-            "interrupt_after": interrupt_after,
-            "webhook": webhook,
-        }
-        if multitask_strategy:
-            payload["multitask_strategy"] = multitask_strategy
-        payload = {k: v for k, v in payload.items() if v is not None}
-        return self.http.post("/runs/crons", json=payload)
+    #     """  # noqa: E501
+    #     payload = {
+    #         "schedule": schedule,
+    #         "input": input,
+    #         "config": config,
+    #         "metadata": metadata,
+    #         "assistant_id": assistant_id,
+    #         "interrupt_before": interrupt_before,
+    #         "interrupt_after": interrupt_after,
+    #         "webhook": webhook,
+    #     }
+    #     if multitask_strategy:
+    #         payload["multitask_strategy"] = multitask_strategy
+    #     payload = {k: v for k, v in payload.items() if v is not None}
+    #     return self.http.post("/runs/crons", json=payload)
 
     def delete(self, cron_id: str) -> None:
         """Delete a cron.

@@ -23,10 +23,8 @@ def find_classes(tree: ast.AST) -> List[Tuple[str, List[str]]]:
 def compare_sync_async_methods(sync_methods: List[str], async_methods: List[str]) -> List[str]:
     sync_set = set(sync_methods)
     async_set = set(async_methods)
-    
-    missing_in_sync = [method for method in async_set if method not in sync_set]
-    missing_in_async = [method for method in sync_set if method not in async_set]
-    
+    missing_in_sync = list(async_set - sync_set)
+    missing_in_async = list(sync_set - async_set)
     return missing_in_sync + missing_in_async
 
 
