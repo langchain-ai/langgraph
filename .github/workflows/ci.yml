@@ -66,6 +66,18 @@ jobs:
     uses: ./.github/workflows/_test_scheduler_kafka.yml
     secrets: inherit
 
+  check-sdk-methods:
+    name: "Check SDK methods matching"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run check_sdk_methods script
+        run: python .github/scripts/check_sdk_methods.py
+
   integration-test:
     name: CLI integration test
     uses: ./.github/workflows/_integration_test.yml
