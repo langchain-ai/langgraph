@@ -61,7 +61,10 @@ jobs:
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
         run: |
-          if [ -n "${{ inputs.changed-files }}" ]; then
+          if [ -z "${{ inputs.changed-files }}" ]; then
+            echo "Running all notebooks"
+            ./docs/_scripts/execute_notebooks.sh
+          else
             CHANGED_FILES='${{ inputs.changed-files }}'
             NOTEBOOK_FILES=$(echo $CHANGED_FILES | jq -r '.[] | select(endswith(".ipynb"))')
             if [ -n "$NOTEBOOK_FILES" ]; then
@@ -70,9 +73,6 @@ jobs:
             else
               echo "No notebook files changed, skipping execution"
             fi
-          else
-            echo "Running all notebooks"
-            ./docs/_scripts/execute_notebooks.sh
           fi
 
       - name: Stop services
