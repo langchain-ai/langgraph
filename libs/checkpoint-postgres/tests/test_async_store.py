@@ -45,12 +45,14 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -61,6 +63,7 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
         ]
     )
@@ -151,12 +154,14 @@ async def test_batch_get_ops(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -205,12 +210,14 @@ async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -439,7 +446,9 @@ class TestAsyncPostgresStore:
 
             docs_result = await store.asearch(["test_search", "documents"])
             assert len(docs_result) == 2
-            assert all([item.namespace[1] == "documents" for item in docs_result])
+            assert all([item.namespace[1] == "documents" for item in docs_result]), [
+                item.namespace for item in docs_result
+            ]
 
             reports_result = await store.asearch(["test_search", "reports"])
             assert len(reports_result) == 2

@@ -152,7 +152,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
         queries: list[tuple[str, Sequence]] = []
         for _, op in search_ops:
             query = """
-                SELECT key, value, created_at, updated_at, prefix
+                SELECT prefix, key, value, created_at, updated_at, prefix
                 FROM store
                 WHERE prefix <@ %s
             """
@@ -297,17 +297,19 @@ class PostgresStore(BasePostgresStore[Connection]):
         results: list[Result],
     ) -> None:
         queries = self._get_batch_search_queries(search_ops)
-        cursors: list[tuple[Cursor[Any], int, SearchOp]] = []
+        cursors: list[tuple[Cursor[Any], int]] = []
 
-        for (query, params), (idx, op) in zip(queries, search_ops):
+        for (query, params), (idx, _) in zip(queries, search_ops):
             cur = self.conn.cursor(binary=True)
             cur.execute(query, params)
-            cursors.append((cur, idx, op))
+            cursors.append((cur, idx))
 
-        for cur, idx, op in cursors:
+        for cur, idx in cursors:
             rows = cast(list[Row], cur.fetchall())
             items = [
-                _row_to_item(op.namespace_prefix, row, loader=self._deserializer)
+                _row_to_item(
+                    _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
+                )
                 for row in rows
             ]
             results[idx] = items
@@ -326,9 +328,7 @@ class PostgresStore(BasePostgresStore[Connection]):
 
         for cur, idx in cursors:
             rows = cast(list[dict], cur.fetchall())
-            namespaces = [
-                tuple(row["truncated_prefix"].decode()[1:].split(".")) for row in rows
-            ]
+            namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
             results[idx] = namespaces
 
     @classmethod
@@ -433,3 +433,9 @@ def _json_loads(content: Union[bytes, orjson.Fragment]) -> Any:
             else:
                 content = content.contents.encode()
     return orjson.loads(cast(bytes, content))
+
+
+def _decode_ns_bytes(namespace: Union[str, bytes]) -> tuple[str, ...]:
+    if isinstance(namespace, bytes):
+        namespace = namespace.decode()[1:]
+    return tuple(namespace.split("."))
