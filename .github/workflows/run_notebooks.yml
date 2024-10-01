@@ -66,10 +66,9 @@ jobs:
             ./docs/_scripts/execute_notebooks.sh
           else
             CHANGED_FILES='${{ inputs.changed-files }}'
-            NOTEBOOK_FILES=$(echo $CHANGED_FILES | jq -r '.[] | select(endswith(".ipynb"))')
-            if [ -n "$NOTEBOOK_FILES" ]; then
-              echo "Running changed notebooks: $NOTEBOOK_FILES"
-              ./docs/_scripts/execute_notebooks.sh $NOTEBOOK_FILES
+            if [ -n "$CHANGED_FILES" ]; then
+              echo "Running changed notebooks: $CHANGED_FILES"
+              ./docs/_scripts/execute_notebooks.sh $CHANGED_FILES
             else
               echo "No notebook files changed, skipping execution"
             fi
