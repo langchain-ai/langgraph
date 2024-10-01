@@ -142,6 +142,7 @@ nav:
           - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
           - Delete messages: how-tos/memory/delete-messages.ipynb
           - Add summary of the conversation history: how-tos/memory/add-summary-conversation-history.ipynb
+          - Share state between threads: how-tos/memory/shared-state.ipynb
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
@@ -197,6 +198,7 @@ nav:
       - LangGraph Glossary: concepts/low_level.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
       - Human-in-the-Loop: concepts/human_in_the_loop.md
+      - Memory: concepts/memory.md
       - Multi-Agent Systems: concepts/multi_agent.md
       - Persistence: concepts/persistence.md
       - Streaming: concepts/streaming.md
