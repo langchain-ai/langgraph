@@ -1,4 +1,4 @@
-.PHONY: build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc
+.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc
 
 build-typedoc:
 	cd libs/sdk-js && yarn install --include-dev && yarn typedoc
@@ -18,6 +18,15 @@ serve-docs: build-typedoc
 clean-docs:
 	find ./docs/docs -name "*.ipynb" -type f -delete
 	rm -rf docs/site
+
+## Run format against the project documentation.
+format-docs:
+	poetry run ruff format docs/docs
+	poetry run ruff check --fix docs/docs
+
+# Check the docs for linting violations
+lint-docs:
+	poetry run ruff check docs/docs
 
 codespell:
 	./docs/codespell_notebooks.sh .

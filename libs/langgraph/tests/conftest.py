@@ -15,6 +15,9 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.store.base import BaseStore
+from langgraph.store.memory import InMemoryStore
+from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
 from tests.memory_assert import MemorySaverAssertImmutable
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
@@ -222,6 +225,63 @@ async def awith_checkpointer(
         raise NotImplementedError(f"Unknown checkpointer: {checkpointer_name}")
 
 
+@asynccontextmanager
+async def _store_postgres_aio():
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(
+            DEFAULT_POSTGRES_URI + database
+        ) as store:
+            await store.setup()
+            yield store
+    finally:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(scope="function")
+def store_postgres():
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        # yield store
+        with PostgresStore.from_conn_string(DEFAULT_POSTGRES_URI + database) as store:
+            store.setup()
+            yield store
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(scope="function")
+def store_in_memory():
+    yield InMemoryStore()
+
+
+@asynccontextmanager
+async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
+    if store_name is None:
+        yield None
+    elif store_name == "in_memory":
+        yield InMemoryStore()
+    elif store_name == "postgres_aio":
+        async with _store_postgres_aio() as store:
+            yield store
+    else:
+        raise NotImplementedError(f"Unknown store {store_name}")
+
+
 ALL_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
@@ -240,3 +300,5 @@ ALL_CHECKPOINTERS_ASYNC_PLUS_NONE = [
     *ALL_CHECKPOINTERS_ASYNC,
     None,
 ]
+ALL_STORES_SYNC = ["in_memory", "postgres"]
+ALL_STORES_ASYNC = ["in_memory", "postgres_aio"]

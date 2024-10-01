@@ -105,8 +105,8 @@ class TestPostgresSaver:
     def test_null_chars(self) -> None:
         with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:
             config = saver.put(self.config_1, self.chkpnt_1, {"my_key": "\x00abc"}, {})
-            assert saver.get_tuple(config).metadata["my_key"] == "abc"
+            assert saver.get_tuple(config).metadata["my_key"] == "abc"  # type: ignore
             assert (
-                list(saver.list(None, filter={"my_key": "abc"}))[0].metadata["my_key"]
+                list(saver.list(None, filter={"my_key": "abc"}))[0].metadata["my_key"]  # type: ignore
                 == "abc"
             )
