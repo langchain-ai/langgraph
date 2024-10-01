@@ -25,7 +25,7 @@ jobs:
   get-changed-notebooks:
     runs-on: ubuntu-latest
     outputs:
-      changed-files: ${{ steps.changed-files.outputs.all_changed_files }}
+      changed-files: ${{ steps.changed-files.outputs.all }}
     steps:
       - uses: actions/checkout@v4
       - name: Get changed files
