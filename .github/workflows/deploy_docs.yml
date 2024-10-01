@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  get-changed-notebooks:
+  get-changed-files:
     runs-on: ubuntu-latest
     outputs:
       changed-files: ${{ steps.changed-files.outputs.all }}
@@ -35,11 +35,11 @@ jobs:
           filter: "docs/docs/**"
 
   run-changed-notebooks:
-    needs: get-changed-notebooks
+    needs: get-changed-files
     uses: ./.github/workflows/run_notebooks.yml
     secrets: inherit
     with:
-      changed-files: ${{ needs.get-changed-notebooks.outputs.changed-files }}
+      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
   deploy:
     needs: run-changed-notebooks
