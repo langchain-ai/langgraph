@@ -9,26 +9,17 @@ Memory in the context of LLMs and AI applications refers to the ability to proce
 - Selecting few shot examples (e.g., from a dataset) to guide model responses
 - Maintaining persistent data (e.g., user preferences) across multiple chat sessions
 - Allowing an LLM to update its own prompt using past information (e.g., meta-prompting)
+- Retrieving information relevant to a conversation or question from a long-term storage system
 
 Below, we'll discuss each of these examples in some detail. 
 
 ## Managing Messages
 
+### Editing message lists
+
 Chat models accept instructions through [messages](https://python.langchain.com/docs/concepts/#messages), which can serve as general instructions (e.g., a system message) or user-provided instructions (e.g., human messages). In chat applications, messages often alternate between human inputs and model responses, accumulating in a list over time. Because context windows are limited and token-rich message lists can be costly, many applications can benefit from approaches to actively manage messages.    
 
-One approach is simply to remove messages (e.g., based upon some criteria such as recency) from a message list. To do this based upon a particular number of tokens, we can use [`trim_messages`](https://python.langchain.com/v0.2/docs/how_to/trim_messages/#getting-the-last-max_tokens-tokens). As an example, the `trim_messages` utility can keep the last `max_tokens` from a list of Messages. 
-
-```python
-from langchain_core.messages import trim_messages
-trim_messages(
-            messages,
-            max_tokens=100,
-            strategy="last", 
-            token_counter=ChatOpenAI(model="gpt-4o"),
-        )
-```
-
-In some cases, we want to remove specific messages from a list. This can be done using [RemoveMessage](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/#manually-deleting-messages) based upon `id`, a unique identifier for each message. In the below example, we keep only the last two messages in the list using `RemoveMessage`.
+The most directed approach is to remove specific messages from a list. This can be done using [RemoveMessage](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/#manually-deleting-messages) based upon the message `id`, a unique identifier for each message. In the below example, we keep only the last two messages in the list using `RemoveMessage` to remove older messages based  upon their `id`.
 
 ```python
 from langchain_core.messages import RemoveMessage
@@ -45,17 +36,55 @@ print(delete_messages)
 [RemoveMessage(content='', id='1'), RemoveMessage(content='', id='2')]
 ```
 
-When building agents in LangGraph, we commonly want to manage messages in state. [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) is a built-in LangGraph state schema that includes a `messages` key, which is a list of messages, and an `add_messages` reducer for updating the messages list with new messages as the application runs. The `add_messages` reducer allows us to [append](https://langchain-ai.github.io/langgraph/concepts/low_level/#serialization) new messages to the `messages` state key. This is how we would achieve this as a state update in a graph node.
-
-```
-{"messages": [HumanMessage(content="message")]}
-```
-
-Additionally, the `add_messages` reducer [works with the `RemoveMessage` utility to remove selected messages from the `messages` state key](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/). Using `messages` and `delete_messages` as defined above, we can remove the first two messages from the list; we simply pass the list of `delete_messages` (`[RemoveMessage(content='', id='1'), RemoveMessage(content='', id='2')]`) to the `add_messages` reducer.
+Because the context window for chat model is denominated in tokens, it can be useful to trim message lists based upon some number of tokens that we want to retain. To do this, we can use [`trim_messages`](https://python.langchain.com/docs/how_to/trim_messages/#trimming-based-on-token-count) and specify number of token to keep from the list, as well as the `strategy` (e.g., keep the last `max_tokens`). 
 
 ```python
-from langgraph.graph.message import add_messages
-add_messages(messages , delete_messages)
+from langchain_core.messages import trim_messages
+trim_messages(
+    messages,
+    # Keep the last <= n_count tokens of the messages.
+    strategy="last",
+    # Remember to adjust based on your model
+    # or else pass a custom token_encoder
+    token_counter=ChatOpenAI(model="gpt-4o"),
+    # Most chat models expect that chat history starts with either:
+    # (1) a HumanMessage or
+    # (2) a SystemMessage followed by a HumanMessage
+    # Remember to adjust based on the desired conversation
+    # length
+    max_tokens=45,
+    # Most chat models expect that chat history starts with either:
+    # (1) a HumanMessage or
+    # (2) a SystemMessage followed by a HumanMessage
+    start_on="human",
+    # Most chat models expect that chat history ends with either:
+    # (1) a HumanMessage or
+    # (2) a ToolMessage
+    end_on=("human", "tool"),
+    # Usually, we want to keep the SystemMessage
+    # if it's present in the original history.
+    # The SystemMessage has special instructions for the model.
+    include_system=True,
+)
+```
+### Usage with LangGraph
+
+When building agents in LangGraph, we commonly want to manage a list of messages in the graph state. Because this is such a common use case, [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) is a built-in LangGraph state schema that includes a `messages` key, which is a list of messages. `MessagesState` also includes an `add_messages` reducer for updating the messages list with new messages as the application runs. The `add_messages` reducer allows us to [append](https://langchain-ai.github.io/langgraph/concepts/low_level/#serialization) new messages to the `messages` state key as shown below. When we perform a state update with `{"messages": new_message}` returned from `my_node`, the `add_messages` reducer appends `new_message` to the existing list of messages.
+
+```python
+def my_node(state: State):
+    # Add a new message to the state
+    new_message = HumanMessage(content="message")
+    return {"messages": new_message}
+```
+
+The `add_messages` reducer built into `MessagesState` [also works with the `RemoveMessage` utility that we discussed above](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/). In this case, we can perform a state update with a list of `delete_messages` to remove specific messages from the `messages` list.
+
+```python
+def my_node(state: State):
+    # Delete messages from state
+    delete_messages = [RemoveMessage(id=m.id) for m in state['messages'][:-2]]
+    return {"messages": delete_messages}
 ```
 
 See this how-to [guide](https://langchain-ai.github.io/langgraph/how-tos/memory/manage-conversation-history/) and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
@@ -137,4 +166,10 @@ Persistence is critical sustaining a long-running chat sessions. For example, a 
 
 Meta-prompting uses an LLM to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori. 
 
-As an example, we created this [tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) that used meta-prompting to iteratively improve the tweet generation prompt. In this case, we used a LangSmith dataset to house several summarization test cases, captured human feedback on these test cases using the LangSmith Annotation Queue, and used the feedback to refine the summarization prompt directly. The process was repeated in a loop until the summaries met our criteria in human review.
+Meta-prompting can use past information to update the prompt. As an example, this [Tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) uses meta-prompting to iteratively improve the summarization prompt used to generate high quality paper summaries for Twitter. In this case, we used a LangSmith dataset to house several papers that we wanted to summarize, generated summaries using a naive summarization prompt, manually reviewed the summaries, captured feedback from human review using the LangSmith Annotation Queue, and passed this feedback to a chat model to re-generate the summarization prompt. The process was repeated in a loop until the summaries met our criteria in human review.
+
+## Retrieving relevant information from long-term storage
+
+A central challenge that spans many different memory use-case can be summarized simply: how can we retrieve *relevant information* from a long-term storage system and pass it to a chat model? As an example, assume we have a system that stores a large number of specific details about a user, but the user asks a specific question related to restaurant recommendations. It would be costly to trivially extract *all* personal user information and pass it to a chat model. Instead, we want to extract only the information that is most relevant to the user's current chat interaction (e,g,. food preferences, location, etc.) and pass it to the chat model. 
+
+There is a large body of work on retrieval that aims to address this challenge. See our tutorials focused on [RAG, or Retrieval Augmented Generation](https://python.langchain.com/v0.1/docs/how_to/rag/), our conceptual docs on [retrieval](https://python.langchain.com/docs/concepts/#retrieval), and our [open source repository](https://github.com/langchain-ai/rag-from-scratch) along with [videos](https://www.youtube.com/playlist?list=PLfaIDFEXuae2LXbO1_PKyVJiQ23ZztA0x) on this topic.
