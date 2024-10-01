@@ -95,7 +95,6 @@ jobs:
     uses: ./.github/workflows/run_notebooks.yml
     with:
       changed-files: ${{ needs.get-changed-notebooks.outputs.changed-files }}
-      external-call: true
     secrets: inherit
 
   integration-test:
