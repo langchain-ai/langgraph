@@ -1051,15 +1051,13 @@ export class StoreClient extends BaseClient {
       params: { namespace: namespace.join("."), key },
     });
 
-    if (!response) {
-      return null;
-    }
-
-    return {
-      ...response,
-      createdAt: response.created_at,
-      updatedAt: response.updated_at,
-    };
+    return response
+      ? {
+          ...response,
+          createdAt: response.created_at,
+          updatedAt: response.updated_at,
+        }
+      : null;
   }
 
   /**
