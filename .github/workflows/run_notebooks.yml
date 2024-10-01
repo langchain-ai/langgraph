@@ -61,7 +61,7 @@ jobs:
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_call" ]; then
+          if [ "${{ inputs.external-call }}" = "true" ]; then
             CHANGED_FILES='${{ inputs.changed-files }}'
             NOTEBOOK_FILES=$(echo $CHANGED_FILES | jq -r '.[] | select(endswith(".ipynb"))')
             if [ -n "$NOTEBOOK_FILES" ]; then
