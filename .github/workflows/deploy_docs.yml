@@ -42,6 +42,7 @@ jobs:
       changed-files: ${{ needs.get-changed-notebooks.outputs.changed-files }}
 
   deploy:
+    needs: run-changed-notebooks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
