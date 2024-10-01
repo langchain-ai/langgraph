@@ -32,7 +32,7 @@ jobs:
         id: changed-files
         uses: Ana06/get-changed-files@v2.3.0
         with:
-          filter: "docs/docs/**.ipynb"
+          filter: "docs/docs/**"
 
   run-changed-notebooks:
     needs: get-changed-notebooks
