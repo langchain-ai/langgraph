@@ -21,6 +21,7 @@ from langgraph.store.base import GetOp, ListNamespacesOp, Op, PutOp, Result, Sea
 from langgraph.store.postgres.base import (
     BasePostgresStore,
     Row,
+    _decode_ns_bytes,
     _group_ops,
     _row_to_item,
 )
@@ -127,17 +128,19 @@ class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
         results: list[Result],
     ) -> None:
         queries = self._get_batch_search_queries(search_ops)
-        cursors: list[tuple[AsyncCursor[Any], int, SearchOp]] = []
+        cursors: list[tuple[AsyncCursor[Any], int]] = []
 
-        for (query, params), (idx, op) in zip(queries, search_ops):
+        for (query, params), (idx, _) in zip(queries, search_ops):
             cur = self.conn.cursor(binary=True)
             await cur.execute(query, params)
-            cursors.append((cur, idx, op))
+            cursors.append((cur, idx))
 
-        for cur, idx, op in cursors:
+        for cur, idx in cursors:
             rows = cast(list[Row], await cur.fetchall())
             items = [
-                _row_to_item(op.namespace_prefix, row, loader=self._deserializer)
+                _row_to_item(
+                    _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
+                )
                 for row in rows
             ]
             results[idx] = items
@@ -156,9 +159,7 @@ class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
 
         for cur, idx in cursors:
             rows = cast(list[dict], await cur.fetchall())
-            namespaces = [
-                tuple(row["truncated_prefix"].decode()[1:].split(".")) for row in rows
-            ]
+            namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
             results[idx] = namespaces
 
     @classmethod
