@@ -65,7 +65,7 @@ jobs:
             echo "Running all notebooks"
             ./docs/_scripts/execute_notebooks.sh
           else
-            CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | grep '\.ipynb$')
+            CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '\.ipynb$')
             if [ -n "$CHANGED_FILES" ]; then
               echo "Running changed notebooks: $CHANGED_FILES"
               ./docs/_scripts/execute_notebooks.sh $CHANGED_FILES
