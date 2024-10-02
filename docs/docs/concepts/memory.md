@@ -162,9 +162,75 @@ graph.get_state(config)
 
 Persistence is critical sustaining a long-running chat sessions. For example, a chat between a user and an AI assistant may have interruptions. Persistence ensures that a user can continue that particular chat session at any later point in time. However, what happens if a user initiates a new chat session with an assistant? This spawns a new thread, and the information from the previous session (thread) is not retained. This motivates the need for a memory that can maintain data across chat sessions (threads). 
 
-For this, we can use LangGraph's `Store` interface to save and retrieve information across threads. Shared information can be namespaced by, for example, `user_id` to retain user-specific information across threads. See more detail in the [persistence conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) and this [how-to guide on shared state](../how-tos/memory/shared-state.ipynb).
+For this, we can use LangGraph's `Store` interface to save and retrieve information across threads. Shared information can be namespaced by, for example, `user_id` to retain user-specific information across threads. Let's show how to use the `Store` interface to save and retrieve information.
 
-## Meta-prompting
+```python
+from langgraph.store.memory import InMemoryStore
+in_memory_store = InMemoryStore()
+
+# Namespace for memories
+user_id = "1"
+namespace_for_memory = (user_id, "memories")
+
+# Save memories 
+memory_id = str(uuid.uuid4())
+memory = {"food_preference" : "I like pizza"}
+in_memory_store.put(namespace_for_memory, memory_id, memory)
+
+# Retrieve memories
+memories = in_memory_store.search(namespace_for_memory)
+memories[-1].dict()
+{'value': {'food_preference': 'I like pizza'},
+ 'key': '07e0caf4-1631-47b7-b15f-65515d4c1843',
+ 'namespace': ['1', 'memories'],
+ 'created_at': '2024-10-02T17:22:31.590602+00:00',
+ 'updated_at': '2024-10-02T17:22:31.590605+00:00'}
+```
+
+The `store` can be used in LangGraph to save or retrieve memories in any graph node. The compile the graph with a checkpointer and store. 
+
+```python
+# Compile the graph with the checkpointer and store
+graph = graph.compile(checkpointer=checkpointer, store=in_memory_store)
+
+# Invoke the graph
+user_id = "1"
+config = {"configurable": {"thread_id": "1", "user_id": user_id}}
+
+# First let's just say hi to the AI
+for update in graph.stream(
+    {"messages": [{"role": "user", "content": "hi"}]}, config, stream_mode="updates"
+):
+    print(update)
+```
+
+Then, we can access the store in any node of the graph by passing `store: BaseStore` as a node argument. 
+
+```python
+def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
+    
+    # Get the user id from the config
+    user_id = config["configurable"]["user_id"]
+    
+    # Namespace the memory
+    namespace = (user_id, "memories")
+    
+    # ... Analyze conversation and create a new memory
+    
+    # Create a new memory ID
+    memory_id = str(uuid.uuid4())
+
+    # We create a new memory
+    store.put(namespace, memory_id, {"memory": memory})
+```
+
+Anything saved to the store persists across graph executions (threads), allowing for information, such as user preferences or information, to be retained across threads.
+
+The store is also built into the LangGraph API, making it accessible when using LangGraph Studio locally or when deploying to the LangGraph Cloud.
+    
+See more detail in the [persistence conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) and this [how-to guide on shared state](../how-tos/memory/shared-state.ipynb).
+
+## Update own instructions
 
 Meta-prompting uses an LLM to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori. 
 
