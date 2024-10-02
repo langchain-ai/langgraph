@@ -575,7 +575,9 @@ class CompiledGraph(Pregel):
                 if len(subgraph.nodes) > 1:
                     e, s = graph.extend(subgraph, prefix=key)
                     if e is None:
-                        raise ValueError(f"Could not extend subgraph {key}")
+                        raise ValueError(
+                            f"Could not extend subgraph '{key}' due to missing entrypoint"
+                        )
                     if s is not None:
                         start_nodes[key] = s
                     end_nodes[key] = e
