@@ -26,6 +26,7 @@ format-docs:
 
 # Check the docs for linting violations
 lint-docs:
+	poetry run ruff format --check docs/docs
 	poetry run ruff check docs/docs
 
 codespell:
