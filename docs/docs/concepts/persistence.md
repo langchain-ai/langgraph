@@ -220,35 +220,46 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ![Update](img/persistence/shared_state.png)
 
-A state schema specifies a set of keys / channels that are populated as a graph is executed and written by a checkpointer to a thread at each graph step. Persistence of this state is scoped to a particular thread ID.
+A state schema specifies a set of keys / channels that are populated as a graph is executed. As discussed above, state can be written by a checkpointer to a thread at each graph step, enabling state persistence.
 
-But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information at the user level, across all threads (e.g., chat conversations) with that user!
+But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
 
-We can do this with the `Store` interface. Below, we specify the `InMemoryStore`, which we pass when compiling the graph and allows each node in the graph to access it.
-
-We want to store memories for each user, so we namespace the memories with `("memories", <user_id>)`. The `<user_id>` is specified when we invoke the graph and is scoped to the lifetime of the graph invocation.
+With checkpointers alone, we cannot share information across threads. This motivates the need for the `Store` interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and will our new in_memory_store.
 
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
-# This is the in memory checkpointer we will use
 # We need this because we want to enable threads (conversations)
 checkpointer = MemorySaver()
 
 # This is the in memory store needed to save the memories (i.e. user preferences) across threads
 in_memory_store = InMemoryStore()
 
-def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
-    
-    # Get the user id from the config
-    user_id = config["configurable"]["user_id"]
-    
-    # Get the memories for the user from the store
-    memories = store.search(("memories", user_id))
-    
-    # ... Use memories in the model call
+# ... Define the graph ...
 
+# Compile the graph with the checkpointer and store
+graph = graph.compile(checkpointer=checkpointer, store=in_memory_store)
+```
+
+Now, let's assume that we want to store memories for each user. We invoke the graph with a `thread_id`, as before, and also with a `user_id`, which we'll use to namespace our memories to this particular user.
+
+```python
+# Invoke the graph
+config = {"configurable": {"thread_id": "1", "user_id": "1"}}
+
+# First let's just say hi to the AI
+for update in graph.stream(
+    {"messages": [{"role": "user", "content": "hi"}]}, config, stream_mode="updates"
+):
+    print(update)
+```
+
+Our memory store is accessible in *any node*. We simply pass `store: BaseStore` to the node as an argument and we can access the store from there. We can write to it using `store.put`. We want to write memories associated with the user, which is specified by `user_id` in the config. 
+
+Each memory is namespaced by a `tuple`, which in our case will be `("memories", <user_id>)`. And we call `store.put` with a key, value pair. The key is UUID for the memory the value is a dictionary with whatever we want to store.
+
+```python
 def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
     
     # Get the user id from the config
@@ -259,23 +270,49 @@ def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseSt
     
     # ... Analyze conversation and create a new memory
     
-    # We create a new memory from this tool call
+    # We create a new memory
     store.put(("memories", user_id), memory_id, {
         "memory": memory,
     })
 
-# Compile the graph with the checkpointer and store
-graph = graph.compile(checkpointer=checkpointer, store=in_memory_store)
+```
 
+So we've written memories namespaced to `("memories", <user_id>)`. We can read them back using `store.search`, which will return all memories for a given user as a list. 
+
+```python
+def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
+    
+    # Get the user id from the config
+    user_id = config["configurable"]["user_id"]
+    
+    # Get the memories for the user from the store
+    memories = store.search(("memories", user_id))
+    info = "\n".join([d.value["memory"] for d in memories])
+    
+    # ... Use memories in the model call
+```
+
+If we create a new thread, we can still access the same memories so long as the user_id is the same. 
+
+```python
 # Invoke the graph
-config = {"configurable": {"thread_id": "1", "user_id": "1"}}
+config = {"configurable": {"thread_id": "2", "user_id": "1"}}
 
-# First let's just say hi to the AI
+# Let's say hi again
 for update in graph.stream(
-    {"messages": [{"role": "user", "content": "hi"}]}, config, stream_mode="updates"
+    {"messages": [{"role": "user", "content": "hi, tell me about my memories"}]}, config, stream_mode="updates"
 ):
     print(update)
 ```
+
+In addition, we can always access the store outside of the graph execution. 
+
+```python
+for memory in in_memory_store.search(("memories", "1")):
+    print(memory.value)
+```
+
+When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the memory store is available to use by default and does not need to be specified during graph compilation. 
 
 See our [how-to guide on shared state](../how-tos/memory/shared-state.ipynb) for a detailed example!.
 

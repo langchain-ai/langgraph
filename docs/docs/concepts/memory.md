@@ -162,7 +162,7 @@ graph.get_state(config)
 
 Persistence is critical sustaining a long-running chat sessions. For example, a chat between a user and an AI assistant may have interruptions. Persistence ensures that a user can continue that particular chat session at any later point in time. However, what happens if a user initiates a new chat session with an assistant? This spawns a new thread, and the information from the previous session (thread) is not retained. This motivates the need for a memory that can maintain data across chat sessions (threads). 
 
-For this, we can use LangGraph's `Store` interface to save and retrieve information namespaced across threads. This information can be namespaced by, for example, `user_id` to retain user-specific information across threads. See more detail in the [persistence conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) and this [how-to guide on shared state](../how-tos/memory/shared-state.ipynb).
+For this, we can use LangGraph's `Store` interface to save and retrieve information across threads. Shared information can be namespaced by, for example, `user_id` to retain user-specific information across threads. See more detail in the [persistence conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) and this [how-to guide on shared state](../how-tos/memory/shared-state.ipynb).
 
 ## Meta-prompting
 
