@@ -14,7 +14,7 @@ class Item:
 
     Args:
         value (dict[str, Any]): The stored data as a dictionary. Keys are filterable.
-        (str): Unique identifier within the namespace.
+        key (str): Unique identifier within the namespace.
         namespace (tuple[str, ...]): Hierarchical path defining the collection in which this document resides.
             Represented as a tuple of strings, allowing for nested categorization.
             For example: ("documents", 'user123')
