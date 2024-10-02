@@ -10,6 +10,7 @@
       members:
         - ToolNode
         - InjectedState
+        - InjectedStore
         - tools_condition
 
 ::: langgraph.prebuilt.tool_validator
