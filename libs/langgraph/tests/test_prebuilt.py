@@ -38,6 +38,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
+from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -698,12 +699,12 @@ def test_tool_node_inject_store() -> None:
     store = InMemoryStore()
     namespace = ("test",)
 
-    def tool1(some_val: int, store: Annotated[Any, InjectedStore()]) -> str:
+    def tool1(some_val: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
         """Tool 1 docstring."""
         store_val = store.get(namespace, "test_key").value["foo"]
         return f"Some val: {some_val}, store val: {store_val}"
 
-    def tool2(some_val: int, store: Annotated[Any, InjectedStore()]) -> str:
+    def tool2(some_val: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
         """Tool 2 docstring."""
         store_val = store.get(namespace, "test_key").value["foo"]
         return f"Some val: {some_val}, store val: {store_val}"
@@ -711,7 +712,7 @@ def test_tool_node_inject_store() -> None:
     def tool3(
         some_val: int,
         bar: Annotated[str, InjectedState("bar")],
-        store: Annotated[Any, InjectedStore()],
+        store: Annotated[BaseStore, InjectedStore()],
     ) -> str:
         """Tool 3 docstring."""
         store_val = store.get(namespace, "test_key").value["foo"]
