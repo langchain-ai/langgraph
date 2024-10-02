@@ -426,13 +426,53 @@ class InjectedState(InjectedToolArg):
 
 
 class InjectedStore(InjectedToolArg):
-    """Annotation for a Tool arg that is meant to be populated with LangGraphstore.
+    """Annotation for a Tool arg that is meant to be populated with LangGraph store.
 
     Any Tool argument annotated with InjectedStore will be hidden from a tool-calling
     model, so that the model doesn't attempt to generate the argument. If using
-    ToolNode, the appropriate graph state field will be automatically injected into
-    the model-generated tool args.
-    """
+    ToolNode, the appropriate store field will be automatically injected into
+    the model-generated tool args. Note: if a graph is compiled with a store object,
+    the store will be automatically propagated to the tools with InjectedStore args
+    when using ToolNode.
+
+    Example:
+        ```python
+        from typing import Any
+        from typing_extensions import Annotated
+
+        from langchain_core.messages import AIMessage
+        from langchain_core.tools import tool
+
+        from langgraph.store.memory import InMemoryStore
+        from langgraph.prebuilt import InjectedStore, ToolNode
+
+        store = InMemoryStore()
+        store.put(("values",), "foo", {"bar": 2})
+
+        @tool
+        def store_tool(x: int, my_store: Annotated[Any, InjectedStore()]) -> str:
+            '''Do something with store.'''
+            stored_value = my_store.get(("values",), "foo").value["bar"]
+            return stored_value + x
+
+        node = ToolNode([store_tool])
+
+        tool_call = {"name": "store_tool", "args": {"x": 1}, "id": "1", "type": "tool_call"}
+        state = {
+            "messages": [AIMessage("", tool_calls=[tool_call])],
+        }
+
+        node.invoke(state, store=store)
+        ```
+
+        ```pycon
+        {
+            "messages": [
+                ToolMessage(content='3', name='store_tool', tool_call_id='1'),
+            ]
+        }
+        ```
+    """  # noqa: E501
 
 
 def _is_injection(
