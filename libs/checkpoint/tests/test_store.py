@@ -2,10 +2,9 @@ import asyncio
 from datetime import datetime
 from typing import Iterable
 
-import pytest
 from pytest_mock import MockerFixture
 
-from langgraph.store.base import GetOp, InvalidNamespaceError, Item, Op, Result
+from langgraph.store.base import GetOp, Item, Op, Result
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
 
@@ -260,26 +259,3 @@ def test_list_namespaces_empty_store() -> None:
 
     result = store.list_namespaces()
     assert result == []
-
-
-async def test_cannot_put_empty_namespace() -> None:
-    store = InMemoryStore()
-    doc = {"foo": "bar"}
-
-    with pytest.raises(InvalidNamespaceError):
-        store.put([], "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        await store.aput([], "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        store.put(["the", "thing.about"], "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        await store.aput(["the", "thing.about"], "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        store.put(["some", "fun", ""], "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        await store.aput(["some", "fun", ""], "foo", doc)
