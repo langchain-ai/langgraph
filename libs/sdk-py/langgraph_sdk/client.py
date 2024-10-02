@@ -1,7 +1,7 @@
 """The LangGraph client implementations connect to the LangGraph API.
 
-It includes functionality for API authentication, HTTP request handling,
-and interfaces for interacting with LangGraph's core resources such as
+This module provides both asynchronous (LangGraphClient) and synchronous (SyncLanggraphClient)
+clients to interacting with the LangGraph API's core resources such as
 Assistants, Threads, Runs, and Cron jobs, as well as its persistent
 document Store.
 """
@@ -2259,7 +2259,7 @@ class SyncHttpClient:
         self.client = client
 
     def get(self, path: str, *, params: Optional[QueryParamTypes] = None) -> Any:
-        """Make a GET request."""
+        """Send a GET request."""
         r = self.client.get(path, params=params)
         try:
             r.raise_for_status()
@@ -2273,7 +2273,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def post(self, path: str, *, json: Optional[dict]) -> Any:
-        """Make a POST request."""
+        """Send a POST request."""
         if json is not None:
             headers, content = encode_json(json)
         else:
@@ -2291,7 +2291,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def put(self, path: str, *, json: dict) -> Any:
-        """Make a PUT request."""
+        """Send a PUT request."""
         headers, content = encode_json(json)
         r = self.client.put(path, headers=headers, content=content)
         try:
@@ -2306,7 +2306,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def patch(self, path: str, *, json: dict) -> Any:
-        """Make a PATCH request."""
+        """Send a PATCH request."""
         headers, content = encode_json(json)
         r = self.client.patch(path, headers=headers, content=content)
         try:
@@ -2321,7 +2321,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def delete(self, path: str, *, json: Optional[Any] = None) -> None:
-        """Make a DELETE request."""
+        """Send a DELETE request."""
         r = self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
