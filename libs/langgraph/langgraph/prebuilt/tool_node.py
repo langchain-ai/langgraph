@@ -32,6 +32,7 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from typing_extensions import Annotated, get_args, get_origin
 
+from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
 
 if TYPE_CHECKING:
@@ -116,11 +117,14 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         config: RunnableConfig,
+        *,
+        store: BaseStore,
     ) -> Any:
         tool_calls, output_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
+        store_list = [store] * len(tool_calls)
         with get_executor_for_config(config) as executor:
-            outputs = [*executor.map(self._run_one, tool_calls, config_list)]
+            outputs = [*executor.map(self._run_one, tool_calls, config_list, store_list)]
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}
 
@@ -132,10 +136,12 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         config: RunnableConfig,
+        *,
+        store: BaseStore,
     ) -> Any:
         tool_calls, output_type = self._parse_input(input)
         outputs = await asyncio.gather(
-            *(self._arun_one(call, config) for call in tool_calls)
+            *(self._arun_one(call, config, store) for call in tool_calls)
         )
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}

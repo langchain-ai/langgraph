@@ -71,7 +71,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         sys.intern("store"),
         (BaseStore, "BaseStore", inspect.Parameter.empty),
         CONFIG_KEY_STORE,
-        inspect.Parameter.empty,
+        None,
     ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
