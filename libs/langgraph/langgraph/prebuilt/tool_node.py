@@ -514,7 +514,7 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     return tool_args_to_state_fields
 
 
-def _get_store_arg(tool: BaseTool):
+def _get_store_arg(tool: BaseTool) -> Optional[str]:
     full_schema = tool.get_input_schema()
     for name, type_ in full_schema.__annotations__.items():
         injections = [
