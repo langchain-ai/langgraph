@@ -150,7 +150,7 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
-            if self.func_accepts[kw]:
+            if self.func_accepts[kw] and kw not in kwargs:
                 if defv is inspect.Parameter.empty and ck not in _conf:
                     raise ValueError(
                         f"Missing required config key '{ck}' for '{self.name}'."

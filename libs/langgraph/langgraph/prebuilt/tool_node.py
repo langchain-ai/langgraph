@@ -13,6 +13,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Type,
     Union,
     cast,
 )
@@ -120,11 +121,10 @@ class ToolNode(RunnableCallable):
         *,
         store: BaseStore,
     ) -> Any:
-        tool_calls, output_type = self._parse_input(input)
+        tool_calls, output_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
-        store_list = [store] * len(tool_calls)
         with get_executor_for_config(config) as executor:
-            outputs = [*executor.map(self._run_one, tool_calls, config_list, store_list)]
+            outputs = [*executor.map(self._run_one, tool_calls, config_list)]
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}
 
@@ -139,9 +139,9 @@ class ToolNode(RunnableCallable):
         *,
         store: BaseStore,
     ) -> Any:
-        tool_calls, output_type = self._parse_input(input)
+        tool_calls, output_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
-            *(self._arun_one(call, config, store) for call in tool_calls)
+            *(self._arun_one(call, config) for call in tool_calls)
         )
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}
@@ -190,6 +190,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
+        store: BaseStore,
     ) -> Tuple[List[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
             output_type = "list"
@@ -207,7 +208,9 @@ class ToolNode(RunnableCallable):
         if not isinstance(message, AIMessage):
             raise ValueError("Last message is not an AIMessage")
 
-        tool_calls = [self._inject_state(call, input) for call in message.tool_calls]
+        tool_calls = [
+            self._inject_tool_args(call, input, store) for call in message.tool_calls
+        ]
         return tool_calls, output_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
@@ -229,8 +232,6 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
     ) -> ToolCall:
-        if tool_call["name"] not in self.tools_by_name:
-            return tool_call
         state_args = _get_state_args(self.tools_by_name[tool_call["name"]])
         if state_args and isinstance(input, list):
             required_fields = list(state_args.values())
@@ -261,12 +262,39 @@ class ToolNode(RunnableCallable):
                 for tool_arg, state_field in state_args.items()
             }
 
-        tool_call_copy: ToolCall = copy(tool_call)
-        tool_call_copy["args"] = {
-            **tool_call_copy["args"],
+        tool_call["args"] = {
+            **tool_call["args"],
             **tool_state_args,
         }
-        return tool_call_copy
+        return tool_call
+
+    def _inject_store(self, tool_call: ToolCall, store: BaseStore) -> ToolCall:
+        store_arg = _get_store_arg(self.tools_by_name[tool_call["name"]])
+        if store_arg:
+            tool_call["args"] = {
+                **tool_call["args"],
+                store_arg: store,
+            }
+            return tool_call
+        return tool_call
+
+    def _inject_tool_args(
+        self,
+        tool_call: ToolCall,
+        input: Union[
+            list[AnyMessage],
+            dict[str, Any],
+            BaseModel,
+        ],
+        store: BaseStore,
+    ) -> ToolCall:
+        if tool_call["name"] not in self.tools_by_name:
+            return tool_call
+
+        tool_call_copy: ToolCall = copy(tool_call)
+        tool_call_with_state = self._inject_state(tool_call_copy, input)
+        tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        return tool_call_with_store
 
 
 def tools_condition(
@@ -397,23 +425,38 @@ class InjectedState(InjectedToolArg):
         self.field = field
 
 
+class InjectedStore(InjectedToolArg):
+    """Annotation for a Tool arg that is meant to be populated with LangGraphstore.
+
+    Any Tool argument annotated with InjectedStore will be hidden from a tool-calling
+    model, so that the model doesn't attempt to generate the argument. If using
+    ToolNode, the appropriate graph state field will be automatically injected into
+    the model-generated tool args.
+    """
+
+
+def _is_injection(
+    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
+) -> bool:
+    if isinstance(type_arg, injection_type) or (
+        isinstance(type_arg, type) and issubclass(type_arg, injection_type)
+    ):
+        return True
+    origin_ = get_origin(type_arg)
+    if origin_ is Union or origin_ is Annotated:
+        return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+    return False
+
+
 def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
 
-    def _is_injection(type_arg: Any) -> bool:
-        if isinstance(type_arg, InjectedState) or (
-            isinstance(type_arg, type) and issubclass(type_arg, InjectedState)
-        ):
-            return True
-        origin_ = get_origin(type_arg)
-        if origin_ is Union or origin_ is Annotated:
-            return any(_is_injection(ta) for ta in get_args(type_arg))
-        return False
-
     for name, type_ in full_schema.__annotations__.items():
         injections = [
-            type_arg for type_arg in get_args(type_) if _is_injection(type_arg)
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedState)
         ]
         if len(injections) > 1:
             raise ValueError(
@@ -429,3 +472,24 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
         else:
             pass
     return tool_args_to_state_fields
+
+
+def _get_store_arg(tool: BaseTool):
+    full_schema = tool.get_input_schema()
+    for name, type_ in full_schema.__annotations__.items():
+        injections = [
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedStore)
+        ]
+        if len(injections) > 1:
+            ValueError(
+                "A tool argument should not be annotated with InjectedStore more than "
+                f"once. Received arg {name} with annotations {injections}."
+            )
+        elif len(injections) == 1:
+            return name
+        else:
+            pass
+
+    return None

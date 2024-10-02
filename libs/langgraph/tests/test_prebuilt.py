@@ -36,7 +36,8 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
-from langgraph.prebuilt.tool_node import InjectedState
+from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
+from langgraph.store.memory import InMemoryStore
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
@@ -690,6 +691,61 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     result = node.invoke([msg])
     tool_message = result[-1]
     assert tool_message.content == "hi?"
+
+
+def test_tool_node_inject_store() -> None:
+    store = InMemoryStore()
+    namespace = ("test",)
+
+    def tool1(some_val: int, store: Annotated[Any, InjectedStore()]) -> str:
+        """Tool 1 docstring."""
+        store_val = store.get(namespace, "test_key").value["foo"]
+        return f"Some val: {some_val}, store val: {store_val}"
+
+    def tool2(some_val: int, store: Annotated[Any, InjectedStore()]) -> str:
+        """Tool 2 docstring."""
+        store_val = store.get(namespace, "test_key").value["foo"]
+        return f"Some val: {some_val}, store val: {store_val}"
+
+    def tool3(
+        some_val: int,
+        bar: Annotated[str, InjectedState("bar")],
+        store: Annotated[Any, InjectedStore()],
+    ) -> str:
+        """Tool 3 docstring."""
+        store_val = store.get(namespace, "test_key").value["foo"]
+        return f"Some val: {some_val}, store val: {store_val}, state val: {bar}"
+
+    node = ToolNode([tool1, tool2, tool3], handle_tool_errors=True)
+    store.put(namespace, "test_key", {"foo": "bar"})
+    for tool_name in ("tool1", "tool2"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 1},
+            "id": "some 0",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        result = node.invoke({"messages": [msg]}, store=store)
+        result["messages"][-1]
+        tool_message = result["messages"][-1]
+        assert (
+            tool_message.content == "Some val: 1, store val: bar"
+        ), f"Failed for tool={tool_name}"
+
+    tool_call = {
+        "name": "tool3",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg], "bar": "baz"}, store=store)
+    result["messages"][-1]
+    tool_message = result["messages"][-1]
+    assert (
+        tool_message.content == "Some val: 1, store val: bar, state val: baz"
+    ), f"Failed for tool={tool_name}"
 
 
 def test_tool_node_ensure_utf8() -> None:
