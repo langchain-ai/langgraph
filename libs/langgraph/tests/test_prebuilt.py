@@ -35,6 +35,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
 from langgraph.store.memory import InMemoryStore
@@ -718,6 +719,15 @@ def test_tool_node_inject_store() -> None:
 
     node = ToolNode([tool1, tool2, tool3], handle_tool_errors=True)
     store.put(namespace, "test_key", {"foo": "bar"})
+
+    class State(MessagesState):
+        bar: str
+
+    builder = StateGraph(State)
+    builder.add_node("tools", node)
+    builder.add_edge(START, "tools")
+    graph = builder.compile(store=store)
+
     for tool_name in ("tool1", "tool2"):
         tool_call = {
             "name": tool_name,
@@ -726,12 +736,14 @@ def test_tool_node_inject_store() -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        result = node.invoke({"messages": [msg]}, store=store)
-        result["messages"][-1]
-        tool_message = result["messages"][-1]
-        assert (
-            tool_message.content == "Some val: 1, store val: bar"
-        ), f"Failed for tool={tool_name}"
+        node_result = node.invoke({"messages": [msg]}, store=store)
+        graph_result = graph.invoke({"messages": [msg]})
+        for result in (node_result, graph_result):
+            result["messages"][-1]
+            tool_message = result["messages"][-1]
+            assert (
+                tool_message.content == "Some val: 1, store val: bar"
+            ), f"Failed for tool={tool_name}"
 
     tool_call = {
         "name": "tool3",
@@ -740,12 +752,19 @@ def test_tool_node_inject_store() -> None:
         "type": "tool_call",
     }
     msg = AIMessage("hi?", tool_calls=[tool_call])
-    result = node.invoke({"messages": [msg], "bar": "baz"}, store=store)
-    result["messages"][-1]
-    tool_message = result["messages"][-1]
-    assert (
-        tool_message.content == "Some val: 1, store val: bar, state val: baz"
-    ), f"Failed for tool={tool_name}"
+    node_result = node.invoke({"messages": [msg], "bar": "baz"}, store=store)
+    graph_result = graph.invoke({"messages": [msg], "bar": "baz"})
+    for result in (node_result, graph_result):
+        result["messages"][-1]
+        tool_message = result["messages"][-1]
+        assert (
+            tool_message.content == "Some val: 1, store val: bar, state val: baz"
+        ), f"Failed for tool={tool_name}"
+
+    # test injected store without passing store to compiled graph
+    failing_graph = builder.compile()
+    with pytest.raises(ValueError):
+        failing_graph.invoke({"messages": [msg], "bar": "baz"})
 
 
 def test_tool_node_ensure_utf8() -> None:
