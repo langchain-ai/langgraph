@@ -105,11 +105,15 @@ class ToolNode(RunnableCallable):
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: Dict[str, BaseTool] = {}
+        self.tool_to_state_args: Dict[str, Dict[str, Optional[str]]] = {}
+        self.tool_to_store_arg: Dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = cast(BaseTool, create_tool(tool_))
             self.tools_by_name[tool_.name] = tool_
+            self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
+            self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
 
     def _func(
         self,
@@ -247,7 +251,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
     ) -> ToolCall:
-        state_args = _get_state_args(self.tools_by_name[tool_call["name"]])
+        state_args = self.tool_to_state_args[tool_call["name"]]
         if state_args and isinstance(input, list):
             required_fields = list(state_args.values())
             if (
@@ -284,7 +288,7 @@ class ToolNode(RunnableCallable):
         return tool_call
 
     def _inject_store(self, tool_call: ToolCall, store: BaseStore) -> ToolCall:
-        store_arg = _get_store_arg(self.tools_by_name[tool_call["name"]])
+        store_arg = self.tool_to_store_arg[tool_call["name"]]
         if not store_arg:
             return tool_call
 
