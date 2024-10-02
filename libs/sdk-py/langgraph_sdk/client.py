@@ -2,7 +2,8 @@
 
 It includes functionality for API authentication, HTTP request handling,
 and interfaces for interacting with LangGraph's core resources such as
-Assistants, Threads, Runs, and Cron jobs, as well as its persistant Store.
+Assistants, Threads, Runs, and Cron jobs, as well as its persistent
+document Store.
 """
 
 from __future__ import annotations
