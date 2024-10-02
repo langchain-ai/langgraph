@@ -461,6 +461,9 @@ class InjectedStore(InjectedToolArg):
     the store will be automatically propagated to the tools with InjectedStore args
     when using ToolNode.
 
+    !!! Warning
+        `InjectedStore` annotation requires `langchain-core >= 0.3.8`
+
     Example:
         ```python
         from typing import Any
