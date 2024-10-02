@@ -216,6 +216,69 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ![Update](img/persistence/checkpoints_full_story.jpg)
 
+## Memory Store
+
+![Update](img/persistence/shared_state.png)
+
+A state schema specifies a set of keys / channels that are populated as a graph is executed and written by a checkpointer to a thread at each graph step. Persistence of this state is scoped to a particular thread ID.
+
+But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information at the user level, across all threads (e.g., chat conversations) with that user!
+
+We can do this with the `Store` interface. Below, we specify the `InMemoryStore`, which we pass when compiling the graph and allows each node in the graph to access it.
+
+We want to store memories for each user, so we namespace the memories with `("memories", <user_id>)`. The `<user_id>` is specified when we invoke the graph and is scoped to the lifetime of the graph invocation.
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.store.memory import InMemoryStore
+
+# This is the in memory checkpointer we will use
+# We need this because we want to enable threads (conversations)
+checkpointer = MemorySaver()
+
+# This is the in memory store needed to save the memories (i.e. user preferences) across threads
+in_memory_store = InMemoryStore()
+
+def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
+    
+    # Get the user id from the config
+    user_id = config["configurable"]["user_id"]
+    
+    # Get the memories for the user from the store
+    memories = store.search(("memories", user_id))
+    
+    # ... Use memories in the model call
+
+def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
+    
+    # Get the user id from the config
+    user_id = config["configurable"]["user_id"]
+    
+    # Create a new memory ID
+    memory_id = str(uuid.uuid4())
+    
+    # ... Analyze conversation and create a new memory
+    
+    # We create a new memory from this tool call
+    store.put(("memories", user_id), memory_id, {
+        "memory": memory,
+    })
+
+# Compile the graph with the checkpointer and store
+graph = graph.compile(checkpointer=checkpointer, store=in_memory_store)
+
+# Invoke the graph
+config = {"configurable": {"thread_id": "1", "user_id": "1"}}
+
+# First let's just say hi to the AI
+for update in graph.stream(
+    {"messages": [{"role": "user", "content": "hi"}]}, config, stream_mode="updates"
+):
+    print(update)
+```
+
+See our [how-to guide on shared state](../how-tos/memory/shared-state.ipynb) for a detailed example!.
+
 ## Checkpointer libraries
 
 Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
