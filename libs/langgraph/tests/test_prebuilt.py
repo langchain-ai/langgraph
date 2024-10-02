@@ -43,6 +43,7 @@ from langgraph.store.memory import InMemoryStore
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
+    IS_LANGCHAIN_CORE_030_OR_GREATER,
     awith_checkpointer,
 )
 from tests.messages import _AnyIdHumanMessage
@@ -695,6 +696,10 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     assert tool_message.content == "hi?"
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 def test_tool_node_inject_store() -> None:
     store = InMemoryStore()
     namespace = ("test",)
