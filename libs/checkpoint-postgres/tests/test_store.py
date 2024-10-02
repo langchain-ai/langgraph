@@ -43,12 +43,14 @@ def test_batch_order(store: PostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -59,6 +61,7 @@ def test_batch_order(store: PostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
         ]
     )
@@ -75,9 +78,9 @@ def test_batch_order(store: PostgresStore) -> None:
 
         def execute_side_effect(query: str, *params: Any) -> None:
             # My super sophisticated database.
-            if "WHERE prefix <@" in query:
+            if "SELECT prefix, key, value" in query:
                 cursor.fetchall = mock_search_cursor.fetchall
-            elif "SELECT DISTINCT subltree" in query:
+            elif "SELECT DISTINCT ON (truncated_prefix)" in query:
                 cursor.fetchall = mock_list_namespaces_cursor.fetchall
             elif "WHERE prefix = %s AND key" in query:
                 cursor.fetchall = mock_get_cursor.fetchall
@@ -149,12 +152,14 @@ def test_batch_get_ops(store: PostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -203,12 +208,14 @@ def test_batch_search_ops(store: PostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -423,7 +430,9 @@ class TestPostgresStore:
 
             docs_result = store.search(["test_search", "documents"])
             assert len(docs_result) == 2
-            assert all(item.namespace[1] == "documents" for item in docs_result)
+            assert all(
+                [item.namespace[1] == "documents" for item in docs_result]
+            ), docs_result
 
             reports_result = store.search(["test_search", "reports"])
             assert len(reports_result) == 2
