@@ -1,26 +1,77 @@
+"""Data models for interacting with the LangGraph API."""
+
 from datetime import datetime
 from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
 
 Json = Optional[dict[str, Any]]
+"""Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
 RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
+"""
+Represents the status of a run:
+- "pending": The run is waiting to start.
+- "running": The run is currently in progress.
+- "error": The run encountered an error and stopped.
+- "success": The run completed successfully.
+- "timeout": The run exceeded its time limit.
+- "interrupted": The run was manually stopped or interrupted.
+"""
 
 ThreadStatus = Literal["idle", "busy", "interrupted"]
+"""
+Represents the status of a thread:
+- "idle": The thread is not currently processing any task.
+- "busy": The thread is actively processing a task.
+- "interrupted": The thread's execution was interrupted.
+"""
 
 StreamMode = Literal["values", "messages", "updates", "events", "debug"]
+"""
+Defines the mode of streaming:
+- "values": Stream only the values.
+- "messages": Stream complete messages.
+- "updates": Stream updates to the state.
+- "events": Stream events occurring during execution.
+- "debug": Stream detailed debug information.
+"""
 
 DisconnectMode = Literal["cancel", "continue"]
+"""
+Specifies behavior on disconnection:
+- "cancel": Cancel the operation on disconnection.
+- "continue": Continue the operation even if disconnected.
+"""
 
 MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
+"""
+Defines how to handle multiple tasks:
+- "reject": Reject new tasks when busy.
+- "interrupt": Interrupt current task for new ones.
+- "rollback": Roll back current task and start new one.
+- "enqueue": Queue new tasks for later execution.
+"""
 
 OnConflictBehavior = Literal["raise", "do_nothing"]
+"""
+Specifies behavior on conflict:
+- "raise": Raise an exception when a conflict occurs.
+- "do_nothing": Ignore conflicts and proceed.
+"""
 
 OnCompletionBehavior = Literal["delete", "keep"]
+"""
+Defines action after completion:
+- "delete": Delete resources after completion.
+- "keep": Retain resources after completion.
+"""
 
 All = Literal["*"]
+"""Represents a wildcard or 'all' selector."""
 
 
 class Config(TypedDict, total=False):
+    """Configuration options for a call."""
+
     tags: list[str]
     """
     Tags for this call and any sub-calls (eg. a Chain calling an LLM).
@@ -42,16 +93,20 @@ class Config(TypedDict, total=False):
 
 
 class Checkpoint(TypedDict):
-    """Checkpoint model."""
+    """Represents a checkpoint in the execution process."""
 
     thread_id: str
+    """Unique identifier for the thread associated with this checkpoint."""
     checkpoint_ns: str
+    """Namespace for the checkpoint, used for organization and retrieval."""
     checkpoint_id: Optional[str]
+    """Optional unique identifier for the checkpoint itself."""
     checkpoint_map: Optional[dict[str, Any]]
+    """Optional dictionary containing checkpoint-specific data."""
 
 
 class GraphSchema(TypedDict):
-    """Graph model."""
+    """Defines the structure and properties of a graph."""
 
     graph_id: str
     """The ID of the graph."""
@@ -73,7 +128,7 @@ Subgraphs = dict[str, GraphSchema]
 
 
 class AssistantBase(TypedDict):
-    """Assistant base model."""
+    """Base model for an assistant."""
 
     assistant_id: str
     """The ID of the assistant."""
@@ -90,13 +145,13 @@ class AssistantBase(TypedDict):
 
 
 class AssistantVersion(AssistantBase):
-    """Assistant version model."""
+    """Represents a specific version of an assistant."""
 
     pass
 
 
 class Assistant(AssistantBase):
-    """Assistant model."""
+    """Represents an assistant with additional properties."""
 
     updated_at: datetime
     """The last time the assistant was updated."""
@@ -105,6 +160,8 @@ class Assistant(AssistantBase):
 
 
 class Thread(TypedDict):
+    """Represents a conversation thread."""
+
     thread_id: str
     """The ID of the thread."""
     created_at: datetime
@@ -120,6 +177,8 @@ class Thread(TypedDict):
 
 
 class ThreadTask(TypedDict):
+    """Represents a task within a thread."""
+
     id: str
     name: str
     error: Optional[str]
@@ -129,6 +188,8 @@ class ThreadTask(TypedDict):
 
 
 class ThreadState(TypedDict):
+    """Represents the state of a thread."""
+
     values: Union[list[dict], dict[str, Any]]
     """The state values."""
     next: Sequence[str]
@@ -147,6 +208,8 @@ class ThreadState(TypedDict):
 
 
 class Run(TypedDict):
+    """Represents a single execution run."""
+
     run_id: str
     """The ID of the run."""
     thread_id: str
@@ -166,6 +229,8 @@ class Run(TypedDict):
 
 
 class Cron(TypedDict):
+    """Represents a scheduled task."""
+
     cron_id: str
     """The ID of the cron."""
     thread_id: Optional[str]
@@ -183,27 +248,42 @@ class Cron(TypedDict):
 
 
 class RunCreate(TypedDict):
-    """Payload for creating a background run."""
+    """Defines the parameters for initiating a background run."""
 
     thread_id: Optional[str]
+    """The identifier of the thread to run. If not provided, the run is stateless."""
     assistant_id: str
+    """The identifier of the assistant to use for this run."""
     input: Optional[dict]
+    """Initial input data for the run."""
     metadata: Optional[dict]
+    """Additional metadata to associate with the run."""
     config: Optional[Config]
+    """Configuration options for the run."""
     checkpoint_id: Optional[str]
+    """The identifier of a checkpoint to resume from."""
     interrupt_before: Optional[list[str]]
+    """List of node names to interrupt execution before."""
     interrupt_after: Optional[list[str]]
+    """List of node names to interrupt execution after."""
     webhook: Optional[str]
+    """URL to send webhook notifications about the run's progress."""
     multitask_strategy: Optional[MultitaskStrategy]
+    """Strategy for handling concurrent runs on the same thread."""
 
 
 class Item(TypedDict):
+    """Represents a single document or data entry in the graph's Store.
+
+    Items are used to store cross-thread memories.
+    """
+
     namespace: list[str]
-    """The namespace of the item."""
+    """The namespace of the item. A namespace is analogous to a document's directory."""
     key: str
     """The unique identifier of the item within its namespace.
     
-    In general, keys are not globally unique.
+    In general, keys needn't be globally unique.
     """
     value: dict[str, Any]
     """The value stored in the item. This is the document itself."""
@@ -214,13 +294,23 @@ class Item(TypedDict):
 
 
 class ListNamespaceResponse(TypedDict):
+    """Response structure for listing namespaces."""
+
     namespaces: list[list[str]]
+    """A list of namespace paths, where each path is a list of strings."""
 
 
 class SearchItemsResponse(TypedDict):
+    """Response structure for searching items."""
+
     items: list[Item]
+    """A list of items matching the search criteria."""
 
 
 class StreamPart(NamedTuple):
+    """Represents a part of a stream response."""
+
     event: str
+    """The type of event for this stream part."""
     data: dict
+    """The data payload associated with the event."""
