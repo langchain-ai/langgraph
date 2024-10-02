@@ -29,6 +29,7 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
+from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from typing_extensions import Annotated, get_args, get_origin
@@ -127,6 +128,20 @@ class ToolNode(RunnableCallable):
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}
+
+    def invoke(
+        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
+        if "store" not in kwargs:
+            kwargs["store"] = None
+        return super().invoke(input, config, **kwargs)
+
+    async def ainvoke(
+        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
+        if "store" not in kwargs:
+            kwargs["store"] = None
+        return await super().ainvoke(input, config, **kwargs)
 
     async def _afunc(
         self,
@@ -270,12 +285,19 @@ class ToolNode(RunnableCallable):
 
     def _inject_store(self, tool_call: ToolCall, store: BaseStore) -> ToolCall:
         store_arg = _get_store_arg(self.tools_by_name[tool_call["name"]])
-        if store_arg:
-            tool_call["args"] = {
-                **tool_call["args"],
-                store_arg: store,
-            }
+        if not store_arg:
             return tool_call
+
+        if store is None:
+            raise ValueError(
+                "Cannot inject store into tools with InjectedStore annotations - "
+                "please compile your graph with a store."
+            )
+
+        tool_call["args"] = {
+            **tool_call["args"],
+            store_arg: store,
+        }
         return tool_call
 
     def _inject_tool_args(
