@@ -18,6 +18,7 @@ from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 
 
@@ -162,7 +163,8 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
-    checkpointer: Checkpointer = None,
+    checkpointer: Optional[Checkpointer] = None,
+    store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
@@ -195,8 +197,10 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
-        checkpointer: An optional checkpoint saver object. This is useful for persisting
-            the state of the graph (e.g., as chat memory).
+        checkpointer: An optional checkpoint saver object. This is used for persisting
+            the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
+        store: An optional store object. This is used for persisting data
+            across multiple threads (e.g., multiple conversations / users).
         interrupt_before: An optional list of node names to interrupt before.
             Should be one of the following: "agent", "tools".
             This is useful if you want to add a user confirmation or other interrupt before taking an action.
@@ -551,6 +555,7 @@ def create_react_agent(
     # meaning you can use it as you would any other runnable
     return workflow.compile(
         checkpointer=checkpointer,
+        store=store,
         interrupt_before=interrupt_before,
         interrupt_after=interrupt_after,
         debug=debug,
