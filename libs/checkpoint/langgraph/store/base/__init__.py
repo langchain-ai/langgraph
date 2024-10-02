@@ -159,15 +159,11 @@ class InvalidNamespaceError(ValueError):
 
 
 def _validate_namespace(namespace: tuple[str, ...]) -> None:
-    if not namespace:
-        raise ValueError("Namespace cannot be empty.")
     for label in namespace:
         if "." in label:
             raise InvalidNamespaceError(
                 f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
             )
-        elif not label:
-            raise ValueError("Namespace labels cannot be empty strings.")
 
 
 class BaseStore(ABC):
