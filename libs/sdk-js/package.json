@@ -19,6 +19,7 @@
     "@types/json-schema": "^7.0.15",
     "p-queue": "^6.6.2",
     "p-retry": "4",
+    "undici": "^6.19.8",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

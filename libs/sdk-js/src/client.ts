@@ -30,10 +30,13 @@ import {
   CronsCreatePayload,
   OnConflictBehavior,
 } from "./types.js";
+import { Agent, fetch } from "undici";
+
 
 interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
+  useInternalSocket?: boolean;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
   defaultHeaders?: Record<string, string | null | undefined>;
@@ -48,15 +51,25 @@ class BaseClient {
 
   protected defaultHeaders: Record<string, string | null | undefined>;
 
+  protected internalSocket?: Agent;
+
   constructor(config?: ClientConfig) {
     this.asyncCaller = new AsyncCaller({
+      fetch: fetch,
       maxRetries: 4,
       maxConcurrency: 4,
       ...config?.callerOptions,
     });
 
     this.timeoutMs = config?.timeoutMs || 12_000;
-    this.apiUrl = config?.apiUrl || "http://localhost:8123";
+    if (!config?.apiUrl && config?.useInternalSocket) {
+      const GRAPH_SOCKET = "./graph.sock";
+      this.apiUrl = "http://graph"
+      this.internalSocket = new Agent({ connect: { socketPath: GRAPH_SOCKET } });
+    } else {
+      this.apiUrl = config?.apiUrl || "http://localhost:8123";
+    }
+
     this.defaultHeaders = config?.defaultHeaders || {};
     if (config?.apiKey != null) {
       this.defaultHeaders["X-Api-Key"] = config.apiKey;
@@ -110,9 +123,19 @@ class BaseClient {
       params?: Record<string, unknown>;
     },
   ): Promise<T> {
-    const response = await this.asyncCaller.fetch(
-      ...this.prepareFetchOptions(path, options),
-    );
+    let response: Response;
+    if (this.internalSocket) {
+      const [url, init] = this.prepareFetchOptions(path, options);
+      response = await fetch(url, {
+        ...init,
+        dispatcher: this.internalSocket,
+      } as any) as Response;
+    } else {
+      response = await this.asyncCaller.fetch(
+        ...this.prepareFetchOptions(path, options),
+      );
+    }
+
     if (response.status === 202 || response.status === 204) {
       return undefined as T;
     }
