@@ -12,6 +12,7 @@ export type {
   Thread,
   ThreadState,
   Cron,
+  Checkpoint,
 } from "./schema.js";
 
 export type { OnConflictBehavior } from "./types.js";
