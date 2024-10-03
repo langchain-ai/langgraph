@@ -1,4 +1,5 @@
 from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+import inspect
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -20,6 +21,7 @@ from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
+from langgraph.utils.runnable import RunnableCallable
 
 
 # We create the AgentState that we will pass around
@@ -54,24 +56,36 @@ StateModifier = Union[
 ]
 
 
-def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
+def _get_state_modifier_runnable(state_modifier: Optional[StateModifier], store: Optional[BaseStore] = None) -> Runnable:
     state_modifier_runnable: Runnable
     if state_modifier is None:
-        state_modifier_runnable = RunnableLambda(
-            lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
+        state_modifier_runnable = RunnableCallable(
+            lambda state, **kwargs: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
         )
     elif isinstance(state_modifier, str):
         _system_message: BaseMessage = SystemMessage(content=state_modifier)
         state_modifier_runnable = RunnableLambda(
-            lambda state: [_system_message] + state["messages"],
+            lambda state, **kwargs: [_system_message] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, SystemMessage):
         state_modifier_runnable = RunnableLambda(
-            lambda state: [state_modifier] + state["messages"],
+            lambda state, **kwargs: [state_modifier] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif callable(state_modifier):
+        # Inspect the state_modifier signature
+        sig = inspect.signature(state_modifier)
+
+        if store is not None and"store" not in sig.parameters:
+            raise ValueError(
+                "State modifier callable needs to accept 'store' as a parameter when using create_react_agent with a store."
+            )
+        elif store is None and "store" in sig.parameters:
+            raise ValueError(
+                "Please pass 'store' to create_react_agent to use 'store' in state modifier."
+            )
+
         state_modifier_runnable = RunnableLambda(
             state_modifier, name=STATE_MODIFIER_RUNNABLE_NAME
         )
@@ -108,6 +122,7 @@ def _convert_messages_modifier_to_state_modifier(
 def _get_model_preprocessing_runnable(
     state_modifier: Optional[StateModifier],
     messages_modifier: Optional[MessagesModifier],
+    store: Optional[BaseStore]
 ) -> Runnable:
     # Add the state or message modifier, if exists
     if state_modifier is not None and messages_modifier is not None:
@@ -118,7 +133,7 @@ def _get_model_preprocessing_runnable(
     if state_modifier is None and messages_modifier is not None:
         state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
 
-    return _get_state_modifier_runnable(state_modifier)
+    return _get_state_modifier_runnable(state_modifier, store)
 
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
@@ -473,12 +488,16 @@ def create_react_agent(
         else:
             return "tools"
 
-    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier)
+    # we're passing store here for validation
+    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier, store)
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
-    def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
-        response = model_runnable.invoke(state, config)
+    def call_model(state: AgentState, config: RunnableConfig, *, store: BaseStore) -> AgentState:
+        if store is not None:
+            response = model_runnable.invoke(state, config, store=store)
+        else:
+            response = model_runnable.invoke(state, config)
         if (
             state["is_last_step"]
             and isinstance(response, AIMessage)
@@ -495,8 +514,11 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-        response = await model_runnable.ainvoke(state, config)
+    async def acall_model(state: AgentState, config: RunnableConfig, *, store: BaseStore) -> AgentState:
+        if store is not None:
+            response = await model_runnable.ainvoke(state, config, store=store)
+        else:
+            response = await model_runnable.ainvoke(state, config)
         if (
             state["is_last_step"]
             and isinstance(response, AIMessage)
@@ -517,7 +539,7 @@ def create_react_agent(
     workflow = StateGraph(state_schema or AgentState)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", RunnableLambda(call_model, acall_model))
+    workflow.add_node("agent", RunnableCallable(call_model, acall_model))
     workflow.add_node("tools", tool_node)
 
     # Set the entrypoint as `agent`

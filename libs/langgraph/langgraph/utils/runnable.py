@@ -159,6 +159,7 @@ class RunnableCallable(Runnable):
                 )
             elif kwargs.get(kw) is None:
                 kwargs[kw] = _conf.get(ck, defv)
+      
         context = copy_context()
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
