@@ -150,13 +150,15 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
-            if self.func_accepts[kw]:
-                if defv is inspect.Parameter.empty and ck not in _conf:
-                    raise ValueError(
-                        f"Missing required config key '{ck}' for '{self.name}'."
-                    )
-                else:
-                    kwargs[kw] = _conf.get(ck, defv)
+            if not self.func_accepts[kw]:
+                continue
+
+            if defv is inspect.Parameter.empty and kw not in kwargs and ck not in _conf:
+                raise ValueError(
+                    f"Missing required config key '{ck}' for '{self.name}'."
+                )
+            elif kwargs.get(kw) is None:
+                kwargs[kw] = _conf.get(ck, defv)
         context = copy_context()
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
@@ -195,13 +197,15 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
-            if self.func_accepts[kw]:
-                if defv is inspect.Parameter.empty and ck not in _conf:
-                    raise ValueError(
-                        f"Missing required config key '{ck}' for '{self.name}'."
-                    )
-                else:
-                    kwargs[kw] = _conf.get(ck, defv)
+            if not self.func_accepts[kw]:
+                continue
+
+            if defv is inspect.Parameter.empty and kw not in kwargs and ck not in _conf:
+                raise ValueError(
+                    f"Missing required config key '{ck}' for '{self.name}'."
+                )
+            elif kwargs.get(kw) is None:
+                kwargs[kw] = _conf.get(ck, defv)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)

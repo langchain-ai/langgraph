@@ -11408,6 +11408,29 @@ def test_xray_bool(snapshot: SnapshotAssertion) -> None:
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
 
 
+def test_multiple_sinks_subgraphs(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("one", lambda x: x)
+    subgraph_builder.add_node("two", lambda x: x)
+    subgraph_builder.add_node("three", lambda x: x)
+    subgraph_builder.add_edge("__start__", "one")
+    subgraph_builder.add_conditional_edges("one", lambda x: "two", ["two", "three"])
+    subgraph = subgraph_builder.compile()
+
+    builder = StateGraph(State)
+    builder.add_node("uno", lambda x: x)
+    builder.add_node("dos", lambda x: x)
+    builder.add_node("subgraph", subgraph)
+    builder.add_edge("__start__", "uno")
+    builder.add_conditional_edges("uno", lambda x: "dos", ["dos", "subgraph"])
+
+    app = builder.compile()
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+
+
 def test_subgraph_retries():
     class State(TypedDict):
         count: int

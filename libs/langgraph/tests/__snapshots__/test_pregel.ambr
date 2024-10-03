@@ -4535,6 +4535,29 @@
   
   '''
 # ---
+# name: test_multiple_sinks_subgraphs
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	uno(uno)
+  	dos(dos)
+  	subgraph_one(one)
+  	subgraph_two(two)
+  	subgraph_three(three)
+  	__start__ --> uno;
+  	uno -.-> dos;
+  	uno -.-> subgraph_one;
+  	subgraph subgraph
+  	subgraph_one -.-> subgraph_two;
+  	subgraph_one -.-> subgraph_three;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_nested_graph
   '''
   graph TD;
