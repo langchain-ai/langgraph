@@ -1,5 +1,5 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 import inspect
+from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -56,7 +56,9 @@ StateModifier = Union[
 ]
 
 
-def _get_state_modifier_runnable(state_modifier: Optional[StateModifier], store: Optional[BaseStore] = None) -> Runnable:
+def _get_state_modifier_runnable(
+    state_modifier: Optional[StateModifier], store: Optional[BaseStore] = None
+) -> Runnable:
     state_modifier_runnable: Runnable
     if state_modifier is None:
         state_modifier_runnable = RunnableLambda(
@@ -77,7 +79,7 @@ def _get_state_modifier_runnable(state_modifier: Optional[StateModifier], store:
         # Inspect the state_modifier signature
         sig = inspect.signature(state_modifier)
 
-        if store is not None and"store" not in sig.parameters:
+        if store is not None and "store" not in sig.parameters:
             raise ValueError(
                 "State modifier callable needs to accept 'store' as a parameter when using create_react_agent with a store."
             )
@@ -122,7 +124,7 @@ def _convert_messages_modifier_to_state_modifier(
 def _get_model_preprocessing_runnable(
     state_modifier: Optional[StateModifier],
     messages_modifier: Optional[MessagesModifier],
-    store: Optional[BaseStore]
+    store: Optional[BaseStore],
 ) -> Runnable:
     # Add the state or message modifier, if exists
     if state_modifier is not None and messages_modifier is not None:
@@ -489,11 +491,15 @@ def create_react_agent(
             return "tools"
 
     # we're passing store here for validation
-    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier, store)
+    preprocessor = _get_model_preprocessing_runnable(
+        state_modifier, messages_modifier, store
+    )
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
-    def call_model(state: AgentState, config: RunnableConfig, *, store: BaseStore) -> AgentState:
+    def call_model(
+        state: AgentState, config: RunnableConfig, *, store: BaseStore
+    ) -> AgentState:
         if store is not None:
             response = model_runnable.invoke(state, config, store=store)
         else:
@@ -514,7 +520,9 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState, config: RunnableConfig, *, store: BaseStore) -> AgentState:
+    async def acall_model(
+        state: AgentState, config: RunnableConfig, *, store: BaseStore
+    ) -> AgentState:
         if store is not None:
             response = await model_runnable.ainvoke(state, config, store=store)
         else:
