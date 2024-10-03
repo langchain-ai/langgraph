@@ -79,11 +79,7 @@ def _get_state_modifier_runnable(
         # Inspect the state_modifier signature
         sig = inspect.signature(state_modifier)
 
-        if store is not None and "store" not in sig.parameters:
-            raise ValueError(
-                "State modifier callable needs to accept 'store' as a parameter when using create_react_agent with a store."
-            )
-        elif store is None and "store" in sig.parameters:
+        if store is None and "store" in sig.parameters:
             raise ValueError(
                 "Please pass 'store' to create_react_agent to use 'store' in state modifier."
             )
