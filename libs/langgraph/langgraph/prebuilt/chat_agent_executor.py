@@ -59,7 +59,7 @@ StateModifier = Union[
 def _get_state_modifier_runnable(state_modifier: Optional[StateModifier], store: Optional[BaseStore] = None) -> Runnable:
     state_modifier_runnable: Runnable
     if state_modifier is None:
-        state_modifier_runnable = RunnableCallable(
+        state_modifier_runnable = RunnableLambda(
             lambda state, **kwargs: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
         )
     elif isinstance(state_modifier, str):
