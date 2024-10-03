@@ -7,11 +7,11 @@ Memory in the context of LLMs and AI applications refers to the ability to proce
 - Managing what messages (e.g., from a long message history) are sent to a chat model to limit token usage
 - Summarizing past conversations to give a chat model context from prior interactions
 - Selecting few shot examples (e.g., from a dataset) to guide model responses
-- Maintaining persistent data (e.g., user preferences) across multiple chat sessions
-- Allowing an LLM to update its own prompt using past information (e.g., meta-prompting)
-- Retrieving information relevant to a conversation or question from a long-term storage system
+- "Long term memory" - e.g. memory that persists across a thread
+- Allowing an LLM to update its own prompt using past information
+- Extract specific information from previous interactions
 
-Below, we'll discuss each of these examples in some detail. 
+Below, we'll discuss each of these examples in some detail.
 
 ## Managing Messages
 
@@ -142,102 +142,79 @@ If few-shot examples are stored in a [LangSmith Dataset](https://docs.smith.lang
 
 See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
 
-## Maintaining Data Across Chat Sessions
+## Long term memory
 
-LangGraph's [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) has checkpointers that utilize various storage systems, including an in-memory key-value store or different databases. These checkpoints capture the graph state at each execution step and accumulate in a thread, which can be accessed at a later time using a thread ID to resume a previous graph execution. We add persistence to our graph by passing a checkpointer to the `compile` method, as shown here.
+LangGraph's [persistence layer](persistence.md#persistence) has checkpointers that enable [thread](persistence.md#threads)-level memory. There are several situations in which you want to enable memory *between* threads. For this we can use LangGraph's [Store](persistence.md#memory-store). This enables "long term memory".
 
-```python
-# Compile the graph with a checkpointer
-checkpointer = MemorySaver()
-graph = workflow.compile(checkpointer=checkpointer)
+The `Store` interface is a very low level interface on top of well-known data structures. The interesting part of "long term memory" in LangGraph is not any particular novel data structures, but how you populate and use these datastructures. We've seen that both **what** you may want to save (the shape of the data) and **how** you use this data is often very application specific. We highlight a few interesting use cases below. In general, we believe more in giving developers tools and resources to build out memory pipelines themselves, rather than an opiononated memory service.
 
-# Invoke the graph with a thread ID
-config = {"configurable": {"thread_id": "1"}}
-graph.invoke(input_state, config)
+We've noticed two ways that users implement memory. One is to update memory "in the hot path" of the application. The other is to update it as a background job (or by using a service).
 
-# get the latest state snapshot at a later time
-config = {"configurable": {"thread_id": "1"}}
-graph.get_state(config)
-```
+### Updating memory in the hot path
 
-Persistence is critical sustaining a long-running chat sessions. For example, a chat between a user and an AI assistant may have interruptions. Persistence ensures that a user can continue that particular chat session at any later point in time. However, what happens if a user initiates a new chat session with an assistant? This spawns a new thread, and the information from the previous session (thread) is not retained. This motivates the need for a memory that can maintain data across chat sessions (threads). 
+This involves updating memory while the application is running. A concrete example of this is the way that ChatGPT does memory. ChatGPT can call tools to update or save a new memory, and it does that and then responds to the user. 
 
-For this, we can use LangGraph's `Store` interface to save and retrieve information across threads. Shared information can be namespaced by, for example, `user_id` to retain user-specific information across threads. Let's show how to use the `Store` interface to save and retrieve information.
+This has several benefits. First of all, it happens realtime, so if the user starts a new thread right away that memory will be present. It also makes it possible to show the user that memory has been updated, and so can be a bit more transparent that way.
 
-```python
-from langgraph.store.memory import InMemoryStore
-in_memory_store = InMemoryStore()
+This also has several downsides. It may slow down the final response since it needs to decide what to remember. It also means your application not only needs to think about the application logic, but also what to remember (which could result in more complicated instructions to the LLM).
 
-# Namespace for memories
-user_id = "1"
-namespace_for_memory = (user_id, "memories")
+### Updating memory as a background job
 
-# Save memories 
-memory_id = str(uuid.uuid4())
-memory = {"food_preference" : "I like pizza"}
-in_memory_store.put(namespace_for_memory, memory_id, memory)
+This involves updating memory as a completely separate process from your application. This can either be done as some of background job that you write, or by utilizing a separate memory service. This involves triggering some run over a conversation after it has finished to updated memory.
 
-# Retrieve memories
-memories = in_memory_store.search(namespace_for_memory)
-memories[-1].dict()
-{'value': {'food_preference': 'I like pizza'},
- 'key': '07e0caf4-1631-47b7-b15f-65515d4c1843',
- 'namespace': ['1', 'memories'],
- 'created_at': '2024-10-02T17:22:31.590602+00:00',
- 'updated_at': '2024-10-02T17:22:31.590605+00:00'}
-```
+This has some benefits. It's a completely separate process from your application, so generally incurs no latency. It also splits up the application logic from the memory logic, making it more modular and easy to manage.
 
-The `store` can be used in LangGraph to save or retrieve memories in any graph node. The compile the graph with a checkpointer and store. 
-
-```python
-# Compile the graph with the checkpointer and store
-graph = graph.compile(checkpointer=checkpointer, store=in_memory_store)
-
-# Invoke the graph
-user_id = "1"
-config = {"configurable": {"thread_id": "1", "user_id": user_id}}
-
-# First let's just say hi to the AI
-for update in graph.stream(
-    {"messages": [{"role": "user", "content": "hi"}]}, config, stream_mode="updates"
-):
-    print(update)
-```
-
-Then, we can access the store in any node of the graph by passing `store: BaseStore` as a node argument. 
-
-```python
-def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
-    
-    # Get the user id from the config
-    user_id = config["configurable"]["user_id"]
-    
-    # Namespace the memory
-    namespace = (user_id, "memories")
-    
-    # ... Analyze conversation and create a new memory
-    
-    # Create a new memory ID
-    memory_id = str(uuid.uuid4())
-
-    # We create a new memory
-    store.put(namespace, memory_id, {"memory": memory})
-```
-
-Anything saved to the store persists across graph executions (threads), allowing for information, such as user preferences or information, to be retained across threads.
-
-The store is also built into the LangGraph API, making it accessible when using LangGraph Studio locally or when deploying to the LangGraph Cloud.
-    
-See more detail in the [persistence conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#persistence) and this [how-to guide on shared state](../how-tos/memory/shared-state.ipynb).
-
+This also has several downsides. It may not happen realtime, so users will not immediately see memory updated. You also have to think more about when to trigger this job - how do you know a conversation is finished?
 ## Update own instructions
 
-Meta-prompting uses an LLM to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori. 
+This is an example of long term memory.
+
+"Reflection" or "Meta-prompting" steps can use an LLM to generate or refine its own prompts or instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori. 
 
 Meta-prompting can use past information to update the prompt. As an example, this [Tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) uses meta-prompting to iteratively improve the summarization prompt used to generate high quality paper summaries for Twitter. In this case, we used a LangSmith dataset to house several papers that we wanted to summarize, generated summaries using a naive summarization prompt, manually reviewed the summaries, captured feedback from human review using the LangSmith Annotation Queue, and passed this feedback to a chat model to re-generate the summarization prompt. The process was repeated in a loop until the summaries met our criteria in human review.
 
-## Retrieving relevant information from long-term storage
+This will utilize the memory store concept above to store the updated instructions in a shared namespace. This namespace will have only a single item (unless you want to update instructions specific for each user, but that's a separate issue). This will look something like:
 
-A central challenge that spans many different memory use-case can be summarized simply: how can we retrieve *relevant information* from a long-term storage system and pass it to a chat model? As an example, assume we have a system that stores a large number of specific details about a user, but the user asks a specific question related to restaurant recommendations. It would be costly to trivially extract *all* personal user information and pass it to a chat model. Instead, we want to extract only the information that is most relevant to the user's current chat interaction (e,g,. food preferences, location, etc.) and pass it to the chat model. 
+```python
+# Node that *uses* the instructions
+def call_model(state: State, store: BaseStore):
+    instructions = store.search(("instructions",))[0]
+    # Application logic
+    prompt = prompt_template.format(instructions=instructions.value["instructions"])
+    ...
 
-There is a large body of work on retrieval that aims to address this challenge. See our tutorials focused on [RAG, or Retrieval Augmented Generation](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_adaptive_rag/), our conceptual docs on [retrieval](https://python.langchain.com/docs/concepts/#retrieval), and our [open source repository](https://github.com/langchain-ai/rag-from-scratch) along with [videos](https://www.youtube.com/playlist?list=PLfaIDFEXuae2LXbO1_PKyVJiQ23ZztA0x) on this topic.
+
+# Node that updates instructions
+def update_instructions(state: State, store: BaseStore):
+    current_instructions = store.search(("instructions",))[0]
+    # Memory logic
+    prompt = prompt_template.format(instructions=instructions.value["instructions"], conversation=state["messages"])
+    output = llm.invoke(prompt)
+    new_instructions = output['new_instructions']
+    store.put(("instructions",), current_instructions.key, {"instructions": new_instructions})
+    ...
+```
+
+## Remember specific information
+
+A key part of long term memory is remembering specific information. We often see that the information that is best to remember is application specific.
+
+A common pattern we see for remembering this information is to extract information from conversation history. The exact structure of what you extract is up to your application. For example, a coding assistant may want to remember what languages you are comfortable with, whether you like spaces or tabs, etc. A travel app may want to remember restaurants you like.
+
+One choice to make here is whether you extract a **list** of information, or rather you just continuously update a **single profile**. In the above example, the coding example is more of a "profile", while the travel app remembers a "list" of information.
+
+### Profile
+
+The profile is generally just a JSON blob with various key-value pairs. When remembering a profile, you will want to make sure that you are **updating** the profile each time. As a result, you will want to pass in the previous profile and ask the LLM to generate a new profile (or some JSON patch to apply to the old profile).
+
+If the profile is large, this can get tricky. You may need to split the profile into subsections and update each one individually. You also may need to fix errors if the LLM generates incorrect JSON.
+
+### Lists
+
+Remember lists of information is easier in some ways, as the individual structures of each item is generally simpler and easier to generate.
+
+It is more complex overall, as you now have to enable the LLM to *delete* or *update* existing items in the list. This can be tricky to prompt the LLM to do.
+
+You can choose to circumvent this problem entirely by just making this list of items append only, and not allowing updates.
+
+Another thing you will have take into account when working with lists is how to choose the relevant items to use. Right now we support filtering by metadata. We will be adding semantic search shortly.

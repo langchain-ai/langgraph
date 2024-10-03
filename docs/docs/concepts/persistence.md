@@ -220,11 +220,11 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ![Update](img/persistence/shared_state.png)
 
-A state schema specifies a set of keys / channels that are populated as a graph is executed. As discussed above, state can be written by a checkpointer to a thread at each graph step, enabling state persistence.
+A [state schema](low_level.md#schema) specifies a set of keys that are populated as a graph is executed. As discussed above, state can be written by a checkpointer to a thread at each graph step, enabling state persistence.
 
 But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
 
-With checkpointers alone, we cannot share information across threads. This motivates the need for the `Store` interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and will our new in_memory_store.
+With checkpointers alone, we cannot share information across threads. This motivates the need for the `Store` interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and will our new `in_memory_store`.
 First, let's showcase this in isolation without using LangGraph.
 
 ```python
@@ -232,7 +232,7 @@ from langgraph.store.memory import InMemoryStore
 in_memory_store = InMemoryStore()
 ```
 
-Memories are namespaced by a `tuple`, which in our case will be `(<user_id>, "memories")`. We can think about this namespace as a directory, where each `user_id` can have various sub-directories of things that we want to store (e.g., `memories`, `preferences`, etc.). 
+Memories are namespaced by a `tuple`, which in this specific example will be `(<user_id>, "memories")`. The namespace can be any length and represent anything, does not have be user specific.
 
 ```python 
 user_id = "1"
@@ -259,6 +259,15 @@ memories[-1].dict()
  'updated_at': '2024-10-02T17:22:31.590605+00:00'}
 ```
 
+Each memory type is a Python class with certain attributes. We can access it as a dictionary by converting via `.dict` as above.
+The attributes it has are:
+
+- `value`: The value (itself a dictionary) of this memory
+- `key`: The UUID for this memory in this namespace
+- `namespace`: A list of strings, the namespace of this memory type
+- `created_at`: Timestamp for when this memory was created
+- `updated_at`: Timestamp for when this memory was updated
+
 With this all in place, we use the `in_memory_store` in LangGraph. The `in_memory_store` works hand-in-hand with the checkpointer: the checkpointer saves state to threads, as discussed above, and the the `in_memory_store` allows us to store arbitrary information for access *across* threads. We compile the graph with both the checkpointer and the `in_memory_store` as follows. 
 
 ```python
@@ -273,7 +282,7 @@ checkpointer = MemorySaver()
 graph = graph.compile(checkpointer=checkpointer, store=in_memory_store)
 ```
 
- We invoke the graph with a `thread_id`, as before, and also with a `user_id`, which we'll use to namespace our memories to this particular user as we showed above.
+We invoke the graph with a `thread_id`, as before, and also with a `user_id`, which we'll use to namespace our memories to this particular user as we showed above.
 
 ```python
 # Invoke the graph
@@ -308,7 +317,7 @@ def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseSt
 
 ```
 
-As we showed above, we can also access the store in any node and use `search` to get memories. Recall the the memories are returned as a list, with each object being a dictionary with the `key` (memory_id) and `value` (the memory itself) along with some metadata.
+As we showed above, we can also access the store in any node and use `search` to get memories. Recall the the memories are returned as a list of objects that can be converted to a dictionary.
 
 ```python
 memories[-1].dict()
