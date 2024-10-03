@@ -4841,10 +4841,10 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
           ],
           "name": "agent"
         }
