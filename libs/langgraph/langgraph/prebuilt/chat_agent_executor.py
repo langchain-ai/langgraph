@@ -84,8 +84,18 @@ def _get_state_modifier_runnable(
                 "Please pass 'store' to create_react_agent to use 'store' in state modifier."
             )
 
+        if store is not None and "store" not in sig.parameters:
+
+            def _state_modifier(state, config, *, store):  # type: ignore
+                return state_modifier(state, config)
+
+            state_modifier_func = _state_modifier
+        else:
+            state_modifier_func = state_modifier  # type: ignore
+
         state_modifier_runnable = RunnableLambda(
-            state_modifier, name=STATE_MODIFIER_RUNNABLE_NAME
+            state_modifier_func,  # type: ignore
+            name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, Runnable):
         state_modifier_runnable = state_modifier

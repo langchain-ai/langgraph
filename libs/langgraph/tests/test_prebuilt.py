@@ -290,7 +290,7 @@ def test_state_modifier_with_store():
         return SystemMessage("foo") + state["messages"]
 
     model = FakeToolCallingModel()
-    # test state_modifier with store, no store passed to react agent
+    # test state_modifier that uses store, no store passed to react agent
     with pytest.raises(ValueError):
         create_react_agent(model, [add], state_modifier=modify)
 
