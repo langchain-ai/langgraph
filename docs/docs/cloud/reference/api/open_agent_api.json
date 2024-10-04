@@ -1171,7 +1171,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": null
               }
             }
           },
@@ -1351,7 +1351,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {}
               }
             }
           },
@@ -1389,7 +1389,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {}
               }
             }
           },
@@ -1666,10 +1666,24 @@
           },
           "checkpoint": {
             "type": "object",
+            "properties": {
+              "checkpoint_id": {
+                "type": "string",
+                "title": "Checkpoint ID",
+                "description": "The ID of the checkpoint."
+              }
+            },
             "title": "Checkpoint"
           },
           "parent_checkpoint": {
             "type": "object",
+            "properties": {
+              "checkpoint_id": {
+                "type": "string",
+                "title": "Checkpoint ID",
+                "description": "The ID of the checkpoint."
+              }
+            },
             "title": "Parent Checkpoint"
           },
           "metadata": {
