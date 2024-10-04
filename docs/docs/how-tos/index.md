@@ -21,7 +21,7 @@ These how-to guides show how to achieve that controllability.
 LangGraph makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
 
 - [How to add thread-level persistence to your graph](persistence.ipynb)
-- [How to add cross-thread persistence to your graph](memory/shared-state.ipynb)
+- [How to add cross-thread persistence to your graph](cross-thread-persistence.ipynb)
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)

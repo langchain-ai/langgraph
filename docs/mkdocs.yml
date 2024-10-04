@@ -137,7 +137,7 @@ nav:
           - Control graph recursion limit: how-tos/recursion-limit.ipynb
       - Persistence:
           - Add thread-level persistence: how-tos/persistence.ipynb
-          - Add cross-thread persistence: how-tos/memory/shared-state.ipynb
+          - Add cross-thread persistence: how-tos/cross-thread-persistence.ipynb
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
