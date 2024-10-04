@@ -162,12 +162,19 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
     if not namespace:
         raise InvalidNamespaceError("Namespace cannot be empty.")
     for label in namespace:
+        if not isinstance(label, str):
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
+                f" must be strings, but got {type(label).__name__}."
+            )
         if "." in label:
             raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
             )
         elif not label:
-            raise InvalidNamespaceError("Namespace labels cannot be empty strings.")
+            raise InvalidNamespaceError(
+                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
+            )
     if namespace[0] == "langgraph":
         raise InvalidNamespaceError(
             f'Root label for namespace cannot be "langgraph". Got: {namespace}'
