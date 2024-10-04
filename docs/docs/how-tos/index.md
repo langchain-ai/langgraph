@@ -28,7 +28,7 @@ LangGraph makes it easy to persist state across graph runs (thread-level persist
 
 ## Memory
 
-LangGraph makes it easy to manage conversation [memory](concepts/memory.md) in your graph. These how-to guides show how to implement different strategies for that.
+LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) in your graph. These how-to guides show how to implement different strategies for that.
 
 - [How to manage conversation history](memory/manage-conversation-history.ipynb)
 - [How to delete messages](memory/delete-messages.ipynb)
