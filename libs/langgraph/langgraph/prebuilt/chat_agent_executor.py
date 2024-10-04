@@ -61,18 +61,18 @@ def _get_state_modifier_runnable(
 ) -> Runnable:
     state_modifier_runnable: Runnable
     if state_modifier is None:
-        state_modifier_runnable = RunnableLambda(
-            lambda state, **kwargs: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
+        state_modifier_runnable = RunnableCallable(
+            lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
         )
     elif isinstance(state_modifier, str):
         _system_message: BaseMessage = SystemMessage(content=state_modifier)
-        state_modifier_runnable = RunnableLambda(
-            lambda state, **kwargs: [_system_message] + state["messages"],
+        state_modifier_runnable = RunnableCallable(
+            lambda state: [_system_message] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, SystemMessage):
-        state_modifier_runnable = RunnableLambda(
-            lambda state, **kwargs: [state_modifier] + state["messages"],
+        state_modifier_runnable = RunnableCallable(
+            lambda state: [state_modifier] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif callable(state_modifier):
@@ -85,7 +85,7 @@ def _get_state_modifier_runnable(
             )
 
         state_modifier_runnable = RunnableCallable(
-            state_modifier,  # type: ignore
+            state_modifier,
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, Runnable):
@@ -497,10 +497,7 @@ def create_react_agent(
     def call_model(
         state: AgentState, config: RunnableConfig, *, store: BaseStore
     ) -> AgentState:
-        if store is not None:
-            response = model_runnable.invoke(state, config, store=store)
-        else:
-            response = model_runnable.invoke(state, config)
+        response = model_runnable.invoke(state, config)
         if (
             state["is_last_step"]
             and isinstance(response, AIMessage)
@@ -520,10 +517,7 @@ def create_react_agent(
     async def acall_model(
         state: AgentState, config: RunnableConfig, *, store: BaseStore
     ) -> AgentState:
-        if store is not None:
-            response = await model_runnable.ainvoke(state, config, store=store)
-        else:
-            response = await model_runnable.ainvoke(state, config)
+        response = await model_runnable.ainvoke(state, config)
         if (
             state["is_last_step"]
             and isinstance(response, AIMessage)
