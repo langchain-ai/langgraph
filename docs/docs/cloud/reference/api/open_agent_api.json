@@ -43,7 +43,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -83,7 +83,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -122,7 +122,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -173,7 +173,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -222,7 +222,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": null
@@ -273,7 +273,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -321,7 +321,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -379,7 +379,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -419,7 +419,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -459,7 +459,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -499,7 +499,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -550,7 +550,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -599,7 +599,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": null
@@ -650,7 +650,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -699,7 +699,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -753,7 +753,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -810,7 +810,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -879,7 +879,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -935,7 +935,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -994,7 +994,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1054,7 +1054,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1106,7 +1106,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": null
@@ -1168,7 +1168,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1220,7 +1220,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1272,7 +1272,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1310,7 +1310,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": null
@@ -1347,11 +1347,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Successful Response",
+          "201": {
+            "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": null
               }
             }
           },
@@ -1385,11 +1385,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Successful Response",
+          "201": {
+            "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": null
               }
             }
           },
@@ -1835,7 +1835,7 @@
             },
             "default": [],
             "title": "Interrupt Before",
-            "description": "An arbitrary list of strings that determine how the assistant handles Human-in-the-Loop use cases for **BEFORE** proceeding to the next execution step. The API specification does not specify the possible values of this field or the default value if Human-in-the-Loop use cases are not supported by the implementation."
+            "description": "An arbitrary list of strings that determine how the assistant handles Human-in-the-Loop use cases for **BEFORE** execution workflows. The API specification does not specify the possible values of this field or the default value if Human-in-the-Loop use cases are not supported by the implementation."
           },
           "interrupt_after": {
             "type": "array",
@@ -1844,7 +1844,7 @@
             },
             "default": [],
             "title": "Interrupt After",
-            "description": "An arbitrary list of strings that determine how the assistant handles Human-in-the-Loop use cases for **AFTER** completing an execution step. The API specification does not specify the possible values of this field or the default value if Human-in-the-Loop use cases are not supported by the implementation."
+            "description": "An arbitrary list of strings that determine how the assistant handles Human-in-the-Loop use cases for **AFTER** execution workflows. The API specification does not specify the possible values of this field or the default value if Human-in-the-Loop use cases are not supported by the implementation."
           },
           "stream_mode": {
             "type": "array",
