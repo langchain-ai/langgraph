@@ -1008,8 +1008,11 @@
           "201": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1307,8 +1310,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1441,8 +1447,11 @@
           "201": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -2017,6 +2026,11 @@
         ],
         "title": "RunCancel",
         "description": "Payload for cancelling a run."
+      },
+      "RunStreamOutput": {
+        "title": "RunStreamOutput",
+        "description": "The server will send a stream of events in SSE format.",
+        "example": "id: 1\nevent: message\ndata: This is the first message\n\nid: 2\nevent: message\ndata: This is the second message\n"
       },
       "ErrorResponse": {
         "title": "ErrorResponse",
