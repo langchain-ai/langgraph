@@ -1,4 +1,3 @@
-import inspect
 from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
@@ -7,7 +6,6 @@ from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
     RunnableConfig,
-    RunnableLambda,
 )
 from langchain_core.tools import BaseTool
 from typing_extensions import Annotated, TypedDict
@@ -76,14 +74,6 @@ def _get_state_modifier_runnable(
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif callable(state_modifier):
-        # Inspect the state_modifier signature
-        sig = inspect.signature(state_modifier)
-
-        if store is None and "store" in sig.parameters:
-            raise ValueError(
-                "Please pass 'store' to create_react_agent to use 'store' in state modifier."
-            )
-
         state_modifier_runnable = RunnableCallable(
             state_modifier,
             name=STATE_MODIFIER_RUNNABLE_NAME,
@@ -494,9 +484,7 @@ def create_react_agent(
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
-    def call_model(
-        state: AgentState, config: RunnableConfig, *, store: BaseStore
-    ) -> AgentState:
+    def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = model_runnable.invoke(state, config)
         if (
             state["is_last_step"]
@@ -514,9 +502,7 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(
-        state: AgentState, config: RunnableConfig, *, store: BaseStore
-    ) -> AgentState:
+    async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = await model_runnable.ainvoke(state, config)
         if (
             state["is_last_step"]
