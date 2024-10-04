@@ -1,28 +1,57 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Open Agent API Specification",
+    "title": "Open Assistants API Specification",
     "version": "1.0.0"
   },
   "tags": [
     {
+      "name": "Templates",
+      "description": "A template is the cognitive architecture of an assistant."
+    },
+    {
       "name": "Assistants",
-      "description": ""
+      "description": "An assistant is a configured instance of a template."
     },
     {
       "name": "Threads",
-      "description": ""
+      "description": "A thread contains the accumulated state of a group of runs."
     },
     {
       "name": "Runs",
-      "description": "The output of a run is persisted to a thread's state."
+      "description": "A run is an invocation of an assistant. The output of a run is persisted to a thread's state."
     },
     {
       "name": "Runs (Threadless)",
-      "description": "The output of a threadless run is not persisted to a thread's state."
+      "description": "A run is an invocation of an assistant. The output of a threadless run is not persisted to any thread state."
     }
   ],
   "paths": {
+    "/templates": {
+      "get": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "List Templates",
+        "description": "List all templates.",
+        "operationId": "templates_get",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Template"
+                  },
+                  "type": "array"              
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/assistants": {
       "post": {
         "tags": [
@@ -1407,6 +1436,19 @@
   },
   "components": {
     "schemas": {
+      "Template": {
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "title": "Template ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template_id"
+        ],
+        "title": "Template"
+      },
       "Assistant": {
         "properties": {
           "assistant_id": {
