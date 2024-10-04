@@ -1075,7 +1075,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunWaitOutput"
+                }
               }
             }
           },
@@ -1368,7 +1370,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunWaitOutput"
+                }
               }
             }
           },
@@ -1491,7 +1495,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunWaitOutput"
+                }
               }
             }
           },
@@ -2027,10 +2033,9 @@
         "title": "RunCancel",
         "description": "Payload for cancelling a run."
       },
-      "RunStreamOutput": {
-        "title": "RunStreamOutput",
-        "description": "The server will send a stream of events in SSE format.",
-        "example": "id: 1\nevent: message\ndata: This is the first message\n\nid: 2\nevent: message\ndata: This is the second message\n"
+      "RunWaitOutput": {
+        "type": "object",
+        "title": "RunWaitOutput"
       },
       "ErrorResponse": {
         "title": "ErrorResponse",
