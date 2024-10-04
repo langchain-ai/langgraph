@@ -267,7 +267,7 @@ def create_react_agent(
         >>> from langgraph.prebuilt import create_react_agent
         >>>
         >>> @tool
-        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ... def check_weather(location: str, at_time: datetime | None = None) -> str:
         ...     '''Return the weather forecast for the specified location.'''
         ...     return f"It's always sunny in {location}"
         >>>
@@ -370,7 +370,7 @@ def create_react_agent(
         ...         message.pretty_print()
         ```
 
-        Add "chat memory" to the graph:
+        Add thread-level "chat memory" to the graph:
 
         ```pycon
         >>> from langgraph.checkpoint.memory import MemorySaver
@@ -425,6 +425,64 @@ def create_react_agent(
         >>> snapshot = graph.get_state(config)
         >>> print("Next step: ", snapshot.next)
         >>> print_stream(graph, None, config)
+        ```
+
+        Add cross-thread memory to the graph:
+
+        ```pycon
+        >>> from langgraph.prebuilt import InjectedStore
+        >>> from langgraph.store.base import BaseStore
+
+        >>> @tool
+        ... def check_weather(config: RunnableConfig, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        ...     '''Return the weather forecast for the specified location.'''
+        ...     user_id = config.get("configurable", {}).get("user_id")
+        ...     namespace = ("locations", user_id)
+        ...     location = store.search(namespace)[0].value["data"]
+        ...     return f"It's always sunny in {location}"
+
+        >>> def modify_state_messages(state: AgentState, config: RunnableConfig, store: BaseStore):
+        ...     # You can do more complex modifications here
+        ...     user_id = config.get("configurable", {}).get("user_id")
+        ...     namespace = ("names", user_id)
+        ...     name = store.search(namespace)[0].value["data"]
+        ...     system_msg = f"User name is: {name}"
+        ...     return [SystemMessage(content=system_msg)] + state["messages"]
+
+        >>> from langgraph.checkpoint.memory import MemorySaver
+        >>> from langgraph.store.memory import InMemoryStore
+        >>> store = InMemoryStore()
+        >>> store.put(("names", "1"), "name_user_1", {"data": "Bob"})
+        >>> store.put(("locations", "1"), "location_user_1", {"data": "SF"})
+        >>> graph = create_react_agent(model, [check_weather], state_modifier=modify_state_messages, store=store)
+        >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
+        >>> def print_stream(graph, inputs, config):
+        ...     for s in graph.stream(inputs, config, stream_mode="values"):
+        ...         message = s["messages"][-1]
+        ...         if isinstance(message, tuple):
+        ...             print(message)
+        ...         else:
+        ...             message.pretty_print()
+        >>> inputs = {"messages": [("user", "what's my name?")]}
+        >>> print_stream(graph, inputs, config)
+        >>> inputs2 = {"messages": [("user", "is it nice outside? should i go biking today?")]}
+        >>> print_stream(graph, inputs2, config)
+        ================================ Human Message =================================
+        what's my name?
+        ================================== Ai Message ==================================
+        Your name is Bob.
+        ================================ Human Message =================================
+        is it nice outside? should i go biking today?
+        ================================== Ai Message ==================================
+        Tool Calls:
+        check_weather (call_Yp9jKFisjBBaEt3mdrqaHLDo)
+        Call ID: call_Yp9jKFisjBBaEt3mdrqaHLDo
+        Args:
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in SF
+        ================================== Ai Message ==================================
+        Yes, it's sunny outside! It sounds like a great day for biking. Enjoy your ride!
         ```
 
         Add a timeout for a given step:
