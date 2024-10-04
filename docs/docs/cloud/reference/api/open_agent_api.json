@@ -205,7 +205,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -574,7 +574,7 @@
           "Threads"
         ],
         "summary": "Patch Thread",
-        "description": "Update a thread.",
+        "description": "Patch a thread by ID.",
         "operationId": "threads__thread_id__patch",
         "parameters": [
           {
@@ -600,7 +600,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -1424,7 +1424,7 @@
         "tags": [
           "Runs (Threadless)"
         ],
-        "summary": "Stream Run",
+        "summary": "Create Run, Stream Output",
         "description": "Create a run without persisting its output to a thread. Stream the output.",
         "operationId": "runs_stream_post",
         "requestBody": {
@@ -1464,7 +1464,7 @@
         "tags": [
           "Runs (Threadless)"
         ],
-        "summary": "Wait Run",
+        "summary": "Create Run, Wait for Output",
         "description": "Create a run without persisting its output to a thread. Wait for the final output and then return.",
         "operationId": "runs_wait_post",
         "requestBody": {
@@ -1727,7 +1727,7 @@
         },
         "type": "object",
         "title": "ThreadPatch",
-        "description": "Payload for creating a thread."
+        "description": "Payload for patching a thread."
       },
       "ThreadSearch": {
         "properties": {
