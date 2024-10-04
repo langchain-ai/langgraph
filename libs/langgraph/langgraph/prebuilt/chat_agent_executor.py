@@ -262,11 +262,10 @@ def create_react_agent(
 
         ```pycon
         >>> from datetime import datetime
-        >>> from langchain_core.tools import tool
         >>> from langchain_openai import ChatOpenAI
         >>> from langgraph.prebuilt import create_react_agent
-        >>>
-        >>> @tool
+
+
         ... def check_weather(location: str, at_time: datetime | None = None) -> str:
         ...     '''Return the weather forecast for the specified location.'''
         ...     return f"It's always sunny in {location}"
@@ -330,11 +329,11 @@ def create_react_agent(
         ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
         ... ])
-        >>> def modify_state_messages(state: AgentState):
+        >>> def format_for_model(state: AgentState):
         ...     # You can do more complex modifications here
         ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, state_modifier=modify_state_messages)
+        >>> graph = create_react_agent(model, tools, state_modifier=format_for_model)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -412,13 +411,6 @@ def create_react_agent(
         ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
         >>> )
         >>> config = {"configurable": {"thread_id": "thread-1"}}
-        >>> def print_stream(graph, inputs, config):
-        ...     for s in graph.stream(inputs, config, stream_mode="values"):
-        ...         message = s["messages"][-1]
-        ...         if isinstance(message, tuple):
-        ...             print(message)
-        ...         else:
-        ...             message.pretty_print()
 
         >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
         >>> print_stream(graph, inputs, config)
@@ -433,63 +425,56 @@ def create_react_agent(
         >>> from langgraph.prebuilt import InjectedStore
         >>> from langgraph.store.base import BaseStore
 
-        >>> @tool
-        ... def check_weather(config: RunnableConfig, store: Annotated[BaseStore, InjectedStore()]) -> str:
-        ...     '''Return the weather forecast for the specified location.'''
+        >>> def save_memory(memory: str, *, config: RunnableConfig, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        ...     '''Save the given memory for the current user.'''
+        ...     # This is a **tool** the model can use to save memories to storage
         ...     user_id = config.get("configurable", {}).get("user_id")
-        ...     namespace = ("locations", user_id)
-        ...     location = store.search(namespace)[0].value["data"]
-        ...     return f"It's always sunny in {location}"
+        ...     namespace = ("memories", user_id)
+        ...     store.put(namespace, f"memory_{len(store.search(namespace))}", {"data": memory})
+        ...     return f"Saved memory: {memory}"
 
-        >>> def modify_state_messages(state: AgentState, config: RunnableConfig, store: BaseStore):
-        ...     # You can do more complex modifications here
+        >>> def prepare_model_inputs(state: AgentState, config: RunnableConfig, store: BaseStore):
+        ...     # Retrieve user memories and add them to the system message
+        ...     # This function is called **every time** the model is prompted. It converts the state to a prompt
         ...     user_id = config.get("configurable", {}).get("user_id")
-        ...     namespace = ("names", user_id)
-        ...     name = store.search(namespace)[0].value["data"]
-        ...     system_msg = f"User name is: {name}"
-        ...     return [SystemMessage(content=system_msg)] + state["messages"]
+        ...     namespace = ("memories", user_id)
+        ...     memories = [m.value["data"] for m in store.search(namespace)]
+        ...     system_msg = f"User memories: {', '.join(memories)}"
+        ...     return [{"role": "system", "content": system_msg)] + state["messages"]
 
         >>> from langgraph.checkpoint.memory import MemorySaver
         >>> from langgraph.store.memory import InMemoryStore
         >>> store = InMemoryStore()
-        >>> store.put(("names", "1"), "name_user_1", {"data": "Bob"})
-        >>> store.put(("locations", "1"), "location_user_1", {"data": "SF"})
-        >>> graph = create_react_agent(model, [check_weather], state_modifier=modify_state_messages, store=store)
+        >>> graph = create_react_agent(model, [save_memory], state_modifier=prepare_model_inputs, store=store, checkpointer=MemorySaver())
         >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
-        >>> def print_stream(graph, inputs, config):
-        ...     for s in graph.stream(inputs, config, stream_mode="values"):
-        ...         message = s["messages"][-1]
-        ...         if isinstance(message, tuple):
-        ...             print(message)
-        ...         else:
-        ...             message.pretty_print()
-        >>> inputs = {"messages": [("user", "what's my name?")]}
+
+        >>> inputs = {"messages": [("user", "Hey I'm Will, how's it going?")]}
         >>> print_stream(graph, inputs, config)
-        >>> inputs2 = {"messages": [("user", "is it nice outside? should i go biking today?")]}
+        ('user', "Hey I'm Will, how's it going?")
+        ================================== Ai Message ==================================
+        Hello Will! It's nice to meet you. I'm doing well, thank you for asking. How are you doing today?
+
+        >>> inputs2 = {"messages": [("user", "I like to bike")]}
         >>> print_stream(graph, inputs2, config)
         ================================ Human Message =================================
-        what's my name?
+        I like to bike
         ================================== Ai Message ==================================
-        Your name is Bob.
+        That's great to hear, Will! Biking is an excellent hobby and form of exercise. It's a fun way to stay active and explore your surroundings. Do you have any favorite biking routes or trails you enjoy? Or perhaps you're into a specific type of biking, like mountain biking or road cycling?
+
+        >>> config = {"configurable": {"thread_id": "thread-2", "user_id": "1"}}
+        >>> inputs3 = {"messages": [("user", "Hi there! Remember me?")]}
+        >>> print_stream(graph, inputs3, config)
         ================================ Human Message =================================
-        is it nice outside? should i go biking today?
+        Hi there! Remember me?
         ================================== Ai Message ==================================
-        Tool Calls:
-        check_weather (call_Yp9jKFisjBBaEt3mdrqaHLDo)
-        Call ID: call_Yp9jKFisjBBaEt3mdrqaHLDo
-        Args:
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in SF
-        ================================== Ai Message ==================================
-        Yes, it's sunny outside! It sounds like a great day for biking. Enjoy your ride!
+        User memories:
+        Hello! Of course, I remember you, Will! You mentioned earlier that you like to bike. It's great to hear from you again. How have you been? Have you been on any interesting bike rides lately?
         ```
 
         Add a timeout for a given step:
 
         ```pycon
         >>> import time
-        >>> @tool
         ... def check_weather(location: str, at_time: datetime | None = None) -> float:
         ...     '''Return the weather forecast for the specified location.'''
         ...     time.sleep(2)
