@@ -1686,8 +1686,14 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted",
+              "error"
+            ],
             "title": "Status",
-            "description": "The status indicates the current state of the thread with respect to \"double texting\" use cases. The API specification does not specify the possible values of this field or the default value if \"double texting\" use cases are not supported by the implementation."
+            "description": "The status indicates the current state of the thread with respect to \"double texting\" use cases."
           },
           "values": {
             "type": "object",
@@ -1758,8 +1764,14 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted",
+              "error"
+            ],
             "title": "Status",
-            "description": "Status to search for.\n\nThe status indicates the current state of the thread with respect to \"double texting\" use cases. The API specification does not specify the possible values of this field or the default value if \"double texting\" use cases are not supported by the implementation."
+            "description": "Status to search for.\n\nThe status indicates the current state of the thread with respect to \"double texting\" use cases."
           },
           "limit": {
             "type": "integer",
@@ -1835,7 +1847,6 @@
             "title": "Values"
           },
           "checkpoint": {
-
             "properties": {
               "checkpoint_id": {
                 "type": "string",
@@ -1917,7 +1928,9 @@
               "interrupt",
               "enqueue"
             ],
-            "title": "Multitask Strategy"
+            "title": "Multitask Strategy",
+            "description": "The multitask strategy determines the behavior of the run with respect to \"double texting\" use cases.",
+            "default": "reject"
           },
           "created_at": {
             "type": "string",
@@ -2009,6 +2022,7 @@
               "enqueue"
             ],
             "title": "Multitask Strategy",
+            "description": "The multitask strategy determines the behavior of the run with respect to \"double texting\" use cases.",
             "default": "reject"
           }
         },
