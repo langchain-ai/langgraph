@@ -15,7 +15,7 @@
     },
     {
       "name": "Threads",
-      "description": "A thread contains the accumulated state of a group of runs."
+      "description": "A thread contains the accumulated outputs of a group of runs. The outputs are persisted to a thread's state."
     },
     {
       "name": "Runs",
