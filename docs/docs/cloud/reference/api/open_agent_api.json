@@ -505,6 +505,134 @@
         }
       }
     },
+    "/threads/{thread_id}/state": {
+      "post": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Create Thread State",
+        "description": "Add state to a thread.",
+        "operationId": "threads__thread_id__state_post",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread ID",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Get Thread State",
+        "description": "Get state for a thread.\n\nThe latest state of the thread is returned.",
+        "operationId": "threads__thread_id__state_get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread ID",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/state/search": {
+      "post": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Search Thread States",
+        "description": "Search for thread states.\n\nThis endpoint also functions as the endpoint to list all thread states (omit `metadata` and `checkpoint_id`). The API specification does not specify how the search is implemented.",
+        "operationId": "threads__thread_id__state_search_post",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ThreadState"
+                  },
+                  "type": "array",
+                  "title": "Response Get Thread History Post Threads  Thread Id  History Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/threads/{thread_id}/runs": {
       "post": {
         "tags": [
@@ -1265,6 +1393,91 @@
         "type": "object",
         "title": "ThreadSearch",
         "description": "Payload for searching for threads."
+      },
+      "ThreadState": {
+        "properties": {
+          "values": {
+            "type": "object",
+            "title": "Values"
+          },
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
+          },
+          "parent_checkpoint": {
+            "type": "object",
+            "title": "Parent Checkpoint"
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "next",
+          "checkpoint",
+          "metadata",
+          "created_at"
+        ],
+        "title": "ThreadState"
+      },
+      "ThreadStateCreate": {
+        "properties": {
+          "values": {
+            "type": "object",
+            "title": "Values"
+          },
+          "checkpoint": {
+
+            "properties": {
+              "checkpoint_id": {
+                "type": "string",
+                "title": "Checkpoint ID",
+                "description": "The ID of the checkpoint."
+              }
+            },
+            "type": "object",
+            "title": "Checkpoint"
+          }
+        },
+        "type": "object",
+        "title": "ThreadStateCreate",
+        "description": "Payload for adding state to a thread."
+      },
+      "ThreadStateSearch": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "The maximum number of states to return.",
+            "default": 10,
+            "maximum": 1000,
+            "minimum": 1
+          },
+          "offset": {
+            "type": "string",
+            "title": "Before",
+            "description": "Return states before this checkpoint ID."
+          },
+          "checkpoint_id": {
+            "type": "string",
+            "title": "Checkpoint ID",
+            "description": "Filter by checkpoint ID."
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata to search for."
+          }
+        },
+        "type": "object",
+        "title": "ThreadStateSearch"
       },
       "Run": {
         "properties": {
