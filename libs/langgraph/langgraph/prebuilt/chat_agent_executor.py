@@ -6,7 +6,6 @@ from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
     RunnableConfig,
-    RunnableLambda,
 )
 from langchain_core.tools import BaseTool
 from typing_extensions import Annotated, TypedDict
@@ -20,6 +19,7 @@ from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
+from langgraph.utils.runnable import RunnableCallable
 
 
 # We create the AgentState that we will pass around
@@ -54,26 +54,29 @@ StateModifier = Union[
 ]
 
 
-def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
+def _get_state_modifier_runnable(
+    state_modifier: Optional[StateModifier], store: Optional[BaseStore] = None
+) -> Runnable:
     state_modifier_runnable: Runnable
     if state_modifier is None:
-        state_modifier_runnable = RunnableLambda(
+        state_modifier_runnable = RunnableCallable(
             lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
         )
     elif isinstance(state_modifier, str):
         _system_message: BaseMessage = SystemMessage(content=state_modifier)
-        state_modifier_runnable = RunnableLambda(
+        state_modifier_runnable = RunnableCallable(
             lambda state: [_system_message] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, SystemMessage):
-        state_modifier_runnable = RunnableLambda(
+        state_modifier_runnable = RunnableCallable(
             lambda state: [state_modifier] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif callable(state_modifier):
-        state_modifier_runnable = RunnableLambda(
-            state_modifier, name=STATE_MODIFIER_RUNNABLE_NAME
+        state_modifier_runnable = RunnableCallable(
+            state_modifier,
+            name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, Runnable):
         state_modifier_runnable = state_modifier
@@ -108,6 +111,7 @@ def _convert_messages_modifier_to_state_modifier(
 def _get_model_preprocessing_runnable(
     state_modifier: Optional[StateModifier],
     messages_modifier: Optional[MessagesModifier],
+    store: Optional[BaseStore],
 ) -> Runnable:
     # Add the state or message modifier, if exists
     if state_modifier is not None and messages_modifier is not None:
@@ -118,7 +122,7 @@ def _get_model_preprocessing_runnable(
     if state_modifier is None and messages_modifier is not None:
         state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
 
-    return _get_state_modifier_runnable(state_modifier)
+    return _get_state_modifier_runnable(state_modifier, store)
 
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
@@ -258,12 +262,11 @@ def create_react_agent(
 
         ```pycon
         >>> from datetime import datetime
-        >>> from langchain_core.tools import tool
         >>> from langchain_openai import ChatOpenAI
         >>> from langgraph.prebuilt import create_react_agent
-        >>>
-        >>> @tool
-        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
+
+
+        ... def check_weather(location: str, at_time: datetime | None = None) -> str:
         ...     '''Return the weather forecast for the specified location.'''
         ...     return f"It's always sunny in {location}"
         >>>
@@ -326,11 +329,11 @@ def create_react_agent(
         ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
         ... ])
-        >>> def modify_state_messages(state: AgentState):
+        >>> def format_for_model(state: AgentState):
         ...     # You can do more complex modifications here
         ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, state_modifier=modify_state_messages)
+        >>> graph = create_react_agent(model, tools, state_modifier=format_for_model)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -366,7 +369,7 @@ def create_react_agent(
         ...         message.pretty_print()
         ```
 
-        Add "chat memory" to the graph:
+        Add thread-level "chat memory" to the graph:
 
         ```pycon
         >>> from langgraph.checkpoint.memory import MemorySaver
@@ -408,13 +411,6 @@ def create_react_agent(
         ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
         >>> )
         >>> config = {"configurable": {"thread_id": "thread-1"}}
-        >>> def print_stream(graph, inputs, config):
-        ...     for s in graph.stream(inputs, config, stream_mode="values"):
-        ...         message = s["messages"][-1]
-        ...         if isinstance(message, tuple):
-        ...             print(message)
-        ...         else:
-        ...             message.pretty_print()
 
         >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
         >>> print_stream(graph, inputs, config)
@@ -423,11 +419,62 @@ def create_react_agent(
         >>> print_stream(graph, None, config)
         ```
 
+        Add cross-thread memory to the graph:
+
+        ```pycon
+        >>> from langgraph.prebuilt import InjectedStore
+        >>> from langgraph.store.base import BaseStore
+
+        >>> def save_memory(memory: str, *, config: RunnableConfig, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        ...     '''Save the given memory for the current user.'''
+        ...     # This is a **tool** the model can use to save memories to storage
+        ...     user_id = config.get("configurable", {}).get("user_id")
+        ...     namespace = ("memories", user_id)
+        ...     store.put(namespace, f"memory_{len(store.search(namespace))}", {"data": memory})
+        ...     return f"Saved memory: {memory}"
+
+        >>> def prepare_model_inputs(state: AgentState, config: RunnableConfig, store: BaseStore):
+        ...     # Retrieve user memories and add them to the system message
+        ...     # This function is called **every time** the model is prompted. It converts the state to a prompt
+        ...     user_id = config.get("configurable", {}).get("user_id")
+        ...     namespace = ("memories", user_id)
+        ...     memories = [m.value["data"] for m in store.search(namespace)]
+        ...     system_msg = f"User memories: {', '.join(memories)}"
+        ...     return [{"role": "system", "content": system_msg)] + state["messages"]
+
+        >>> from langgraph.checkpoint.memory import MemorySaver
+        >>> from langgraph.store.memory import InMemoryStore
+        >>> store = InMemoryStore()
+        >>> graph = create_react_agent(model, [save_memory], state_modifier=prepare_model_inputs, store=store, checkpointer=MemorySaver())
+        >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
+
+        >>> inputs = {"messages": [("user", "Hey I'm Will, how's it going?")]}
+        >>> print_stream(graph, inputs, config)
+        ('user', "Hey I'm Will, how's it going?")
+        ================================== Ai Message ==================================
+        Hello Will! It's nice to meet you. I'm doing well, thank you for asking. How are you doing today?
+
+        >>> inputs2 = {"messages": [("user", "I like to bike")]}
+        >>> print_stream(graph, inputs2, config)
+        ================================ Human Message =================================
+        I like to bike
+        ================================== Ai Message ==================================
+        That's great to hear, Will! Biking is an excellent hobby and form of exercise. It's a fun way to stay active and explore your surroundings. Do you have any favorite biking routes or trails you enjoy? Or perhaps you're into a specific type of biking, like mountain biking or road cycling?
+
+        >>> config = {"configurable": {"thread_id": "thread-2", "user_id": "1"}}
+        >>> inputs3 = {"messages": [("user", "Hi there! Remember me?")]}
+        >>> print_stream(graph, inputs3, config)
+        ================================ Human Message =================================
+        Hi there! Remember me?
+        ================================== Ai Message ==================================
+        User memories:
+        Hello! Of course, I remember you, Will! You mentioned earlier that you like to bike. It's great to hear from you again. How have you been? Have you been on any interesting bike rides lately?
+        ```
+
         Add a timeout for a given step:
 
         ```pycon
         >>> import time
-        >>> @tool
         ... def check_weather(location: str, at_time: datetime | None = None) -> float:
         ...     '''Return the weather forecast for the specified location.'''
         ...     time.sleep(2)
@@ -473,7 +520,10 @@ def create_react_agent(
         else:
             return "tools"
 
-    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier)
+    # we're passing store here for validation
+    preprocessor = _get_model_preprocessing_runnable(
+        state_modifier, messages_modifier, store
+    )
     model_runnable = preprocessor | model
 
     # Define the function that calls the model
@@ -517,7 +567,7 @@ def create_react_agent(
     workflow = StateGraph(state_schema or AgentState)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", RunnableLambda(call_model, acall_model))
+    workflow.add_node("agent", RunnableCallable(call_model, acall_model))
     workflow.add_node("tools", tool_node)
 
     # Set the entrypoint as `agent`
