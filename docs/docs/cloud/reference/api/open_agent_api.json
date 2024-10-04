@@ -85,7 +85,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -164,7 +166,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -215,7 +219,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -223,7 +229,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -262,7 +270,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -315,7 +325,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -323,7 +335,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -367,7 +381,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -421,7 +437,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -461,7 +479,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -541,7 +561,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -592,7 +614,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -600,7 +624,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -639,7 +665,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -692,7 +720,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -700,7 +730,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -741,7 +773,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -799,7 +833,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -852,7 +888,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -860,7 +898,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -924,7 +964,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -975,7 +1017,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -983,7 +1027,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1034,7 +1080,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1042,7 +1090,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1096,7 +1146,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1146,7 +1198,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1208,7 +1262,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1260,7 +1316,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1312,7 +1370,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1350,7 +1410,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1388,7 +1450,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1426,7 +1490,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1951,6 +2017,21 @@
         ],
         "title": "RunCancel",
         "description": "Payload for cancelling a run."
+      },
+      "ErrorResponse": {
+        "title": "ErrorResponse",
+        "description": "Response body for an error.",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Detail of the error."
+          }
+        },
+        "required": [
+          "detail"
+        ]
       }
     }
   }
