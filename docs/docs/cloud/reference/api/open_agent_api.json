@@ -15,7 +15,7 @@
     },
     {
       "name": "Threads",
-      "description": "A thread contains the accumulated state of a group of runs."
+      "description": "A thread contains the accumulated outputs of a group of runs. The outputs are persisted to a thread's state."
     },
     {
       "name": "Runs",
@@ -85,7 +85,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -164,7 +166,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -201,7 +205,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -215,7 +219,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -223,7 +229,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -262,7 +270,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -315,7 +325,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -323,7 +335,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -367,7 +381,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -421,7 +437,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -461,7 +479,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -541,7 +561,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -552,7 +574,7 @@
           "Threads"
         ],
         "summary": "Patch Thread",
-        "description": "Update a thread.",
+        "description": "Patch a thread by ID.",
         "operationId": "threads__thread_id__patch",
         "parameters": [
           {
@@ -578,7 +600,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -592,7 +614,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -600,7 +624,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -639,7 +665,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -692,7 +720,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -700,7 +730,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -741,7 +773,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -799,7 +833,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -852,7 +888,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -860,7 +898,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -924,7 +964,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -966,8 +1008,11 @@
           "201": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -975,7 +1020,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -983,7 +1030,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1026,7 +1075,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunWaitOutput"
+                }
               }
             }
           },
@@ -1034,7 +1085,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1042,7 +1095,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1096,7 +1151,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1146,7 +1203,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1208,7 +1267,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1251,8 +1312,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1260,7 +1324,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1304,7 +1370,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunWaitOutput"
+                }
               }
             }
           },
@@ -1312,7 +1380,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1350,7 +1420,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1362,7 +1434,7 @@
         "tags": [
           "Runs (Threadless)"
         ],
-        "summary": "Stream Run",
+        "summary": "Create Run, Stream Output",
         "description": "Create a run without persisting its output to a thread. Stream the output.",
         "operationId": "runs_stream_post",
         "requestBody": {
@@ -1379,8 +1451,11 @@
           "201": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1388,7 +1463,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1400,7 +1477,7 @@
         "tags": [
           "Runs (Threadless)"
         ],
-        "summary": "Wait Run",
+        "summary": "Create Run, Wait for Output",
         "description": "Create a run without persisting its output to a thread. Wait for the final output and then return.",
         "operationId": "runs_wait_post",
         "requestBody": {
@@ -1418,7 +1495,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RunWaitOutput"
+                }
               }
             }
           },
@@ -1426,7 +1505,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": null
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1661,7 +1742,7 @@
         },
         "type": "object",
         "title": "ThreadPatch",
-        "description": "Payload for creating a thread."
+        "description": "Payload for patching a thread."
       },
       "ThreadSearch": {
         "properties": {
@@ -1951,6 +2032,25 @@
         ],
         "title": "RunCancel",
         "description": "Payload for cancelling a run."
+      },
+      "RunWaitOutput": {
+        "type": "object",
+        "title": "RunWaitOutput"
+      },
+      "ErrorResponse": {
+        "title": "ErrorResponse",
+        "description": "Response body for an error.",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Detail of the error."
+          }
+        },
+        "required": [
+          "detail"
+        ]
       }
     }
   }
