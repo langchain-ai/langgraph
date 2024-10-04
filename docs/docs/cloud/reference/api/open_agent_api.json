@@ -29,7 +29,7 @@
           "Assistants"
         ],
         "summary": "Create Assistant",
-        "description": "Create an assistant.\n\nThe initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `PATCH /assistants/{assistant_id}/` endpoint.",
+        "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `PATCH /assistants/{assistant_id}/` endpoint.",
         "operationId": "assistants_post",
         "requestBody": {
           "content": {
@@ -49,6 +49,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/Assistant"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           }
@@ -174,6 +182,14 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -266,6 +282,14 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -345,7 +369,7 @@
             "description": "The version of the assistant.",
             "required": true,
             "schema": {
-              "type": "string",
+              "type": "integer",
               "title": "Version",
               "description": "The version of the assistant."
             },
@@ -354,7 +378,7 @@
           }
         ],
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -401,6 +425,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/Thread"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           }
@@ -527,6 +559,14 @@
               }
             }
           },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
+              }
+            }
+          },
           "404": {
             "description": "Not Found",
             "content": {
@@ -616,6 +656,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/ThreadState"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           },
@@ -761,13 +809,21 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Run"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           },
@@ -878,11 +934,19 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           },
@@ -929,11 +993,19 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           },
@@ -1237,8 +1309,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": null
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": null
@@ -1274,6 +1354,14 @@
                 "schema": {}
               }
             }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
+              }
+            }
           }
         }
       }
@@ -1302,6 +1390,14 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": null
               }
             }
           }
@@ -1388,7 +1484,7 @@
       "AssistantPatch": {
         "properties": {
           "version": {
-            "type": "string",
+            "type": "integer",
             "title": "Version",
             "description": "Version to change to."
           }
@@ -1430,7 +1526,7 @@
         },
         "type": "object",
         "title": "AssistantSearch",
-        "description": "Payload for searching for assistants."
+        "description": "Payload for searching for assistants or assistant versions."
       },
       "AssistantVersionCreate": {
         "properties": {
