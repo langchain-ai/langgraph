@@ -167,7 +167,7 @@ nav:
       - Tool calling:
           - Call tools using ToolNode: how-tos/tool-calling.ipynb
           - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
-          - Pass graph state to tools: how-tos/pass-run-time-values-to-tools.ipynb
+          - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
       - Subgraphs:
