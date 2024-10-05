@@ -1,3 +1,11 @@
+"""The LangGraph client implementations connect to the LangGraph API.
+
+This module provides both asynchronous (LangGraphClient) and synchronous (SyncLanggraphClient)
+clients to interacting with the LangGraph API's core resources such as
+Assistants, Threads, Runs, and Cron jobs, as well as its persistent
+document Store.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -117,6 +125,20 @@ def get_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
+
+    Returns:
+        LangGraphClient: The top-level client for accessing AssistantsClient,
+        ThreadsClient, RunsClient, and CronClient.
+
+    Example:
+
+        from langgraph_sdk import get_client
+
+        # get top-level LangGraphClient
+        client = get_client(url="http://localhost:8123")
+
+        # example usage: client.<model>.<method_name>()
+        assistants = await client.assistants.get(assistant_id="some_uuid")
     """
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
@@ -141,6 +163,16 @@ def get_client(
 
 
 class LangGraphClient:
+    """Top-level client for LangGraph API.
+
+    Attributes:
+        assistants: Manages versioned configuration for your graphs.
+        threads: Handles (potentially) multi-turn interactions, such as conversational threads.
+        runs: Controls individual invocations of the graph.
+        crons: Manages scheduled operations.
+        store: Interfaces with persistent, shared data storage.
+    """
+
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.http = HttpClient(client)
         self.assistants = AssistantsClient(self.http)
@@ -151,11 +183,20 @@ class LangGraphClient:
 
 
 class HttpClient:
+    """Hancle async requests to the LangGraph API.
+
+    Adds additional error messaging & content handling above the
+    provided httpx client.
+
+    Attributes:
+        client (httpx.AsyncClient): Underlying HTTPX async client.
+    """
+
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
     async def get(self, path: str, *, params: Optional[QueryParamTypes] = None) -> Any:
-        """Make a GET request."""
+        """Send a GET request."""
         r = await self.client.get(path, params=params)
         try:
             r.raise_for_status()
@@ -169,7 +210,7 @@ class HttpClient:
         return await adecode_json(r)
 
     async def post(self, path: str, *, json: Optional[dict]) -> Any:
-        """Make a POST request."""
+        """Send a POST request."""
         if json is not None:
             headers, content = await aencode_json(json)
         else:
@@ -187,7 +228,7 @@ class HttpClient:
         return await adecode_json(r)
 
     async def put(self, path: str, *, json: dict) -> Any:
-        """Make a PUT request."""
+        """Send a PUT request."""
         headers, content = await aencode_json(json)
         r = await self.client.put(path, headers=headers, content=content)
         try:
@@ -202,7 +243,7 @@ class HttpClient:
         return await adecode_json(r)
 
     async def patch(self, path: str, *, json: dict) -> Any:
-        """Make a PATCH request."""
+        """Send a PATCH request."""
         headers, content = await aencode_json(json)
         r = await self.client.patch(path, headers=headers, content=content)
         try:
@@ -217,7 +258,7 @@ class HttpClient:
         return await adecode_json(r)
 
     async def delete(self, path: str, *, json: Optional[Any] = None) -> None:
-        """Make a DELETE request."""
+        """Send a DELETE request."""
         r = await self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
@@ -232,7 +273,7 @@ class HttpClient:
     async def stream(
         self, path: str, method: str, *, json: Optional[dict] = None
     ) -> AsyncIterator[StreamPart]:
-        """Stream the results of a request using SSE."""
+        """Stream results using SSE."""
         headers, content = await aencode_json(json)
         async with httpx_sse.aconnect_sse(
             self.client, method, path, headers=headers, content=content
@@ -276,6 +317,17 @@ async def adecode_json(r: httpx.Response) -> Any:
 
 
 class AssistantsClient:
+    """Client for managing assistants in LangGraph.
+
+    This class provides methods to interact with assistants,
+    which are versioned configurations of your graph.
+
+    Example:
+
+        client = get_client()
+        assistant = await client.assistants.get("assistant_id_123")
+    """
+
     def __init__(self, http: HttpClient) -> None:
         self.http = http
 
@@ -699,6 +751,18 @@ class AssistantsClient:
 
 
 class ThreadsClient:
+    """Client for managing threads in LangGraph.
+
+    A thread maintains the state of a graph across multiple interactions/invocations (aka runs).
+    It accumulates and persists the graph's state, allowing for continuity between separate
+    invocations of the graph.
+
+    Example:
+
+        client = get_client()
+        new_thread = await client.threads.create(metadata={"user_id": "123"})
+    """
+
     def __init__(self, http: HttpClient) -> None:
         self.http = http
 
@@ -1070,6 +1134,17 @@ class ThreadsClient:
 
 
 class RunsClient:
+    """Client for managing runs in LangGraph.
+
+    A run is a single assistant invocation with optional input, config, and metadata.
+    This client manages runs, which can be stateful (on threads) or stateless.
+
+    Example:
+
+        client = get_client()
+        run = await client.runs.create(assistant_id="asst_123", thread_id="thread_456", input={"query": "Hello"})
+    """
+
     def __init__(self, http: HttpClient) -> None:
         self.http = http
 
@@ -1677,6 +1752,22 @@ class RunsClient:
 
 
 class CronClient:
+    """Client for managing recurrent runs (cron jobs) in LangGraph.
+
+    A run is a single invocation of an assistant with optional input and config.
+    This client allows scheduling recurring runs to occur automatically.
+
+    Example:
+
+        client = get_client()
+        cron_job = await client.crons.create_for_thread(
+            thread_id="thread_123",
+            assistant_id="asst_456",
+            schedule="0 9 * * *",
+            input={"message": "Daily update"}
+        )
+    """
+
     def __init__(self, http_client: HttpClient) -> None:
         self.http = http_client
 
@@ -1888,6 +1979,17 @@ class CronClient:
 
 
 class StoreClient:
+    """Client for interacting with the graph's shared storage.
+
+    The Store provides a key-value storage system for persisting data across graph executions,
+    allowing for stateful operations and data sharing across threads.
+
+    Example:
+
+        client = get_client()
+        await client.store.put_item(["users", "user123"], "mem-123451342", {"name": "Alice", "score": 100})
+    """
+
     def __init__(self, http: HttpClient) -> None:
         self.http = http
 
@@ -2092,7 +2194,7 @@ def get_sync_client(
     api_key: Optional[str] = None,
     headers: Optional[dict[str, str]] = None,
 ) -> SyncLangGraphClient:
-    """Get a LangGraphClient instance.
+    """Get a synchronous LangGraphClient instance.
 
     Args:
         url: The URL of the LangGraph API.
@@ -2103,6 +2205,19 @@ def get_sync_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
+    Returns:
+        SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
+        ThreadsClient, RunsClient, and CronClient.
+
+    Example:
+
+        from langgraph_sdk import get_sync_client
+
+        # get top-level synchronous LangGraphClient
+        client = get_sync_client(url="http://localhost:8123")
+
+        # example usage: client.<model>.<method_name>()
+        assistant = client.assistants.get(assistant_id="some_uuid")
     """
 
     if url is None:
@@ -2119,6 +2234,17 @@ def get_sync_client(
 
 
 class SyncLangGraphClient:
+    """Synchronous client for interacting with the LangGraph API.
+
+    This class provides synchronous access to LangGraph API endpoints for managing
+    assistants, threads, runs, cron jobs, and data storage.
+
+    Example:
+
+        client = get_sync_client()
+        assistant = client.assistants.get("asst_123")
+    """
+
     def __init__(self, client: httpx.Client) -> None:
         self.http = SyncHttpClient(client)
         self.assistants = SyncAssistantsClient(self.http)
@@ -2133,7 +2259,7 @@ class SyncHttpClient:
         self.client = client
 
     def get(self, path: str, *, params: Optional[QueryParamTypes] = None) -> Any:
-        """Make a GET request."""
+        """Send a GET request."""
         r = self.client.get(path, params=params)
         try:
             r.raise_for_status()
@@ -2147,7 +2273,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def post(self, path: str, *, json: Optional[dict]) -> Any:
-        """Make a POST request."""
+        """Send a POST request."""
         if json is not None:
             headers, content = encode_json(json)
         else:
@@ -2165,7 +2291,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def put(self, path: str, *, json: dict) -> Any:
-        """Make a PUT request."""
+        """Send a PUT request."""
         headers, content = encode_json(json)
         r = self.client.put(path, headers=headers, content=content)
         try:
@@ -2180,7 +2306,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def patch(self, path: str, *, json: dict) -> Any:
-        """Make a PATCH request."""
+        """Send a PATCH request."""
         headers, content = encode_json(json)
         r = self.client.patch(path, headers=headers, content=content)
         try:
@@ -2195,7 +2321,7 @@ class SyncHttpClient:
         return decode_json(r)
 
     def delete(self, path: str, *, json: Optional[Any] = None) -> None:
-        """Make a DELETE request."""
+        """Send a DELETE request."""
         r = self.client.request("DELETE", path, json=json)
         try:
             r.raise_for_status()
@@ -2248,6 +2374,16 @@ def decode_json(r: httpx.Response) -> Any:
 
 
 class SyncAssistantsClient:
+    """Client for managing assistants in LangGraph synchronously.
+
+    This class provides methods to interact with assistants, which are versioned configurations of your graph.
+
+    Example:
+
+        client = get_client()
+        assistant = client.assistants.get("assistant_id_123")
+    """
+
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
@@ -2667,6 +2803,17 @@ class SyncAssistantsClient:
 
 
 class SyncThreadsClient:
+    """Synchronous client for managing threads in LangGraph.
+
+    This class provides methods to create, retrieve, and manage threads,
+    which represent conversations or stateful interactions.
+
+    Example:
+
+        client = get_sync_client()
+        thread = client.threads.create(metadata={"user_id": "123"})
+    """
+
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
@@ -3038,6 +3185,17 @@ class SyncThreadsClient:
 
 
 class SyncRunsClient:
+    """Synchronous client for managing runs in LangGraph.
+
+    This class provides methods to create, retrieve, and manage runs, which represent
+    individual executions of graphs.
+
+    Example:
+
+        client = get_sync_client()
+        run = client.runs.create(thread_id="thread_123", assistant_id="asst_456")
+    """
+
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
@@ -3641,6 +3799,16 @@ class SyncRunsClient:
 
 
 class SyncCronClient:
+    """Synchronous client for managing cron jobs in LangGraph.
+
+    This class provides methods to create and manage scheduled tasks (cron jobs) for automated graph executions.
+
+    Example:
+
+        client = get_sync_client()
+        cron_job = client.crons.create_for_thread(thread_id="thread_123", assistant_id="asst_456", schedule="0 * * * *")
+    """
+
     def __init__(self, http_client: SyncHttpClient) -> None:
         self.http = http_client
 
@@ -3852,6 +4020,17 @@ class SyncCronClient:
 
 
 class SyncStoreClient:
+    """A client for synchronous operations on a key-value store.
+
+    Provides methods to interact with a remote key-value store, allowing
+    storage and retrieval of items within namespaced hierarchies.
+
+    Example:
+
+        client = get_sync_client()
+        client.store.put_item(["users", "profiles"], "user123", {"name": "Alice", "age": 30})
+    """
+
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 

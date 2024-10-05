@@ -677,6 +677,7 @@ export class RunsClient extends BaseClient {
       multitask_strategy: payload?.multitaskStrategy,
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
+      after_seconds: payload?.afterSeconds,
     };
 
     const endpoint =
@@ -755,6 +756,7 @@ export class RunsClient extends BaseClient {
       webhook: payload?.webhook,
       checkpoint_id: payload?.checkpointId,
       multitask_strategy: payload?.multitaskStrategy,
+      after_seconds: payload?.afterSeconds,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
@@ -823,6 +825,7 @@ export class RunsClient extends BaseClient {
       multitask_strategy: payload?.multitaskStrategy,
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
+      after_seconds: payload?.afterSeconds,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
