@@ -14,7 +14,7 @@ class Item:
 
     Args:
         value (dict[str, Any]): The stored data as a dictionary. Keys are filterable.
-        (str): Unique identifier within the namespace.
+        key (str): Unique identifier within the namespace.
         namespace (tuple[str, ...]): Hierarchical path defining the collection in which this document resides.
             Represented as a tuple of strings, allowing for nested categorization.
             For example: ("documents", 'user123')
@@ -162,12 +162,19 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
     if not namespace:
         raise InvalidNamespaceError("Namespace cannot be empty.")
     for label in namespace:
+        if not isinstance(label, str):
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
+                f" must be strings, but got {type(label).__name__}."
+            )
         if "." in label:
             raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
             )
         elif not label:
-            raise InvalidNamespaceError("Namespace labels cannot be empty strings.")
+            raise InvalidNamespaceError(
+                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
+            )
     if namespace[0] == "langgraph":
         raise InvalidNamespaceError(
             f'Root label for namespace cannot be "langgraph". Got: {namespace}'
