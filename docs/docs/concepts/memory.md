@@ -169,7 +169,7 @@ Still, there are several patterns you should be thinking about when implementing
 **Do you want to update memory "in the hot path" or "as a separate process"**
 
 Memory can be updated either as part of the application logic (e.g. "in the hot path" of the application) or as a separate process.
-There are pros and cons to each approach, we document them in [this section](#-in-the-hot-path--vs--as-a-separate-process-)
+There are pros and cons to each approach, we document them in [this section](#how-to-update-memory)
 
 **Update own instructions**
 
@@ -196,7 +196,9 @@ You can then pull these raw interactions into the prompt as few-shot examples in
 We dive into this more in [this section](#few-shot-examples)
 
 
-### "In the hot path" vs "As a separate process"
+### How to update memory
+
+There are two main ways to update memory: "in the hot path" and "as a separate process".
 
 ![](img/memory/hot_path_vs_process.png)
 
