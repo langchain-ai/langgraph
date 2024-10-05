@@ -356,7 +356,7 @@ for update in graph.stream(
     print(update)
 ```
 
-When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the memory store is available to use by default and does not need to be specified during graph compilation. See our [how-to guide on shared state](../how-tos/memory/shared-state.ipynb) for a detailed example!.
+When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the memory store is available to use by default and does not need to be specified during graph compilation.
 
 ## Checkpointer libraries
 
