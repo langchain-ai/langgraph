@@ -2,22 +2,43 @@
 
 ## What is Memory?
 
-Memory in the context of LLMs and AI applications refers to the ability to process, retain, and utilize information from past interactions or data sources. Examples include:
+Memory in the context of LLMs and AI applications refers to the ability to process, retain, and utilize information from past interactions or data sources. 
+We break this guide into two parts: short term memory and long-term memory.
 
-- Managing what messages (e.g., from a long message history) are sent to a chat model to limit token usage
-- Summarizing past conversations to give a chat model context from prior interactions
-- Selecting few shot examples (e.g., from a dataset) to guide model responses
-- "Long term memory" - e.g. memory that persists across a thread
-- Allowing an LLM to update its own prompt using past information
-- Extract specific information from previous interactions
+By **short-term memory** we mean memory that persists **within** a single conversation (or interaction) with a user.
 
-Below, we'll discuss each of these examples in some detail.
+By **long-term memory** we mean memory that persists **across** conversations (or interactions) with a user.
 
-## Managing Messages
+Both are important to understand and implement for your application.
+
+![](img/memory/short-vs-long.png)
+
+## Short-term memory
+
+Short-term memory primarily refers to the ability of an application to accurately remember interactions that previously occurred in the same conversation with the user.
+Most conversations are represented as a list of messages and so the best first thing to do is to store a list of those messages and pass those in to future invocations of the LLM.
+LangGraph's [persistence layer](persistence.md#persistence) has checkpointers that enable [thread](persistence.md#threads)-level memory.
+
+As the conversation grows in length, you will need to think about how to manage that list of messages.
+The reason you will need to think about this is that too many messages will either (a) not fit inside an LLMs context window and will throw an error, or (b) will "overwhelm" the LLM and cause it to perform poorly.
+Therefore, it becomes crucial to think about what parts (or representations) of the conversation to pass to the LLM.
+
+**Note:** we say "messages" and "conversation" above, but short-term memory is not limited to conversations.
+It can apply to any type of interactions.
+For the more general case, you will also need to think of how to represent the list of previous events within that interaction.
+
+We cover a few different concepts below:
+
+- [Editing message lists](#editing-message-lists): How to think about trimming and filtering a list of messages before passing to language model.
+- [Managing messages within LangGraph](#managing-messages-within-langgraph): Some concepts that are helpful to know for managing messages within LangGraph.
+- [Summarizaing past conversations](#summarizing-past-conversations): A common technique to use when you don't just want to filter the list of messages.
 
 ### Editing message lists
 
 Chat models accept instructions through [messages](https://python.langchain.com/docs/concepts/#messages), which can serve as general instructions (e.g., a system message) or user-provided instructions (e.g., human messages). In chat applications, messages often alternate between human inputs and model responses, accumulating in a list over time. Because context windows are limited and token-rich message lists can be costly, many applications can benefit from approaches to actively manage messages.    
+
+
+![](img/memory/filter.png)
 
 The most directed approach is to remove specific messages from a list. This can be done using [RemoveMessage](https://langchain-ai.github.io/langgraph/how-tos/memory/delete-messages/#manually-deleting-messages) based upon the message `id`, a unique identifier for each message. In the below example, we keep only the last two messages in the list using `RemoveMessage` to remove older messages based  upon their `id`.
 
@@ -67,7 +88,7 @@ trim_messages(
     include_system=True,
 )
 ```
-### Usage with LangGraph
+### Managing messages within LangGraph
 
 When building agents in LangGraph, we commonly want to manage a list of messages in the graph state. Because this is such a common use case, [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) is a built-in LangGraph state schema that includes a `messages` key, which is a list of messages. `MessagesState` also includes an `add_messages` reducer for updating the messages list with new messages as the application runs. The `add_messages` reducer allows us to [append](https://langchain-ai.github.io/langgraph/concepts/low_level/#serialization) new messages to the `messages` state key as shown below. When we perform a state update with `{"messages": new_message}` returned from `my_node`, the `add_messages` reducer appends `new_message` to the existing list of messages.
 
@@ -89,9 +110,11 @@ def my_node(state: State):
 
 See this how-to [guide](https://langchain-ai.github.io/langgraph/how-tos/memory/manage-conversation-history/) and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
 
-## Summarizing Past Conversations
+### Summarizing Past Conversations
 
-The problem with trimming or removing messages, as shown above, is that we may loose information from culling of the message queue. Because of this, some applications benefit from a more sophisticated approach of summarizing the message history using a chat model. 
+The problem with trimming or removing messages, as shown above, is that we may lose information from culling of the message queue. Because of this, some applications benefit from a more sophisticated approach of summarizing the message history using a chat model. 
+
+![](img/memory/summary.png)
 
 Simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph we can extend the [MessagesState](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state) to include a `summary` key. 
 
@@ -132,25 +155,52 @@ def summarize_conversation(state: State):
 
 See this how-to [here](https://langchain-ai.github.io/langgraph/how-tos/memory/add-summary-conversation-history/) and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
 
-## Few Shot Examples
-
-Few-shot learning is a powerful technique where LLMs can be ["programmed"](https://x.com/karpathy/status/1627366413840322562) inside the prompt with input-output examples to perform diverse tasks. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input. 
-
-LangChain [`ExampleSelectors`](https://python.langchain.com/docs/how_to/#example-selectors) can be used to customize few-shot example selection from a collection of examples using criteria such as length, semantic similarity, semantic ngram overlap, or maximal marginal relevance.
-
-If few-shot examples are stored in a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets), then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). 
-
-See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
-
 ## Long term memory
 
-LangGraph's [persistence layer](persistence.md#persistence) has checkpointers that enable [thread](persistence.md#threads)-level memory. There are several situations in which you want to enable memory *between* threads. For this we can use LangGraph's [Store](persistence.md#memory-store). This enables "long term memory".
+Long-term memory refers to the ability of a system to remember information between different conversations (or interactions).
+There a many different ways this can be accomplished, and the right way to do so depends entirely on your application.
+Rather than build a generic "long-term memory" solution, LangGraph aims to give you the ability to more directly control the long-term memory of your application.
+You can use LangGraph's [Store](persistence.md#memory-store) to accomplish this.
 
-The `Store` interface is a very low level interface on top of well-known data structures. The interesting part of "long term memory" in LangGraph is not any particular novel data structures, but how you populate and use these datastructures. We've seen that both **what** you may want to save (the shape of the data) and **how** you use this data is often very application specific. We highlight a few interesting use cases below. In general, we believe more in giving developers tools and resources to build out memory pipelines themselves, rather than an opiononated memory service.
+Long-term memory is far from a solved problem.
+It is hard to provide generic advice on how to build long term memory, as it often depends on your application.
+Still, there are several patterns you should be thinking about when implementing long-term memory, and we try outline those below.
 
-We've noticed two ways that users implement memory. One is to update memory "in the hot path" of the application. The other is to update it as a background job (or by using a service).
+**Do you want to update memory "in the hot path" or "as a separate process"**
 
-### Updating memory in the hot path
+Memory can be updated either as part of the application logic (e.g. "in the hot path" of the application) or as a separate process.
+There are pros and cons to each approach, we document them in [this section](#-in-the-hot-path--vs--as-a-separate-process-)
+
+**Update own instructions**
+
+Oftentimes, part of the system prompt (or instructions) to an LLM can be updated based on previous interactions.
+This can be viewed as analyzing interactions and trying to determine what could have been done better, and then putting those learnings back into the system prompt for future interactions.
+We dive into this more in [this section](#update-own-instructions)
+
+**Remember a profile**
+
+This technique is useful when there is specific information you may want to remember about a user/organization/group.
+You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions.
+We dive into this more in [this section](#remember-a-profile)
+
+**Remember a list**
+This technique is useful when you want repeatedly extract items and remember those.
+Similar to remembering a profile, you still define a custom schema to remember.
+The difference is that rather than remembering ONE schema per user/organization/group, you remember a list.
+We still use an LLM to update this list.
+We dive into this more in [this section](#remember-a-list)
+
+**Few shot examples**
+Sometimes you don't need to use an LLM to update memory, but rather can just raw interactions.
+You can then pull these raw interactions into the prompt as few-shot examples in future interactions.
+We dive into this more in [this section](#few-shot-examples)
+
+
+### "In the hot path" vs "As a separate process"
+
+![](img/memory/hot_path_vs_process.png)
+
+#### Updating memory in the hot path
 
 This involves updating memory while the application is running. A concrete example of this is the way that ChatGPT does memory. ChatGPT can call tools to update or save a new memory, and it does that and then responds to the user. 
 
@@ -158,7 +208,7 @@ This has several benefits. First of all, it happens realtime, so if the user sta
 
 This also has several downsides. It may slow down the final response since it needs to decide what to remember. It also means your application not only needs to think about the application logic, but also what to remember (which could result in more complicated instructions to the LLM).
 
-### Updating memory as a background job
+#### Updating memory as a separate process
 
 This involves updating memory as a completely separate process from your application. This can either be done as some of background job that you write, or by utilizing a separate memory service. This involves triggering some run over a conversation after it has finished to updated memory.
 
@@ -195,21 +245,15 @@ def update_instructions(state: State, store: BaseStore):
     ...
 ```
 
-## Remember specific information
-
-A key part of long term memory is remembering specific information. We often see that the information that is best to remember is application specific.
-
-A common pattern we see for remembering this information is to extract information from conversation history. The exact structure of what you extract is up to your application. For example, a coding assistant may want to remember what languages you are comfortable with, whether you like spaces or tabs, etc. A travel app may want to remember restaurants you like.
-
-One choice to make here is whether you extract a **list** of information, or rather you just continuously update a **single profile**. In the above example, the coding example is more of a "profile", while the travel app remembers a "list" of information.
-
-### Profile
+![](img/memory/update-instructions.png)
+### Remember a profile
 
 The profile is generally just a JSON blob with various key-value pairs. When remembering a profile, you will want to make sure that you are **updating** the profile each time. As a result, you will want to pass in the previous profile and ask the LLM to generate a new profile (or some JSON patch to apply to the old profile).
 
 If the profile is large, this can get tricky. You may need to split the profile into subsections and update each one individually. You also may need to fix errors if the LLM generates incorrect JSON.
 
-### Lists
+![](img/memory/update-profile.png)
+### Remember a list
 
 Remember lists of information is easier in some ways, as the individual structures of each item is generally simpler and easier to generate.
 
@@ -218,3 +262,15 @@ It is more complex overall, as you now have to enable the LLM to *delete* or *up
 You can choose to circumvent this problem entirely by just making this list of items append only, and not allowing updates.
 
 Another thing you will have take into account when working with lists is how to choose the relevant items to use. Right now we support filtering by metadata. We will be adding semantic search shortly.
+
+![](img/memory/update-list.png)
+
+## Few Shot Examples
+
+Few-shot learning is a powerful technique where LLMs can be ["programmed"](https://x.com/karpathy/status/1627366413840322562) inside the prompt with input-output examples to perform diverse tasks. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input. 
+
+LangChain [`ExampleSelectors`](https://python.langchain.com/docs/how_to/#example-selectors) can be used to customize few-shot example selection from a collection of examples using criteria such as length, semantic similarity, semantic ngram overlap, or maximal marginal relevance.
+
+If few-shot examples are stored in a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets), then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). 
+
+See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
