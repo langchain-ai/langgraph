@@ -5,9 +5,9 @@
 Memory in the context of LLMs and AI applications refers to the ability to process, retain, and utilize information from past interactions or data sources. 
 We break this guide into two parts: short term memory and long-term memory.
 
-By **short-term memory** we mean memory that persists **within** a single conversation (or interaction) with a user.
+By **short-term memory** we mean memory that persists **within** a single conversation (or interaction) with a user. In LangGraph, we manage short-term memory with the concept of [threads](persistence.md#threads) and [checkpointers](persistence.md#checkpoints)
 
-By **long-term memory** we mean memory that persists **across** conversations (or interactions) with a user.
+By **long-term memory** we mean memory that persists **across** conversations (or interactions) with a user. In LangGraph, we manage long-term memory with [stores](persistence.md#memory-store)
 
 Both are important to understand and implement for your application.
 
