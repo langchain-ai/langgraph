@@ -312,3 +312,41 @@ async def test_cannot_put_empty_namespace() -> None:
     assert store.search(("langgraph", "foo"))[0].value == doc
     store.delete(("langgraph", "foo"), "bar")
     assert store.get(("langgraph", "foo"), "bar") is None
+
+    class MockAsyncBatchedStore(AsyncBatchedBaseStore):
+        def __init__(self):
+            super().__init__()
+            self._store = InMemoryStore()
+
+        def batch(self, ops: Iterable[Op]) -> list[Result]:
+            return self._store.batch(ops)
+
+        async def abatch(self, ops: Iterable[Op]) -> list[Result]:
+            return self._store.batch(ops)
+
+    async_store = MockAsyncBatchedStore()
+    doc = {"foo": "bar"}
+
+    with pytest.raises(InvalidNamespaceError):
+        await async_store.aput((), "foo", doc)
+
+    with pytest.raises(InvalidNamespaceError):
+        await async_store.aput(("the", "thing.about"), "foo", doc)
+
+    with pytest.raises(InvalidNamespaceError):
+        await async_store.aput(("some", "fun", ""), "foo", doc)
+
+    with pytest.raises(InvalidNamespaceError):
+        await async_store.aput(("langgraph", "foo"), "bar", doc)
+
+    await async_store.aput(("foo", "langgraph", "foo"), "bar", doc)
+    assert (await async_store.aget(("foo", "langgraph", "foo"), "bar")).value == doc
+    assert (await async_store.asearch(("foo", "langgraph", "foo")))[0].value == doc
+    await async_store.adelete(("foo", "langgraph", "foo"), "bar")
+    assert (await async_store.aget(("foo", "langgraph", "foo"), "bar")) is None
+
+    await async_store.abatch([PutOp(("valid", "namespace"), "key", doc)])
+    assert (await async_store.aget(("valid", "namespace"), "key")).value == doc
+    assert (await async_store.asearch(("valid", "namespace")))[0].value == doc
+    await async_store.adelete(("valid", "namespace"), "key")
+    assert (await async_store.aget(("valid", "namespace"), "key")) is None
