@@ -30,14 +30,18 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
-from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
+from langgraph.prebuilt.tool_node import (
+    InjectedState,
+    InjectedStore,
+    PydanticValidationErrors,
+)
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from tests.conftest import (
@@ -638,7 +642,7 @@ async def test_tool_node():
 
     # test validation errors get raised
 
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(PydanticValidationErrors) as exc_info:
         ToolNode([tool1], handle_validation_errors=False).invoke(
             {
                 "messages": [

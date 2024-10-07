@@ -33,10 +33,13 @@ from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as create_tool
 from pydantic import ValidationError
+from pydantic.v1 import ValidationError as ValidationErrorV1
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
+
+PydanticValidationErrors = (ValidationError, ValidationErrorV1)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -69,9 +72,13 @@ def msg_content_output(output: Any) -> str | List[dict]:
 
 
 def _handle_validation_error(
-    e: ValidationError,
+    e: Union[ValidationError, ValidationErrorV1],
     *,
-    flag: Union[Literal[True], str, Callable[[ValidationError], str]],
+    flag: Union[
+        Literal[True],
+        str,
+        Callable[[Union[ValidationError, ValidationErrorV1]], str],
+    ],
 ) -> str:
     if isinstance(flag, bool):
         content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
@@ -172,7 +179,7 @@ class ToolNode(RunnableCallable):
             Literal["all"], bool, str, Callable[[ToolException], str]
         ] = "all",
         handle_validation_errors: Union[
-            bool, str, Callable[[ValidationError], str]
+            bool, str, Callable[[Union[ValidationError, ValidationErrorV1]], str]
         ] = True,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
@@ -252,7 +259,7 @@ class ToolNode(RunnableCallable):
                 Union[str, list], msg_content_output(tool_message.content)
             )
             return tool_message
-        except ValidationError as e:
+        except PydanticValidationErrors as e:
             if not self.handle_validation_errors:
                 error_to_raise = e
             else:
