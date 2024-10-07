@@ -387,6 +387,7 @@ class KafkaExecutor(AbstractContextManager):
                 managed=managed,
                 config=patch_configurable(msg["config"], {CONFIG_KEY_DELEGATE: True}),
                 step=saved.metadata["step"] + 1,
+                stop=saved.metadata.get("stop", -1) + 1,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
             ):
