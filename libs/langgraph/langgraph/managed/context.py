@@ -104,5 +104,5 @@ class Context(ManagedValue[V], Generic[V]):
         self.ctx = ctx
         self.actx = actx
 
-    def __call__(self, step: int) -> V:
+    def __call__(self, step: int, stop: int) -> V:
         return self.value

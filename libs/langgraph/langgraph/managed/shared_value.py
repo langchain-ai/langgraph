@@ -93,7 +93,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
                 f"Scope {scope} for shared state key not in config.configurable"
             )
 
-    def __call__(self, step: int) -> Value:
+    def __call__(self, step: int, stop: int) -> Value:
         return self.value.copy()
 
     def _process_update(self, values: Sequence[Update]) -> list[PutOp]:

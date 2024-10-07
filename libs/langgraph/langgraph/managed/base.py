@@ -53,7 +53,7 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int) -> V: ...
+    def __call__(self, step: int, stop: int) -> V: ...
 
 
 class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):

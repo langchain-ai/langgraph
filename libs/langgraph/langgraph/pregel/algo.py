@@ -121,6 +121,7 @@ def should_interrupt(
 
 def local_read(
     step: int,
+    stop: int,
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -156,7 +157,7 @@ def local_read(
     else:
         values = read_channels(channels, select)
     if managed_keys:
-        values.update({k: managed[k](step) for k in managed_keys})
+        values.update({k: managed[k](step, stop) for k in managed_keys})
     return values
 
 
@@ -275,6 +276,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     *,
     for_execution: Literal[False],
     store: Literal[None] = None,
@@ -291,6 +293,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     *,
     for_execution: Literal[True],
     store: Optional[BaseStore],
@@ -306,6 +309,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     *,
     for_execution: bool,
     store: Optional[BaseStore] = None,
@@ -327,6 +331,7 @@ def prepare_next_tasks(
             managed=managed,
             config=config,
             step=step,
+            stop=stop,
             for_execution=for_execution,
             store=store,
             checkpointer=checkpointer,
@@ -345,6 +350,7 @@ def prepare_next_tasks(
             managed=managed,
             config=config,
             step=step,
+            stop=stop,
             for_execution=for_execution,
             store=store,
             checkpointer=checkpointer,
@@ -364,6 +370,7 @@ def prepare_single_task(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     for_execution: bool,
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
@@ -404,6 +411,7 @@ def prepare_single_task(
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         metadata = {
             "langgraph_step": step,
+            "langgraph_stop": stop,
             "langgraph_node": packet.node,
             "langgraph_triggers": triggers,
             "langgraph_path": task_path,
@@ -441,6 +449,7 @@ def prepare_single_task(
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 step,
+                                stop,
                                 checkpoint,
                                 channels,
                                 managed,
@@ -494,7 +503,7 @@ def prepare_single_task(
             try:
                 val = next(
                     _proc_input(
-                        step, proc, managed, channels, for_execution=for_execution
+                        step, stop, proc, managed, channels, for_execution=for_execution
                     )
                 )
             except StopIteration:
@@ -551,6 +560,7 @@ def prepare_single_task(
                                 CONFIG_KEY_READ: partial(
                                     local_read,
                                     step,
+                                    stop,
                                     checkpoint,
                                     channels,
                                     managed,
@@ -584,6 +594,7 @@ def prepare_single_task(
 
 def _proc_input(
     step: int,
+    stop: int,
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
@@ -605,7 +616,7 @@ def _proc_input(
                     except EmptyChannelError:
                         continue
                 else:
-                    val[k] = managed[k](step)
+                    val[k] = managed[k](step, stop)
         except EmptyChannelError:
             return
     elif isinstance(proc.channels, list):

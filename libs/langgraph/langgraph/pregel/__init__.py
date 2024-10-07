@@ -468,6 +468,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 managed,
                 saved.config,
                 saved.metadata.get("step", -1) + 1,
+                saved.metadata.get("stop", -1) + 1,
                 for_execution=False,
             )
             # get the subgraphs
@@ -544,6 +545,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 managed,
                 saved.config,
                 saved.metadata.get("step", -1) + 1,
+                saved.metadata.get("stop", -1) + 1,
                 for_execution=False,
             )
             # get the subgraphs
@@ -803,6 +805,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
+        stop = saved.metadata.get("stop", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
         checkpoint_config = patch_configurable(
             config,
@@ -878,6 +881,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         CONFIG_KEY_READ: partial(
                             local_read,
                             step + 1,
+                            stop + 1,
                             checkpoint,
                             channels,
                             managed,
@@ -950,6 +954,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
+        stop = saved.metadata.get("stop", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
         checkpoint_config = patch_configurable(
             config,
@@ -1023,6 +1028,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         CONFIG_KEY_READ: partial(
                             local_read,
                             step + 1,
+                            stop + 1,
                             checkpoint,
                             channels,
                             managed,
