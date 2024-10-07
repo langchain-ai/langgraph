@@ -156,7 +156,7 @@ See this how-to [here](https://langchain-ai.github.io/langgraph/how-tos/memory/a
 
 Long-term memory refers to the ability of a system to remember information across different conversations (or sessions).
 There are many tradeoffs between long-term-memory techniques, and the right way to do so depends largely on your application's needs.
-LangGraph aims to give you the low-level primitves to directly control the long-term memory of your application.
+LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application.
 You can use LangGraph's [Store](persistence.md#memory-store) to accomplish this.
 
 Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below that you should be consider when implementing long-term memory.
@@ -172,13 +172,13 @@ Oftentimes, part of the system prompt (or instructions) to an LLM can be updated
 This can be viewed as analyzing interactions and trying to determine what could have been done better, and then putting those learnings back into the system prompt for future interactions.
 We dive into this more in [this section](#update-own-instructions)
 
-**Remember a single profile**
+**Learn a single profile**
 
 This technique is useful when there is specific information you may want to remember about a user/organization/group.
 You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions.
 We dive into this more in [this section](#remember-a-profile)
 
-**Remember multiple memories**
+**Learn multiple memories**
 This technique is useful when you want repeatedly extract & items and remember those.
 Similar to remembering a profile, you still define a schema to remember.
 The difference is that rather than remembering ONE schema per user/organization/group, you remember a list.
@@ -202,11 +202,11 @@ This involves updating memory while the application is running. A concrete examp
 
 This has a few benefits. First of all, it happens realtime, so if the user starts a new thread right away that memory will be present. The user also transparently sees when memories are stored.
 
-This also has several downsides. It adds one more decision for the agent (what to commit to memory). This can which can degrade its tool-calling performance. It may slow down the final response since it needs to decide what to commit to memory. It also typically leads to fewer things being saved to memory (since the assistant is multi-tasking), which will cause lower recall in later conversations.
+This also has several downsides. It adds one more decision for the agent (what to commit to memory). This can can degrade its tool-calling performance. It may slow down the final response since it needs to decide what to commit to memory. It also typically leads to fewer things being saved to memory (since the assistant is multi-tasking), which will cause lower recall in later conversations.
 
 #### Updating memory in the background
 
-This involves updating memory in the background, typically as a completely separate graph or function. This can either be done as some of background job that you write, or by using a separate memory service. Whenever a conversation completes (or on some schedule), long-term memory is "triggered" to extract and synthesize memories.
+This involves updating memory in the background, typically as a completely separate graph or function. This can either be done as some part of background job that you write, or by using a separate memory service. Whenever a conversation completes (or on some schedule), long-term memory is "triggered" to extract and synthesize memories.
 
 This has some benefits. Since it happens in the background, it incurs no latency. It also splits up the application logic from the memory logic, making it more modular and easy to manage.
 
@@ -233,7 +233,8 @@ def call_model(state: State, store: BaseStore):
 
 # Node that updates instructions
 def update_instructions(state: State, store: BaseStore):
-    current_instructions = store.search(("instructions",))[0]
+    namespace = ("instructions",)
+    current_instructions = store.search(namespace)[0]
     # Memory logic
     prompt = prompt_template.format(instructions=instructions.value["instructions"], conversation=state["messages"])
     output = llm.invoke(prompt)
@@ -243,16 +244,16 @@ def update_instructions(state: State, store: BaseStore):
 ```
 
 ![](img/memory/update-instructions.png)
-### Remember a profile
+### Learn a profile
 
 The profile is generally just a JSON blob with various key-value pairs. When remembering a profile, you will want to make sure that you are **updating** the profile each time. As a result, you will want to pass in the previous profile and ask the LLM to generate a new profile (or some JSON patch to apply to the old profile).
 
 If the profile is large, this can get tricky. You may need to split the profile into subsections and update each one individually. You also may need to fix errors if the LLM generates incorrect JSON.
 
 ![](img/memory/update-profile.png)
-### Remember a list
+### Learn multiple memories
 
-Remember lists of information is easier in some ways, as the individual structures of each item is generally simpler and easier to generate.
+Remembering lists of information is easier in some ways, as the individual structures of each item is generally simpler and easier to generate.
 
 It is more complex overall, as you now have to enable the LLM to *delete* or *update* existing items in the list. This can be tricky to prompt the LLM to do.
 
