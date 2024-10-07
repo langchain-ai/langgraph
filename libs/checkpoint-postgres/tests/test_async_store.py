@@ -45,12 +45,14 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -61,6 +63,7 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
         ]
     )
@@ -77,9 +80,9 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
 
         async def execute_side_effect(query: str, *params: Any) -> None:
             # My super sophisticated database.
-            if "WHERE prefix <@" in query:
+            if "SELECT prefix, key," in query:
                 cursor.fetchall = mock_search_cursor.fetchall
-            elif "SELECT DISTINCT subltree" in query:
+            elif "SELECT DISTINCT ON (truncated_prefix)" in query:
                 cursor.fetchall = mock_list_namespaces_cursor.fetchall
             elif "WHERE prefix = %s AND key" in query:
                 cursor.fetchall = mock_get_cursor.fetchall
@@ -151,12 +154,14 @@ async def test_batch_get_ops(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -205,12 +210,14 @@ async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
                 "value": '{"data": "value1"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.foo",
             },
             {
                 "key": "key2",
                 "value": '{"data": "value2"}',
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
+                "prefix": "test.bar",
             },
         ]
     )
@@ -383,7 +390,6 @@ class TestAsyncPostgresStore:
 
             max_depth_result = await store.alist_namespaces(max_depth=3)
             assert all([len(ns) <= 3 for ns in max_depth_result])
-
             max_depth_result = await store.alist_namespaces(
                 max_depth=4, prefix=[test_pref, "*", "documents"]
             )
@@ -422,13 +428,26 @@ class TestAsyncPostgresStore:
                 {"title": "Report A", "author": "John Doe", "tags": ["final"]},
                 {"title": "Report B", "author": "Alice Johnson", "tags": ["draft"]},
             ]
+            empty = await store.asearch(
+                (
+                    "scoped",
+                    "assistant_id",
+                    "shared",
+                    "6c5356f6-63ab-4158-868d-cd9fd14c736e",
+                ),
+                limit=10,
+                offset=0,
+            )
+            assert len(empty) == 0
 
             for namespace, item in zip(test_namespaces, test_items):
                 await store.aput(namespace, f"item_{namespace[-1]}", item)
 
             docs_result = await store.asearch(["test_search", "documents"])
             assert len(docs_result) == 2
-            assert all(item.namespace[1] == "documents" for item in docs_result)
+            assert all([item.namespace[1] == "documents" for item in docs_result]), [
+                item.namespace for item in docs_result
+            ]
 
             reports_result = await store.asearch(["test_search", "reports"])
             assert len(reports_result) == 2
@@ -460,6 +479,51 @@ class TestAsyncPostgresStore:
             all_items = page1 + page2
             assert len(all_items) == 4
             assert len(set(item.key for item in all_items)) == 4
+            empty = await store.asearch(
+                (
+                    "scoped",
+                    "assistant_id",
+                    "shared",
+                    "again",
+                    "maybe",
+                    "some-long",
+                    "6be5cb0e-2eb4-42e6-bb6b-fba3c269db25",
+                ),
+                limit=10,
+                offset=0,
+            )
+            assert len(empty) == 0
+
+            # Test with a namespace beginning with a number (like a UUID)
+            uuid_namespace = (str(uuid.uuid4()), "documents")
+            uuid_item_id = "uuid_doc"
+            uuid_item_value = {
+                "title": "UUID Document",
+                "content": "This document has a UUID namespace.",
+            }
+
+            # Insert the item with the UUID namespace
+            await store.aput(uuid_namespace, uuid_item_id, uuid_item_value)
+
+            # Retrieve the item to verify it was stored correctly
+            retrieved_item = await store.aget(uuid_namespace, uuid_item_id)
+            assert retrieved_item is not None
+            assert retrieved_item.namespace == uuid_namespace
+            assert retrieved_item.key == uuid_item_id
+            assert retrieved_item.value == uuid_item_value
+
+            # Search for the item using the UUID namespace
+            search_result = await store.asearch([uuid_namespace[0]])
+            assert len(search_result) == 1
+            assert search_result[0].key == uuid_item_id
+            assert search_result[0].value == uuid_item_value
+
+            # Clean up: delete the item with the UUID namespace
+            await store.adelete(uuid_namespace, uuid_item_id)
+
+            # Verify the item was deleted
+            deleted_item = await store.aget(uuid_namespace, uuid_item_id)
+            assert deleted_item is None
 
             for namespace in test_namespaces:
                 await store.adelete(namespace, f"item_{namespace[-1]}")
