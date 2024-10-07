@@ -83,7 +83,6 @@ from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.messages import StreamMessagesHandler
-from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
@@ -386,18 +385,18 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
     def get_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, PregelProtocol]]:
+    ) -> Iterator[tuple[str, Pregel]]:
         for name, node in self.nodes.items():
             # filter by prefix
             if namespace is not None:
                 if not namespace.startswith(name):
                     continue
             # find the subgraph, if any
-            graph: Optional[PregelProtocol] = None
+            graph: Optional[Pregel] = None
             candidates = [node.bound]
             for candidate in candidates:
                 if (
-                    isinstance(candidate, PregelProtocol)
+                    isinstance(candidate, Pregel)
                     # subgraphs that disabled checkpointing are not considered
                     and candidate.checkpointer is not False
                 ):
@@ -437,7 +436,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
     async def aget_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, PregelProtocol]]:
+    ) -> AsyncIterator[tuple[str, Pregel]]:
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 
