@@ -60,7 +60,7 @@ from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import HumanMessage
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode
 
@@ -125,7 +125,7 @@ workflow.add_conditional_edges(
 workflow.add_edge("tools", 'agent')
 
 # Initialize memory to persist state between graph runs
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 # Finally, we compile it!
 # This compiles it into a LangChain Runnable,
@@ -201,7 +201,7 @@ final_state["messages"][-1].content
     <summary>Compile the graph.</summary>
 
     - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
-    - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
+    - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `InMemorySaver` - a simple in-memory checkpointer
     </details>
 
 6. <details>

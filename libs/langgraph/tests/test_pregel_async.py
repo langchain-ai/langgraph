@@ -49,7 +49,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import ERROR, PULL, PUSH
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph, StateGraph
@@ -89,11 +89,11 @@ pytestmark = pytest.mark.anyio
 
 
 async def test_checkpoint_errors() -> None:
-    class FaultyGetCheckpointer(MemorySaver):
+    class FaultyGetCheckpointer(InMemorySaver):
         async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
-    class FaultyPutCheckpointer(MemorySaver):
+    class FaultyPutCheckpointer(InMemorySaver):
         async def aput(
             self,
             config: RunnableConfig,
@@ -103,13 +103,13 @@ async def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
-    class FaultyPutWritesCheckpointer(MemorySaver):
+    class FaultyPutWritesCheckpointer(InMemorySaver):
         async def aput_writes(
             self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
-    class FaultyVersionCheckpointer(MemorySaver):
+    class FaultyVersionCheckpointer(InMemorySaver):
         def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
             raise ValueError("Faulty get_next_version")
 

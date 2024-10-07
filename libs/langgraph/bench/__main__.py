@@ -8,7 +8,7 @@ from uvloop import new_event_loop
 from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.react_agent import react_agent
 from bench.wide_state import wide_state
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.pregel import Pregel
 
 
@@ -55,8 +55,8 @@ benchmarks = (
     ),
     (
         "fanout_to_subgraph_10x_checkpoint",
-        fanout_to_subgraph().compile(checkpointer=MemorySaver()),
-        fanout_to_subgraph_sync().compile(checkpointer=MemorySaver()),
+        fanout_to_subgraph().compile(checkpointer=InMemorySaver()),
+        fanout_to_subgraph_sync().compile(checkpointer=InMemorySaver()),
         {
             "subjects": [
                 random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(10)
@@ -75,8 +75,8 @@ benchmarks = (
     ),
     (
         "fanout_to_subgraph_100x_checkpoint",
-        fanout_to_subgraph().compile(checkpointer=MemorySaver()),
-        fanout_to_subgraph_sync().compile(checkpointer=MemorySaver()),
+        fanout_to_subgraph().compile(checkpointer=InMemorySaver()),
+        fanout_to_subgraph_sync().compile(checkpointer=InMemorySaver()),
         {
             "subjects": [
                 random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
@@ -91,8 +91,8 @@ benchmarks = (
     ),
     (
         "react_agent_10x_checkpoint",
-        react_agent(10, checkpointer=MemorySaver()),
-        react_agent(10, checkpointer=MemorySaver()),
+        react_agent(10, checkpointer=InMemorySaver()),
+        react_agent(10, checkpointer=InMemorySaver()),
         {"messages": [HumanMessage("hi?")]},
     ),
     (
@@ -103,8 +103,8 @@ benchmarks = (
     ),
     (
         "react_agent_100x_checkpoint",
-        react_agent(100, checkpointer=MemorySaver()),
-        react_agent(100, checkpointer=MemorySaver()),
+        react_agent(100, checkpointer=InMemorySaver()),
+        react_agent(100, checkpointer=InMemorySaver()),
         {"messages": [HumanMessage("hi?")]},
     ),
     (
@@ -125,8 +125,8 @@ benchmarks = (
     ),
     (
         "wide_state_25x300_checkpoint",
-        wide_state(300).compile(checkpointer=MemorySaver()),
-        wide_state(300).compile(checkpointer=MemorySaver()),
+        wide_state(300).compile(checkpointer=InMemorySaver()),
+        wide_state(300).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -157,8 +157,8 @@ benchmarks = (
     ),
     (
         "wide_state_15x600_checkpoint",
-        wide_state(600).compile(checkpointer=MemorySaver()),
-        wide_state(600).compile(checkpointer=MemorySaver()),
+        wide_state(600).compile(checkpointer=InMemorySaver()),
+        wide_state(600).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -189,8 +189,8 @@ benchmarks = (
     ),
     (
         "wide_state_9x1200_checkpoint",
-        wide_state(1200).compile(checkpointer=MemorySaver()),
-        wide_state(1200).compile(checkpointer=MemorySaver()),
+        wide_state(1200).compile(checkpointer=InMemorySaver()),
+        wide_state(1200).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {

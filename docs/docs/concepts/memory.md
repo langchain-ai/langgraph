@@ -148,7 +148,7 @@ LangGraph's [persistence layer](https://langchain-ai.github.io/langgraph/concept
 
 ```python
 # Compile the graph with a checkpointer
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 
 # Invoke the graph with a thread ID

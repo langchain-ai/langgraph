@@ -372,8 +372,8 @@ def create_react_agent(
         Add thread-level "chat memory" to the graph:
 
         ```pycon
-        >>> from langgraph.checkpoint.memory import MemorySaver
-        >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
+        >>> from langgraph.checkpoint.memory import InMemorySaver
+        >>> graph = create_react_agent(model, tools, checkpointer=InMemorySaver())
         >>> config = {"configurable": {"thread_id": "thread-1"}}
         >>> def print_stream(graph, inputs, config):
         ...     for s in graph.stream(inputs, config, stream_mode="values"):
@@ -408,7 +408,7 @@ def create_react_agent(
 
         ```pycon
         >>> graph = create_react_agent(
-        ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
+        ...     model, tools, interrupt_before=["tools"], checkpointer=InMemorySaver()
         >>> )
         >>> config = {"configurable": {"thread_id": "thread-1"}}
 
@@ -442,10 +442,10 @@ def create_react_agent(
         ...     system_msg = f"User memories: {', '.join(memories)}"
         ...     return [{"role": "system", "content": system_msg)] + state["messages"]
 
-        >>> from langgraph.checkpoint.memory import MemorySaver
+        >>> from langgraph.checkpoint.memory import InMemorySaver
         >>> from langgraph.store.memory import InMemoryStore
         >>> store = InMemoryStore()
-        >>> graph = create_react_agent(model, [save_memory], state_modifier=prepare_model_inputs, store=store, checkpointer=MemorySaver())
+        >>> graph = create_react_agent(model, [save_memory], state_modifier=prepare_model_inputs, store=store, checkpointer=InMemorySaver())
         >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
 
         >>> inputs = {"messages": [("user", "Hey I'm Will, how's it going?")]}
