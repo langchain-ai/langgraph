@@ -17,7 +17,6 @@ from langgraph.pregel.types import All, StateSnapshot, StreamMode
 
 @runtime_checkable
 class PregelProtocol(Protocol):
-
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self: ...

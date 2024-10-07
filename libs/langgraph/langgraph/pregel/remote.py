@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 
 
 class RemotePregel(PregelProtocol):
-    def __init__(self, client: LangGraphClient, sync_client: SyncLangGraphClient, graph_id: str):
+    def __init__(
+        self, client: LangGraphClient, sync_client: SyncLangGraphClient, graph_id: str
+    ):
         self.client = client
         self.sync_client = sync_client
         self.graph_id = graph_id
@@ -28,7 +30,7 @@ class RemotePregel(PregelProtocol):
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
         return self.__class__(**attrs)
-    
+
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self:
@@ -79,10 +81,12 @@ class RemotePregel(PregelProtocol):
                     "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
                     "checkpoint_map": state["parent_checkpoint"]["checkpoint_map"],
                 }
-            } if state["parent_checkpoint"] else None,
+            }
+            if state["parent_checkpoint"]
+            else None,
             tasks=state["tasks"],
         )
-    
+
     def _get_checkpoint(self, config: Optional[RunnableConfig]) -> Optional[Checkpoint]:
         if config is None:
             return None
@@ -99,7 +103,7 @@ class RemotePregel(PregelProtocol):
             checkpoint["checkpoint_map"] = config["configurable"]["checkpoint_map"]
 
         return checkpoint if checkpoint else None
-    
+
     def _get_config(self, checkpoint: Checkpoint) -> RunnableConfig:
         return {
             "configurable": {
@@ -129,7 +133,7 @@ class RemotePregel(PregelProtocol):
             subgraphs=subgraphs,
         )
         return self._create_state_snapshot(state)
-    
+
     def get_state_history(
         self,
         config: RunnableConfig,
@@ -193,7 +197,7 @@ class RemotePregel(PregelProtocol):
             checkpoint=self._get_checkpoint(config),
         )
         return self._get_config(response["checkpoint"])
-    
+
     def stream(
         self,
         input: Union[dict[str, Any], Any],
