@@ -273,7 +273,7 @@ class ToolNode(RunnableCallable):
             if self.handle_tool_errors != "all":
                 error_to_raise = e
             else:
-                content = _handle_tool_error(e, flag=True)
+                content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
         if error_to_raise:
             raise error_to_raise
@@ -317,7 +317,7 @@ class ToolNode(RunnableCallable):
             if self.handle_tool_errors != "all":
                 error_to_raise = e
             else:
-                content = _handle_tool_error(e, flag=True)
+                content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
         if error_to_raise:
             raise error_to_raise
