@@ -14,13 +14,19 @@ Both are important to understand and implement for your application.
 
 ## Short-term memory
 
-Short-term memory refers to the ability to accurately remember previous turns within a single thread. A [thread](persistence.md#threads) organizes multiple turns from a single conversation or session, similar to the way an email or slack thread groups messages in a single conversation. Reading from and writing updates to the memory is scoped to within a single thread.
+Short-term memory refers to remembering previous turns within a single conversation thread. LangGraph manages short-term memory as part of the agent's state, which is persisted using checkpoints scoped by the thread ID. For example, in a chatbot, the state would contain the conversation history as a list of messages.
 
-LangGraph agents access short-term memory using checkpointed state. Using chatbots as a common example, the state would contain conversation history as a list of chat messages. Every user request and every assistant response are appended as messages to the state LangGraph saves the state updates in checkpoints scoped by the conversation's distinct [thread](persistence.md#threads) ID. For every subsequent user request, LangGraph can load the state from the appropriate checkpoint so your chatbot can see the entire conversation history.
+However, long conversations pose challenges for LLMs due to context window limitations and performance degradation over long contexts. Managing short-term memory involves balancing precision and recall with latency and cost requirements.
 
-If a user uploads files, if the bot generates code artifacts, or if the agent performs other side-effects, all of these objects could be stored and checkpointed as a part of your graph's state. That way, your bot can access the entire shared context for each conversation while keeping the context for each conversation separate from others.
+Common techniques for managing conversation history include:
+
+Short-term memory lets your application remember previous turns within a single [thread](persistence.md#threads) or conversation. A [thread](persistence.md#threads) organizes multiple turns in a session or interaction, similar to the way an email or slack thread groups messages in a single conversation.
+
+LangGraph manages short-term memory as part of the agent's state, persisted via thread-scoped checkpoints. This state can normally includes the conversation history along with other stateful data, such as uploaded files, generated artifacts, and other results from side-effects. By storing these in the graph's state, the bot can access the full context for a given conversation while maintaining separation between different threads.
 
 Since conversation history is the most common form of representing short-term memory, in the next section, we will cover techniques for managing conversation history when interactions become **long**. If you want to stick to the high-level concepts, continue on to the [long-term memory](#long-term-memory) section.
+
+### Managing long conversation history
 
 Long conversations pose a challenge to today's LLMs. The full history may (a) not even fit inside an LLM's context window, resulting in an irrecoverable error. Even _if_ your LLM technically supports the full context length, most LLMs (b) still perform poorly over long contexts. They get "distracted" by stale or off-topic content, all while suffering from slower response times and higher costs.
 
