@@ -258,7 +258,7 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        async for chunk in self.client.runs.stream(
+        async for chunk in await self.client.runs.stream(
             thread_id=config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
