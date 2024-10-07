@@ -224,25 +224,27 @@ This involves updating memory as a conceptually separate task, typically as a co
 
 This approach is not without its downsides, however. You have to think about how often to write memories. If it doesn't run in realtime, the user's interactions on other threads won't benefit from the new context. You also have to think about when to trigger this job. We typically recommend scheduling memories after some point of time, cancelling and re-scheduling for the future if new events occur on a given thread. Other popular choices are to form memories on some cron schedule or to let the user or application logic manually trigger memory formation.
 
-## Managing memories
+### Managing memories
 
 Once you've sorted out memory scheduling, it's important to think about **how to update memory with new information**.
 
-We see the two ends of the spectrum being: continuously update a single document (memory profile), inserting new documents every time you receive new information. We will outline some tradeoffs below. Note that most people settle on a combination of memory types and update strategies depending on their use case.
+There are two ends of the spectrum: on one hand, you could continuously update a single document (memory profile). On the other, you could only ever insert new documents every time you receive new information. 
 
-### Update a single profile
+We will outline some tradeoffs between these two approaches below, understanding that most people will find it most appropriate to combine approaches and to settle on somewhere in the middle.
 
-The profile is generally just a JSON document with various key-value pairs you've selected to represent your domain. When remembering a profile, you will want to make sure that you are **updating** the profile each time. As a result, you will want to pass in the previous profile and ask the LLM to generate a new profile (or some JSON patch to apply to the old profile).
+#### Manage individual profiles
+
+A profile is generally just a JSON document with various key-value pairs you've selected to represent your domain. When remembering a profile, you will want to make sure that you are **updating** the profile each time. As a result, you will want to pass in the previous profile and ask the LLM to generate a new profile (or some JSON patch to apply to the old profile).
 
 The larger the document, the more error-prone this can become. If your document becomes **too** large, you may want to consider splitting up the profiles into separate sections. You will likely need to use generation with retries and/or **strict** decoding when generating documents to ensure the memory schemas remains valid.
 
 ![](img/memory/update-profile.png)
 
-### Remember a list
+#### Manage a collection of memories
 
-Saving memories as lists of information simplifies some things. Each individual memory can be more narrowly scoped and easier to generate. It also means you're less likely to **lose** information over time, since it's easier for an LLM to generate new objects when it receives new information than it is for it to reconcile that new information with information in a single profile. This tends to lead to higher recall downstream.
+Saving memories as an collection documents simplifies some things. Each individual memory can be more narrowly scoped and easier to generate. It also means you're less likely to **lose** information over time, since it's easier for an LLM to generate _new_ objects for new information than it is for it to reconcile that new information with information in a dense profile. This tends to lead to higher recall downstream.
 
-This approach shifts some complexity to how you prompt the LLM to apply memory updates, as you now have to enable the LLM to _delete_ or _update_ existing items in the list. This can be tricky to prompt the LLM to do (some LLMs may default to always inserting; others may default to always updating). Tuning the behavior here is best done through evals, somethign you can do with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation).
+This approach shifts some complexity to how you prompt the LLM to apply memory updates. You now have to enable the LLM to _delete_ or _update_ existing items in the list. This can be tricky to prompt the LLM to do. Some LLMs may default to over-inserting; others may default to over-updating. Tuning the behavior here is best done through evals, somethign you can do with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation).
 
 This also shifts complexity to memory **search** (recall). You have to think about what relevant items to use. Right now we support filtering by metadata. We will be adding semantic search shortly.
 
@@ -250,12 +252,12 @@ Finally, this shifts some complexity to how you represent the memories for the L
 
 ![](img/memory/update-list.png)
 
-## Representing memories
+### Representing memories
 
 Once you have saved memories, the way you then retrieve and present the memory content for the LLM can play a large role in how well your LLM incorporates that information in its responses.
 The following sections a couple of common approaches. Note that these sections also will largely inform how you write and manage memories. Everything in memory is connected!
 
-## Update own instructions
+#### Update own instructions
 
 While instructions are often static text written by the developer, many AI applications benefit from letting the users personalize the rules and instructions the agent should follow whenever it interacts with that user. This ideally can be inferred by its interactions with the user (so the user doesn't have to explicitly change settings in yoru app). In this sense, instructions are a form of long-form memory!
 
@@ -287,7 +289,7 @@ def update_instructions(state: State, store: BaseStore):
 
 ![](img/memory/update-instructions.png)
 
-## Few Shot Examples
+#### Few Shot Examples
 
 Sometimes it's easier to "show" than "tell." LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
 
