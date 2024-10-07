@@ -51,6 +51,11 @@ class CheckpointMetadata(TypedDict, total=False):
     0 for the first "loop" checkpoint.
     ... for the nth checkpoint afterwards.
     """
+    stop: int
+    """The step number at which the loop should stop.
+
+    first execution step + recursion_limit.
+    """
     writes: dict[str, Any]
     """The writes that were made between the previous checkpoint and this one.
 

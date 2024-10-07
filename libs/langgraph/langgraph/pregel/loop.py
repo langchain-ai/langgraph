@@ -532,6 +532,7 @@ class PregelLoop:
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step
         metadata["step"] = self.step
+        metadata["stop"] = self.stop
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
         # debug flag
         if self.debug:
