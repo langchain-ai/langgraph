@@ -198,9 +198,9 @@ We dive into this more in [this section](#few-shot-examples)
 
 ### How to update memory
 
-There are two main ways to update memory: "in the hot path" and "as a separate process".
+There are two main ways to update memory: "in the hot path" and "in the background".
 
-![](img/memory/hot_path_vs_process.png)
+![](img/memory/hot_path_vs_background.png)
 
 #### Updating memory in the hot path
 
@@ -210,11 +210,11 @@ This has several benefits. First of all, it happens realtime, so if the user sta
 
 This also has several downsides. It may slow down the final response since it needs to decide what to remember. It also means your application not only needs to think about the application logic, but also what to remember (which could result in more complicated instructions to the LLM).
 
-#### Updating memory as a separate process
+#### Updating memory in the background
 
-This involves updating memory as a completely separate process from your application. This can either be done as some of background job that you write, or by utilizing a separate memory service. This involves triggering some run over a conversation after it has finished to updated memory.
+This involves updating memory in the background, typically as a completely separate process from your application. This can either be done as some of background job that you write, or by utilizing a separate memory service. This involves triggering some run over a conversation after it has finished to updated memory.
 
-This has some benefits. It's a completely separate process from your application, so generally incurs no latency. It also splits up the application logic from the memory logic, making it more modular and easy to manage.
+This has some benefits. Since it happens in the background, it incurs no latency. It also splits up the application logic from the memory logic, making it more modular and easy to manage.
 
 This also has several downsides. It may not happen realtime, so users will not immediately see memory updated. You also have to think more about when to trigger this job - how do you know a conversation is finished?
 ## Update own instructions
