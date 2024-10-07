@@ -180,13 +180,14 @@ trim_messages(
 
 ## Long-term memory
 
-Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces."
+Long-term memory in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is thread-scoped, long-term memory is saved within custom "namespaces."
 
-Long-term memories are saved in a [store](persistence.md#memory-store). Each memory is a JSON document stored in a custom `namespace` under a distinct `key` in that namespace. You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage. To take the analogy further, the `key` would be akin to the memory's "filename", and the value would contain the contents. This permits arbitrary hierarchical organization of memories while still letting you organize and search memories using content folders to support cross-cutting searches.
+LangGraph stores long-term memories as JSON documents in a [store](persistence.md#memory-store) ([reference doc](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.BaseStore)). Each memory is organized under a custom `namespace` (similar to a folder) and a distinct `key` (like a filename). Namespaces often include user or org IDs or other labels that makes it easier to organize information. This structure enables hierarchical organization of memories. Cross-namespace searching is then supported through content filters. See the example below for an example.
 
 ```python
 from langgraph.store.memory import InMemoryStore
 
+# InMemoryStore saves data to an in-memory dictionary. Use a DB-backed store in production use.
 store = InMemoryStore()
 user_id = "my-user"
 application_context = "chitchat"
@@ -198,7 +199,7 @@ item = store.get(namespace)
 items = store.search(namespace, filter={"my-key": "my-value"})
 ```
 
-When adding long-term memory to your agent, it's important to think about how & how often to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
+When adding long-term memory to your agent, it's important to think about how to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
 LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application, based on memory [Store](persistence.md#memory-store)'s.
 
 Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below for your consideration as you implement long-term memory.
