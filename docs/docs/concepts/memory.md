@@ -17,15 +17,15 @@ Both are important to understand and implement for your application.
 
 Short-term memory refers to the ability to accurately remember previous turns within a single thread. A thread organizes multiple turns from a single conversation or session, similar to the way an email or slack thread groups messages in a single conversation. Reading from and writing updates to the memory is scoped to within a single thread.
 
-LangGraph agents access short-term memory using checkpointed state. Using chatbots as a common example, the state would contain conversation history as a list of chat messages. Every user request and every assistant response is appended as a message to the state. LangGraph saves the state updates in checkpoints scoped by the conversation's distinct [thread](persistence.md#threads) ID. For every subsequent user request, LangGraph can load the state from the appropriate checkpoint so your chatbot can see the entire conversation history.
+LangGraph agents access short-term memory using checkpointed state. Using chatbots as a common example, the state would contain conversation history as a list of chat messages. Every user request and every assistant response are appended as messages to the state LangGraph saves the state updates in checkpoints scoped by the conversation's distinct [thread](persistence.md#threads) ID. For every subsequent user request, LangGraph can load the state from the appropriate checkpoint so your chatbot can see the entire conversation history.
 
 If a user uploads files, if the bot generates code artifacts, or if the agent performs other side-effects, all of these objects could be stored and checkpointed as a part of your graph's state. That way, your bot can access the entire shared context for each conversation while keeping the context for each conversation separate from others.
 
-Since conversation history is the most common form of representing short-term memory, in the next section, we will cover techniques for managing conversation history when interactions become **long**.
+Since conversation history is the most common form of representing short-term memory, in the next section, we will cover techniques for managing conversation history when interactions become **long**. If you want to stick to the high-level concepts, continue on to the [long-term memory](#long-term-memory) section.
 
 Long conversations pose a challenge to today's LLMs. The full history may (a) not even fit inside an LLM's context window, resulting in an irrecoverable error. Even _if_ your LLM technically supports the full context length, most LLMs (b) still perform poorly over long contexts. They get "distracted" by stale or off-topic content, all while suffering from slower response times and higher costs.
 
-Managing short-term memory is really an exercise of balancing [precision & recall](https://en.wikipedia.org/wiki/Precision_and_recall#:~:text=Precision%20can%20be%20seen%20as,irrelevant%20ones%20are%20also%20returned) with your application's other performance requirements (latency & cost). As always, it's important to think critically about how you represent information for your LLM and to look at your data. We cover a few common techniques for managing message lists below and hope to provide sufficient context for you to pick the best tradeoffs for your application:
+Managing short-term memory is an exercise of balancing [precision & recall](https://en.wikipedia.org/wiki/Precision_and_recall#:~:text=Precision%20can%20be%20seen%20as,irrelevant%20ones%20are%20also%20returned) with your application's other performance requirements (latency & cost). As always, it's important to think critically about how you represent information for your LLM and to look at your data. We cover a few common techniques for managing message lists below and hope to provide sufficient context for you to pick the best tradeoffs for your application:
 
 - [Editing message lists](#editing-message-lists): How to think about trimming and filtering a list of messages before passing to language model.
 - [Managing messages within LangGraph](#managing-messages-within-langgraph): Some concepts that are helpful to know for managing messages within LangGraph.
@@ -39,7 +39,7 @@ Chat models accept context using [messages](https://python.langchain.com/docs/co
 
 The most direct approach is to remove old messages from a list (similar to a [least-recently used cache](https://en.wikipedia.org/wiki/Page_replacement_algorithm#Least_recently_used)).
 
-The typical technique for deleting content from a list in LangGraph is to return an update from a node telling it to delete some portion of the list. You get to define what this update looks like, but a common approach would be to let you return an object or dictionary specifying which values to retain.
+The typical technique for deleting content from a list in LangGraph is to return an update from a node telling the system to delete some portion of the list. You get to define what this update looks like, but a common approach would be to let you return an object or dictionary specifying which values to retain.
 
 ```python
 def manage_list(existing: list, updates: Union[list, dict]):
@@ -186,7 +186,7 @@ from langgraph.store.memory import InMemoryStore
 store = InMemoryStore()
 user_id = "my-user"
 application_context = "chitchat"
-namespace = (user_id, application_contest)
+namespace = (user_id, application_context)
 store.put(namespace, key="a-memory", {"rules": ["User likes short, direct language", "User only speaks English & python"], "my-key": "my-value"})
 # get the "memory" by ID
 item = store.get(namespace)
@@ -228,7 +228,7 @@ Humans form long-term memories when we sleep, but when and how should our agents
 
 #### Writing memories in the hot path
 
-This involves creating memories while the application is running. To provide a popular production example, ChatGPT manages memories uses a "save_memories" tool to upsert memories as content strings. It decides whether (and how) to use this tool every time it receives a user message and multi-tasks memory management with the rest of the user instructions.
+This involves creating memories while the application is running. To provide a popular production example, ChatGPT manages memories using a "save_memories" tool to upsert memories as content strings. It decides whether (and how) to use this tool every time it receives a user message and multi-tasks memory management with the rest of the user instructions.
 
 This has a few benefits. First of all, it happens "in real time". If the user starts a new thread right away that memory will be present. The user also transparently sees when memories are stored, since the bot has to explicitly decide to store information and can relate that to the user.
 
@@ -246,7 +246,7 @@ Once you've sorted out memory scheduling, it's important to think about **how to
 
 There are two ends of the spectrum: on one hand, you could continuously update a single document (memory profile). On the other, you could only ever insert new documents every time you receive new information.
 
-We will outline some tradeoffs between these two approaches below, understanding that most people will find it most appropriate to combine approaches and to settle on somewhere in the middle.
+We will outline some tradeoffs between these two approaches below, understanding that most people will find it most appropriate to combine approaches and to settle somewhere in the middle.
 
 #### Manage individual profiles
 
@@ -258,7 +258,7 @@ The larger the document, the more error-prone this can become. If your document 
 
 #### Manage a collection of memories
 
-Saving memories as an collection documents simplifies some things. Each individual memory can be more narrowly scoped and easier to generate. It also means you're less likely to **lose** information over time, since it's easier for an LLM to generate _new_ objects for new information than it is for it to reconcile that new information with information in a dense profile. This tends to lead to higher recall downstream.
+Saving memories as a collection of documents simplifies some things Each individual memory can be more narrowly scoped and easier to generate. It also means you're less likely to **lose** information over time, since it's easier for an LLM to generate _new_ objects for new information than it is for it to reconcile that new information with information in a dense profile. This tends to lead to higher recall downstream.
 
 This approach shifts some complexity to how you prompt the LLM to apply memory updates. You now have to enable the LLM to _delete_ or _update_ existing items in the list. This can be tricky to prompt the LLM to do. Some LLMs may default to over-inserting; others may default to over-updating. Tuning the behavior here is best done through evals, something you can do with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation).
 
@@ -271,15 +271,15 @@ Finally, this shifts some complexity to how you represent the memories for the L
 ### Representing memories
 
 Once you have saved memories, the way you then retrieve and present the memory content for the LLM can play a large role in how well your LLM incorporates that information in its responses.
-The following sections a couple of common approaches. Note that these sections also will largely inform how you write and manage memories. Everything in memory is connected!
+The following sections present a couple of common approaches. Note that these sections also will largely inform how you write and manage memories. Everything in memory is connected!
 
 #### Update own instructions
 
 While instructions are often static text written by the developer, many AI applications benefit from letting the users personalize the rules and instructions the agent should follow whenever it interacts with that user. This ideally can be inferred by its interactions with the user (so the user doesn't have to explicitly change settings in yoru app). In this sense, instructions are a form of long-form memory!
 
-One way to apply this is using "reflection" or "Meta-prompting" steps. Prompt the LLM with the current instructions set (from the system prompt) and a conversation with the user and instruct the LLM to to refine its instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori.
+One way to apply this is using "reflection" or "Meta-prompting" steps. Prompt the LLM with the current instruction set (from the system prompt) and a conversation with the user, and instruct the LLM to refine its instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori.
 
-Meta-prompting uses past information to refine prompts. For instance, a [Tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) employs meta-prompting to enhance its paper summarization prompt for Twitter. You could implement this using LangGraph's memory store to save updated instructions in a shared namespace. In this case we will namespace the memoreis
+Meta-prompting uses past information to refine prompts. For instance, a [Tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) employs meta-prompting to enhance its paper summarization prompt for Twitter. You could implement this using LangGraph's memory store to save updated instructions in a shared namespace. In this case, we will namespace the memories as "agent_instructions" and key the memory based on the agent.
 
 ```python
 # Node that *uses* the instructions
