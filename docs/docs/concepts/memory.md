@@ -5,7 +5,7 @@
 Memory in the context of LLMs and AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and provide more relevant outputs to users.
 This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
-**Short-term memory**, or thread-scoped memory, can be recalled _at any time_ **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints), so the thread can be resumed at any time. Updates to short-term memory are triggered any time you invoke the graph or any time a step completes.
+**Short-term memory**, or thread-scoped memory, can be recalled _at any time_ **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints), so the thread can be resumed at any time. Updates to short-term memory are triggered any time you invoke the graph or any time a step completes.
 
 **Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and in any node. Memories are scoped to any custom namespace, not just within a single thread. LangGraph provides [stores](persistence.md#memory-store) to let you save and recall long-term memories.
 
@@ -63,7 +63,7 @@ def my_node(state: State):
     }
 ```
 
-LangGraph will call the `manage_list` "[reducer](low_level#reducer)" function any time an update is returned under the key "my_list". Within that function, we define what types of updates to accept. Typically, messages will be added to the existing list (the conversation will grow); however, we've also added support to accept a dictionary that lets you "keep" certain parts of the state. This lets you programmatically drop old message context.
+LangGraph will call the `manage_list` "[reducer](low_level.md#reducers)" function any time an update is returned under the key "my_list". Within that function, we define what types of updates to accept. Typically, messages will be added to the existing list (the conversation will grow); however, we've also added support to accept a dictionary that lets you "keep" certain parts of the state. This lets you programmatically drop old message context.
 
 Another common approach is to let you return a list of "remove" objects that specify the IDs of all messages to delete. If you're using the LangChain messages and the [`add_messages`](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages) reducer (or `MessagesState`, which uses the same underlying functionality) in LangGraph, you can do this using a `RemoveMessage`.
 
@@ -200,14 +200,14 @@ Long-term memory is far from a solved problem. While it is hard to provide gener
 
 **Do you want to write memories "in the hot path" or "in the background"**
 
-Memory can be updated either as part of your primary application logic (e.g. "in the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each approach in [how to update memory](#how-to-update-memory)
+Memory can be updated either as part of your primary application logic (e.g. "in the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each approach in [the writing memories section below](#writing-memories)
 
 **Do you want to manage memories as a single profile or as a list of events?**
 
 Managing memories as a single, continuously updated "profile" or "schema" is useful when there is well-scoped, specific information you want to remember about a user, organization, or other entity (including the agent itself). You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions. Querying the "memory" is easy since it's a simple GET operation on a JSON document.We explain this in more detail in [remember a profile](#manage-individual-profiles). This technique can provide higher precision (on known information use cases) at the expense of lower recall (since you have to anticipate and model your domain, and updates to the doc tend to delete or rewrite away old information at a greater frequency).
 
 Managing long-term memory as a collection of documents, on the other hand, lets you store an unbounded amount of information. This technique is useful when you want to repeatedly extract & remember items over a long time horizon but can be more complicated to query and manage over time.
-Similar to the "profile" memory, you still define schema(s) for each memory. Rather than overwriting a single document, you instead will insert new ones (and potentially update or re-contextualize existing ones in the process). We explain this approach in more detail in [remember a list](#manage-a-collection-of-memories)
+Similar to the "profile" memory, you still define schema(s) for each memory. Rather than overwriting a single document, you instead will insert new ones (and potentially update or re-contextualize existing ones in the process). We explain this approach in more detail in ["managing a collection of memories"](#manage-a-collection-of-memories)
 
 **Do you want to present memories to your agent as updated instructions or as few-shot examples?**
 
