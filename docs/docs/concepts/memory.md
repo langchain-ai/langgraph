@@ -2,12 +2,12 @@
 
 ## What is Memory?
 
-Memory in the context of LLMs and AI applications refers to the ability to process, retain, and utilize information from past interactions or data sources. 
-We break this guide into two parts: short term memory and long-term memory.
+Memory in the context of LLMs and AI applications refers to the ability to process, store, and effectively recall information from past interactions or data sources. Memory is how your agents' get better over time.
+We break this guide into two parts based on the scope of how memories are recalled: short-term memory and long-term memory.
 
-By **short-term memory** we mean memory that persists **within** a single conversation (or interaction) with a user. In LangGraph, we manage short-term memory with the concept of [threads](persistence.md#threads) and [checkpointers](persistence.md#checkpoints)
+**Short-term memory** persists **within** a single conversation (or session) with a user. In LangGraph, we manage short-term memory with the concept of [threads](persistence.md#threads) and [checkpointers](persistence.md#checkpoints). While this memory can still last forever, its scope is saved and recalled within a single thread.
 
-By **long-term memory** we mean memory that persists **across** conversations (or interactions) with a user. In LangGraph, we manage long-term memory with [stores](persistence.md#memory-store)
+**long-term memory** persists **across** conversations (or session) with a user. In LangGraph, we manage long-term memory with [stores](persistence.md#memory-store).
 
 Both are important to understand and implement for your application.
 
@@ -15,23 +15,20 @@ Both are important to understand and implement for your application.
 
 ## Short-term memory
 
-Short-term memory primarily refers to the ability of an application to accurately remember interactions that previously occurred in the same conversation with the user.
-Most conversations are represented as a list of messages and so the best first thing to do is to store a list of those messages and pass those in to future invocations of the LLM.
-LangGraph's [persistence layer](persistence.md#persistence) has checkpointers that enable [thread](persistence.md#threads)-level memory.
+Short-term memory refers to the ability of an application to accurately remember previous interactions from the same conversation or session.
+For a simple simple chat bot, you would persist a list of messages for each conversational turn. If a user uploads files, if the bot generates code artifacts, or if your agent causes other side-effects that should be re-used throughout the session, you would also save these objects (or references to the objects) in the graph's state. LangGraph checkpoints the state after each step of the graph. This [persistence layer](persistence.md#persistence) enables [thread](persistence.md#threads)-level memory.
 
-As the conversation grows in length, you will need to think about how to manage that list of messages.
-The reason you will need to think about this is that too many messages will either (a) not fit inside an LLMs context window and will throw an error, or (b) will "overwhelm" the LLM and cause it to perform poorly.
+As the conversation grows in length, you will need to think about how to **manage** that list of messages.
+Too many messages will either (a) not fit inside an LLMs context window and will throw an error, or (b) will "distract" the LLM and cause it to perform poorly.
 Therefore, it becomes crucial to think about what parts (or representations) of the conversation to pass to the LLM.
 
-**Note:** we say "messages" and "conversation" above, but short-term memory is not limited to conversations.
-It can apply to any type of interactions.
-For the more general case, you will also need to think of how to represent the list of previous events within that interaction.
+For the more general case, you will also need to think of how to represent the list of previous events within a given invocation.
 
-We cover a few different concepts below:
+We cover a few common techniques for managing message lists:
 
 - [Editing message lists](#editing-message-lists): How to think about trimming and filtering a list of messages before passing to language model.
 - [Managing messages within LangGraph](#managing-messages-within-langgraph): Some concepts that are helpful to know for managing messages within LangGraph.
-- [Summarizaing past conversations](#summarizing-past-conversations): A common technique to use when you don't just want to filter the list of messages.
+- [Summarizing past conversations](#summarizing-past-conversations): A common technique to use when you don't just want to filter the list of messages.
 
 ### Editing message lists
 
@@ -157,18 +154,16 @@ See this how-to [here](https://langchain-ai.github.io/langgraph/how-tos/memory/a
 
 ## Long term memory
 
-Long-term memory refers to the ability of a system to remember information between different conversations (or interactions).
-There a many different ways this can be accomplished, and the right way to do so depends entirely on your application.
-Rather than build a generic "long-term memory" solution, LangGraph aims to give you the ability to more directly control the long-term memory of your application.
+Long-term memory refers to the ability of a system to remember information across different conversations (or sessions).
+There are many tradeoffs between long-term-memory techniques, and the right way to do so depends largely on your application's needs.
+LangGraph aims to give you the low-level primitves to directly control the long-term memory of your application.
 You can use LangGraph's [Store](persistence.md#memory-store) to accomplish this.
 
-Long-term memory is far from a solved problem.
-It is hard to provide generic advice on how to build long term memory, as it often depends on your application.
-Still, there are several patterns you should be thinking about when implementing long-term memory, and we try outline those below.
+Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below that you should be consider when implementing long-term memory.
 
-**Do you want to update memory "in the hot path" or "as a separate process"**
+**Do you want to update memory "in the hot path" or "in the background"**
 
-Memory can be updated either as part of the application logic (e.g. "in the hot path" of the application) or as a separate process.
+Memory can be updated either as part of your primary application logic (e.g. "in the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state).
 There are pros and cons to each approach, we document them in [this section](#how-to-update-memory)
 
 **Update own instructions**
@@ -177,15 +172,15 @@ Oftentimes, part of the system prompt (or instructions) to an LLM can be updated
 This can be viewed as analyzing interactions and trying to determine what could have been done better, and then putting those learnings back into the system prompt for future interactions.
 We dive into this more in [this section](#update-own-instructions)
 
-**Remember a profile**
+**Remember a single profile**
 
 This technique is useful when there is specific information you may want to remember about a user/organization/group.
 You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions.
 We dive into this more in [this section](#remember-a-profile)
 
-**Remember a list**
-This technique is useful when you want repeatedly extract items and remember those.
-Similar to remembering a profile, you still define a custom schema to remember.
+**Remember multiple memories**
+This technique is useful when you want repeatedly extract & items and remember those.
+Similar to remembering a profile, you still define a schema to remember.
 The difference is that rather than remembering ONE schema per user/organization/group, you remember a list.
 We still use an LLM to update this list.
 We dive into this more in [this section](#remember-a-list)
@@ -195,7 +190,6 @@ Sometimes you don't need to use an LLM to update memory, but rather can just raw
 You can then pull these raw interactions into the prompt as few-shot examples in future interactions.
 We dive into this more in [this section](#few-shot-examples)
 
-
 ### How to update memory
 
 There are two main ways to update memory: "in the hot path" and "in the background".
@@ -204,19 +198,20 @@ There are two main ways to update memory: "in the hot path" and "in the backgrou
 
 #### Updating memory in the hot path
 
-This involves updating memory while the application is running. A concrete example of this is the way that ChatGPT does memory. ChatGPT can call tools to update or save a new memory, and it does that and then responds to the user. 
+This involves updating memory while the application is running. A concrete example of this is the way that ChatGPT does memory. ChatGPT can call tools to update or save a new memory. It decides when to use these tools and does so before responding to the user. 
 
-This has several benefits. First of all, it happens realtime, so if the user starts a new thread right away that memory will be present. It also makes it possible to show the user that memory has been updated, and so can be a bit more transparent that way.
+This has a few benefits. First of all, it happens realtime, so if the user starts a new thread right away that memory will be present. The user also transparently sees when memories are stored.
 
-This also has several downsides. It may slow down the final response since it needs to decide what to remember. It also means your application not only needs to think about the application logic, but also what to remember (which could result in more complicated instructions to the LLM).
+This also has several downsides. It adds one more decision for the agent (what to commit to memory). This can which can degrade its tool-calling performance. It may slow down the final response since it needs to decide what to commit to memory. It also typically leads to fewer things being saved to memory (since the assistant is multi-tasking), which will cause lower recall in later conversations.
 
 #### Updating memory in the background
 
-This involves updating memory in the background, typically as a completely separate process from your application. This can either be done as some of background job that you write, or by utilizing a separate memory service. This involves triggering some run over a conversation after it has finished to updated memory.
+This involves updating memory in the background, typically as a completely separate graph or function. This can either be done as some of background job that you write, or by using a separate memory service. Whenever a conversation completes (or on some schedule), long-term memory is "triggered" to extract and synthesize memories.
 
 This has some benefits. Since it happens in the background, it incurs no latency. It also splits up the application logic from the memory logic, making it more modular and easy to manage.
 
-This also has several downsides. It may not happen realtime, so users will not immediately see memory updated. You also have to think more about when to trigger this job - how do you know a conversation is finished?
+This also has several downsides. It may not happen in real time, so users may not immediately see memory updated. You also have to think more about when to trigger this job - how do you know a conversation is finished?
+
 ## Update own instructions
 
 This is an example of long term memory.
