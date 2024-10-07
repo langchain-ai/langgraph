@@ -28,7 +28,6 @@ Long conversations pose a challenge to today's LLMs. The full history may (a) no
 Managing short-term memory is an exercise of balancing [precision & recall](https://en.wikipedia.org/wiki/Precision_and_recall#:~:text=Precision%20can%20be%20seen%20as,irrelevant%20ones%20are%20also%20returned) with your application's other performance requirements (latency & cost). As always, it's important to think critically about how you represent information for your LLM and to look at your data. We cover a few common techniques for managing message lists below and hope to provide sufficient context for you to pick the best tradeoffs for your application:
 
 - [Editing message lists](#editing-message-lists): How to think about trimming and filtering a list of messages before passing to language model.
-- [Managing messages within LangGraph](#managing-messages-within-langgraph): Some concepts that are helpful to know for managing messages within LangGraph.
 - [Summarizing past conversations](#summarizing-past-conversations): A common technique to use when you don't just want to filter the list of messages.
 
 ### Editing message lists
