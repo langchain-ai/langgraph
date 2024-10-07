@@ -10,6 +10,7 @@ from typing import (
 )
 
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.graph import Graph as DrawableGraph
 
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, StateSnapshot, StreamMode
@@ -35,6 +36,37 @@ class RemotePregel(PregelProtocol):
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self:
         return self.copy({})
+
+    def get_graph(
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
+    ) -> DrawableGraph:
+        graph = self.sync_client.assistants.get_graph(
+            assistant_id=self.graph_id,
+            xray=xray,
+        )
+
+        return DrawableGraph(
+            nodes=graph["nodes"],
+            edges=graph["edges"],
+        )
+
+    async def aget_graph(
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
+    ) -> DrawableGraph:
+        graph = await self.client.assistants.get_graph(
+            assistant_id=self.graph_id,
+            xray=xray,
+        )
+        return DrawableGraph(
+            nodes=graph["nodes"],
+            edges=graph["edges"],
+        )
 
     def get_subgraphs(
         self, namespace: Optional[str] = None, recurse: bool = False

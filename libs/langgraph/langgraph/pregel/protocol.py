@@ -10,6 +10,7 @@ from typing import (
 )
 
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.pregel.types import All, StateSnapshot, StreamMode
@@ -20,6 +21,20 @@ class PregelProtocol(Protocol):
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self: ...
+
+    def get_graph(
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
+    ) -> DrawableGraph: ...
+
+    async def aget_graph(
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
+    ) -> DrawableGraph: ...
 
     def get_subgraphs(
         self, namespace: Optional[str] = None, recurse: bool = False
