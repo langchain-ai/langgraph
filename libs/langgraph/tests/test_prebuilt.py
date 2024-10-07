@@ -366,13 +366,13 @@ async def test_tool_node():
     def tool1(some_val: int, some_other_val: str) -> str:
         """Tool 1 docstring."""
         if some_val == 0:
-            raise ValueError("Test error")
+            raise ToolException("Test error")
         return f"{some_val} - {some_other_val}"
 
     async def tool2(some_val: int, some_other_val: str) -> str:
         """Tool 2 docstring."""
         if some_val == 0:
-            raise ValueError("Test error")
+            raise ToolException("Test error")
         return f"tool2: {some_val} - {some_other_val}"
 
     async def tool3(some_val: int, some_other_val: str) -> str:
@@ -388,15 +388,19 @@ async def test_tool_node():
             {"type": "image_url", "image_url": {"url": "abdc"}},
         ]
 
-    @dec_tool(handle_tool_error="foo")
+    @dec_tool
     def tool5(some_val: int):
         """Tool 5 docstring."""
-        return some_val / 0
+        raise ToolException("Test error")
 
-    @dec_tool(handle_validation_error="foo")
+    tool5.handle_tool_error = "foo"
+
+    @dec_tool
     def tool6(some_val: str):
         """Tool 6 docstring."""
         return some_val
+
+    tool6.handle_validation_error = "foo"
 
     result = ToolNode([tool1]).invoke(
         {
@@ -442,7 +446,7 @@ async def test_tool_node():
     assert tool_message.status == "error"
     assert (
         tool_message.content
-        == f"Error: {repr(ToolException(repr(ValueError('Test error'))))}\n Please fix your mistakes."
+        == f"Error: {repr(ToolException('Test error'))}\n Please fix your mistakes."
     )
     assert tool_message.tool_call_id == "some 0"
 
@@ -578,7 +582,7 @@ async def test_tool_node():
                 ]
             }
         )
-    assert str(exc_info.value) == repr(ValueError("Test error"))
+    assert str(exc_info.value) == "Test error"
 
     # test error handling for ToolNode works
 

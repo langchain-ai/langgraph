@@ -109,6 +109,10 @@ def _handle_tool_error(
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
+    It can be used either in StateGraph with a "messages" key or in MessageGraph. If
+    multiple tool calls are requested, they will be run in parallel. The output will be
+    a list of ToolMessages, one for each tool call.
+
     Args:
         tools (Sequence[Union[BaseTool, Callable]]): A sequence of tools that can be invoked.
         name (str, optional): The name of the node, defaults to "tools"
@@ -121,31 +125,6 @@ class ToolNode(RunnableCallable):
             raised by tools inside the node. If False then errors will be raised unless dealt with by individual
             tools. If True, default error handler will be used. If string or callable, ToolMessage
             will be returned with correspopnding content.
-
-    Example:
-
-        @tool
-        def complex_tool(int_arg: int, float_arg: float, dict_arg: dict) -> int:
-            \"\"\"Do something complex with a complex tool.\"\"\"
-            return int_arg * float_arg
-
-        tools = [complex_tool]
-
-        def handle_tool_errors(e, call):
-            content = f"Error: {repr(e)}\n Please fix your mistakes."
-            return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
-
-        tool_node = ToolNode(
-                        tools,
-                        name="my_tool_node",
-                        tags=["my_tag_1","my_tag_2"],
-                        handle_tool_errors = handle_tool_errors
-                    )
-
-
-    It can be used either in StateGraph with a "messages" key or in MessageGraph. If
-    multiple tool calls are requested, they will be run in parallel. The output will be
-    a list of ToolMessages, one for each tool call.
 
     The `ToolNode` is roughly analogous to:
 
@@ -248,9 +227,9 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
-        input = {**call, **{"type": "tool_call"}}
-        error_to_raise: Union[Exception, None] = None
+        error_to_raise: Optional[Exception] = None
         try:
+            input = {**call, **{"type": "tool_call"}}
             tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
                 input, config
             )
@@ -281,35 +260,28 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
-        input = {**call, **{"type": "tool_call"}}
-        error_to_raise: Union[Exception, None] = None
+        error_to_raise: Optional[Exception] = None
         try:
-            try:
-                tool_message: ToolMessage = await self.tools_by_name[
-                    call["name"]
-                ].ainvoke(input, config)
-                # TODO: handle this properly in core
-                tool_message.content = cast(
-                    Union[str, list], msg_content_output(tool_message.content)
-                )
-                return tool_message
-            except ValidationError as e:
-                if not self.handle_validation_errors:
-                    error_to_raise = e
-                else:
-                    content = _handle_validation_error(
-                        e, flag=self.handle_validation_errors
-                    )
-            except ToolException as e:
-                raise e
-            except Exception as e:
-                raise ToolException(str(e)) from e
+            input = {**call, **{"type": "tool_call"}}
+            tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
+                input, config
+            )
+            tool_message.content = cast(
+                Union[str, list], msg_content_output(tool_message.content)
+            )
+            return tool_message
         except ToolException as e:
             if not self.handle_tool_errors:
                 error_to_raise = e
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
-
+        except ValidationError as e:
+            if not self.handle_validation_errors:
+                error_to_raise = e
+            else:
+                content = _handle_validation_error(
+                    e, flag=self.handle_validation_errors
+                )
         if error_to_raise:
             raise error_to_raise
         return ToolMessage(
