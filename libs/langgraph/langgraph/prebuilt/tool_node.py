@@ -114,9 +114,9 @@ class ToolNode(RunnableCallable):
     a list of ToolMessages, one for each tool call.
 
     Args:
-        tools: A sequence of tools that can be invoked.
-        name: The name of the node, defaults to "tools"
-        tags: Tags to associate with the node
+        tools: A sequence of tools that can be invoked by the ToolNode.
+        name: The name of the ToolNode in the graph. Defaults to "tools".
+        tags: Optional tags to associate with the node. Defaults to None.
         handle_tool_errors: How to handle tool errors raised by tools inside the node. Defaults to "all".
             Must be one of the following:
 
