@@ -1,5 +1,5 @@
-from hashlib import md5
-from typing import Any, List, Optional, Tuple
+import random
+from typing import Any, List, Optional, Sequence, Tuple, cast
 
 from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
@@ -7,8 +7,9 @@ from psycopg.types.json import Jsonb
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
-    EmptyChannelError,
+    CheckpointMetadata,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -110,16 +111,26 @@ UPSERT_CHECKPOINTS_SQL = """
 UPSERT_CHECKPOINT_WRITES_SQL = """
     INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
+        channel = EXCLUDED.channel,
+        type = EXCLUDED.type,
+        blob = EXCLUDED.blob;
+"""
+
+INSERT_CHECKPOINT_WRITES_SQL = """
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
 
-class BasePostgresSaver(BaseCheckpointSaver):
+class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
     MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
+    INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
     jsonplus_serde = JsonPlusSerializer()
 
@@ -156,8 +167,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         thread_id: str,
         checkpoint_ns: str,
         values: dict[str, Any],
-        versions: dict[str, str],
-    ) -> list[tuple[str, str, str, str, str, bytes]]:
+        versions: ChannelVersions,
+    ) -> list[tuple[str, str, str, str, str, Optional[bytes]]]:
         if not versions:
             return []
 
@@ -166,7 +177,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
                 thread_id,
                 checkpoint_ns,
                 k,
-                ver,
+                cast(str, ver),
                 *(
                     self.serde.dumps_typed(values[k])
                     if k in values
@@ -198,8 +209,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         checkpoint_ns: str,
         checkpoint_id: str,
         task_id: str,
-        writes: list[tuple[str, Any]],
-    ) -> list[tuple[str, str, str, int, str, str, bytes]]:
+        writes: Sequence[tuple[str, Any]],
+    ) -> list[tuple[str, str, str, str, int, str, str, bytes]]:
         return [
             (
                 thread_id,
@@ -213,18 +224,13 @@ class BasePostgresSaver(BaseCheckpointSaver):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def _load_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+    def _load_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
         return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
 
-    def _dump_metadata(self, metadata) -> str:
-        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
-            metadata
-        )
-        if serialized_metadata_type != "json":
-            raise TypeError(
-                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
-            )
-        return serialized_metadata.decode()
+    def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
+        serialized_metadata = self.jsonplus_serde.dumps(metadata)
+        # NOTE: we're using JSON serializer (not msgpack), so we need to remove null characters before writing
+        return serialized_metadata.decode().replace("\\u0000", "")
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
@@ -234,11 +240,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        try:
-            next_h = md5(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"
 
     def _search_where(
         self,

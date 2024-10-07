@@ -1,16 +1,6 @@
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager, contextmanager
-from typing import (
-    Any,
-    AsyncIterator,
-    Generic,
-    Iterator,
-    Optional,
-    Sequence,
-    TypeVar,
-)
+from typing import Any, Generic, Optional, Sequence, Type, TypeVar
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -21,7 +11,11 @@ C = TypeVar("C")
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):
-    key: str = ""
+    __slots__ = ("key", "typ")
+
+    def __init__(self, typ: Type[Any], key: str = "") -> None:
+        self.typ = typ
+        self.key = key
 
     @property
     @abstractmethod
@@ -41,38 +35,10 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         or doesn't support checkpoints."""
         return self.get()
 
-    @contextmanager
     @abstractmethod
-    def from_checkpoint(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> Iterator[Self]:
+    def from_checkpoint(self, checkpoint: Optional[C]) -> Self:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
-
-    @contextmanager
-    def from_checkpoint_named(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> Iterator[Self]:
-        with self.from_checkpoint(checkpoint, config) as value:
-            value.key = self.key
-            yield value
-
-    @asynccontextmanager
-    async def afrom_checkpoint(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> AsyncIterator[Self]:
-        """Return a new identical channel, optionally initialized from a checkpoint.
-        If the checkpoint contains complex data structures, they should be copied."""
-        with self.from_checkpoint(checkpoint, config) as value:
-            yield value
-
-    @asynccontextmanager
-    async def afrom_checkpoint_named(
-        self, checkpoint: Optional[C], config: RunnableConfig
-    ) -> AsyncIterator[Self]:
-        async with self.afrom_checkpoint(checkpoint, config) as value:
-            value.key = self.key
-            yield value
 
     # state methods
 

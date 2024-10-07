@@ -7,12 +7,13 @@ from typing import (
     Optional,
     Sequence,
     Type,
+    cast,
 )
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, Self
 
-from langgraph.constants import CONFIG_KEY_STORE
+from langgraph.constants import CONF, CONFIG_KEY_STORE
 from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -20,7 +21,7 @@ from langgraph.managed.base import (
     ConfiguredManagedValue,
     WritableManagedValue,
 )
-from langgraph.store.base import BaseStore
+from langgraph.store.base import BaseStore, PutOp
 
 V = dict[str, Any]
 
@@ -30,7 +31,7 @@ Update = dict[str, Optional[V]]
 
 
 # Adapted from typing_extensions
-def _strip_extras(t):
+def _strip_extras(t):  # type: ignore[no-untyped-def]
     """Strips Annotated, Required and NotRequired from a given type."""
     if hasattr(t, "__origin__"):
         return _strip_extras(t.__origin__)
@@ -57,8 +58,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
         with super().enter(config, **kwargs) as value:
             if value.store is not None:
-                saved = value.store.list([value.ns])
-                value.value = saved[value.ns] or {}
+                saved = value.store.search(value.ns)
+                value.value = {it.key: it.value for it in saved}
             yield value
 
     @classmethod
@@ -66,8 +67,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
         async with super().aenter(config, **kwargs) as value:
             if value.store is not None:
-                saved = await value.store.alist([value.ns])
-                value.value = saved[value.ns] or {}
+                saved = await value.store.asearch(value.ns)
+                value.value = {it.key: it.value for it in saved}
             yield value
 
     def __init__(
@@ -82,11 +83,11 @@ class SharedValue(WritableManagedValue[Value, Update]):
                 raise ValueError("SharedValue must be a dict")
         self.scope = scope
         self.value: Value = {}
-        self.store: BaseStore = config["configurable"].get(CONFIG_KEY_STORE)
+        self.store = cast(BaseStore, config[CONF].get(CONFIG_KEY_STORE))
         if self.store is None:
-            self.ns: Optional[str] = None
-        elif scope_value := config["configurable"].get(self.scope):
-            self.ns = f"scoped:{scope}:{key}:{scope_value}"
+            pass
+        elif scope_value := config[CONF].get(self.scope):
+            self.ns = ("scoped", scope, key, scope_value)
         else:
             raise ValueError(
                 f"Scope {scope} for shared state key not in config.configurable"
@@ -95,31 +96,29 @@ class SharedValue(WritableManagedValue[Value, Update]):
     def __call__(self, step: int) -> Value:
         return self.value.copy()
 
-    def _process_update(
-        self, values: Sequence[Update]
-    ) -> list[tuple[str, str, Optional[dict[str, Any]]]]:
-        writes = []
+    def _process_update(self, values: Sequence[Update]) -> list[PutOp]:
+        writes: list[PutOp] = []
         for vv in values:
             for k, v in vv.items():
                 if v is None:
                     if k in self.value:
-                        self.value[k] = None
-                        writes.append((self.ns, k, None))
+                        del self.value[k]
+                        writes.append(PutOp(self.ns, k, None))
                 elif not isinstance(v, dict):
                     raise InvalidUpdateError("Received a non-dict value")
                 else:
                     self.value[k] = v
-                    writes.append((self.ns, k, v))
+                    writes.append(PutOp(self.ns, k, v))
         return writes
 
     def update(self, values: Sequence[Update]) -> None:
         if self.store is None:
             self._process_update(values)
         else:
-            return self.store.put(self._process_update(values))
+            return self.store.batch(self._process_update(values))
 
     async def aupdate(self, writes: Sequence[Update]) -> None:
         if self.store is None:
             self._process_update(writes)
         else:
-            return await self.store.aput(self._process_update(writes))
+            return await self.store.abatch(self._process_update(writes))

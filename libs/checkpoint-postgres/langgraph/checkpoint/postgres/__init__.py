@@ -1,29 +1,30 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional, Union
+from typing import Any, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
-from psycopg.rows import dict_row
+from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.postgres.base import (
-    BasePostgresSaver,
-)
+from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
+
+Conn = Union[Connection[DictRow], ConnectionPool[Connection[DictRow]]]
 
 
 @contextmanager
-def _get_connection(conn: Union[Connection, ConnectionPool]) -> Iterator[Connection]:
+def _get_connection(conn: Conn) -> Iterator[Connection[DictRow]]:
     if isinstance(conn, Connection):
         yield conn
     elif isinstance(conn, ConnectionPool):
@@ -38,7 +39,7 @@ class PostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: Union[Connection, ConnectionPool],
+        conn: Conn,
         pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
@@ -84,9 +85,13 @@ class PostgresSaver(BasePostgresSaver):
         """
         with self._cursor() as cur:
             try:
-                version = cur.execute(
+                row = cur.execute(
                     "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                ).fetchone()["v"]
+                ).fetchone()
+                if row is None:
+                    version = -1
+                else:
+                    version = row["v"]
             except UndefinedTable:
                 version = -1
             for v, migration in zip(
@@ -160,15 +165,17 @@ class PostgresSaver(BasePostgresSaver):
                         value["pending_sends"],
                     ),
                     self._load_metadata(value["metadata"]),
-                    {
-                        "configurable": {
-                            "thread_id": value["thread_id"],
-                            "checkpoint_ns": value["checkpoint_ns"],
-                            "checkpoint_id": value["parent_checkpoint_id"],
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": value["thread_id"],
+                                "checkpoint_ns": value["checkpoint_ns"],
+                                "checkpoint_id": value["parent_checkpoint_id"],
+                            }
                         }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None,
+                        if value["parent_checkpoint_id"]
+                        else None
+                    ),
                     self._load_writes(value["pending_writes"]),
                 )
 
@@ -211,7 +218,7 @@ class PostgresSaver(BasePostgresSaver):
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id:
-            args = (thread_id, checkpoint_ns, checkpoint_id)
+            args: tuple[Any, ...] = (thread_id, checkpoint_ns, checkpoint_id)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
         else:
             args = (thread_id, checkpoint_ns)
@@ -239,15 +246,17 @@ class PostgresSaver(BasePostgresSaver):
                         value["pending_sends"],
                     ),
                     self._load_metadata(value["metadata"]),
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["parent_checkpoint_id"],
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": value["parent_checkpoint_id"],
+                            }
                         }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None,
+                        if value["parent_checkpoint_id"]
+                        else None
+                    ),
                     self._load_writes(value["pending_writes"]),
                 )
 
@@ -305,7 +314,7 @@ class PostgresSaver(BasePostgresSaver):
                 self._dump_blobs(
                     thread_id,
                     checkpoint_ns,
-                    copy.pop("channel_values"),
+                    copy.pop("channel_values"),  # type: ignore[misc]
                     new_versions,
                 ),
             )
@@ -325,7 +334,7 @@ class PostgresSaver(BasePostgresSaver):
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: List[tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
@@ -337,9 +346,14 @@ class PostgresSaver(BasePostgresSaver):
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
         """
+        query = (
+            self.UPSERT_CHECKPOINT_WRITES_SQL
+            if all(w[0] in WRITES_IDX_MAP for w in writes)
+            else self.INSERT_CHECKPOINT_WRITES_SQL
+        )
         with self._cursor(pipeline=True) as cur:
             cur.executemany(
-                self.UPSERT_CHECKPOINT_WRITES_SQL,
+                query,
                 self._dump_writes(
                     config["configurable"]["thread_id"],
                     config["configurable"]["checkpoint_ns"],
@@ -350,7 +364,7 @@ class PostgresSaver(BasePostgresSaver):
             )
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor]:
+    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
         with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -372,3 +386,6 @@ class PostgresSaver(BasePostgresSaver):
             else:
                 with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
+
+
+__all__ = ["PostgresSaver", "Conn"]

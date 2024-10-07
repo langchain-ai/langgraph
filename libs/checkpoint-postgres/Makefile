@@ -5,21 +5,34 @@
 ######################
 
 start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait
+	POSTGRES_VERSION=${POSTGRES_VERSION:-16} docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait
 
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down
 
-test:
-	make start-postgres; \
-	poetry run pytest; \
-	EXIT_CODE=$$?; \
+POSTGRES_VERSIONS ?= 15 16
+test_pg_version:
+	@echo "Testing PostgreSQL $(POSTGRES_VERSION)"
+	@POSTGRES_VERSION=$(POSTGRES_VERSION) make start-postgres
+	@poetry run pytest $(TEST)
+	@EXIT_CODE=$$?; \
 	make stop-postgres; \
+	echo "Finished testing PostgreSQL $(POSTGRES_VERSION); Exit code: $$EXIT_CODE"; \
 	exit $$EXIT_CODE
 
+test:
+	@for version in $(POSTGRES_VERSIONS); do \
+		if ! make test_pg_version POSTGRES_VERSION=$$version; then \
+			echo "Test failed for PostgreSQL $$version"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "All PostgreSQL versions tested successfully"
+
+TEST ?= .
 test_watch:
-	make start-postgres; \
-	poetry run ptw .; \
+	POSTGRES_VERSION=${POSTGRES_VERSION:-16} make start-postgres; \
+	poetry run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
@@ -41,7 +54,8 @@ lint lint_diff lint_package lint_tests:
 	poetry run ruff check .
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff check --select I $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
 format format_diff:
 	poetry run ruff format $(PYTHON_FILES)

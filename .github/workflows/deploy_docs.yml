@@ -22,7 +22,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  get-changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-files: ${{ steps.changed-files.outputs.added_modified }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "docs/docs/**"
+
+  run-changed-notebooks:
+    needs: get-changed-files
+    uses: ./.github/workflows/run_notebooks.yml
+    secrets: inherit
+    with:
+      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
+
   deploy:
+    # needs: run-changed-notebooks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,11 +59,48 @@ jobs:
       - name: Install dependencies
         run: |
           poetry install --with docs
+          poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
 
+      - name: Lint Docs
+        # This step lints the docs using the existing linting set up.
+        # It should be very fast and should not require any external services.
+        run: make lint-docs
       - name: Build site
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
+
+      - name: Check links in notebooks
+        env:
+          LANGCHAIN_API_KEY: test
+        run: |
+          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
+            echo "Running link check on all HTML files matching notebooks in docs directory..."
+            poetry run pytest -v \
+              --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+              --check-links-ignore "https://x.com/.*" \
+              --check-links-ignore "https://github\.com/.*" \
+              --check-links-ignore "/.*\.(ipynb|html)$" \
+              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html')
+          else
+            echo "Fetching changes from origin/main..."
+            git fetch origin main
+            echo "Checking for changed notebook files..."
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|docs/site/|; s/\.ipynb$/\/index.html/' || true)
+            echo "Changed files: ${CHANGED_FILES}"
+            if [ -n "${CHANGED_FILES}" ]; then
+              echo "Running link check on HTML files matching changed notebook files..."
+              poetry run pytest -v \
+                --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "https://x.com/.*" \
+                --check-links-ignore "https://github\.com/.*" \
+                --check-links-ignore "/.*\.(ipynb|html)$" \
+                --check-links ${CHANGED_FILES} \
+                || ([ $? = 5 ] && exit 0 || exit $?)
+            else
+              echo "No notebook files changed."
+            fi
+          fi
 
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main'
@@ -59,10 +116,3 @@ jobs:
         if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Deploy Pull Request Preview
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v2
-        with:
-          name: pr-preview-${{ github.event.number }}
-          path: ./docs/site/

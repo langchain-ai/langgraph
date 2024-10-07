@@ -18,16 +18,21 @@ These how-to guides show how to achieve that controllability.
 
 ## Persistence
 
-LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
+LangGraph makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
 
-- [How to add persistence ("memory") to your graph](persistence.ipynb)
-- [How to manage conversation history](memory/manage-conversation-history.ipynb)
-- [How to delete messages](memory/delete-messages.ipynb)
-- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
+- [How to add thread-level persistence to your graph](persistence.ipynb)
+- [How to add cross-thread persistence to your graph](cross-thread-persistence.ipynb)
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
-- [How to share state between threads](memory/shared-state.ipynb)
+
+## Memory
+
+LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) in your graph. These how-to guides show how to implement different strategies for that.
+
+- [How to manage conversation history](memory/manage-conversation-history.ipynb)
+- [How to delete messages](memory/delete-messages.ipynb)
+- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
 
 ## Human in the Loop
 
@@ -50,18 +55,19 @@ These guides show how to use different streaming modes.
 - [How to stream state updates of your graph](stream-updates.ipynb)
 - [How to stream LLM tokens](streaming-tokens.ipynb)
 - [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)
-- [How to stream arbitrarily nested content](streaming-content.ipynb)
+- [How to stream custom data](streaming-content.ipynb)
 - [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
 - [How to stream from subgraphs](streaming-subgraphs.ipynb)
+- [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 
 ## Tool calling
 
 - [How to call tools using ToolNode](tool-calling.ipynb)
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
-- [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
+- [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
@@ -74,7 +80,6 @@ These guides show how to use different streaming modes.
 ## State Management
 
 - [Use Pydantic model as state](state-model.ipynb)
-- [Use a context object in state](state-context-key.ipynb)
 - [Have a separate input and output schema](input_output_schema.ipynb)
 - [Pass private state between nodes inside the graph](pass_private_state.ipynb)
 
@@ -84,10 +89,10 @@ These guides show how to use different streaming modes.
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
 - [How to use a Pydantic model as your state](state-model.ipynb)
-- [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ## Prebuilt ReAct Agent
 
