@@ -5,7 +5,7 @@
 Memory in the context of LLMs and AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and provide more relevant outputs to users.
 This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
-**Short-term memory**, or thread-scoped memory, can be recalled _at any time_ **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state][#state]. State is persisted to a database using a [checkpointer](persistence.md#checkpoints), so the thread can be resumed at any time. Updates to short-term memory are triggered any time you invoke the graph or any time a step completes.
+**Short-term memory**, or thread-scoped memory, can be recalled _at any time_ **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints), so the thread can be resumed at any time. Updates to short-term memory are triggered any time you invoke the graph or any time a step completes.
 
 **Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and in any node. Memories are scoped to any custom namespace, not just within a single thread. LangGraph provides [stores](persistence.md#memory-store) to let you save and recall long-term memories.
 
@@ -64,7 +64,7 @@ def my_node(state: State):
     }
 ```
 
-LangGraph will call the `manage_list` "[reducer][reducer]" function any time an update is returned under the key "my_list". Within that function, we define what types of updates to accept. Typically, messages will be added to the existing list (the conversation will grow); however, we've also added support to accept a dictionary that lets you "keep" certain parts of the state. This lets you programmatically drop old message context.
+LangGraph will call the `manage_list` "[reducer](low_level#reducer)" function any time an update is returned under the key "my_list". Within that function, we define what types of updates to accept. Typically, messages will be added to the existing list (the conversation will grow); however, we've also added support to accept a dictionary that lets you "keep" certain parts of the state. This lets you programmatically drop old message context.
 
 Another common approach is to let you return a list of "remove" objects that specify the IDs of all messages to delete. If you're using the LangChain messages and the [`add_messages`](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages) reducer (or `MessagesState`, which uses the same underlying functionality) in LangGraph, you can do this using a `RemoveMessage`.
 
