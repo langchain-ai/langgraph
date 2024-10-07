@@ -176,7 +176,9 @@ trim_messages(
 
 ## Long-term memory
 
-Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces." You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage.
+Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces." 
+
+Long-term memories are saved in a [store](persistence.md#memory-store). Each memory is a JSON document stored in a custom `namespace` under a distinct `key` in that namespace. You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage. To take the analogy further, the `key` would be akin to the memory's "filename", and the value would contain the contents. This permits arbitrary hierarchical organization of memories while still letting you organize and search memories using content filders to support cross-cutting searches.
 
 ```python
 from langgraph.store.memory import InMemoryStore
