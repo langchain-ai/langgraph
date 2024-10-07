@@ -62,17 +62,7 @@ C = TypeVar("C", bound=BaseConnection)
 class BasePostgresStore(BaseStore, Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
-    __slots__ = ("_deserializer",)
-
-    def __init__(
-        self,
-        *,
-        deserializer: Optional[
-            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
-        ] = None,
-    ) -> None:
-        super().__init__()
-        self._deserializer = deserializer
+    _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
 
     def _get_batch_GET_ops_queries(
         self,
@@ -228,6 +218,8 @@ class BasePostgresStore(BaseStore, Generic[C]):
 
 
 class PostgresStore(BasePostgresStore[Connection]):
+    __slots__ = ("_deserializer",)
+
     def __init__(
         self,
         conn: Connection[Any],
@@ -236,7 +228,8 @@ class PostgresStore(BasePostgresStore[Connection]):
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
     ) -> None:
-        super().__init__(deserializer=deserializer)
+        super().__init__()
+        self._deserializer = deserializer
         self.conn = conn
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
