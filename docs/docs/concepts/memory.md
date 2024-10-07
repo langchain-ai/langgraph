@@ -176,7 +176,21 @@ trim_messages(
 
 ## Long-term memory
 
-Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces."
+Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces." You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage.
+
+```python
+from langgraph.store.memory import InMemoryStore
+
+store = InMemoryStore()
+user_id = "my-user"
+application_context = "chitchat"
+namespace = (user_id, application_contest)
+store.put(namespace, key="a-memory", {"rules": ["User likes short, direct language", "User only speaks English & python"], "my-key": "my-value"})
+# get the "memory" by ID
+item = store.get(namespace)
+# list "memories" within this namespace, filtering on content equivalence
+items = store.search(namespace, filter={"my-key": "my-value"})
+```
 
 When adding long-term memory to your agent, it's important to think about how & how often to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent; each technique has tradeoffs, and the right way to do so depends largely on your application's needs.
 LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application, based on memory [Store](persistence.md#memory-store)'s.
@@ -228,7 +242,7 @@ This approach is not without its downsides, however. You have to think about how
 
 Once you've sorted out memory scheduling, it's important to think about **how to update memory with new information**.
 
-There are two ends of the spectrum: on one hand, you could continuously update a single document (memory profile). On the other, you could only ever insert new documents every time you receive new information. 
+There are two ends of the spectrum: on one hand, you could continuously update a single document (memory profile). On the other, you could only ever insert new documents every time you receive new information.
 
 We will outline some tradeoffs between these two approaches below, understanding that most people will find it most appropriate to combine approaches and to settle on somewhere in the middle.
 
