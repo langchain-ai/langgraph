@@ -1,5 +1,4 @@
 from typing import (
-    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Iterator,
@@ -11,13 +10,11 @@ from typing import (
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
+from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
+from langgraph_sdk.schema import Checkpoint, ThreadState
 
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, StateSnapshot, StreamMode
-
-if TYPE_CHECKING:
-    from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
-    from langgraph_sdk.schema import Checkpoint, ThreadState
 
 
 class RemotePregel(PregelProtocol):
@@ -77,7 +74,7 @@ class RemotePregel(PregelProtocol):
             recurse=recurse,
         )
         for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"graph_id": graph_schema.graph_id})
+            remote_subgraph = self.copy({"graph_id": graph_schema["graph_id"]})
             yield (namespace, remote_subgraph)
 
     async def aget_subgraphs(
@@ -89,7 +86,7 @@ class RemotePregel(PregelProtocol):
             recurse=recurse,
         )
         for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"graph_id": graph_schema.graph_id})
+            remote_subgraph = self.copy({"graph_id": graph_schema["graph_id"]})
             yield (namespace, remote_subgraph)
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
