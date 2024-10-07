@@ -611,7 +611,7 @@ export class ThreadsClient extends BaseClient {
     options?: {
       limit?: number;
       before?: Config;
-      checkpoint?: Checkpoint;
+      checkpoint?: Partial<Omit<Checkpoint, "thread_id">>;
       metadata?: Metadata;
     },
   ): Promise<ThreadState<ValuesType>[]> {
