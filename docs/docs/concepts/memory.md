@@ -2,12 +2,11 @@
 
 ## What is Memory?
 
-Memory in the context of LLMs and AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and provide more relevant outputs to users.
-This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
+Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
-**Short-term memory**, or thread-scoped memory, can be recalled _at any time_ **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints), so the thread can be resumed at any time. Updates to short-term memory are triggered any time you invoke the graph or any time a step completes.
+**Short-term memory**, or [thread](persistence.md#threads)-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Updates to short-term memory occur any time you invoke the graph or any time a step completes. State recalled any time a step begins.
 
-**Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and in any node. Memories are scoped to any custom namespace, not just within a single thread. LangGraph provides [stores](persistence.md#memory-store) to let you save and recall long-term memories.
+**Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and **in any thread**. Memories are scoped to any custom namespace, not just within a single thread ID. LangGraph provides [stores](persistence.md#memory-store) ([reference doc](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.BaseStore)) to let you save and recall long-term memories.
 
 Both are important to understand and implement for your application.
 
@@ -15,13 +14,19 @@ Both are important to understand and implement for your application.
 
 ## Short-term memory
 
-Short-term memory refers to the ability to accurately remember previous turns within a single thread. A thread organizes multiple turns from a single conversation or session, similar to the way an email or slack thread groups messages in a single conversation. Reading from and writing updates to the memory is scoped to within a single thread.
+Short-term memory refers to remembering previous turns within a single conversation thread. LangGraph manages short-term memory as part of the agent's state, which is persisted using checkpoints scoped by the thread ID. For example, in a chatbot, the state would contain the conversation history as a list of messages.
 
-LangGraph agents access short-term memory using checkpointed state. Using chatbots as a common example, the state would contain conversation history as a list of chat messages. Every user request and every assistant response are appended as messages to the state LangGraph saves the state updates in checkpoints scoped by the conversation's distinct [thread](persistence.md#threads) ID. For every subsequent user request, LangGraph can load the state from the appropriate checkpoint so your chatbot can see the entire conversation history.
+However, long conversations pose challenges for LLMs due to context window limitations and performance degradation over long contexts. Managing short-term memory involves balancing precision and recall with latency and cost requirements.
 
-If a user uploads files, if the bot generates code artifacts, or if the agent performs other side-effects, all of these objects could be stored and checkpointed as a part of your graph's state. That way, your bot can access the entire shared context for each conversation while keeping the context for each conversation separate from others.
+Common techniques for managing conversation history include:
+
+Short-term memory lets your application remember previous turns within a single [thread](persistence.md#threads) or conversation. A [thread](persistence.md#threads) organizes multiple turns in a session or interaction, similar to the way an email or slack thread groups messages in a single conversation.
+
+LangGraph manages short-term memory as part of the agent's state, persisted via thread-scoped checkpoints. This state can normally includes the conversation history along with other stateful data, such as uploaded files, generated artifacts, and other results from side-effects. By storing these in the graph's state, the bot can access the full context for a given conversation while maintaining separation between different threads.
 
 Since conversation history is the most common form of representing short-term memory, in the next section, we will cover techniques for managing conversation history when interactions become **long**. If you want to stick to the high-level concepts, continue on to the [long-term memory](#long-term-memory) section.
+
+### Managing long conversation history
 
 Long conversations pose a challenge to today's LLMs. The full history may (a) not even fit inside an LLM's context window, resulting in an irrecoverable error. Even _if_ your LLM technically supports the full context length, most LLMs (b) still perform poorly over long contexts. They get "distracted" by stale or off-topic content, all while suffering from slower response times and higher costs.
 
@@ -175,13 +180,14 @@ trim_messages(
 
 ## Long-term memory
 
-Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces." 
+Long-term memory in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is thread-scoped, long-term memory is saved within custom "namespaces."
 
-Long-term memories are saved in a [store](persistence.md#memory-store). Each memory is a JSON document stored in a custom `namespace` under a distinct `key` in that namespace. You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage. To take the analogy further, the `key` would be akin to the memory's "filename", and the value would contain the contents. This permits arbitrary hierarchical organization of memories while still letting you organize and search memories using content folders to support cross-cutting searches.
+LangGraph stores long-term memories as JSON documents in a [store](persistence.md#memory-store) ([reference doc](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.BaseStore)). Each memory is organized under a custom `namespace` (similar to a folder) and a distinct `key` (like a filename). Namespaces often include user or org IDs or other labels that makes it easier to organize information. This structure enables hierarchical organization of memories. Cross-namespace searching is then supported through content filters. See the example below for an example.
 
 ```python
 from langgraph.store.memory import InMemoryStore
 
+# InMemoryStore saves data to an in-memory dictionary. Use a DB-backed store in production use.
 store = InMemoryStore()
 user_id = "my-user"
 application_context = "chitchat"
@@ -193,7 +199,7 @@ item = store.get(namespace)
 items = store.search(namespace, filter={"my-key": "my-value"})
 ```
 
-When adding long-term memory to your agent, it's important to think about how & how often to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
+When adding long-term memory to your agent, it's important to think about how to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
 LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application, based on memory [Store](persistence.md#memory-store)'s.
 
 Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below for your consideration as you implement long-term memory.
