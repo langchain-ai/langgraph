@@ -69,6 +69,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
         self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
+        loop = asyncio.get_running_loop()
         self.subgraphs = {
             k: v async for k, v in self.graph.aget_subgraphs(recurse=True)
         }
@@ -81,6 +82,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                     auto_offset_reset="earliest",
                     group_id="executor",
                     enable_auto_commit=False,
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -89,6 +91,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
 
             self.producer = await self.stack.enter_async_context(
                 DefaultAsyncProducer(
+                    loop=loop,
                     **self.kwargs,
                 )
             )
