@@ -3,7 +3,6 @@ from typing import (
     AsyncIterator,
     Iterator,
     Optional,
-    Self,
     Sequence,
     Union,
 )
@@ -12,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 from langgraph_sdk.schema import Checkpoint, ThreadState
+from typing_extensions import Self
 
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, StateSnapshot, StreamMode

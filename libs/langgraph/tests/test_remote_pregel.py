@@ -301,26 +301,30 @@ async def test_aget_state():
 def test_get_state_history():
     # set up test
     mock_sync_client = MagicMock()
-    mock_sync_client.threads.get_history.return_value = [{
-        "values": {"messages": [{"type": "human", "content": "hello"}]},
-        "next": None,
-        "checkpoint": {
-            "thread_id": "thread_1",
-            "checkpoint_ns": "ns",
-            "checkpoint_id": "checkpoint_1",
-            "checkpoint_map": {},
-        },
-        "metadata": {},
-        "created_at": "timestamp",
-        "parent_checkpoint": None,
-        "tasks": [],
-    }]
+    mock_sync_client.threads.get_history.return_value = [
+        {
+            "values": {"messages": [{"type": "human", "content": "hello"}]},
+            "next": None,
+            "checkpoint": {
+                "thread_id": "thread_1",
+                "checkpoint_ns": "ns",
+                "checkpoint_id": "checkpoint_1",
+                "checkpoint_map": {},
+            },
+            "metadata": {},
+            "created_at": "timestamp",
+            "parent_checkpoint": None,
+            "tasks": [],
+        }
+    ]
 
     # call method / assertions
     remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
-    state_history_snapshot = list(remote_pregel.get_state_history(config, filter=None, before=None, limit=None))
+    state_history_snapshot = list(
+        remote_pregel.get_state_history(config, filter=None, before=None, limit=None)
+    )
 
     assert len(state_history_snapshot) == 1
     assert state_history_snapshot[0] == StateSnapshot(
@@ -345,27 +349,31 @@ def test_get_state_history():
 async def test_aget_state_history():
     # set up test
     mock_async_client = AsyncMock()
-    mock_async_client.threads.get_history.return_value = [{
-        "values": {"messages": [{"type": "human", "content": "hello"}]},
-        "next": None,
-        "checkpoint": {
-            "thread_id": "thread_1",
-            "checkpoint_ns": "ns",
-            "checkpoint_id": "checkpoint_1",
-            "checkpoint_map": {},
-        },
-        "metadata": {},
-        "created_at": "timestamp",
-        "parent_checkpoint": None,
-        "tasks": [],
-    }]
+    mock_async_client.threads.get_history.return_value = [
+        {
+            "values": {"messages": [{"type": "human", "content": "hello"}]},
+            "next": None,
+            "checkpoint": {
+                "thread_id": "thread_1",
+                "checkpoint_ns": "ns",
+                "checkpoint_id": "checkpoint_1",
+                "checkpoint_map": {},
+            },
+            "metadata": {},
+            "created_at": "timestamp",
+            "parent_checkpoint": None,
+            "tasks": [],
+        }
+    ]
 
     # call method / assertions
     remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_history_snapshot = []
-    async for state_snapshot in remote_pregel.aget_state_history(config, filter=None, before=None, limit=None):
+    async for state_snapshot in remote_pregel.aget_state_history(
+        config, filter=None, before=None, limit=None
+    ):
         state_history_snapshot.append(state_snapshot)
 
     assert len(state_history_snapshot) == 1
@@ -450,7 +458,7 @@ def test_stream():
     mock_sync_client.runs.stream.return_value = [
         {"chunk": "data1"},
         {"chunk": "data2"},
-        {"chunk": "data3"}
+        {"chunk": "data3"},
     ]
 
     # call method / assertions
@@ -468,7 +476,7 @@ async def test_astream():
     mock_async_client.runs.stream.return_value.__aiter__.return_value = [
         {"chunk": "data1"},
         {"chunk": "data2"},
-        {"chunk": "data3"}
+        {"chunk": "data3"},
     ]
 
     # call method / assertions
@@ -484,13 +492,17 @@ async def test_astream():
 def test_invoke():
     # set up test
     mock_sync_client = MagicMock()
-    mock_sync_client.runs.wait.return_value = {"values": {"messages": [{"type": "human", "content": "world"}]}}
+    mock_sync_client.runs.wait.return_value = {
+        "values": {"messages": [{"type": "human", "content": "world"}]}
+    }
 
     # call method / assertions
     remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    result = remote_pregel.invoke({"input": {"messages": [{"type": "human", "content": "hello"}]}}, config)
+    result = remote_pregel.invoke(
+        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
+    )
 
     assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
 
@@ -499,12 +511,16 @@ def test_invoke():
 async def test_ainvoke():
     # set up test
     mock_async_client = AsyncMock()
-    mock_async_client.runs.wait.return_value = {"values": {"messages": [{"type": "human", "content": "world"}]}}
+    mock_async_client.runs.wait.return_value = {
+        "values": {"messages": [{"type": "human", "content": "world"}]}
+    }
 
     # call method / assertions
     remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    result = await remote_pregel.ainvoke({"input": {"messages": [{"type": "human", "content": "hello"}]}}, config)
+    result = await remote_pregel.ainvoke(
+        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
+    )
 
     assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
