@@ -611,6 +611,7 @@ export class ThreadsClient extends BaseClient {
     options?: {
       limit?: number;
       before?: Config;
+      checkpoint?: Checkpoint;
       metadata?: Metadata;
     },
   ): Promise<ThreadState<ValuesType>[]> {
@@ -622,6 +623,7 @@ export class ThreadsClient extends BaseClient {
           limit: options?.limit ?? 10,
           before: options?.before,
           metadata: options?.metadata,
+          checkpoint: options?.checkpoint,
         },
       },
     );
