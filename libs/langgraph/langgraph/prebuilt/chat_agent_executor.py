@@ -310,8 +310,6 @@ def create_react_agent(
             - "remove_tool_calls": modify AIMessages to remove tool_calls that do not have corresponding ToolMessages
             - "add_tool_messages": add a ToolMessage for each unanswered tool call, following each AIMessage with unanswered tool calls
             - False: do nothing (default)
-        checkpointer: An optional checkpoint saver object. This is useful for persisting
-            the state of the graph (e.g., as chat memory).
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
