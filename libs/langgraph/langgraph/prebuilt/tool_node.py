@@ -114,17 +114,32 @@ class ToolNode(RunnableCallable):
     a list of ToolMessages, one for each tool call.
 
     Args:
-        tools (Sequence[Union[BaseTool, Callable]]): A sequence of tools that can be invoked.
-        name (str, optional): The name of the node, defaults to "tools"
-        tags (list[str], optional): Tags to associate with the node
-        handle_tool_errors (union(callable, str, bool), optional): How to handle tool errors
-            raised by tools inside the node. If False then errors will be raised unless dealt with by individual
-            tools. If True, default error handler will be used. If string or callable, ToolMessage
-            will be returned with correspopnding content.
-        handle_validation_errors (union(callable, str, bool), optional): How to handle validation errors
-            raised by tools inside the node. If False then errors will be raised unless dealt with by individual
-            tools. If True, default error handler will be used. If string or callable, ToolMessage
-            will be returned with correspopnding content.
+        tools: A sequence of tools that can be invoked.
+        name: The name of the node, defaults to "tools"
+        tags: Tags to associate with the node
+        handle_tool_errors: How to handle tool errors raised by tools inside the node. Defaults to "all".
+            Must be one of the following:
+
+            - "all": all non-validation errors will be caught and
+                a ToolMessage with a default error message (TOOL_CALL_ERROR_TEMPLATE) will be returned.
+            - True: ToolExceptions will be caught and
+                a ToolMessage with a default error message (TOOL_CALL_ERROR_TEMPLATE) will be returned.
+            - str: ToolExceptions will be caught and
+                a ToolMessage with the string value of 'handle_tool_errors' will be returned.
+            - Callable[[ToolException], str]: ToolExceptions will be caught and
+                a ToolMessage with the string value of the result of the 'handle_tool_errors' callable will be returned.
+            - False: none of the errors raised by the tools will be caught
+
+        handle_validation_errors: How to handle validation errors raised by tools inside the node. Defaults to True.
+            Must be one of the following:
+
+            - True: ValidationErrors will be caught and
+                a ToolMessage with a default error message (TOOL_CALL_ERROR_TEMPLATE) will be returned.
+            - str: ValidationErrors will be caught and
+                a ToolMessage with the string value of 'handle_validation_errors' will be returned.
+            - Callable[[ValidationError], str]: ValidationErrors will be caught and
+                a ToolMessage with the string value of the result of the 'handle_validation_errors' callable will be returned.
+            - False: none of the errors raised by the tools will be caught
 
     The `ToolNode` is roughly analogous to:
 
@@ -153,11 +168,11 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
-        handle_tool_errors: Optional[
-            Union[bool, str, Callable[[ToolException], str]]
-        ] = True,
-        handle_validation_errors: Optional[
-            Union[bool, str, Callable[[ValidationError], str]]
+        handle_tool_errors: Union[
+            Literal["all"], bool, str, Callable[[ToolException], str]
+        ] = "all",
+        handle_validation_errors: Union[
+            bool, str, Callable[[ValidationError], str]
         ] = True,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
@@ -248,10 +263,21 @@ class ToolNode(RunnableCallable):
             if not self.handle_tool_errors:
                 error_to_raise = e
             else:
-                content = _handle_tool_error(e, flag=self.handle_tool_errors)
+                flag = (
+                    True
+                    if self.handle_tool_errors == "all"
+                    else self.handle_tool_errors
+                )
+                content = _handle_tool_error(e, flag=flag)
+        except Exception as e:
+            if self.handle_tool_errors != "all":
+                error_to_raise = e
+            else:
+                content = _handle_tool_error(e, flag=True)
 
         if error_to_raise:
             raise error_to_raise
+
         return ToolMessage(
             content=content, name=call["name"], tool_call_id=call["id"], status="error"
         )
@@ -270,11 +296,6 @@ class ToolNode(RunnableCallable):
                 Union[str, list], msg_content_output(tool_message.content)
             )
             return tool_message
-        except ToolException as e:
-            if not self.handle_tool_errors:
-                error_to_raise = e
-            else:
-                content = _handle_tool_error(e, flag=self.handle_tool_errors)
         except ValidationError as e:
             if not self.handle_validation_errors:
                 error_to_raise = e
@@ -282,8 +303,25 @@ class ToolNode(RunnableCallable):
                 content = _handle_validation_error(
                     e, flag=self.handle_validation_errors
                 )
+        except ToolException as e:
+            if not self.handle_tool_errors:
+                error_to_raise = e
+            else:
+                flag = (
+                    True
+                    if self.handle_tool_errors == "all"
+                    else self.handle_tool_errors
+                )
+                content = _handle_tool_error(e, flag=flag)
+        except Exception as e:
+            if self.handle_tool_errors != "all":
+                error_to_raise = e
+            else:
+                content = _handle_tool_error(e, flag=True)
+
         if error_to_raise:
             raise error_to_raise
+
         return ToolMessage(
             content=content, name=call["name"], tool_call_id=call["id"], status="error"
         )
