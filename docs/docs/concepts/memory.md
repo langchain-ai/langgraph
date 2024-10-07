@@ -178,7 +178,7 @@ trim_messages(
 
 Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces." 
 
-Long-term memories are saved in a [store](persistence.md#memory-store). Each memory is a JSON document stored in a custom `namespace` under a distinct `key` in that namespace. You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage. To take the analogy further, the `key` would be akin to the memory's "filename", and the value would contain the contents. This permits arbitrary hierarchical organization of memories while still letting you organize and search memories using content filders to support cross-cutting searches.
+Long-term memories are saved in a [store](persistence.md#memory-store). Each memory is a JSON document stored in a custom `namespace` under a distinct `key` in that namespace. You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage. To take the analogy further, the `key` would be akin to the memory's "filename", and the value would contain the contents. This permits arbitrary hierarchical organization of memories while still letting you organize and search memories using content folders to support cross-cutting searches.
 
 ```python
 from langgraph.store.memory import InMemoryStore
@@ -194,21 +194,21 @@ item = store.get(namespace)
 items = store.search(namespace, filter={"my-key": "my-value"})
 ```
 
-When adding long-term memory to your agent, it's important to think about how & how often to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent; each technique has tradeoffs, and the right way to do so depends largely on your application's needs.
+When adding long-term memory to your agent, it's important to think about how & how often to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
 LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application, based on memory [Store](persistence.md#memory-store)'s.
 
 Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below for your consideration as you implement long-term memory.
 
 **Do you want to write memories "in the hot path" or "in the background"**
 
-Memory can be updated either as part of your primary application logic (e.g. "in the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each appproach in [how to update memory](#how-to-update-memory)
+Memory can be updated either as part of your primary application logic (e.g. "in the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each approach in [how to update memory](#how-to-update-memory)
 
 **Do you want to manage memories as a single profile or as a list of events?**
 
-Managing memories as a single, continuously updated "profile" or "schema" is useful when there is well-scoped, specific information you want to remember about a user, organization, or other entity (including the agent itself). You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions. Querying the "memory" is easy since it's a simple GET operation on a JSON document.We explain this in more detail in [remember a profile](#remember-a-profile). This technique can provide higher precision (on known information use cases) at the expense of lower recall (since you have to anticipate and model your domain, and updates to the doc tend to delete or rewrite away old information at a greater frequency).
+Managing memories as a single, continuously updated "profile" or "schema" is useful when there is well-scoped, specific information you want to remember about a user, organization, or other entity (including the agent itself). You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions. Querying the "memory" is easy since it's a simple GET operation on a JSON document.We explain this in more detail in [remember a profile](#manage-individual-profiles). This technique can provide higher precision (on known information use cases) at the expense of lower recall (since you have to anticipate and model your domain, and updates to the doc tend to delete or rewrite away old information at a greater frequency).
 
 Managing long-term memory as a collection of documents, on the other hand, lets you store an unbounded amount of information. This technique is useful when you want to repeatedly extract & remember items over a long time horizon but can be more complicated to query and manage over time.
-Similar to the "profile" memory, you still define schema(s) for each memory. Rather than overwriting a single document, you instead will insert new ones (and potentially update or re-contextualize existing ones in the process). We explain this approach in more detail in [remember a list](#remember-a-list)
+Similar to the "profile" memory, you still define schema(s) for each memory. Rather than overwriting a single document, you instead will insert new ones (and potentially update or re-contextualize existing ones in the process). We explain this approach in more detail in [remember a list](#manage-a-collection-of-memories)
 
 **Do you want to present memories to your agent as updated instructions or as few-shot examples?**
 
@@ -260,7 +260,7 @@ The larger the document, the more error-prone this can become. If your document 
 
 Saving memories as an collection documents simplifies some things. Each individual memory can be more narrowly scoped and easier to generate. It also means you're less likely to **lose** information over time, since it's easier for an LLM to generate _new_ objects for new information than it is for it to reconcile that new information with information in a dense profile. This tends to lead to higher recall downstream.
 
-This approach shifts some complexity to how you prompt the LLM to apply memory updates. You now have to enable the LLM to _delete_ or _update_ existing items in the list. This can be tricky to prompt the LLM to do. Some LLMs may default to over-inserting; others may default to over-updating. Tuning the behavior here is best done through evals, somethign you can do with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation).
+This approach shifts some complexity to how you prompt the LLM to apply memory updates. You now have to enable the LLM to _delete_ or _update_ existing items in the list. This can be tricky to prompt the LLM to do. Some LLMs may default to over-inserting; others may default to over-updating. Tuning the behavior here is best done through evals, something you can do with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation).
 
 This also shifts complexity to memory **search** (recall). You have to think about what relevant items to use. Right now we support filtering by metadata. We will be adding semantic search shortly.
 
@@ -310,7 +310,3 @@ def update_instructions(state: State, store: BaseStore):
 Sometimes it's easier to "show" than "tell." LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
 
 Note that the memory store is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets) to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
-
-## Fin
-
-Thank you for reading! This doc just scratches the surface of how to think about memory in LangGraph. Please comment below with more challenges you've run into using memory in production.
