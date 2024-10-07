@@ -5,9 +5,9 @@
 Memory in the context of LLMs and AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and provide more relevant outputs to users.
 This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
-**Short-term memory**, or thread-scoped memory, can be recalled _at any time_ **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints), so the thread can be resumed at any time. Updates to short-term memory are triggered any time you invoke the graph or any time a step completes.
+**Short-term memory**, or thread-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Updates to short-term memory occur any time you invoke the graph or any time a step completes. State recalled any time a step begins.
 
-**Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and in any node. Memories are scoped to any custom namespace, not just within a single thread. LangGraph provides [stores](persistence.md#memory-store) to let you save and recall long-term memories.
+**Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and **in any thread**. Memories are scoped to any custom namespace, not just within a single thread ID. LangGraph provides [stores](persistence.md#memory-store) to let you save and recall long-term memories.
 
 Both are important to understand and implement for your application.
 
