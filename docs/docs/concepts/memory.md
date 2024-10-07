@@ -2,8 +2,7 @@
 
 ## What is Memory?
 
-Memory in the context of LLMs and AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and provide more relevant outputs to users.
-This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
+Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
 **Short-term memory**, or [thread](persistence.md#threads)-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Updates to short-term memory occur any time you invoke the graph or any time a step completes. State recalled any time a step begins.
 
@@ -175,7 +174,7 @@ trim_messages(
 
 ## Long-term memory
 
-Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces." 
+Long-term memory refers to the ability of a system to remember information across different conversations (or sessions). While short-term memory is always scoped to a "thread", long-term memory is saved within custom scopes, or "namespaces."
 
 Long-term memories are saved in a [store](persistence.md#memory-store). Each memory is a JSON document stored in a custom `namespace` under a distinct `key` in that namespace. You can think of namespaces like "folders" or "directories" on your computer. They're one way of organizing information into arbitrary collections. Common things to include in a namespace would be a user or organiation ID, a schema type, or other contextual information that makes it easier to manage. To take the analogy further, the `key` would be akin to the memory's "filename", and the value would contain the contents. This permits arbitrary hierarchical organization of memories while still letting you organize and search memories using content folders to support cross-cutting searches.
 
