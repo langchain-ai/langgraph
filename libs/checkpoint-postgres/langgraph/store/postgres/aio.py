@@ -18,6 +18,7 @@ from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 
 from langgraph.store.base import GetOp, ListNamespacesOp, Op, PutOp, Result, SearchOp
+from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.postgres.base import (
     BasePostgresStore,
     Row,
@@ -29,7 +30,9 @@ from langgraph.store.postgres.base import (
 logger = logging.getLogger(__name__)
 
 
-class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
+class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[AsyncConnection]):
+    __slots__ = ("_deserializer",)
+
     def __init__(
         self,
         conn: AsyncConnection[Any],
@@ -38,7 +41,8 @@ class AsyncPostgresStore(BasePostgresStore[AsyncConnection]):
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
     ) -> None:
-        super().__init__(deserializer=deserializer)
+        super().__init__()
+        self._deserializer = deserializer
         self.conn = conn
         self.conn = conn
         self.loop = asyncio.get_running_loop()
