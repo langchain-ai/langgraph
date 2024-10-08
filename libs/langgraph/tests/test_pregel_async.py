@@ -9944,15 +9944,19 @@ async def test_debug_nested_subgraphs():
         (AnyStr("gp_two:"), AnyStr("p_two:")),
     ]
 
-    history_ns = {
-        ns: [
-            c
-            async for c in graph.aget_state_history(
-                {"configurable": {"thread_id": "1", "checkpoint_ns": "|".join(ns)}}
-            )
-        ][::-1]
-        for ns in stream_ns.keys()
-    }
+    history_ns = {}
+    for ns in stream_ns.keys():
+
+        async def get_history():
+            history = [
+                c
+                async for c in graph.aget_state_history(
+                    {"configurable": {"thread_id": "1", "checkpoint_ns": "|".join(ns)}}
+                )
+            ]
+            return history[::-1]
+
+        history_ns[ns] = await get_history()
 
     def normalize_config(config: Optional[dict]) -> Optional[dict]:
         if config is None:
