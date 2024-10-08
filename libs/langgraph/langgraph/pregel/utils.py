@@ -34,7 +34,7 @@ def find_subgraph_pregel(candidate: Runnable) -> Optional[Runnable]:
         if (
             isinstance(c, Pregel)
             # subgraphs that disabled checkpointing are not considered
-            and candidate.checkpointer is not False
+            and c.checkpointer is not False
         ):
             return c
         elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
