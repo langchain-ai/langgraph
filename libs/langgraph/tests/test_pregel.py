@@ -11634,7 +11634,7 @@ def test_debug_subgraphs():
 
     assert len(checkpoint_events) == len(checkpoint_history)
 
-    def normalize_config(config: dict | None) -> dict | None:
+    def normalize_config(config: Optional[dict]) -> Optional[dict]:
         if config is None:
             return None
         return config["configurable"]
