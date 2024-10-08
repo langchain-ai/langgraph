@@ -15,9 +15,7 @@ from typing import (
 )
 from uuid import UUID
 
-from langchain_core.runnables import RunnableLambda, RunnableSequence
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.utils import get_function_nonlocals
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
@@ -32,8 +30,8 @@ from langgraph.constants import (
     TAG_HIDDEN,
 )
 from langgraph.pregel.io import read_channels
+from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
-from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 
 class TaskPayload(TypedDict):
@@ -157,29 +155,7 @@ def map_debug_checkpoint(
     task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
 
     for task in tasks:
-        subgraph = None
-        candidates = [task.proc]
-        for c in candidates:
-            # Cannot do isinstance(c, Pregel) due to circular imports
-            if "Pregel" in [t.__name__ for t in type(c).__mro__]:
-                subgraph = c
-
-            if isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
-                candidates.extend(c.steps)
-            elif isinstance(c, RunnableLambda):
-                candidates.extend(c.deps)
-            elif isinstance(c, RunnableCallable):
-                if c.func is not None:
-                    candidates.extend(
-                        nl.__self__ if hasattr(nl, "__self__") else nl
-                        for nl in get_function_nonlocals(c.func)
-                    )
-                if c.afunc is not None:
-                    candidates.extend(
-                        nl.__self__ if hasattr(nl, "__self__") else nl
-                        for nl in get_function_nonlocals(c.afunc)
-                    )
-        if not subgraph:
+        if not find_subgraph_pregel(task.proc):
             continue
 
         # assemble checkpoint_ns for this task
