@@ -26,11 +26,16 @@ def get_new_channel_versions(
 
 
 def find_subgraph_pregel(candidate: Runnable) -> Optional[Runnable]:
+    from langgraph.pregel import Pregel
+
     candidates: list[Runnable] = [candidate]
 
     for c in candidates:
-        # Cannot do isinstance(c, Pregel) due to circular imports
-        if "Pregel" in [t.__name__ for t in type(c).__mro__]:
+        if (
+            isinstance(c, Pregel)
+            # subgraphs that disabled checkpointing are not considered
+            and candidate.checkpointer is not False
+        ):
             return c
         elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
             candidates.extend(c.steps)
