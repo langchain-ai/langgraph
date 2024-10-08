@@ -686,32 +686,33 @@ async def test_tool_node():
     assert tool_message.content == "foo"
     assert tool_message.tool_call_id == "some 7"
 
-    result_individual_validation_error_handler = ToolNode(
-        [tool6], handle_validation_errors="bar"
-    ).invoke(
-        {
-            "messages": [
-                AIMessage(
-                    "hi?",
-                    tool_calls=[
-                        {
-                            "name": "tool6",
-                            "args": {"some_val": 0},
-                            "id": "some 8",
-                        }
-                    ],
-                )
-            ]
-        }
-    )
+    if IS_LANGCHAIN_CORE_030_OR_GREATER:
+        result_individual_validation_error_handler = ToolNode(
+            [tool6], handle_validation_errors="bar"
+        ).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool6",
+                                "args": {"some_val": 0},
+                                "id": "some 8",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
 
-    tool_message: ToolMessage = result_individual_validation_error_handler["messages"][
-        -1
-    ]
-    assert tool_message.type == "tool"
-    assert tool_message.status == "error"
-    assert tool_message.content == "foo"
-    assert tool_message.tool_call_id == "some 8"
+        tool_message: ToolMessage = result_individual_validation_error_handler[
+            "messages"
+        ][-1]
+        assert tool_message.type == "tool"
+        assert tool_message.status == "error"
+        assert tool_message.content == "foo"
+        assert tool_message.tool_call_id == "some 8"
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
