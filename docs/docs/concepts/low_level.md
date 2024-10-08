@@ -338,7 +338,7 @@ LangGraph provides built-in document storage through the [BaseStore][langgraph.s
 
 LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
 
-- For s at the end of the graph (i.e. not interrupted) you can change the entire topology of the graph (i.e. all nodes and edges, remove, add, rename, etc)
+- For threads at the end of the graph (i.e. not interrupted) you can change the entire topology of the graph (i.e. all nodes and edges, remove, add, rename, etc)
 - For threads currently interrupted, we support all topology changes other than renaming / removing nodes (as that thread could now be about to enter a node that no longer exists) -- if this is a blocker please reach out and we can prioritize a solution.
 - For modifying state, we have full backwards and forwards compatibility for adding and removing keys
 - State keys that are renamed lose their saved state in existing threads
