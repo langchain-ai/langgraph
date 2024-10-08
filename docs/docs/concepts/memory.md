@@ -193,16 +193,18 @@ item = store.get(namespace)
 items = store.search(namespace, filter={"my-key": "my-value"})
 ```
 
-When adding long-term memory to your agent, it's important to think about how to **write memories**, how to **stores and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
+When adding long-term memory to your agent, it's important to think about how to **write memories**, how to **store and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
 LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application, based on memory [Store](persistence.md#memory-store)'s.
 
 Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below for your consideration as you implement long-term memory.
 
-**Do you want to write memories "in the hot path" or "in the background"**
+**Do you want to write memories "on the hot path" or "in the background"**
 
-Memory can be updated either as part of your primary application logic (e.g. "in the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each approach in [the writing memories section below](#writing-memories).
+Memory can be updated either as part of your primary application logic (e.g. "on the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each approach in [the writing memories section below](#writing-memories).
 
 **Do you want to manage memories as a single profile or as a collection of documents?**
+
+We provide two main approaches to managing long-term memory: a single, continuously updated document (referred to as a "profile" or "schema") or a collection of documents. Each method offers its own benefits, depending on the type of information you need to store and how you intend to access it.
 
 Managing memories as a single, continuously updated "profile" or "schema" is useful when there is well-scoped, specific information you want to remember about a user, organization, or other entity (including the agent itself). You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions. Querying the "memory" is easy since it's a simple GET operation on a JSON document. We explain this in more detail in [remember a profile](#manage-individual-profiles). This technique can provide higher precision (on known information use cases) at the expense of lower recall (since you have to anticipate and model your domain, and updates to the doc tend to delete or rewrite away old information at a greater frequency).
 
@@ -221,7 +223,7 @@ We will expand on techniques for writing, managing, and recalling & formatting m
 
 ### Writing memories
 
-Humans form long-term memories when we sleep, but when and how should our agents create new memories? The two most common ways we see agents write memories are "in the hot path" and "in the background".
+Humans form long-term memories when we sleep, but when and how should our agents create new memories? The two most common ways we see agents write memories are "on the hot path" and "in the background".
 
 ![](img/memory/hot_path_vs_background.png)
 
@@ -243,7 +245,7 @@ This approach is not without its downsides, however. You have to think about how
 
 Once you've sorted out memory scheduling, it's important to think about **how to update memory with new information**.
 
-There are two ends of the spectrum: on one hand, you could continuously update a single document (memory profile). On the other, you could only ever insert new documents every time you receive new information.
+There are two main approaches: you can either continuously update a single document (memory profile) or insert new documents each time you receive new information.
 
 We will outline some tradeoffs between these two approaches below, understanding that most people will find it most appropriate to combine approaches and to settle somewhere in the middle.
 
