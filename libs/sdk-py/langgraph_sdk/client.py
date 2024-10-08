@@ -1057,7 +1057,7 @@ class ThreadsClient:
     async def update_state(
         self,
         thread_id: str,
-        values: dict,
+        values: Optional[Union[dict, Sequence[dict]]],
         *,
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3118,7 +3118,7 @@ class SyncThreadsClient:
     def update_state(
         self,
         thread_id: str,
-        values: dict,
+        values: Optional[Union[dict, Sequence[dict]]],
         *,
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
