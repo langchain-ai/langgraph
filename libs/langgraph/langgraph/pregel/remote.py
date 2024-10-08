@@ -136,7 +136,9 @@ class RemotePregel(PregelProtocol):
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
                     interrupts=tuple(interrupts),
-                    state=self._create_state_snapshot(task["state"]) if task["state"] else None,
+                    state=self._create_state_snapshot(task["state"])
+                    if task["state"]
+                    else None,
                 )
             )
 

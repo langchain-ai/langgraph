@@ -58,8 +58,12 @@ def test_get_graph():
     drawable_graph = remote_pregel.get_graph()
 
     assert drawable_graph.nodes == {
-        "__start__": DrawableNode(id="__start__", name="__start__", data="__start__", metadata=None),
-        "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
+        "__start__": DrawableNode(
+            id="__start__", name="__start__", data="__start__", metadata=None
+        ),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
             name="agent",
@@ -105,8 +109,12 @@ async def test_aget_graph():
     drawable_graph = await remote_pregel.aget_graph()
 
     assert drawable_graph.nodes == {
-        "__start__": DrawableNode(id="__start__", name="__start__", data="__start__", metadata=None),
-        "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
+        "__start__": DrawableNode(
+            id="__start__", name="__start__", data="__start__", metadata=None
+        ),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
             name="agent",
