@@ -182,7 +182,11 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
 
 
 class BaseStore(ABC):
-    """Abstract base class for key-value stores."""
+    """Abstract base class for persistent key-value stores.
+
+    Stores enable persistence and memory that can be shared across threads,
+    scoped to user IDs, assistant IDs, or other arbitrary namespaces.
+    """
 
     __slots__ = ("__weakref__",)
 

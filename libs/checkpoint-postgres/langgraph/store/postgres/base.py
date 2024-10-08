@@ -155,8 +155,10 @@ class BasePostgresStore(BaseStore, Generic[C]):
                         filter_conditions.append("value->%s = %s::jsonb")
                         params.extend([key, json.dumps(value)])
                 query += " AND " + " AND ".join(filter_conditions)
-
-            query += " LIMIT %s OFFSET %s"
+            
+            # Note: we will need to not do this if sim/keyword search
+            # is used
+            query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
 
             queries.append((query, params))
