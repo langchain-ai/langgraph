@@ -77,15 +77,6 @@ plugins:
             options:
               filters:
                 - "!^_"
-  - mkdocs-jupyter:
-      ignore_h1_titles: true
-      execute: false
-      include_source: True
-      include_requirejs: true
-  - exclude:
-      glob:
-        - tutorials/llm-compiler/math_tools.py
-        - tutorials/llm-compiler/output_parser.py
 nav:
   - "index.md"
   - Tutorials:
@@ -328,7 +319,8 @@ markdown_extensions:
   - github-callouts
 extra_css:
   - css/mkdocstrings.css
-
+hooks:
+  - _scripts/notebook_hooks.py
 extra:
   social:
     - icon: fontawesome/brands/js
