@@ -5655,7 +5655,14 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     },
                     "parent_config": None,
                     "next": ["__start__"],
-                    "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
+                    "tasks": [
+                        {
+                            "id": AnyStr(),
+                            "name": "__start__",
+                            "interrupts": (),
+                            "state": None,
+                        }
+                    ],
                 },
             },
             {
@@ -5696,7 +5703,14 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         },
                     },
                     "next": ["prepare"],
-                    "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
+                    "tasks": [
+                        {
+                            "id": AnyStr(),
+                            "name": "prepare",
+                            "interrupts": (),
+                            "state": None,
+                        }
+                    ],
                 },
             },
             {
@@ -5761,7 +5775,12 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     },
                     "next": ["tool_two_slow"],
                     "tasks": [
-                        {"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}
+                        {
+                            "id": AnyStr(),
+                            "name": "tool_two_slow",
+                            "interrupts": (),
+                            "state": None,
+                        }
                     ],
                 },
             },
@@ -5826,7 +5845,14 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         },
                     },
                     "next": ["finish"],
-                    "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
+                    "tasks": [
+                        {
+                            "id": AnyStr(),
+                            "name": "finish",
+                            "interrupts": (),
+                            "state": None,
+                        }
+                    ],
                 },
             },
             {
@@ -5937,7 +5963,14 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     },
                     "parent_config": None,
                     "next": ["__start__"],
-                    "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
+                    "tasks": [
+                        {
+                            "id": AnyStr(),
+                            "name": "__start__",
+                            "interrupts": (),
+                            "state": None,
+                        }
+                    ],
                 },
             },
             {
@@ -5978,7 +6011,14 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         },
                     },
                     "next": ["prepare"],
-                    "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
+                    "tasks": [
+                        {
+                            "id": AnyStr(),
+                            "name": "prepare",
+                            "interrupts": (),
+                            "state": None,
+                        }
+                    ],
                 },
             },
             {
@@ -6043,7 +6083,12 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     },
                     "next": ["tool_two_slow"],
                     "tasks": [
-                        {"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}
+                        {
+                            "id": AnyStr(),
+                            "name": "tool_two_slow",
+                            "interrupts": (),
+                            "state": None,
+                        }
                     ],
                 },
             },

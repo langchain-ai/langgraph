@@ -6996,11 +6996,14 @@ def test_branch_then(
     # test stream_mode=debug
     tool_two = tool_two_graph.compile(checkpointer=checkpointer)
     thread10 = {"configurable": {"thread_id": "10"}}
-    assert [
+    
+    res = [
         *tool_two.stream(
             {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
         )
-    ] == [
+    ]
+    
+    assert res == [
         {
             "type": "checkpoint",
             "timestamp": AnyStr(),
@@ -7026,7 +7029,7 @@ def test_branch_then(
                 },
                 "parent_config": None,
                 "next": ["__start__"],
-                "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
+                "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": (), "state": None}],
             },
         },
         {
@@ -7067,7 +7070,7 @@ def test_branch_then(
                     },
                 },
                 "next": ["prepare"],
-                "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
+                "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": (), "state": None}],
             },
         },
         {
@@ -7131,7 +7134,7 @@ def test_branch_then(
                     },
                 },
                 "next": ["tool_two_slow"],
-                "tasks": [{"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}],
+                "tasks": [{"id": AnyStr(), "name": "tool_two_slow", "interrupts": (), "state": None}],
             },
         },
         {
@@ -7195,7 +7198,7 @@ def test_branch_then(
                     },
                 },
                 "next": ["finish"],
-                "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
+                "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": (), "state": None}],
             },
         },
         {
