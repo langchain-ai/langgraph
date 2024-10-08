@@ -1,13 +1,10 @@
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
 from langchain_core.runnables.utils import get_function_nonlocals
 
 from langgraph.checkpoint.base import ChannelVersions
 from langgraph.utils.runnable import Runnable, RunnableCallable, RunnableSeq
-
-if TYPE_CHECKING:
-    from langgraph.pregel import Pregel
 
 
 def get_new_channel_versions(
@@ -28,7 +25,7 @@ def get_new_channel_versions(
     return new_versions
 
 
-def find_subgraph_pregel(candidate: Runnable) -> Optional[Pregel]:
+def find_subgraph_pregel(candidate: Runnable) -> Optional[Runnable]:
     candidates: list[Runnable] = [candidate]
 
     for c in candidates:

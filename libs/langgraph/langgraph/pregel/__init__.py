@@ -390,7 +390,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     continue
 
             # find the subgraph, if any
-            graph: Optional[Pregel] = find_subgraph_pregel(node.bound)
+            graph = cast(Optional[Pregel], find_subgraph_pregel(node.bound))
 
             # if found, yield recursively
             if graph:
