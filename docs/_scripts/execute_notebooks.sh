@@ -1,20 +1,25 @@
 #!/bin/bash
 
+# Set the concurrency level (default: 4)
+CONCURRENCY=${CONCURRENCY:-4}
+
 # Read the list of notebooks to skip from the JSON file
 SKIP_NOTEBOOKS=$(python -c "import json; print('\n'.join(json.load(open('docs/notebooks_no_execution.json'))))")
 
 # Function to execute a single notebook
 execute_notebook() {
-    file="$1"
+    local file="$1"
     echo "Starting execution of $file"
     start_time=$(date +%s)
-    if ! output=$(time poetry run jupyter execute "$file" 2>&1); then
+
+    if ! output=$(poetry run jupyter execute "$file" 2>&1); then
         end_time=$(date +%s)
         execution_time=$((end_time - start_time))
         echo "Error in $file. Execution time: $execution_time seconds"
-        echo "Error details: $output"
-        exit 1
+        echo "Error details: $output" >&2
+        return 1
     fi
+
     end_time=$(date +%s)
     execution_time=$((end_time - start_time))
     echo "Finished $file. Execution time: $execution_time seconds"
@@ -30,7 +35,33 @@ else
     notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
 fi
 
-# Execute notebooks sequentially
-for file in $notebooks; do
-    execute_notebook "$file"
+# Display the found notebooks in a more readable way
+echo "====================================="
+echo "Notebooks to be executed:"
+echo "====================================="
+for notebook in $notebooks; do
+    echo "- $notebook"
 done
+
+echo
+echo "================================================================="
+echo "Starting notebook execution with concurrency level: $CONCURRENCY"
+echo "================================================================="
+echo
+
+# Run notebooks in parallel with controllable concurrency
+echo "$notebooks" | xargs -n 1 -P "$CONCURRENCY" bash -c 'execute_notebook "$@"' _
+
+# Check exit status and handle any errors
+if [ $? -ne 0 ]; then
+    echo "====================================="
+    echo "One or more notebooks failed to execute."
+    echo "====================================="
+    echo >&2
+    exit 1
+fi
+
+echo
+echo "====================================="
+echo "All notebooks processed successfully."
+echo "====================================="
