@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
 C = TypeVar("C", bound=BaseConnection)
 
 
-class BasePostgresStore(BaseStore, Generic[C]):
+class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
@@ -155,7 +155,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
                         filter_conditions.append("value->%s = %s::jsonb")
                         params.extend([key, json.dumps(value)])
                 query += " AND " + " AND ".join(filter_conditions)
-            
+
             # Note: we will need to not do this if sim/keyword search
             # is used
             query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
@@ -219,7 +219,7 @@ class BasePostgresStore(BaseStore, Generic[C]):
         return queries
 
 
-class PostgresStore(BasePostgresStore[Connection]):
+class PostgresStore(BaseStore, BasePostgresStore[Connection]):
     __slots__ = ("_deserializer",)
 
     def __init__(
