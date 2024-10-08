@@ -53,6 +53,7 @@ from langgraph_sdk.schema import (
     Thread,
     ThreadState,
     ThreadStatus,
+    ThreadUpdateStateResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -1060,7 +1061,7 @@ class ThreadsClient:
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
-    ) -> None:
+    ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
         Args:
@@ -1070,15 +1071,27 @@ class ThreadsClient:
             checkpoint: The checkpoint to update the state of.
 
         Returns:
-            None
+            ThreadUpdateStateResponse: Response after updating a thread's state.
 
         Example Usage:
 
-            await client.threads.update_state(
+            response = await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
             )
+            print(response)
+
+            ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+            {
+                'checkpoint': {
+                    'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                    'checkpoint_ns': '',
+                    'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1',
+                    'checkpoint_map': {}
+                }
+            }
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -3109,7 +3122,7 @@ class SyncThreadsClient:
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
-    ) -> None:
+    ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
         Args:
@@ -3119,15 +3132,27 @@ class SyncThreadsClient:
             checkpoint: The checkpoint to update the state of.
 
         Returns:
-            None
+            ThreadUpdateStateResponse: Response after updating a thread's state.
 
         Example Usage:
 
-            await client.threads.update_state(
+            response = client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
             )
+            print(response)
+
+            ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+            {
+                'checkpoint': {
+                    'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                    'checkpoint_ns': '',
+                    'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1',
+                    'checkpoint_map': {}
+                }
+            }
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
