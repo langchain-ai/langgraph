@@ -323,13 +323,22 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 ## Persistence
 
-LangGraph has a built-in persistence layer, implemented through [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. When you use a checkpointer with a graph, you can interact with and manage the graph's state after the execution. The checkpointer saves a _checkpoint_ (a snapshot) of the graph state at every superstep, enabling several powerful capabilities, including human-in-the-loop, memory and fault-tolerance. See this [conceptual guide](./persistence.md) for more information.
+LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the 
+appropriate `get` and `update` methods. For more details, see the [persistence conceptual guide](./persistence.md).
+
+## Threads
+
+Threads in LangGraph represent individual sessions or conversations between your graph and a user. When using checkpointing, turns in a single conversation (and even steps within a single graph execution) are organized by a unique thread ID.
+
+## Storage
+
+LangGraph provides built-in document storage through the [BaseStore][langgraph.store.base.BaseStore] interface. Unlike checkpointers, which save state by thread ID, stores use custom namespaces for organizing data. This enables cross-thread persistence, allowing agents to maintain long-term memories, learn from past interactions, and accumulate knowledge over time. Common use cases include storing user profiles, building knowledge bases, and managing global preferences across all threads.
 
 ## Graph Migrations
 
 LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
 
-- For threads at the end of the graph (i.e. not interrupted) you can change the entire topology of the graph (i.e. all nodes and edges, remove, add, rename, etc)
+- For s at the end of the graph (i.e. not interrupted) you can change the entire topology of the graph (i.e. all nodes and edges, remove, add, rename, etc)
 - For threads currently interrupted, we support all topology changes other than renaming / removing nodes (as that thread could now be about to enter a node that no longer exists) -- if this is a blocker please reach out and we can prioritize a solution.
 - For modifying state, we have full backwards and forwards compatibility for adding and removing keys
 - State keys that are renamed lose their saved state in existing threads
