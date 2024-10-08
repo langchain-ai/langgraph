@@ -15,14 +15,25 @@ from typing import (
 )
 from uuid import UUID
 
+from langchain_core.runnables import RunnableLambda, RunnableSequence
 from langchain_core.runnables.config import RunnableConfig
+from langchain_core.runnables.utils import get_function_nonlocals
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
-from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_NS,
+    ERROR,
+    INTERRUPT,
+    NS_END,
+    NS_SEP,
+    TAG_HIDDEN,
+)
 from langgraph.pregel.io import read_channels
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
+from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 
 class TaskPayload(TypedDict):
@@ -45,6 +56,7 @@ class CheckpointTask(TypedDict):
     name: str
     error: Optional[str]
     interrupts: list[dict]
+    state: Optional[RunnableConfig]
 
 
 class CheckpointPayload(TypedDict):
@@ -140,6 +152,49 @@ def map_debug_checkpoint(
     parent_config: Optional[RunnableConfig],
 ) -> Iterator[DebugOutputCheckpoint]:
     """Produce "checkpoint" events for stream_mode=debug."""
+
+    parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+    task_states: dict[str, RunnableConfig] = {}
+
+    for task in tasks:
+        subgraph = None
+        candidates = [task.proc]
+        for c in candidates:
+            # Cannot do isinstance(c, Pregel) due to circular imports
+            if "Pregel" in [t.__name__ for t in type(c).__mro__]:
+                subgraph = c
+
+            if isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
+                candidates.extend(c.steps)
+            elif isinstance(c, RunnableLambda):
+                candidates.extend(c.deps)
+            elif isinstance(c, RunnableCallable):
+                if c.func is not None:
+                    candidates.extend(
+                        nl.__self__ if hasattr(nl, "__self__") else nl
+                        for nl in get_function_nonlocals(c.func)
+                    )
+                if c.afunc is not None:
+                    candidates.extend(
+                        nl.__self__ if hasattr(nl, "__self__") else nl
+                        for nl in get_function_nonlocals(c.afunc)
+                    )
+        if not subgraph:
+            continue
+
+        # assemble checkpoint_ns for this task
+        task_ns = f"{task.name}{NS_END}{task.id}"
+        if parent_ns:
+            task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+
+        # set config as signal that subgraph checkpoints exist
+        task_states[task.id] = {
+            CONF: {
+                "thread_id": config[CONF]["thread_id"],
+                CONFIG_KEY_CHECKPOINT_NS: task_ns,
+            }
+        }
+
     yield {
         "type": "checkpoint",
         "timestamp": checkpoint["ts"],
@@ -155,14 +210,16 @@ def map_debug_checkpoint(
                     "id": t.id,
                     "name": t.name,
                     "error": t.error,
+                    "state": task_states.get(t.id) if task_states else None,
                 }
                 if t.error
                 else {
                     "id": t.id,
                     "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": task_states.get(t.id) if task_states else None,
                 }
-                for t in tasks_w_writes(tasks, pending_writes, None)
+                for t in tasks_w_writes(tasks, pending_writes, task_states)
             ],
         },
     }
