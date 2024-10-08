@@ -4,7 +4,7 @@
 
 Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
-**Short-term memory**, or [thread](persistence.md#threads)-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Updates to short-term memory occur any time you invoke the graph or any time a step completes. State recalled any time a step begins.
+**Short-term memory**, or [thread](persistence.md#threads)-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Short-term memory updates when the graph is invoked or a step is completed, and the State is read at the start of each step.
 
 **Long-term memory** is shared **across** conversational threads. It can be recalled _at any time_ and **in any thread**. Memories are scoped to any custom namespace, not just within a single thread ID. LangGraph provides [stores](persistence.md#memory-store) ([reference doc](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.BaseStore)) to let you save and recall long-term memories.
 
@@ -14,15 +14,15 @@ Both are important to understand and implement for your application.
 
 ## Short-term memory
 
-Short-term memory lets your application remember previous interactions within a single [thread](persistence.md#threads) or conversation. A [thread](persistence.md#threads) organizes multiple interactions in a session, similar to the way an email or slack thread groups messages in a single conversation.
+Short-term memory lets your application remember previous interactions within a single [thread](persistence.md#threads) or conversation. A [thread](persistence.md#threads) organizes multiple interactions in a session, similar to the way email groups messages in a single conversation.
 
-LangGraph manages short-term memory as part of the agent's state, persisted via thread-scoped checkpoints. This state can normally includes the conversation history along with other stateful data, such as uploaded files, generated artifacts, and other results from side-effects. By storing these in the graph's state, the bot can access the full context for a given conversation while maintaining separation between different threads.
+LangGraph manages short-term memory as part of the agent's state, persisted via thread-scoped checkpoints. This state can normally include the conversation history along with other stateful data, such as uploaded files, retrieved documents, or generated artifacts. By storing these in the graph's state, the bot can access the full context for a given conversation while maintaining separation between different threads.
 
 Since conversation history is the most common form of representing short-term memory, in the next section, we will cover techniques for managing conversation history when the list of messages becomes **long**. If you want to stick to the high-level concepts, continue on to the [long-term memory](#long-term-memory) section.
 
 ### Managing long conversation history
 
-Long conversations pose a challenge to today's LLMs. The full history may (a) not even fit inside an LLM's context window, resulting in an irrecoverable error. Even _if_ your LLM technically supports the full context length, most LLMs (b) still perform poorly over long contexts. They get "distracted" by stale or off-topic content, all while suffering from slower response times and higher costs.
+Long conversations pose a challenge to today's LLMs. The full history may not even fit inside an LLM's context window, resulting in an irrecoverable error. Even _if_ your LLM technically supports the full context length, most LLMs still perform poorly over long contexts. They get "distracted" by stale or off-topic content, all while suffering from slower response times and higher costs.
 
 Managing short-term memory is an exercise of balancing [precision & recall](https://en.wikipedia.org/wiki/Precision_and_recall#:~:text=Precision%20can%20be%20seen%20as,irrelevant%20ones%20are%20also%20returned) with your application's other performance requirements (latency & cost). As always, it's important to think critically about how you represent information for your LLM and to look at your data. We cover a few common techniques for managing message lists below and hope to provide sufficient context for you to pick the best tradeoffs for your application:
 
@@ -31,7 +31,7 @@ Managing short-term memory is an exercise of balancing [precision & recall](http
 
 ### Editing message lists
 
-Chat models accept context using [messages](https://python.langchain.com/docs/concepts/#messages). Messages transmit both developer or application-provided instructions (e.g., a system message) and user-provided instructions (e.g., human messages) all while recording the trajectory of the conversation or interaction. In chat applications, messages often alternate between human inputs and model responses, accumulating as a list over time. Because context windows are limited and token-rich message lists can be costly, many applications can benefit from using techniques to manually remove or forget stale information.
+Chat models accept context using [messages](https://python.langchain.com/docs/concepts/#messages), which include developer provided instructions (a system message) and user inputs (human messages). In chat applications, messages alternate between human inputs and model responses, resulting in a list of messages that grows longer over time. Because context windows are limited and token-rich message lists can be costly, many applications can benefit from using techniques to manually remove or forget stale information.
 
 ![](img/memory/filter.png)
 
@@ -151,9 +151,6 @@ trim_messages(
     # Remember to adjust based on your model
     # or else pass a custom token_encoder
     token_counter=ChatOpenAI(model="gpt-4"),
-    # Most chat models expect that chat history starts with either:
-    # (1) a HumanMessage or
-    # (2) a SystemMessage followed by a HumanMessage
     # Remember to adjust based on the desired conversation
     # length
     max_tokens=45,
