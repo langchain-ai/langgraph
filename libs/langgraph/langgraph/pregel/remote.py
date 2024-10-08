@@ -23,8 +23,8 @@ from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.types import Interrupt
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
+from langgraph.types import Interrupt
 
 
 class RemotePregel(PregelProtocol):
