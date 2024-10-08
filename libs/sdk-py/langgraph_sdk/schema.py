@@ -25,7 +25,7 @@ Represents the status of a thread:
 - "interrupted": The thread's execution was interrupted.
 """
 
-StreamMode = Literal["values", "messages", "updates", "events", "debug"]
+StreamMode = Literal["values", "messages", "updates", "events", "debug", "custom"]
 """
 Defines the mode of streaming:
 - "values": Stream only the values.
@@ -33,6 +33,7 @@ Defines the mode of streaming:
 - "updates": Stream updates to the state.
 - "events": Stream events occurring during execution.
 - "debug": Stream detailed debug information.
+- "custom": Stream custom events.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
