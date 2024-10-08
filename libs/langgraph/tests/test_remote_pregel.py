@@ -1,6 +1,10 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langchain_core.runnables.graph import (
+    Edge as DrawableEdge,
+    Node as DrawableNode,
+)
 
 from langgraph.pregel.remote import RemotePregel
 from langgraph.pregel.types import StateSnapshot
@@ -51,19 +55,20 @@ def test_get_graph():
     # call method / assertions
     drawable_graph = remote_pregel.get_graph()
 
-    assert drawable_graph.nodes == [
-        {"id": "__start__", "type": "schema", "data": "__start__"},
-        {"id": "__end__", "type": "schema", "data": "__end__"},
-        {
-            "id": "agent",
-            "type": "runnable",
-            "data": {"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
-        },
-    ]
+    assert drawable_graph.nodes == {
+        "__start__": DrawableNode(id="__start__", name="__start__", data="__start__", metadata=None),
+        "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
+        "agent": DrawableNode(
+            id="agent",
+            name="agent",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            metadata=None,
+        ),
+    }
 
     assert drawable_graph.edges == [
-        {"source": "__start__", "target": "agent"},
-        {"source": "agent", "target": "__end__"},
+        DrawableEdge(source="__start__", target="agent"),
+        DrawableEdge(source="agent", target="__end__"),
     ]
 
 
@@ -97,19 +102,20 @@ async def test_aget_graph():
     # call method / assertions
     drawable_graph = await remote_pregel.aget_graph()
 
-    assert drawable_graph.nodes == [
-        {"id": "__start__", "type": "schema", "data": "__start__"},
-        {"id": "__end__", "type": "schema", "data": "__end__"},
-        {
-            "id": "agent",
-            "type": "runnable",
-            "data": {"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
-        },
-    ]
+    assert drawable_graph.nodes == {
+        "__start__": DrawableNode(id="__start__", name="__start__", data="__start__", metadata=None),
+        "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
+        "agent": DrawableNode(
+            id="agent",
+            name="agent",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            metadata=None,
+        ),
+    }
 
     assert drawable_graph.edges == [
-        {"source": "__start__", "target": "agent"},
-        {"source": "agent", "target": "__end__"},
+        DrawableEdge(source="__start__", target="agent"),
+        DrawableEdge(source="agent", target="__end__"),
     ]
 
 
@@ -228,7 +234,7 @@ def test_get_state():
 
     assert state_snapshot == StateSnapshot(
         values={"messages": [{"type": "human", "content": "hello"}]},
-        next=None,
+        next=(),
         config={
             "configurable": {
                 "thread_id": "thread_1",
@@ -275,7 +281,7 @@ async def test_aget_state():
 
     assert state_snapshot == StateSnapshot(
         values={"messages": [{"type": "human", "content": "hello"}]},
-        next=None,
+        next=(),
         config={
             "configurable": {
                 "thread_id": "thread_1",
@@ -329,7 +335,7 @@ def test_get_state_history():
     assert len(state_history_snapshot) == 1
     assert state_history_snapshot[0] == StateSnapshot(
         values={"messages": [{"type": "human", "content": "hello"}]},
-        next=None,
+        next=(),
         config={
             "configurable": {
                 "thread_id": "thread_1",
@@ -379,7 +385,7 @@ async def test_aget_state_history():
     assert len(state_history_snapshot) == 1
     assert state_history_snapshot[0] == StateSnapshot(
         values={"messages": [{"type": "human", "content": "hello"}]},
-        next=None,
+        next=(),
         config={
             "configurable": {
                 "thread_id": "thread_1",

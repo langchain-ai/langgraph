@@ -8,11 +8,16 @@ from typing import (
 )
 
 from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.graph import Graph as DrawableGraph
+from langchain_core.runnables.graph import (
+    Edge as DrawableEdge,
+    Graph as DrawableGraph,
+    Node as DrawableNode,
+)
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 from langgraph_sdk.schema import Checkpoint, ThreadState
 from typing_extensions import Self
 
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, StateSnapshot, StreamMode
 
@@ -45,9 +50,20 @@ class RemotePregel(PregelProtocol):
             xray=xray,
         )
 
+        # construct DrawableNodes
+        nodes = {}
+        for node in graph["nodes"]:
+            node_id = node["id"]
+            nodes[node_id] = DrawableNode(
+                id=node_id,
+                name=node.get("name", node_id),
+                data=node.get("data", {}),
+                metadata=node.get("metadata"),
+            )
+
         return DrawableGraph(
-            nodes=graph["nodes"],
-            edges=graph["edges"],
+            nodes=nodes,
+            edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
 
     async def aget_graph(
@@ -60,9 +76,21 @@ class RemotePregel(PregelProtocol):
             assistant_id=self.graph_id,
             xray=xray,
         )
+
+        # construct DrawableNodes
+        nodes = {}
+        for node in graph["nodes"]:
+            node_id = node["id"]
+            nodes[node_id] = DrawableNode(
+                id=node_id,
+                name=node.get("name", node_id),
+                data=node.get("data", {}),
+                metadata=node.get("metadata"),
+            )
+
         return DrawableGraph(
-            nodes=graph["nodes"],
-            edges=graph["edges"],
+            nodes=nodes,
+            edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
 
     def get_subgraphs(
@@ -92,7 +120,7 @@ class RemotePregel(PregelProtocol):
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
         return StateSnapshot(
             values=state["values"],
-            next=state["next"],
+            next=tuple(state["next"]) if state["next"] else tuple(),
             config={
                 "configurable": {
                     "thread_id": state["checkpoint"]["thread_id"],
@@ -101,7 +129,7 @@ class RemotePregel(PregelProtocol):
                     "checkpoint_map": state["checkpoint"]["checkpoint_map"],
                 }
             },
-            metadata=state["metadata"],
+            metadata=CheckpointMetadata(**state["metadata"]),
             created_at=state["created_at"],
             parent_config={
                 "configurable": {
@@ -205,7 +233,7 @@ class RemotePregel(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        response = self.sync_client.threads.update_state(
+        response = self.sync_client.threads.update_state(  # type: ignore
             thread_id=config["configurable"]["thread_id"],
             values=values,
             as_node=as_node,
@@ -219,7 +247,7 @@ class RemotePregel(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        response = await self.client.threads.update_state(
+        response = await self.client.threads.update_state(  # type: ignore
             thread_id=config["configurable"]["thread_id"],
             values=values,
             as_node=as_node,
