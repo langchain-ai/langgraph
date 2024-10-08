@@ -9818,3 +9818,76 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         assert (
             len((await the_store.asearch(("foo", "bar")))) == 1
         )  # still overwriting the same one
+
+
+async def test_debug_subgraphs():
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def node(name):
+        async def _node(state: State):
+            return {"messages": [f"entered {name} node"]}
+
+        return _node
+
+    grand_parent = StateGraph(State)
+    parent = StateGraph(State)
+    child = StateGraph(State)
+
+    child.add_node("c_one", node("c_one"))
+    child.add_node("c_two", node("c_two"))
+    child.add_edge(START, "c_one")
+    child.add_edge("c_one", "c_two")
+    child.add_edge("c_two", END)
+
+    parent.add_node("p_one", node("p_one"))
+    parent.add_node("p_two", child.compile())
+    parent.add_edge(START, "p_one")
+    parent.add_edge("p_one", "p_two")
+    parent.add_edge("p_two", END)
+
+    grand_parent.add_node("gp_one", node("gp_one"))
+    grand_parent.add_node("gp_two", parent.compile())
+    grand_parent.add_edge(START, "gp_one")
+    grand_parent.add_edge("gp_one", "gp_two")
+    grand_parent.add_edge("gp_two", END)
+
+    graph = grand_parent.compile(checkpointer=MemorySaver())
+
+    config = {"configurable": {"thread_id": "1"}}
+    events = [
+        c
+        async for c in graph.astream(
+            {"messages": []},
+            config=config,
+            stream_mode="debug",
+        )
+    ]
+
+    checkpoint_events = list(
+        reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
+    )
+    checkpoint_history = [c async for c in graph.aget_state_history(config)]
+
+    assert len(checkpoint_events) == len(checkpoint_history)
+
+    def normalize_config(config: dict | None) -> dict | None:
+        if config is None:
+            return None
+        return config["configurable"]
+
+    for stream, history in zip(checkpoint_events, checkpoint_history):
+        assert stream["values"] == history.values
+        assert stream["next"] == list(history.next)
+        assert normalize_config(stream["config"]) == normalize_config(history.config)
+        assert normalize_config(stream["parent_config"]) == normalize_config(
+            history.parent_config
+        )
+
+        assert len(stream["tasks"]) == len(history.tasks)
+        for stream_task, history_task in zip(stream["tasks"], history.tasks):
+            assert stream_task["id"] == history_task.id
+            assert stream_task["name"] == history_task.name
+            assert stream_task["interrupts"] == history_task.interrupts
+            assert stream_task.get("error") == history_task.error
+            assert stream_task.get("state") == history_task.state
