@@ -302,12 +302,14 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
+                "stop": 25,
                 "writes": None,
             },
             {
                 "parents": {},
                 "source": "input",
                 "step": -1,
+                "stop": 25,
                 "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
             },
         ]
@@ -325,7 +327,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
             ),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={"parents": {}, "source": "loop", "step": 0, "stop": 25, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -484,6 +486,7 @@ async def test_cancel_graph_astream(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
+                "stop": 25,
                 "writes": None,
             }
 
@@ -560,6 +563,7 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {"alittlewhile": {"value": 2}},
             }
 
@@ -943,6 +947,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "loop",
                     "step": 6,
+                    "stop": 32,
                     "writes": {"two": 5},
                 },
                 created_at=AnyStr(),
@@ -963,6 +968,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "loop",
                     "step": 5,
+                    "stop": 30,
                     "writes": {"one": None},
                 },
                 created_at=AnyStr(),
@@ -983,6 +989,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "input",
                     "step": 4,
+                    "stop": 30,
                     "writes": {"input": 3},
                 },
                 created_at=AnyStr(),
@@ -1003,6 +1010,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "loop",
                     "step": 3,
+                    "stop": 28,
                     "writes": {"one": None},
                 },
                 created_at=AnyStr(),
@@ -1023,6 +1031,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "input",
                     "step": 2,
+                    "stop": 28,
                     "writes": {"input": 20},
                 },
                 created_at=AnyStr(),
@@ -1043,6 +1052,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "loop",
                     "step": 1,
+                    "stop": 27,
                     "writes": {"two": 4},
                 },
                 created_at=AnyStr(),
@@ -1063,6 +1073,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "loop",
                     "step": 0,
+                    "stop": 25,
                     "writes": {"one": None},
                 },
                 created_at=AnyStr(),
@@ -1083,6 +1094,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "parents": {},
                     "source": "input",
                     "step": -1,
+                    "stop": 25,
                     "writes": {"input": 2},
                 },
                 created_at=AnyStr(),
@@ -1157,6 +1169,7 @@ async def test_fork_always_re_runs_nodes(
                     "parents": {},
                     "source": "loop",
                     "step": 5,
+                    "stop": 25,
                     "writes": {"add_one": 1},
                 },
                 created_at=AnyStr(),
@@ -1177,6 +1190,7 @@ async def test_fork_always_re_runs_nodes(
                     "parents": {},
                     "source": "loop",
                     "step": 4,
+                    "stop": 25,
                     "writes": {"add_one": 1},
                 },
                 created_at=AnyStr(),
@@ -1197,6 +1211,7 @@ async def test_fork_always_re_runs_nodes(
                     "parents": {},
                     "source": "loop",
                     "step": 3,
+                    "stop": 25,
                     "writes": {"add_one": 1},
                 },
                 created_at=AnyStr(),
@@ -1217,6 +1232,7 @@ async def test_fork_always_re_runs_nodes(
                     "parents": {},
                     "source": "loop",
                     "step": 2,
+                    "stop": 25,
                     "writes": {"add_one": 1},
                 },
                 created_at=AnyStr(),
@@ -1237,6 +1253,7 @@ async def test_fork_always_re_runs_nodes(
                     "parents": {},
                     "source": "loop",
                     "step": 1,
+                    "stop": 25,
                     "writes": {"add_one": 1},
                 },
                 created_at=AnyStr(),
@@ -1253,7 +1270,13 @@ async def test_fork_always_re_runs_nodes(
                         "checkpoint_id": AnyStr(),
                     }
                 },
-                metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+                metadata={
+                    "parents": {}, 
+                    "source": "loop", 
+                    "step": 0, 
+                    "stop": 25, 
+                    "writes": None,
+                },
                 created_at=AnyStr(),
                 parent_config=history[6].config,
             ),
@@ -1272,6 +1295,7 @@ async def test_fork_always_re_runs_nodes(
                     "parents": {},
                     "source": "input",
                     "step": -1,
+                    "stop": 25,
                     "writes": {"__start__": 1},
                 },
                 created_at=AnyStr(),
@@ -1694,6 +1718,7 @@ async def test_pending_writes_resume(
             "parents": {},
             "source": "loop",
             "step": 0,
+            "stop": 25,
             "writes": None,
         }
         # should contain pending write of "one"
@@ -1781,6 +1806,7 @@ async def test_pending_writes_resume(
             metadata={
                 "parents": {},
                 "step": 1,
+                "stop": 27,
                 "source": "loop",
                 "writes": {"one": {"value": 2}, "two": {"value": 3}},
             },
@@ -1829,7 +1855,14 @@ async def test_pending_writes_resume(
                     "start:two": "__start__",
                 },
             },
-            metadata={"parents": {}, "step": 0, "source": "loop", "writes": None},
+            metadata={
+                "parents": {}, 
+                "step": 0, 
+                "stop": 25, 
+                "source": 
+                "loop", 
+                "writes": None,
+            },
             parent_config={
                 "configurable": {
                     "thread_id": "1",
@@ -1869,6 +1902,7 @@ async def test_pending_writes_resume(
             metadata={
                 "parents": {},
                 "step": -1,
+                "stop": 25,
                 "source": "input",
                 "writes": {"__start__": {"value": 1}},
             },
@@ -2573,6 +2607,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
+                "stop": 25,
                 "writes": {
                     "agent": {
                         "agent": {
@@ -2812,6 +2847,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
+                "stop": 25,
                 "writes": {
                     "agent": {
                         "agent": {
@@ -3051,6 +3087,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
+                "stop": 25,
                 "writes": {
                     "agent": {
                         "agent": {
@@ -3473,6 +3510,7 @@ async def test_conditional_graph_state(
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {
                     "agent": {
                         "agent_outcome": AgentAction(
@@ -3656,6 +3694,7 @@ async def test_conditional_graph_state(
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {
                     "agent": {
                         "agent_outcome": AgentAction(
@@ -4477,6 +4516,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(
@@ -4633,6 +4673,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 4,
+                "stop": 29,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(
@@ -4948,6 +4989,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {
                     "agent": AIMessage(
                         content="",
@@ -5081,6 +5123,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 4,
+                "stop": 29,
                 "writes": {
                     "agent": AIMessage(
                         content="",
@@ -5438,12 +5481,14 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
+                "stop": 25,
                 "writes": None,
             },
             {
                 "parents": {},
                 "source": "input",
                 "step": -1,
+                "stop": 25,
                 "writes": {"__start__": {"my_key": "value", "market": "DE"}},
             },
         ]
@@ -5455,7 +5500,13 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
                 "ts"
             ],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {}, 
+                "source": "loop", 
+                "step": 0, 
+                "stop": 25, 
+                "writes": None,
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -5477,6 +5528,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 27,
                 "writes": {"tool_two_slow": {"my_key": " slow"}},
             },
             parent_config=[
@@ -5498,7 +5550,13 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
                 "ts"
             ],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "stop": 25,
+                "writes": None,
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -5520,6 +5578,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 27,
                 "writes": {"tool_two_fast": {"my_key": " fast"}},
             },
             parent_config=[
@@ -5541,7 +5600,13 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
                 "ts"
             ],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "stop": 25,
+                "writes": None,
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
             ][-1].config,
@@ -5583,6 +5648,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 2,
+                "stop": 28,
                 "writes": {"tool_two_fast": {"my_key": " fast"}},
             },
             parent_config=[
@@ -5651,6 +5717,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "input",
                         "step": -1,
+                        "stop": 25,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                     },
                     "parent_config": None,
@@ -5682,6 +5749,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "loop",
                         "step": 0,
+                        "stop": 25,
                         "writes": None,
                     },
                     "parent_config": {
@@ -5746,6 +5814,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "loop",
                         "step": 1,
+                        "stop": 25,
                         "writes": {"prepare": {"my_key": " prepared"}},
                     },
                     "parent_config": {
@@ -5812,6 +5881,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "loop",
                         "step": 2,
+                        "stop": 25,
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
                     "parent_config": {
@@ -5876,6 +5946,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "loop",
                         "step": 3,
+                        "stop": 25,
                         "writes": {"finish": {"my_key": " finished"}},
                     },
                     "parent_config": {
@@ -5933,6 +6004,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "input",
                         "step": -1,
+                        "stop": 25,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                     },
                     "parent_config": None,
@@ -5964,6 +6036,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "loop",
                         "step": 0,
+                        "stop": 25,
                         "writes": None,
                     },
                     "parent_config": {
@@ -6028,6 +6101,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "parents": {},
                         "source": "loop",
                         "step": 1,
+                        "stop": 25,
                         "writes": {"prepare": {"my_key": " prepared"}},
                     },
                     "parent_config": {
@@ -6060,6 +6134,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=[
@@ -6083,6 +6158,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 3,
+                "stop": 28,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[
@@ -6108,6 +6184,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=[
@@ -6131,6 +6208,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 3,
+                "stop": 28,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[
@@ -6164,6 +6242,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=[
@@ -6187,6 +6266,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 3,
+                "stop": 28,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[
@@ -6212,6 +6292,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 25,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=[
@@ -6235,6 +6316,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 3,
+                "stop": 28,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[
@@ -6280,6 +6362,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 1,
+                "stop": 27,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=uconfig,
@@ -6301,6 +6384,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 3,
+                "stop": 28,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[
@@ -6650,6 +6734,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 "source": "loop",
                 "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
+                "stop": 30,
             },
             created_at=AnyStr(),
             parent_config={
@@ -7599,6 +7684,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "stop": 25,
             },
             created_at=AnyStr(),
             parent_config={
@@ -7653,6 +7739,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                                 }
                             },
                             "step": 1,
+                            "stop": 25,
                         },
                         created_at=AnyStr(),
                         parent_config={
@@ -7678,6 +7765,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "stop": 25,
             },
             created_at=AnyStr(),
             parent_config={
@@ -7719,6 +7807,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
                     "step": 1,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7745,6 +7834,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7771,6 +7861,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "my value"}},
                     "step": -1,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -7803,6 +7894,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     },
                     "step": 1,
+                    "stop": 25,
                     "parents": {"": AnyStr()},
                 },
                 created_at=AnyStr(),
@@ -7834,6 +7926,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "stop": 25,
                     "parents": {"": AnyStr()},
                 },
                 created_at=AnyStr(),
@@ -7865,6 +7958,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "hi my value"}},
                     "step": -1,
+                    "stop": 25,
                     "parents": {"": AnyStr()},
                 },
                 created_at=AnyStr(),
@@ -7896,6 +7990,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "outer_2": {"my_key": "hi my value here and there and back again"}
                 },
                 "step": 3,
+                "stop": 28,
             },
             created_at=AnyStr(),
             parent_config={
@@ -7929,6 +8024,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     },
                     "step": 3,
+                    "stop": 28,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7955,6 +8051,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"inner": {"my_key": "hi my value here and there"}},
                     "step": 2,
+                    "stop": 28,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7993,6 +8090,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
                     "step": 1,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8019,6 +8117,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8045,6 +8144,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "my value"}},
                     "step": -1,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -8149,6 +8249,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"parent_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "stop": 25,
             },
             created_at=AnyStr(),
             parent_config={
@@ -8193,6 +8294,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8239,6 +8341,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"grandchild_1": {"my_key": "hi my value here"}},
                 "step": 1,
+                "stop": 25,
             },
             created_at=AnyStr(),
             parent_config={
@@ -8304,6 +8407,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                             }
                                         },
                                         "step": 1,
+                                        "stop": 25,
                                     },
                                     created_at=AnyStr(),
                                     parent_config={
@@ -8332,6 +8436,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             "source": "loop",
                             "writes": None,
                             "step": 0,
+                            "stop": 25,
                         },
                         created_at=AnyStr(),
                         parent_config={
@@ -8357,6 +8462,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"parent_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "stop": 25,
             },
             created_at=AnyStr(),
             parent_config={
@@ -8404,6 +8510,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     },
                     "step": 3,
+                    "stop": 28,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8440,6 +8547,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             }
                         },
                         "step": 3,
+                        "stop": 28,
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8465,6 +8573,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "loop",
                         "writes": {"child": {"my_key": "hi my value here and there"}},
                         "step": 2,
+                        "stop": 25,
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8508,6 +8617,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "loop",
                         "writes": {"parent_1": {"my_key": "hi my value"}},
                         "step": 1,
+                        "stop": 25,
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8533,6 +8643,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "loop",
                         "writes": None,
                         "step": 0,
+                        "stop": 25,
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8563,6 +8674,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "input",
                         "writes": {"my_key": "my value"},
                         "step": -1,
+                        "stop": 25,
                     },
                     created_at=AnyStr(),
                     parent_config=None,
@@ -8596,6 +8708,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"child_1": {"my_key": "hi my value here and there"}},
                     "step": 1,
+                    "stop": 27,
                     "parents": {"": AnyStr()},
                 },
                 created_at=AnyStr(),
@@ -8625,6 +8738,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "stop": 25,
                     "parents": {"": AnyStr()},
                 },
                 created_at=AnyStr(),
@@ -8666,6 +8780,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "hi my value"}},
                     "step": -1,
+                    "stop": 25,
                     "parents": {"": AnyStr()},
                 },
                 created_at=AnyStr(),
@@ -8703,6 +8818,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "grandchild_2": {"my_key": "hi my value here and there"}
                     },
                     "step": 2,
+                    "stop": 28,
                     "parents": AnyDict(
                         {
                             "": AnyStr(),
@@ -8741,6 +8857,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"grandchild_1": {"my_key": "hi my value here"}},
                     "step": 1,
+                    "stop": 25,
                     "parents": AnyDict(
                         {
                             "": AnyStr(),
@@ -8783,6 +8900,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "stop": 25,
                     "parents": AnyDict(
                         {
                             "": AnyStr(),
@@ -8825,6 +8943,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "hi my value"}},
                     "step": -1,
+                    "stop": 25,
                     "parents": AnyDict(
                         {
                             "": AnyStr(),
@@ -8939,7 +9058,13 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "stop": 25,
+            },
             created_at=AnyStr(),
             parent_config={
                 "configurable": {
@@ -8986,6 +9111,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     ]
                 },
                 "step": 1,
+                "stop": 27,
             },
             created_at=AnyStr(),
             parent_config={
@@ -9028,6 +9154,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                         ]
                     },
                     "step": 1,
+                    "stop": 27,
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -9072,7 +9199,13 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                         "checkpoint_id": AnyStr(),
                     }
                 },
-                metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "writes": None,
+                    "step": 0,
+                    "stop": 25,
+                },
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
@@ -9098,6 +9231,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
                     "step": -1,
+                    "stop": 25,
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -9273,6 +9407,7 @@ async def test_weather_subgraph(
                 "source": "loop",
                 "writes": {"router_node": {"route": "weather"}},
                 "step": 1,
+                "stop": 25,
                 "parents": {},
             },
             created_at=AnyStr(),
@@ -9363,6 +9498,7 @@ async def test_weather_subgraph(
                 "source": "loop",
                 "writes": {"router_node": {"route": "weather"}},
                 "step": 1,
+                "stop": 25,
                 "parents": {},
             },
             created_at=AnyStr(),
@@ -9403,6 +9539,7 @@ async def test_weather_subgraph(
                             "source": "loop",
                             "writes": {"model_node": {"city": "San Francisco"}},
                             "step": 1,
+                            "stop": 25,
                             "parents": {"": AnyStr()},
                         },
                         created_at=AnyStr(),
@@ -9447,6 +9584,7 @@ async def test_weather_subgraph(
                 "source": "loop",
                 "writes": {"router_node": {"route": "weather"}},
                 "step": 1,
+                "stop": 25,
                 "parents": {},
             },
             created_at=AnyStr(),
