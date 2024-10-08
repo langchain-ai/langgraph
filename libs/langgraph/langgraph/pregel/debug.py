@@ -154,7 +154,7 @@ def map_debug_checkpoint(
     """Produce "checkpoint" events for stream_mode=debug."""
 
     parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-    task_states: dict[str, RunnableConfig] = {}
+    task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
 
     for task in tasks:
         subgraph = None
