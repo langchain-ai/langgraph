@@ -207,6 +207,13 @@ class ThreadState(TypedDict):
     """Tasks to execute in this step. If already attempted, may contain an error."""
 
 
+class ThreadUpdateStateResponse(TypedDict):
+    """Represents the response from updating a thread's state."""
+
+    checkpoint: Checkpoint
+    """Checkpoint of the latest state."""
+
+
 class Run(TypedDict):
     """Represents a single execution run."""
 
