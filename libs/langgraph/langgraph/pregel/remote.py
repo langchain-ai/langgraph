@@ -10,7 +10,11 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
+)
+from langchain_core.runnables.graph import (
     Graph as DrawableGraph,
+)
+from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
@@ -19,7 +23,8 @@ from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.types import All, StateSnapshot, StreamMode
+from langgraph.types import Interrupt
+from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 
 
 class RemotePregel(PregelProtocol):
@@ -118,6 +123,23 @@ class RemotePregel(PregelProtocol):
             yield (namespace, remote_subgraph)
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
+        tasks = []
+        for task in state["tasks"]:
+            interrupts = []
+            for interrupt in task["interrupts"]:
+                interrupts.append(Interrupt(**interrupt))
+
+            tasks.append(
+                PregelTask(
+                    id=task["id"],
+                    name=task["name"],
+                    path=tuple(),
+                    error=Exception(task["error"]) if task["error"] else None,
+                    interrupts=tuple(interrupts),
+                    state=self._create_state_snapshot(task["state"]) if task["state"] else None,
+                )
+            )
+
         return StateSnapshot(
             values=state["values"],
             next=tuple(state["next"]) if state["next"] else tuple(),
@@ -141,7 +163,7 @@ class RemotePregel(PregelProtocol):
             }
             if state["parent_checkpoint"]
             else None,
-            tasks=state["tasks"],
+            tasks=tuple(tasks),
         )
 
     def _get_checkpoint(self, config: Optional[RunnableConfig]) -> Optional[Checkpoint]:
@@ -233,9 +255,9 @@ class RemotePregel(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        response = self.sync_client.threads.update_state(  # type: ignore
+        response: dict = self.sync_client.threads.update_state(  # type: ignore
             thread_id=config["configurable"]["thread_id"],
-            values=values,
+            values=values,  # type: ignore
             as_node=as_node,
             checkpoint=self._get_checkpoint(config),
         )
@@ -247,9 +269,9 @@ class RemotePregel(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        response = await self.client.threads.update_state(  # type: ignore
+        response: dict = await self.client.threads.update_state(  # type: ignore
             thread_id=config["configurable"]["thread_id"],
-            values=values,
+            values=values,  # type: ignore
             as_node=as_node,
             checkpoint=self._get_checkpoint(config),
         )
@@ -265,13 +287,14 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
+        assert config is not None
         for chunk in self.sync_client.runs.stream(
             thread_id=config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
-            stream_mode=stream_mode,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
+            stream_mode=stream_mode,  # type: ignore
+            interrupt_before=interrupt_before,  # type: ignore
+            interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
             yield chunk
@@ -286,13 +309,14 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        assert config is not None
         async for chunk in await self.client.runs.stream(
             thread_id=config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
-            stream_mode=stream_mode,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
+            stream_mode=stream_mode if stream_mode else "values",  # type: ignore
+            interrupt_before=interrupt_before,  # type: ignore
+            interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
             yield chunk
@@ -305,13 +329,14 @@ class RemotePregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
+        assert config is not None
         return self.sync_client.runs.wait(
             thread_id=config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=config,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
+            interrupt_before=interrupt_before,  # type: ignore
+            interrupt_after=interrupt_after,  # type: ignore
         )
 
     async def ainvoke(
@@ -322,11 +347,12 @@ class RemotePregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
+        assert config is not None
         return await self.client.runs.wait(
             thread_id=config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=config,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
+            interrupt_before=interrupt_before,  # type: ignore
+            interrupt_after=interrupt_after,  # type: ignore
         )

@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
+)
+from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
 
@@ -246,7 +248,7 @@ def test_get_state():
         metadata={},
         created_at="timestamp",
         parent_config=None,
-        tasks=[],
+        tasks=(),
     )
 
 
@@ -300,7 +302,7 @@ async def test_aget_state():
                 "checkpoint_map": {},
             }
         },
-        tasks=[],
+        tasks=(),
     )
 
 
@@ -347,7 +349,7 @@ def test_get_state_history():
         metadata={},
         created_at="timestamp",
         parent_config=None,
-        tasks=[],
+        tasks=(),
     )
 
 
@@ -397,7 +399,7 @@ async def test_aget_state_history():
         metadata={},
         created_at="timestamp",
         parent_config=None,
-        tasks=[],
+        tasks=(),
     )
 
 
