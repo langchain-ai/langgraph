@@ -6,6 +6,8 @@ import nbformat
 from nbconvert.exporters import MarkdownExporter
 from nbconvert.preprocessors import Preprocessor
 
+from generate_api_reference_links import ImportPreprocessor
+
 
 class EscapePreprocessor(Preprocessor):
     def preprocess_cell(self, cell, resources, cell_index):
@@ -109,6 +111,7 @@ exporter = MarkdownExporter(
         EscapePreprocessor,
         ExtractAttachmentsPreprocessor,
         CustomRegexRemovePreprocessor,
+        ImportPreprocessor,
     ],
     template_name="mdoutput",
     extra_template_basedirs=[os.path.join(os.path.dirname(__file__), "notebook_convert_templates")],

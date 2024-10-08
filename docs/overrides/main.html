@@ -156,7 +156,6 @@
   </style>
 {% endblock %}
 
-
 {% block content %}
 <div class="notebook-links">
   {% if page.nb_url %}
@@ -167,6 +166,69 @@
 </div>
 
 {{ super() }}
+<script>
+  function processCodeBlocks() {
+    const codeBlocks = document.querySelectorAll('pre');
+    codeBlocks.forEach(function(codeBlock) {
+      const codeElement = codeBlock.querySelector('code');
+      if (codeElement) {
+        const content = codeElement.textContent;
+        const innerHTML = codeElement.innerHTML;
+        const match = /<!--IMPORTS:(.*?)-->\n/.exec(content);
+        if (match) {
+          const imports = JSON.parse(match[1]);
+          const importsDiv = document.createElement('div');
+          importsDiv.style.cssText = `
+            padding: 0.8rem 0.8rem 0.8rem 1.3rem;
+            background: var(--md-code-bg-color);
+            color: var(--md-code-fg-color);
+            margin-top: 0.2em;
+            margin-bottom: 1em;
+            box-shadow: var(--md-shadow-z1);
+            border-bottom-left-radius: 0.1rem;
+            border-bottom-right-radius: 0.1rem;
+          `;
+          
+          const label = document.createElement('b');
+          label.textContent = 'API Reference:';
+          label.style.cssText = `
+            margin-right: 0.5rem;
+          `;
+          importsDiv.appendChild(label);
+
+          imports.forEach((imp, index) => {
+            const link = document.createElement('a');
+            link.href = imp.docs;
+            link.textContent = imp.imported;
+            importsDiv.appendChild(link);
+            
+            if (index < imports.length - 1) {
+              importsDiv.appendChild(document.createTextNode(' | '));
+            }
+          });
+
+          codeBlock.insertAdjacentElement('afterend', importsDiv);
+          codeElement.textContent = content.replace(match[0], '');
+        }
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', processCodeBlocks);
+
+  // Re-run the function when navigating to a different page
+  document.addEventListener('DOMContentLoaded', function() {
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          processCodeBlocks();
+        }
+      });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+</script>
 {% endblock content %}
 
 
