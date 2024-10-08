@@ -213,6 +213,7 @@ class ThreadUpdateStateResponse(TypedDict):
     checkpoint: Checkpoint
     """Checkpoint of the latest state."""
 
+
 class Run(TypedDict):
     """Represents a single execution run."""
 
