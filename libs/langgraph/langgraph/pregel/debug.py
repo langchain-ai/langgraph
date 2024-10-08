@@ -186,14 +186,14 @@ def map_debug_checkpoint(
                     "id": t.id,
                     "name": t.name,
                     "error": t.error,
-                    "state": task_states.get(t.id) if task_states else None,
+                    "state": t.state,
                 }
                 if t.error
                 else {
                     "id": t.id,
                     "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
-                    "state": task_states.get(t.id) if task_states else None,
+                    "state": t.state,
                 }
                 for t in tasks_w_writes(tasks, pending_writes, task_states)
             ],
