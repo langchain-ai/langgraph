@@ -3,6 +3,7 @@ import decimal
 import importlib
 import json
 import pathlib
+import pandas as pd
 import re
 from collections import deque
 from datetime import date, datetime, time, timedelta, timezone
@@ -128,6 +129,8 @@ class JsonPlusSerializer(SerializerProtocol):
             )
         elif isinstance(obj, BaseException):
             return repr(obj)
+        elif isinstance(obj, pd.DataFrame):
+            return self._encode_constructor_args(pd.DataFrame, method="from_dict", args=[obj.to_dict()])
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
