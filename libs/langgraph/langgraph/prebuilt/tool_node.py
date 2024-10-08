@@ -97,7 +97,7 @@ def _handle_validation_error(
 def _handle_tool_error(
     e: ToolException,
     *,
-    flag: Optional[Union[Literal[True], str, Callable[[ToolException], str]]],
+    flag: Union[Literal[True], str, Callable[[ToolException], str]],
 ) -> str:
     if isinstance(flag, bool):
         content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
