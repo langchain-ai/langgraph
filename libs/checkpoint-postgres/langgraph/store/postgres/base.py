@@ -59,20 +59,10 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
 C = TypeVar("C", bound=BaseConnection)
 
 
-class BasePostgresStore(BaseStore, Generic[C]):
+class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
-    __slots__ = ("_deserializer",)
-
-    def __init__(
-        self,
-        *,
-        deserializer: Optional[
-            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
-        ] = None,
-    ) -> None:
-        super().__init__()
-        self._deserializer = deserializer
+    _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
 
     def _get_batch_GET_ops_queries(
         self,
@@ -166,7 +156,9 @@ class BasePostgresStore(BaseStore, Generic[C]):
                         params.extend([key, json.dumps(value)])
                 query += " AND " + " AND ".join(filter_conditions)
 
-            query += " LIMIT %s OFFSET %s"
+            # Note: we will need to not do this if sim/keyword search
+            # is used
+            query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
 
             queries.append((query, params))
@@ -227,7 +219,9 @@ class BasePostgresStore(BaseStore, Generic[C]):
         return queries
 
 
-class PostgresStore(BasePostgresStore[Connection]):
+class PostgresStore(BaseStore, BasePostgresStore[Connection]):
+    __slots__ = ("_deserializer",)
+
     def __init__(
         self,
         conn: Connection[Any],
@@ -236,7 +230,8 @@ class PostgresStore(BasePostgresStore[Connection]):
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
     ) -> None:
-        super().__init__(deserializer=deserializer)
+        super().__init__()
+        self._deserializer = deserializer
         self.conn = conn
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
