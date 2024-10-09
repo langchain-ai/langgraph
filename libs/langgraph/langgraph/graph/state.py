@@ -824,18 +824,16 @@ def _get_schema(
 def _get_input_schema_from_type_hint(
     action: Optional[RunnableLike],
 ) -> Optional[Type[Any]]:
-    try:
-        if not hasattr(action, "__call__"):
-            raise AttributeError
-        action = cast(Callable, action)
-        if not isfunction(action) and not ismethod(getattr(action, "__call__")):
-            raise TypeError
+    if not isfunction(action) and not ismethod(getattr(action, "__call__", None)):
+        return None
+    action = cast(Callable, action)
 
-        hints = get_type_hints(getattr(action, "__call__")) or get_type_hints(action)
+    hints = get_type_hints(getattr(action, "__call__")) or get_type_hints(action)
+    try:
         first_parameter_name = next(iter(inspect.signature(action).parameters.keys()))
         input_hint = hints.get(first_parameter_name)
         if isinstance(input_hint, type) and get_type_hints(input_hint):
             return input_hint
-    except (AttributeError, TypeError, StopIteration):
+    except StopIteration:
         pass
     return None
