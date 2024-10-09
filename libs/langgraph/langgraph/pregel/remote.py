@@ -7,6 +7,7 @@ from typing import (
     Union,
 )
 
+import orjson
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -203,12 +204,39 @@ class RemotePregel(PregelProtocol, Runnable):
         }
 
     def _sanitize_config(self, config: RunnableConfig) -> RunnableConfig:
-        config = {
-            "configurable": {
-                "thread_id": config["configurable"]["thread_id"],
-            }
+        reserved_configurable_keys = frozenset([
+            "callbacks",
+            "checkpoint_map",
+            "checkpoint_id",
+            "checkpoint_ns",
+        ])
+
+        def _sanitize_obj(obj: Any) -> Any:
+            """Remove non-JSON serializable fields from the given object."""
+            if isinstance(obj, dict):
+                return {k: _sanitize_obj(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_sanitize_obj(v) for v in obj]
+            else:
+                try:
+                    orjson.dumps(obj)
+                    return obj
+                except orjson.JSONEncodeError:
+                    return None
+                
+        # Remove non-JSON serializable fields from the config.
+        config = _sanitize_obj(config)
+
+        # Only include configurable keys that are not reserved and
+        # not starting with "__pregel_" prefix.
+        new_configurable = {
+            k: v for k, v in config["configurable"].items()
+            if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
-        return config
+
+        return {
+            "configurable": new_configurable
+        }
 
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
@@ -323,6 +351,7 @@ class RemotePregel(PregelProtocol, Runnable):
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
+            config=sanitized_config,
             stream_mode=stream_mode,  # type: ignore
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
@@ -347,6 +376,7 @@ class RemotePregel(PregelProtocol, Runnable):
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
+            config=sanitized_config,
             stream_mode=stream_mode if stream_mode else "values",  # type: ignore
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
