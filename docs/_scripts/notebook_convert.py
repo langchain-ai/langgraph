@@ -12,11 +12,17 @@ from generate_api_reference_links import ImportPreprocessor
 class EscapePreprocessor(Preprocessor):
     def preprocess_cell(self, cell, resources, cell_index):
         if cell.cell_type == "markdown":
-            # rewrite .ipynb links to .md
+            # rewrite markdown links to html links (excluding image links)
             cell.source = re.sub(
-                r"\[([^\]]*)\]\((?![^\)]*//)([^)]*)\.ipynb\)",
-                r"[\1](\2.md)",
+                r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
+                r'<a href="\2">\1</a>',
                 cell.source,
+            )
+            # Fix image paths in <img> tags
+            cell.source = re.sub(
+                r'<img\s+src="\.?/img/([^"]+)"',
+                r'<img src="../img/\1"',
+                cell.source
             )
 
         elif cell.cell_type == "code":
@@ -30,11 +36,17 @@ class EscapePreprocessor(Preprocessor):
                         if not output["text"].strip():
                             filter_out.add(i)
                             continue
-                        output["text"] = output["text"].replace("```", r"\`\`\`")
+
+                        value = output["text"].replace("```", r"\`\`\`")
+                        # handle a funky case w/ references in text
+                        value = re.sub(r'\[(\d+)\](?=\[(\d+)\])', r'[\1]\\', value)
+                        output["text"] = value
                     elif "data" in output:
                         for key, value in output["data"].items():
                             if isinstance(value, str):
-                                output["data"][key] = value.replace("```", r"\`\`\`")
+                                value = value.replace("```", r"\`\`\`")
+                                # handle a funky case w/ references in text
+                                output["data"][key] = re.sub(r'\[(\d+)\](?=\[(\d+)\])', r'[\1]\\', value)
                 cell["outputs"] = [
                     output
                     for i, output in enumerate(cell["outputs"])
@@ -102,7 +114,6 @@ class CustomRegexRemovePreprocessor(Preprocessor):
 
     def preprocess(self, nb, resources):
         nb.cells = [cell for cell in nb.cells if self.check_conditions(cell)]
-
         return nb, resources
 
 
@@ -117,33 +128,11 @@ exporter = MarkdownExporter(
     extra_template_basedirs=[os.path.join(os.path.dirname(__file__), "notebook_convert_templates")],
 )
 
-def _modify_frontmatter(
-    body: str, notebook_path: Path, intermediate_docs_dir: Path
-) -> str:
-    # if frontmatter exists
-    rel_path = notebook_path.relative_to(intermediate_docs_dir).as_posix()
-    edit_url = (
-        f"https://github.com/langchain-ai/langchain/edit/master/docs/docs/{rel_path}"
-    )
-    if re.match(r"^[\s\n]*---\n", body):
-        # if custom_edit_url already exists, leave it
-        if re.match(r"custom_edit_url: ", body):
-            return body
-        else:
-            return re.sub(
-                r"^[\s\n]*---\n", f"---\ncustom_edit_url: {edit_url}\n", body, count=1
-            )
-    else:
-        return f"---\ncustom_edit_url: {edit_url}\n---\n{body}"
-
-
 def convert_notebook(
     notebook_path: Path,
-    #   intermediate_docs_dir: Path
 ) -> Path:
     with open(notebook_path) as f:
         nb = nbformat.read(f, as_version=4)
 
-    body, resources = exporter.from_notebook_node(nb)
-    # body = _modify_frontmatter(body, notebook_path, intermediate_docs_dir)
+    body, _ = exporter.from_notebook_node(nb)
     return body

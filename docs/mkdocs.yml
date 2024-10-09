@@ -317,8 +317,6 @@ markdown_extensions:
   - markdown_include.include:
       base_path: ./
   - github-callouts
-extra_css:
-  - css/mkdocstrings.css
 hooks:
   - _scripts/notebook_hooks.py
 extra:
@@ -349,4 +347,6 @@ validation:
   omitted_files: warn
   absolute_links: warn
   unrecognized_links: warn
-  anchors: warn
+  # TODO: figure out how to enable 'warn' for this
+  # it's only an issue for tutorials/storm/storm.ipynb
+  anchors: info
