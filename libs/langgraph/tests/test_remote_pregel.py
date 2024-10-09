@@ -21,11 +21,10 @@ def test_with_config():
     )
 
     # call method / assertions
-    new_remote_pregel = remote_pregel.with_config()
+    config = {"configurable": {"thread_id": "thread_id_1"}}
+    remote_pregel = remote_pregel.with_config(config)
 
-    assert new_remote_pregel.client.id == "async_client_1"
-    assert new_remote_pregel.sync_client.id == "sync_client_1"
-    assert new_remote_pregel.graph_id == "test_graph_id"
+    assert remote_pregel.config["configurable"]["thread_id"] == "thread_id_1"
 
 
 def test_get_graph():

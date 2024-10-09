@@ -25,15 +25,21 @@ from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 from langgraph.types import Interrupt
+from langgraph.utils.config import merge_configs
 
 
 class RemotePregel(PregelProtocol):
     def __init__(
-        self, client: LangGraphClient, sync_client: SyncLangGraphClient, graph_id: str
+        self,
+        client: LangGraphClient,
+        sync_client: SyncLangGraphClient,
+        graph_id: str,
+        config: Optional[RunnableConfig] = None,
     ):
         self.client = client
         self.sync_client = sync_client
         self.graph_id = graph_id
+        self.config = config
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
@@ -42,7 +48,8 @@ class RemotePregel(PregelProtocol):
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self:
-        return self.copy({})
+        self.config = config
+        return self
 
     def get_graph(
         self,
@@ -198,9 +205,11 @@ class RemotePregel(PregelProtocol):
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
+        merged_config = merge_configs(self.config, config)
+
         state = self.sync_client.threads.get_state(
-            thread_id=config["configurable"]["thread_id"],
-            checkpoint=self._get_checkpoint(config),
+            thread_id=merged_config["configurable"]["thread_id"],
+            checkpoint=self._get_checkpoint(merged_config),
             subgraphs=subgraphs,
         )
         return self._create_state_snapshot(state)
@@ -208,9 +217,11 @@ class RemotePregel(PregelProtocol):
     async def aget_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
+        merged_config = merge_configs(self.config, config)
+
         state = await self.client.threads.get_state(
-            thread_id=config["configurable"]["thread_id"],
-            checkpoint=self._get_checkpoint(config),
+            thread_id=merged_config["configurable"]["thread_id"],
+            checkpoint=self._get_checkpoint(merged_config),
             subgraphs=subgraphs,
         )
         return self._create_state_snapshot(state)
@@ -223,12 +234,14 @@ class RemotePregel(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
+        merged_config = merge_configs(self.config, config)
+        
         states = self.sync_client.threads.get_history(
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             limit=limit if limit else 10,
             before=self._get_checkpoint(before),
             metadata=filter,
-            checkpoint=self._get_checkpoint(config),
+            checkpoint=self._get_checkpoint(merged_config),
         )
         for state in states:
             yield self._create_state_snapshot(state)
@@ -241,12 +254,14 @@ class RemotePregel(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
+        merged_config = merge_configs(self.config, config)
+
         states = await self.client.threads.get_history(
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             limit=limit if limit else 10,
             before=self._get_checkpoint(before),
             metadata=filter,
-            checkpoint=self._get_checkpoint(config),
+            checkpoint=self._get_checkpoint(merged_config),
         )
         for state in states:
             yield self._create_state_snapshot(state)
@@ -257,11 +272,13 @@ class RemotePregel(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        merged_config = merge_configs(self.config, config)
+
         response: dict = self.sync_client.threads.update_state(  # type: ignore
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             values=values,  # type: ignore
             as_node=as_node,
-            checkpoint=self._get_checkpoint(config),
+            checkpoint=self._get_checkpoint(merged_config),
         )
         return self._get_config(response["checkpoint"])
 
@@ -271,11 +288,13 @@ class RemotePregel(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        merged_config = merge_configs(self.config, config)
+
         response: dict = await self.client.threads.update_state(  # type: ignore
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             values=values,  # type: ignore
             as_node=as_node,
-            checkpoint=self._get_checkpoint(config),
+            checkpoint=self._get_checkpoint(merged_config),
         )
         return self._get_config(response["checkpoint"])
 
@@ -289,9 +308,10 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
-        assert config is not None
+        merged_config = merge_configs(self.config, config)
+        
         for chunk in self.sync_client.runs.stream(
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             stream_mode=stream_mode,  # type: ignore
@@ -311,9 +331,10 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        assert config is not None
+        merged_config = merge_configs(self.config, config)
+
         async for chunk in await self.client.runs.stream(
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             stream_mode=stream_mode if stream_mode else "values",  # type: ignore
@@ -331,12 +352,13 @@ class RemotePregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
-        assert config is not None
+        merged_config = merge_configs(self.config, config)
+
         return self.sync_client.runs.wait(
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
-            config=config,
+            config=merged_config,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
         )
@@ -349,12 +371,13 @@ class RemotePregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
-        assert config is not None
+        merged_config = merge_configs(self.config, config)
+
         return await self.client.runs.wait(
-            thread_id=config["configurable"]["thread_id"],
+            thread_id=merged_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
-            config=config,
+            config=merged_config,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
         )
