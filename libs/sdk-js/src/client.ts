@@ -664,12 +664,6 @@ export class RunsClient extends BaseClient {
     event: StreamEvent;
     data: any;
   }> {
-    if (!!payload?.checkpointId && !!payload?.checkpoint) {
-      throw new Error(
-        "Cannot specify both a checkpoint and a checkpoint ID in the payload.",
-      );
-    }
-
     const json: Record<string, any> = {
       input: payload?.input,
       config: payload?.config,
@@ -755,12 +749,6 @@ export class RunsClient extends BaseClient {
     assistantId: string,
     payload?: RunsCreatePayload,
   ): Promise<Run> {
-    if (!!payload?.checkpointId && !!payload?.checkpoint) {
-      throw new Error(
-        "Cannot specify both a checkpoint and a checkpoint ID in the payload.",
-      );
-    }
-
     const json: Record<string, any> = {
       input: payload?.input,
       config: payload?.config,
@@ -829,12 +817,6 @@ export class RunsClient extends BaseClient {
     assistantId: string,
     payload?: RunsWaitPayload,
   ): Promise<ThreadState["values"]> {
-    if (!!payload?.checkpointId && !!payload?.checkpoint) {
-      throw new Error(
-        "Cannot specify both a checkpoint and a checkpoint ID in the payload.",
-      );
-    }
-
     const json: Record<string, any> = {
       input: payload?.input,
       config: payload?.config,
