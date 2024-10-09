@@ -25,7 +25,7 @@ Represents the status of a thread:
 - "interrupted": The thread's execution was interrupted.
 """
 
-StreamMode = Literal["values", "messages", "updates", "events", "debug"]
+StreamMode = Literal["values", "messages", "updates", "events", "debug", "custom"]
 """
 Defines the mode of streaming:
 - "values": Stream only the values.
@@ -33,6 +33,7 @@ Defines the mode of streaming:
 - "updates": Stream updates to the state.
 - "events": Stream events occurring during execution.
 - "debug": Stream detailed debug information.
+- "custom": Stream custom events.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
@@ -205,6 +206,13 @@ class ThreadState(TypedDict):
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+
+
+class ThreadUpdateStateResponse(TypedDict):
+    """Represents the response from updating a thread's state."""
+
+    checkpoint: Checkpoint
+    """Checkpoint of the latest state."""
 
 
 class Run(TypedDict):

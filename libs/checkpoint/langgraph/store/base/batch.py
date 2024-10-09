@@ -2,7 +2,15 @@ import asyncio
 import weakref
 from typing import Any, Optional
 
-from langgraph.store.base import BaseStore, GetOp, Item, Op, PutOp, SearchOp
+from langgraph.store.base import (
+    BaseStore,
+    GetOp,
+    Item,
+    Op,
+    PutOp,
+    SearchOp,
+    _validate_namespace,
+)
 
 
 class AsyncBatchedBaseStore(BaseStore):
@@ -46,6 +54,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
         value: dict[str, Any],
     ) -> None:
+        _validate_namespace(namespace)
         fut = self._loop.create_future()
         self._aqueue[fut] = PutOp(namespace, key, value)
         return await fut
