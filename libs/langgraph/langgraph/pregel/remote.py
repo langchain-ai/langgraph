@@ -204,12 +204,14 @@ class RemotePregel(PregelProtocol, Runnable):
         }
 
     def _sanitize_config(self, config: RunnableConfig) -> RunnableConfig:
-        reserved_configurable_keys = frozenset([
-            "callbacks",
-            "checkpoint_map",
-            "checkpoint_id",
-            "checkpoint_ns",
-        ])
+        reserved_configurable_keys = frozenset(
+            [
+                "callbacks",
+                "checkpoint_map",
+                "checkpoint_id",
+                "checkpoint_ns",
+            ]
+        )
 
         def _sanitize_obj(obj: Any) -> Any:
             """Remove non-JSON serializable fields from the given object."""
@@ -223,20 +225,19 @@ class RemotePregel(PregelProtocol, Runnable):
                     return obj
                 except orjson.JSONEncodeError:
                     return None
-                
+
         # Remove non-JSON serializable fields from the config.
         config = _sanitize_obj(config)
 
         # Only include configurable keys that are not reserved and
         # not starting with "__pregel_" prefix.
         new_configurable = {
-            k: v for k, v in config["configurable"].items()
+            k: v
+            for k, v in config["configurable"].items()
             if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
 
-        return {
-            "configurable": new_configurable
-        }
+        return {"configurable": new_configurable}
 
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
