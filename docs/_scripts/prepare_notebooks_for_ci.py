@@ -70,7 +70,6 @@ def is_comment(code: str) -> bool:
 
 
 def has_blocklisted_command(code: str, metadata: dict) -> bool:
-    print("METADATA", metadata)
     if 'hide_from_vcr' in metadata:
         return True
     
