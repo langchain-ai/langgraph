@@ -235,7 +235,7 @@ class RemotePregel(PregelProtocol):
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
         merged_config = merge_configs(self.config, config)
-        
+
         states = self.sync_client.threads.get_history(
             thread_id=merged_config["configurable"]["thread_id"],
             limit=limit if limit else 10,
@@ -309,7 +309,7 @@ class RemotePregel(PregelProtocol):
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
-        
+
         for chunk in self.sync_client.runs.stream(
             thread_id=merged_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
