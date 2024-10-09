@@ -11917,6 +11917,9 @@ def test_debug_nested_subgraphs():
         clean_config["thread_id"] = config["configurable"]["thread_id"]
         clean_config["checkpoint_id"] = config["configurable"]["checkpoint_id"]
         clean_config["checkpoint_ns"] = config["configurable"]["checkpoint_ns"]
+        clean_config["checkpoint_map"] = config["configurable"]["checkpoint_map"]
+        if "checkpoint_map" in config["configurable"]:
+            clean_config["checkpoint_map"] = config["configurable"]["checkpoint_map"]
 
         return clean_config
 
