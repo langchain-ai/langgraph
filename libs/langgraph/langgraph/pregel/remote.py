@@ -7,7 +7,7 @@ from typing import (
     Union,
 )
 
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
 )
@@ -28,7 +28,7 @@ from langgraph.types import Interrupt
 from langgraph.utils.config import merge_configs
 
 
-class RemotePregel(PregelProtocol):
+class RemotePregel(PregelProtocol, Runnable):
     def __init__(
         self,
         client: LangGraphClient,
@@ -202,6 +202,14 @@ class RemotePregel(PregelProtocol):
             }
         }
 
+    def _sanitize_config(self, config: RunnableConfig) -> RunnableConfig:
+        config = {
+            "configurable": {
+                "thread_id": config["configurable"]["thread_id"],
+            }
+        }
+        return config
+
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
@@ -309,9 +317,10 @@ class RemotePregel(PregelProtocol):
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
+        sanitized_config = self._sanitize_config(merged_config)
 
         for chunk in self.sync_client.runs.stream(
-            thread_id=merged_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             stream_mode=stream_mode,  # type: ignore
@@ -332,9 +341,10 @@ class RemotePregel(PregelProtocol):
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
+        sanitized_config = self._sanitize_config(merged_config)
 
         async for chunk in await self.client.runs.stream(
-            thread_id=merged_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             stream_mode=stream_mode if stream_mode else "values",  # type: ignore
@@ -353,12 +363,13 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
         merged_config = merge_configs(self.config, config)
+        sanitized_config = self._sanitize_config(merged_config)
 
         return self.sync_client.runs.wait(
-            thread_id=merged_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
-            config=merged_config,
+            config=sanitized_config,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
         )
@@ -372,12 +383,13 @@ class RemotePregel(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
         merged_config = merge_configs(self.config, config)
+        sanitized_config = self._sanitize_config(merged_config)
 
         return await self.client.runs.wait(
-            thread_id=merged_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
-            config=merged_config,
+            config=sanitized_config,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
         )

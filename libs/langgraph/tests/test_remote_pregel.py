@@ -539,3 +539,39 @@ async def test_ainvoke():
     )
 
     assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
+
+
+@pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")
+def test_langgraph_cloud_integration():
+    from langgraph_sdk.client import get_client, get_sync_client
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, MessagesState, StateGraph
+
+    # create RemotePregel instance
+    client = get_client()
+    sync_client = get_sync_client()
+    remote_pregel = RemotePregel(client, sync_client, "agent")
+
+    # define graph
+    workflow = StateGraph(MessagesState)
+    workflow.add_node("agent", remote_pregel)
+    workflow.add_edge(START, "agent")
+    workflow.add_edge("agent", END)
+    app = workflow.compile(checkpointer=MemorySaver())
+
+    # test invocation
+    input = {
+        "messages": [
+            {
+                "role": "human",
+                "content": "What's the weather in SF?",
+            }
+        ]
+    }
+
+    response = app.invoke(
+        input,
+        config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
+    )
+    print("\nresponse:", response["messages"][-1].content)
