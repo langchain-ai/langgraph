@@ -34,7 +34,6 @@ interface RunsInvokePayload {
 
   /**
    * Checkpoint ID for when creating a new run.
-   * @deprecated Use `checkpoint` instead.
    */
   checkpointId?: string;
 
