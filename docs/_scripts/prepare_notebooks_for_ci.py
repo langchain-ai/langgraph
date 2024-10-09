@@ -16,6 +16,8 @@ BLOCKLIST_COMMANDS = (
     "WebBaseLoader",
     # skip if has draw_mermaid_png to avoid generating mermaid images via API
     "draw_mermaid_png",
+    # skip if it uses requests to load a file
+    "requests.get",
 )
 
 NOTEBOOKS_NO_CASSETTES = (
@@ -124,6 +126,8 @@ def add_vcr_to_notebook(
         "import msgpack",
         "import base64",
         "import zlib",
+        "import os",
+        "os.environ.pop(\"LANGCHAIN_TRACING_V2\")",
         "custom_vcr = vcr.VCR()",
         "",
         "def compress_data(data, compression_level=9):",
