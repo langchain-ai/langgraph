@@ -16,8 +16,6 @@ BLOCKLIST_COMMANDS = (
     "WebBaseLoader",
     # skip if has draw_mermaid_png to avoid generating mermaid images via API
     "draw_mermaid_png",
-    # skip if it uses requests to load a file
-    "requests.get",
 )
 
 NOTEBOOKS_NO_CASSETTES = (
@@ -71,10 +69,14 @@ def is_comment(code: str) -> bool:
     return code.strip().startswith("#")
 
 
-def has_blocklisted_command(code: str) -> bool:
+def has_blocklisted_command(code: str, metadata: dict) -> bool:
+    print("METADATA", metadata)
+    if 'hide_from_vcr' in metadata:
+        return True
+    
     code = code.strip()
-    for blocklisted_command in BLOCKLIST_COMMANDS:
-        if blocklisted_command in code:
+    for blocklisted_pattern in BLOCKLIST_COMMANDS:
+        if blocklisted_pattern in code:
             return True
     return False
 
@@ -109,7 +111,7 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
-        if has_blocklisted_command(cell.source):
+        if has_blocklisted_command(cell.source,cell.metadata):
             continue
 
         cell_id = cell.get("id", idx)
