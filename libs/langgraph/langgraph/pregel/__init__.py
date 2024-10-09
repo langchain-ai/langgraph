@@ -26,7 +26,6 @@ from uuid import UUID, uuid5
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     Runnable,
-    RunnableLambda,
     RunnableSequence,
 )
 from langchain_core.runnables.base import Input, Output
@@ -37,7 +36,6 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
-    get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -86,7 +84,7 @@ from langgraph.pregel.messages import StreamMessagesHandler
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
-from langgraph.pregel.utils import get_new_channel_versions
+from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -100,7 +98,6 @@ from langgraph.utils.config import (
 )
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
-from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
 
@@ -391,32 +388,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if namespace is not None:
                 if not namespace.startswith(name):
                     continue
+
             # find the subgraph, if any
-            graph: Optional[Pregel] = None
-            candidates = [node.bound]
-            for candidate in candidates:
-                if (
-                    isinstance(candidate, Pregel)
-                    # subgraphs that disabled checkpointing are not considered
-                    and candidate.checkpointer is not False
-                ):
-                    graph = candidate
-                    break
-                elif isinstance(candidate, RunnableSequence):
-                    candidates.extend(candidate.steps)
-                elif isinstance(candidate, RunnableLambda):
-                    candidates.extend(candidate.deps)
-                elif isinstance(candidate, RunnableCallable):
-                    if candidate.func is not None:
-                        candidates.extend(
-                            nl.__self__ if hasattr(nl, "__self__") else nl
-                            for nl in get_function_nonlocals(candidate.func)
-                        )
-                    if candidate.afunc is not None:
-                        candidates.extend(
-                            nl.__self__ if hasattr(nl, "__self__") else nl
-                            for nl in get_function_nonlocals(candidate.afunc)
-                        )
+            graph = cast(Optional[Pregel], find_subgraph_pregel(node.bound))
+
             # if found, yield recursively
             if graph:
                 if name == namespace:
