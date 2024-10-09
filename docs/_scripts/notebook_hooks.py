@@ -1,4 +1,5 @@
 import logging
+from typing import Any, Dict
 
 from mkdocs.structure.pages import Page
 from mkdocs.structure.files import Files, File
@@ -14,7 +15,7 @@ class NotebookFile(File):
         return True
 
 
-def on_files(files: Files, **kwargs):
+def on_files(files: Files, **kwargs: Dict[str, Any]):
     new_files = Files([])
     for file in files:
         if file.src_path.endswith(".ipynb"):
@@ -30,7 +31,7 @@ def on_files(files: Files, **kwargs):
     return new_files
 
 
-def on_page_markdown(markdown, page: Page, **kwargs):
+def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
     if page.file.src_path.endswith(".ipynb"):
         logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         body = convert_notebook(page.file.abs_src_path)

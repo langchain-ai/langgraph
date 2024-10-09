@@ -103,25 +103,10 @@ class ExtractAttachmentsPreprocessor(Preprocessor):
         return cell, resources
 
 
-class CustomRegexRemovePreprocessor(Preprocessor):
-    def check_conditions(self, cell):
-        pattern = re.compile(r"(?s)(?:\s*\Z)|(?:.*#\s*\|\s*output:\s*false.*)")
-        rtn = not pattern.match(cell.source)
-        if not rtn:
-            return False
-        else:
-            return True
-
-    def preprocess(self, nb, resources):
-        nb.cells = [cell for cell in nb.cells if self.check_conditions(cell)]
-        return nb, resources
-
-
 exporter = MarkdownExporter(
     preprocessors=[
         EscapePreprocessor,
         ExtractAttachmentsPreprocessor,
-        CustomRegexRemovePreprocessor,
         ImportPreprocessor,
     ],
     template_name="mdoutput",

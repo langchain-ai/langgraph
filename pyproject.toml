@@ -30,6 +30,7 @@ mkdocs-exclude = "^1.0.2"
 vcrpy = "^6.0.1"
 click = "^8.1.7"
 ruff = "^0.6.8"
+jupyter = "^1.1.1"
 
 [tool.poetry.group.test.dependencies]
 langchain = "^0.3.1"
