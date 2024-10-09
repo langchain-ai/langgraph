@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.INFO)
 
-class NotebookFile(File):
 
+class NotebookFile(File):
     def is_documentation_page(self):
         return True
 
@@ -22,7 +22,7 @@ def on_files(files: Files, **kwargs):
                 path=file.src_path,
                 src_dir=file.src_dir,
                 dest_dir=file.dest_dir,
-                use_directory_urls=file.use_directory_urls
+                use_directory_urls=file.use_directory_urls,
             )
             new_files.append(new_file)
         else:

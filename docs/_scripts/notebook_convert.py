@@ -20,9 +20,7 @@ class EscapePreprocessor(Preprocessor):
             )
             # Fix image paths in <img> tags
             cell.source = re.sub(
-                r'<img\s+src="\.?/img/([^"]+)"',
-                r'<img src="../img/\1"',
-                cell.source
+                r'<img\s+src="\.?/img/([^"]+)"', r'<img src="../img/\1"', cell.source
             )
 
         elif cell.cell_type == "code":
@@ -39,14 +37,16 @@ class EscapePreprocessor(Preprocessor):
 
                         value = output["text"].replace("```", r"\`\`\`")
                         # handle a funky case w/ references in text
-                        value = re.sub(r'\[(\d+)\](?=\[(\d+)\])', r'[\1]\\', value)
+                        value = re.sub(r"\[(\d+)\](?=\[(\d+)\])", r"[\1]\\", value)
                         output["text"] = value
                     elif "data" in output:
                         for key, value in output["data"].items():
                             if isinstance(value, str):
                                 value = value.replace("```", r"\`\`\`")
                                 # handle a funky case w/ references in text
-                                output["data"][key] = re.sub(r'\[(\d+)\](?=\[(\d+)\])', r'[\1]\\', value)
+                                output["data"][key] = re.sub(
+                                    r"\[(\d+)\](?=\[(\d+)\])", r"[\1]\\", value
+                                )
                 cell["outputs"] = [
                     output
                     for i, output in enumerate(cell["outputs"])
@@ -125,8 +125,11 @@ exporter = MarkdownExporter(
         ImportPreprocessor,
     ],
     template_name="mdoutput",
-    extra_template_basedirs=[os.path.join(os.path.dirname(__file__), "notebook_convert_templates")],
+    extra_template_basedirs=[
+        os.path.join(os.path.dirname(__file__), "notebook_convert_templates")
+    ],
 )
+
 
 def convert_notebook(
     notebook_path: Path,

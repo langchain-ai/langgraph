@@ -217,25 +217,29 @@ class ImportPreprocessor(Preprocessor):
 
     def preprocess(self, nb, resources):
         self.all_imports = []
-        file_name = os.path.basename(resources.get('metadata', {}).get('name', ''))
+        file_name = os.path.basename(resources.get("metadata", {}).get("name", ""))
         _DOC_TITLE = _get_doc_title(nb.cells[0].source, file_name)
 
         cells = []
         for cell in nb.cells:
             if cell.cell_type == "code":
                 cells.append(cell)
-                imports = _get_imports(cell.source, _DOC_TITLE, "langchain") + _get_imports(cell.source, _DOC_TITLE, "langgraph")
+                imports = _get_imports(
+                    cell.source, _DOC_TITLE, "langchain"
+                ) + _get_imports(cell.source, _DOC_TITLE, "langgraph")
                 if not imports:
                     continue
 
-                cells.append(nbformat.v4.new_markdown_cell(
-                    source=f"""
+                cells.append(
+                    nbformat.v4.new_markdown_cell(
+                        source=f"""
 <div>
 <b>API Reference:</b>
 {' | '.join(f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports)}
 </div>
                     """
-                ))
+                    )
+                )
             else:
                 cells.append(cell)
         nb.cells = cells
