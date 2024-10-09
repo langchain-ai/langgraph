@@ -1,4 +1,4 @@
-import { Config, Metadata } from "./schema.js";
+import { Checkpoint, Config, Metadata } from "./schema.js";
 
 export type StreamMode = "values" | "messages" | "updates" | "events" | "debug";
 export type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
@@ -36,6 +36,11 @@ interface RunsInvokePayload {
    * Checkpoint ID for when creating a new run.
    */
   checkpointId?: string;
+
+  /**
+   * Checkpoint for when creating a new run.
+   */
+  checkpoint?: Omit<Checkpoint, "thread_id">;
 
   /**
    * Interrupt execution before entering these nodes.
