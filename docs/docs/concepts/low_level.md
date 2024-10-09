@@ -416,6 +416,123 @@ def my_node(state: State) -> State:
     return state
 ```
 
+## Subgraphs
+
+Subgraph is [graph](#graphs) that is called as a [node](#nodes) in another graph. This is a useful design principle if you are building a complex system with multiple components that each need to manage their own separate state. A common use case for using subgraphs is building [multi-agent systems](./multi_agent.md).
+
+There are two ways to add subgraphs nodes in the parent graph:
+
+* add a compiled subgraph
+
+```python
+builder.add_node("subgraph", subgraph_builder.compile())
+```
+
+* add a function that invokes the subgraph
+
+```python
+subgraph = subgraph_builder.compile()
+def call_subgraph(state: State):
+    response = subgraph.invoke({"subgraph_key": state["parent_key"]})
+    ...
+```
+
+Let's take a look at examples for each.
+
+### As a compiled graph
+
+The simplest way to create subgraph nodes is by using a [compiled subgraph](#compiling-your-graph) directly. When doing so, it is **important** that the parent graph and the subgraph [state schemas](#state) share at least one key which they can use to communicate. If your graph and subgraph do not share any keys, you should use write a function [invoking the subgraph](#as-a-function) instead.
+
+```python
+from langgraph.graph import START, StateGraph
+from typing import TypedDict
+
+class State(TypedDict):
+    foo: str
+
+class SubgraphState(TypedDict):
+    foo: str  # note that this key is shared with the parent graph state
+    bar: str
+
+# Define subgraph
+def subgraph_node_1(state: SubgraphState):
+    return {"bar": "bar"}
+
+def subgraph_node_2(state: SubgraphState):
+    # note that this node is using a state key ('bar') that is only available in the subgraph
+    # and is sending update on the shared state key ('foo')
+    return {"foo": state["foo"] + state["bar"]}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_node(subgraph_node_2)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph = subgraph_builder.compile()
+
+# Define parent graph
+def node_1(state: State):
+    return {"foo": "hi! " + state["foo"]}
+
+builder = StateGraph(State)
+builder.add_node("node_1", node_1)
+# note that we're adding the compiled subgraph as a node to the parent graph
+builder.add_node("node_2", subgraph)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+graph = builder.compile()
+graph.invoke({"foo": "foo"})
+{'foo': 'hi! foobar'}
+```
+
+### As a function
+
+You might want to define a subgraph with a completely different schema. In this case, you can create a node function that invokes the subgraph. This function will need to [transform](../how-tos/subgraph-tranform-state.ipynb) the input (parent) state to the subgraph state before invoking the subgraph, and transform the results back to the parent state before returning the state update from the node.
+
+```python
+class State(TypedDict):
+    foo: str
+
+class SubgraphState(TypedDict):
+    # note that none of these keys are shared with the parent graph state
+    bar: str
+    baz: str
+
+# Define subgraph
+def subgraph_node_1(state: SubgraphState):
+    return {"baz": "baz"}
+
+def subgraph_node_2(state: SubgraphState):
+    return {"bar": state["bar"] + state["baz"]}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node_1)
+subgraph_builder.add_node(subgraph_node_2)
+subgraph_builder.add_edge(START, "subgraph_node_1")
+subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph = subgraph_builder.compile()
+
+# Define parent graph
+def node_1(state: State):
+    return {"foo": "hi! " + state["foo"]}
+
+def node_2(state: State):
+    # transform the state to the subgraph state
+    response = subgraph.invoke({"bar": state["foo"]})
+    # transform response back to the parent state
+    return {"foo": response["bar"]}
+
+builder = StateGraph(State)
+builder.add_node("node_1", node_1)
+# note that instead of using the compiled subgraph we are using `node_2` function that is calling the subgraph
+builder.add_node("node_2", node_2)
+builder.add_edge(START, "node_1")
+builder.add_edge("node_1", "node_2")
+graph = builder.compile()
+graph.invoke({"foo": "foo"})
+{'foo': 'hi! foobaz'}
+```
+
 ## Visualization
 
 It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.ipynb) for more info.

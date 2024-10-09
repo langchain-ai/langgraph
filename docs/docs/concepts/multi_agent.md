@@ -107,7 +107,7 @@ graph = create_react_agent(model, [research_agent, summarize_agent], state_modif
 
 Below are several examples of complex multi-agent architectures that can be implemented in LangGraph.
 
-### Multi-Agent Collaboration
+### Multi-agent collaboration
 
 In this example, different agents collaborate on a **shared** scratchpad of messages (i.e. shared graph state). This means that all the work any of them do is visible to the other ones. The benefit is that the other agents can see all the individual steps done. The downside is that sometimes is it overly verbose and unnecessary to pass ALL this information along, and sometimes only the final answer from an agent is needed. We call this **collaboration** because of the shared nature the scratchpad.
 
@@ -119,7 +119,7 @@ Here is a visualization of how these agents are connected:
 
 See full code example in this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/).
 
-### Agent Supervisor
+### Agent supervisor
 
 In this example, multiple agents are connected, but compared to above they do NOT share a shared scratchpad. Rather, they have their own independent scratchpads (i.e. their own state), and then their final responses are appended to a global scratchpad.
 
@@ -129,7 +129,7 @@ In this case, the independent agents are a LangGraph ReAct agent (graph). This m
 
 See full code example in this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/).
 
-### Hierarchical Agent Teams
+### Hierarchical agent teams
 
 What if the job for a single worker in agent supervisor example becomes too complex? What if the number of workers becomes too large? For some applications, the system may be more effective if work is distributed hierarchically. You can do this by creating additional level of subgraphs and creating a top-level supervisor, along with mid-level supervisors:
 
