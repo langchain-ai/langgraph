@@ -20,8 +20,17 @@ from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
-from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_NS,
+    ERROR,
+    INTERRUPT,
+    NS_END,
+    NS_SEP,
+    TAG_HIDDEN,
+)
 from langgraph.pregel.io import read_channels
+from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 
 
@@ -45,6 +54,7 @@ class CheckpointTask(TypedDict):
     name: str
     error: Optional[str]
     interrupts: list[dict]
+    state: Optional[RunnableConfig]
 
 
 class CheckpointPayload(TypedDict):
@@ -140,6 +150,27 @@ def map_debug_checkpoint(
     parent_config: Optional[RunnableConfig],
 ) -> Iterator[DebugOutputCheckpoint]:
     """Produce "checkpoint" events for stream_mode=debug."""
+
+    parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+    task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+
+    for task in tasks:
+        if not find_subgraph_pregel(task.proc):
+            continue
+
+        # assemble checkpoint_ns for this task
+        task_ns = f"{task.name}{NS_END}{task.id}"
+        if parent_ns:
+            task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+
+        # set config as signal that subgraph checkpoints exist
+        task_states[task.id] = {
+            CONF: {
+                "thread_id": config[CONF]["thread_id"],
+                CONFIG_KEY_CHECKPOINT_NS: task_ns,
+            }
+        }
+
     yield {
         "type": "checkpoint",
         "timestamp": checkpoint["ts"],
@@ -155,14 +186,16 @@ def map_debug_checkpoint(
                     "id": t.id,
                     "name": t.name,
                     "error": t.error,
+                    "state": t.state,
                 }
                 if t.error
                 else {
                     "id": t.id,
                     "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
                 }
-                for t in tasks_w_writes(tasks, pending_writes, None)
+                for t in tasks_w_writes(tasks, pending_writes, task_states)
             ],
         },
     }
