@@ -349,4 +349,6 @@ validation:
   unrecognized_links: warn
   # TODO: figure out how to enable 'warn' for this
   # it's only an issue for tutorials/storm/storm.ipynb
+  # because it creates anchors in the generated report
+  # and those anchors are not available in the actual doc
   anchors: info
