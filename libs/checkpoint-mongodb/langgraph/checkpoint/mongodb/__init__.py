@@ -1,13 +1,24 @@
 """
-Taken from: https://langchain-ai.github.io/langgraph/how-tos/persistence_mongodb
-
+TODO: Update Docs
+    - Add async saver
+    - https://langchain-ai.github.io/langgraph/how-tos/persistence_mongodb
+    - Add docstrings. To the standards of the others.
+    - Build API docs
 """
 
-from contextlib import asynccontextmanager, contextmanager
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
+from contextlib import contextmanager
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from langchain_core.runnables import RunnableConfig
-from pymongo import AsyncMongoClient, MongoClient, UpdateOne
+from pymongo import MongoClient, UpdateOne
 from pymongo.database import Database as MongoDatabase
 
 from langgraph.checkpoint.base import (
@@ -18,15 +29,6 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
 )
-
-# TODO - Notes
-#   - Assumes collection names: "checkpoints", "checkpoint_writes". Optional kwargs?
-#   - Following postgres: Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts). Mentioned in comments
-#   - filter: Can I take any match command? {f'metadata.{key}' = 'bob', or { scores: { $elemMatch: { $gt: 80, $lt: 90 } } }
-#       - Would have to get clever with filters but want flexibility
-#   -  Do we want serde? postgres doesn't use it
-#   - Add documentation. The to the standards of the others.
-#       - Build docs
 
 
 class MongoDBSaver(BaseCheckpointSaver):
@@ -59,10 +61,12 @@ class MongoDBSaver(BaseCheckpointSaver):
         chkpnt_wrt_clxn_name: str = "checkpoint_writes",
         **kwargs: Any,
     ) -> Iterator["MongoDBSaver"]:
-        client = None
+        client: Optional[MongoClient] = None
         try:
             client = MongoClient(conn_string)
-            yield MongoDBSaver(client, db_name, chkpnt_clxn_name, chkpnt_wrt_clxn_name, **kwargs)
+            yield MongoDBSaver(
+                client, db_name, chkpnt_clxn_name, chkpnt_wrt_clxn_name, **kwargs
+            )
         finally:
             if client:
                 client.close()
@@ -92,7 +96,7 @@ class MongoDBSaver(BaseCheckpointSaver):
         else:
             query = {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns}
 
-        result = self.db["checkpoints"].find(query).sort("checkpoint_id", -1).limit(1)
+        result = self.clxn_chkpnt.find(query, sort=[("checkpoint_id", -1)], limit=1)
         for doc in result:
             config_values = {
                 "thread_id": thread_id,
@@ -100,7 +104,7 @@ class MongoDBSaver(BaseCheckpointSaver):
                 "checkpoint_id": doc["checkpoint_id"],
             }
             checkpoint = self.serde.loads_typed((doc["type"], doc["checkpoint"]))
-            serialized_writes = self.db["checkpoint_writes"].find(config_values)
+            serialized_writes = self.clxn_chkpnt_wrt.find(config_values)
             pending_writes = [
                 (
                     doc["task_id"],
@@ -112,7 +116,7 @@ class MongoDBSaver(BaseCheckpointSaver):
             return CheckpointTuple(
                 {"configurable": config_values},
                 checkpoint,
-                self.serde.loads(doc["metadata"]),
+                self._loads_metadata(doc["metadata"]),
                 (
                     {
                         "configurable": {
@@ -151,24 +155,22 @@ class MongoDBSaver(BaseCheckpointSaver):
         """
         query = {}
         if config is not None:
-            query = {
-                "thread_id": config["configurable"]["thread_id"],
-                "checkpoint_ns": config["configurable"].get("checkpoint_ns", ""),
-            }
+            query = {"thread_id": config["configurable"]["thread_id"]}
+            if checkpoint_ns := config["configurable"].get("checkpoint_ns", ""):
+                query["checkpoint_ns"] = checkpoint_ns
 
         if filter:
             for key, value in filter.items():
-                query[f"metadata.{key}"] = value
+                query[f"metadata.{key}"] = self._dumps_metadata(value)
 
         if before is not None:
             query["checkpoint_id"] = {"$lt": before["configurable"]["checkpoint_id"]}
 
-        result = self.db["checkpoints"].find(query).sort("checkpoint_id", -1)
+        result = self.clxn_chkpnt.find(
+            query, limit=0 if limit is None else limit, sort=[("checkpoint_id", -1)]
+        )
 
-        if limit is not None:
-            result = result.limit(limit)  # TODO Limit in query or here?
         for doc in result:
-            checkpoint = self.serde.loads_typed((doc["type"], doc["checkpoint"]))
             yield CheckpointTuple(
                 {
                     "configurable": {
@@ -177,8 +179,8 @@ class MongoDBSaver(BaseCheckpointSaver):
                         "checkpoint_id": doc["checkpoint_id"],
                     }
                 },
-                checkpoint,
-                self.serde.loads(doc["metadata"]),  # TODO - Do we want serde?
+                self.serde.loads_typed((doc["type"], doc["checkpoint"])),
+                self._loads_metadata(doc["metadata"]),
                 (
                     {
                         "configurable": {
@@ -221,15 +223,14 @@ class MongoDBSaver(BaseCheckpointSaver):
             "parent_checkpoint_id": config["configurable"].get("checkpoint_id"),
             "type": type_,
             "checkpoint": serialized_checkpoint,
-            "metadata": self.serde.dumps(metadata),
+            "metadata": self._dumps_metadata(metadata),
         }
         upsert_query = {
             "thread_id": thread_id,
             "checkpoint_ns": checkpoint_ns,
             "checkpoint_id": checkpoint_id,
         }
-        # Perform your operations here
-        self.db["checkpoints"].update_one(upsert_query, {"$set": doc}, upsert=True)
+        self.clxn_chkpnt.update_one(upsert_query, {"$set": doc}, upsert=True)
         return {
             "configurable": {
                 "thread_id": thread_id,
@@ -265,6 +266,7 @@ class MongoDBSaver(BaseCheckpointSaver):
                 "task_id": task_id,
                 "idx": idx,
             }
+            # TODO - Do we need special handling here? \/
             type_, serialized_value = self.serde.dumps_typed(value)
             operations.append(
                 UpdateOne(
@@ -279,4 +281,33 @@ class MongoDBSaver(BaseCheckpointSaver):
                     upsert=True,
                 )
             )
-        self.db["checkpoint_writes"].bulk_write(operations)
+        self.clxn_chkpnt_wrt.bulk_write(operations)
+
+    def _loads_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
+        """Deserialize metadata document
+
+        metadata is stored in MongoDB collection with string keys and
+        serde serialized keys.
+        """
+        if isinstance(metadata, dict):
+            output = dict()
+            for key, value in metadata.items():
+                output[key] = self._loads_metadata(value)
+            return output
+        else:
+            return self.serde.loads(metadata)
+
+    def _dumps_metadata(
+        self, metadata: Union[CheckpointMetadata, Any]
+    ) -> Union[bytes, Dict[str, Any]]:
+        """Serialize all values in metadata dictionary.
+
+        Keep dict keys as strings for efficient filtering in MongoDB
+        """
+        if isinstance(metadata, dict):
+            output = dict()
+            for key, value in metadata.items():
+                output[key] = self._dumps_metadata(value)
+            return output
+        else:
+            return self.serde.dumps(metadata)
