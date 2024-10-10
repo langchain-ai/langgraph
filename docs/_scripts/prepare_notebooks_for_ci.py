@@ -110,7 +110,7 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
-        if has_blocklisted_command(cell.source,cell.metadata):
+        if has_blocklisted_command(cell.source, cell.metadata):
             continue
 
         cell_id = cell.get("id", idx)
@@ -128,10 +128,7 @@ def add_vcr_to_notebook(
         "import base64",
         "import zlib",
         "import os",
-        "try:",
-        "    os.environ.pop(\"LANGCHAIN_TRACING_V2\")",
-        "except:",
-        "    pass",
+        "os.environ.pop(\"LANGCHAIN_TRACING_V2\", None)",
         "custom_vcr = vcr.VCR()",
         "",
         "def compress_data(data, compression_level=9):",
