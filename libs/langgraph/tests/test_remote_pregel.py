@@ -588,3 +588,13 @@ async def test_langgraph_cloud_integration():
         stream_mode=["debug", "messages"],
     ):
         print("chunk:", chunk)
+
+    # test stream events
+    async for chunk in remote_pregel.astream_events(
+        input,
+        config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
+        version="v2",
+        subgraphs=True,
+        stream_mode=[],
+    ):
+        print("chunk:", chunk)

@@ -2,6 +2,7 @@ from typing import (
     Any,
     AsyncIterator,
     Iterator,
+    Literal,
     Optional,
     Sequence,
     Union,
@@ -18,6 +19,7 @@ from langchain_core.runnables.graph import (
 from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
+from langchain_core.runnables.schema import StreamEvent
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 from langgraph_sdk.schema import Checkpoint, ThreadState
 from typing_extensions import Self
@@ -384,6 +386,34 @@ class RemotePregel(PregelProtocol, Runnable):
             stream_subgraphs=subgraphs,
         ):
             yield chunk
+
+
+    async def astream_events(
+        self,
+        input: Any,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        merged_config = merge_configs(self.config, config)
+        sanitized_config = self._sanitize_config(merged_config)
+
+        # manually add 'events' to stream modes list
+        stream_mode: list[str] = kwargs.get("stream_mode", [])
+        if "events" not in stream_mode:
+            stream_mode.append("events")
+
+        async for chunk in self.client.runs.stream(
+            thread_id=sanitized_config["configurable"]["thread_id"],
+            assistant_id=self.graph_id,
+            input=input,
+            config=sanitized_config,
+            stream_mode=stream_mode,  # type: ignore
+            interrupt_before=kwargs.get("interrupt_before"),  # type: ignore
+            interrupt_after=kwargs.get("interrupt_after"),  # type: ignore
+            stream_subgraphs=kwargs.get("subgraphs", False),
+        ):
+            yield chunk
+
 
     def invoke(
         self,
