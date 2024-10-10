@@ -40,7 +40,7 @@ class PregelProtocol(Protocol):
         self, namespace: Optional[str] = None, recurse: bool = False
     ) -> Iterator[tuple[str, "PregelProtocol"]]: ...
 
-    async def aget_subgraphs(
+    def aget_subgraphs(
         self, namespace: Optional[str] = None, recurse: bool = False
     ) -> AsyncIterator[tuple[str, "PregelProtocol"]]: ...
 
@@ -61,7 +61,7 @@ class PregelProtocol(Protocol):
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]: ...
 
-    async def aget_state_history(
+    def aget_state_history(
         self,
         config: RunnableConfig,
         *,
@@ -95,7 +95,7 @@ class PregelProtocol(Protocol):
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]: ...
 
-    async def astream(
+    def astream(
         self,
         input: Union[dict[str, Any], Any],
         config: Optional[RunnableConfig] = None,

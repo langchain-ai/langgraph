@@ -18,7 +18,7 @@ from langchain_core.runnables.graph import (
 from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
-from langchain_core.runnables.schema import StreamEvent
+from langchain_core.runnables.schema import StandardStreamEvent, StreamEvent
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 from langgraph_sdk.schema import Checkpoint, ThreadState
 from typing_extensions import Self
@@ -408,11 +408,14 @@ class RemotePregel(PregelProtocol, Runnable):
             input=input,
             config=sanitized_config,
             stream_mode=stream_mode,  # type: ignore
-            interrupt_before=kwargs.get("interrupt_before"),  # type: ignore
-            interrupt_after=kwargs.get("interrupt_after"),  # type: ignore
+            interrupt_before=kwargs.get("interrupt_before"),
+            interrupt_after=kwargs.get("interrupt_after"),
             stream_subgraphs=kwargs.get("subgraphs", False),
         ):
-            yield chunk
+            yield StandardStreamEvent(
+                event=chunk.event,
+                data=chunk.data,
+            )
 
     def invoke(
         self,
