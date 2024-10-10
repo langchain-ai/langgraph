@@ -598,3 +598,16 @@ async def test_langgraph_cloud_integration():
         stream_mode=[],
     ):
         print("chunk:", chunk)
+
+    # test get state
+    state_snapshot = await remote_pregel.aget_state(
+        config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
+        subgraphs=True,
+    )
+    print("state snapshot:", state_snapshot)
+
+    # test get history
+    async for state in remote_pregel.aget_state_history(
+        config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
+    ):
+        print("state snapshot:", state)

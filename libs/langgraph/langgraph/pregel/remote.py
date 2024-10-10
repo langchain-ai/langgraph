@@ -160,7 +160,7 @@ class RemotePregel(PregelProtocol, Runnable):
                     "thread_id": state["checkpoint"]["thread_id"],
                     "checkpoint_ns": state["checkpoint"]["checkpoint_ns"],
                     "checkpoint_id": state["checkpoint"]["checkpoint_id"],
-                    "checkpoint_map": state["checkpoint"]["checkpoint_map"],
+                    "checkpoint_map": state["checkpoint"].get("checkpoint_map", {}),
                 }
             },
             metadata=CheckpointMetadata(**state["metadata"]),
@@ -170,7 +170,9 @@ class RemotePregel(PregelProtocol, Runnable):
                     "thread_id": state["parent_checkpoint"]["thread_id"],
                     "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
                     "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
-                    "checkpoint_map": state["parent_checkpoint"]["checkpoint_map"],
+                    "checkpoint_map": state["parent_checkpoint"].get(
+                        "checkpoint_map", {}
+                    ),
                 }
             }
             if state["parent_checkpoint"]
@@ -387,7 +389,6 @@ class RemotePregel(PregelProtocol, Runnable):
         ):
             yield chunk
 
-
     async def astream_events(
         self,
         input: Any,
@@ -413,7 +414,6 @@ class RemotePregel(PregelProtocol, Runnable):
             stream_subgraphs=kwargs.get("subgraphs", False),
         ):
             yield chunk
-
 
     def invoke(
         self,
