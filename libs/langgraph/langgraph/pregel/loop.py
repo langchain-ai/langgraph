@@ -250,13 +250,7 @@ class PregelLoop:
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
             else ()
         )
-        self.prev_checkpoint_config = (
-            self.checkpoint_config
-            if self.checkpoint_config
-            and CONF in self.checkpoint_config
-            and CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
-            else None
-        )
+        self.prev_checkpoint_config = None
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -740,6 +734,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
                 **saved.config.get(CONF, {}),
             },
         }
+        self.prev_checkpoint_config = saved.parent_config
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
@@ -867,6 +862,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
                 **saved.config.get(CONF, {}),
             },
         }
+        self.prev_checkpoint_config = saved.parent_config
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (

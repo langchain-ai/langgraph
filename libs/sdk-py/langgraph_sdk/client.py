@@ -31,6 +31,7 @@ from httpx._types import QueryParamTypes
 
 import langgraph_sdk
 from langgraph_sdk.schema import (
+    All,
     Assistant,
     AssistantVersion,
     Checkpoint,
@@ -53,6 +54,7 @@ from langgraph_sdk.schema import (
     Thread,
     ThreadState,
     ThreadStatus,
+    ThreadUpdateStateResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -1055,12 +1057,12 @@ class ThreadsClient:
     async def update_state(
         self,
         thread_id: str,
-        values: dict,
+        values: Optional[Union[dict, Sequence[dict]]],
         *,
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
-    ) -> None:
+    ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
         Args:
@@ -1070,15 +1072,27 @@ class ThreadsClient:
             checkpoint: The checkpoint to update the state of.
 
         Returns:
-            None
+            ThreadUpdateStateResponse: Response after updating a thread's state.
 
         Example Usage:
 
-            await client.threads.update_state(
+            response = await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
             )
+            print(response)
+
+            ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+            {
+                'checkpoint': {
+                    'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                    'checkpoint_ns': '',
+                    'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1',
+                    'checkpoint_map': {}
+                }
+            }
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -1161,8 +1175,8 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
@@ -1181,8 +1195,8 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -1202,8 +1216,8 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -1303,8 +1317,8 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
@@ -1323,8 +1337,8 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
@@ -1342,8 +1356,8 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -1481,8 +1495,8 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
@@ -1498,8 +1512,8 @@ class RunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -1516,8 +1530,8 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -1780,8 +1794,8 @@ class CronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
     ) -> Run:
@@ -1845,8 +1859,8 @@ class CronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
     ) -> Run:
@@ -3104,12 +3118,12 @@ class SyncThreadsClient:
     def update_state(
         self,
         thread_id: str,
-        values: dict,
+        values: Optional[Union[dict, Sequence[dict]]],
         *,
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
-    ) -> None:
+    ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
         Args:
@@ -3119,15 +3133,27 @@ class SyncThreadsClient:
             checkpoint: The checkpoint to update the state of.
 
         Returns:
-            None
+            ThreadUpdateStateResponse: Response after updating a thread's state.
 
         Example Usage:
 
-            await client.threads.update_state(
+            response = client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
             )
+            print(response)
+
+            ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+            {
+                'checkpoint': {
+                    'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                    'checkpoint_ns': '',
+                    'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1',
+                    'checkpoint_map': {}
+                }
+            }
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -3212,8 +3238,8 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
@@ -3232,8 +3258,8 @@ class SyncRunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -3253,8 +3279,8 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -3354,8 +3380,8 @@ class SyncRunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
@@ -3374,8 +3400,8 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         after_seconds: Optional[int] = None,
@@ -3393,8 +3419,8 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -3532,8 +3558,8 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
@@ -3549,8 +3575,8 @@ class SyncRunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -3567,8 +3593,8 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -3821,8 +3847,8 @@ class SyncCronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
     ) -> Run:
@@ -3886,8 +3912,8 @@ class SyncCronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[list[str]] = None,
-        interrupt_after: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
     ) -> Run:

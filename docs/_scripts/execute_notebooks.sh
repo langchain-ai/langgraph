@@ -24,7 +24,7 @@ export -f execute_notebook
 
 # Check if custom notebook paths are provided
 if [ $# -gt 0 ]; then
-    notebooks="$@"
+    notebooks=$(echo "$@" | tr ' ' '\n' | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
 else
     # Find all notebooks and filter out those in the skip list
     notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
