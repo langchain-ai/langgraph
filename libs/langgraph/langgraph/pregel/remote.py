@@ -2,7 +2,6 @@ from typing import (
     Any,
     AsyncIterator,
     Iterator,
-    Literal,
     Optional,
     Sequence,
     Union,
