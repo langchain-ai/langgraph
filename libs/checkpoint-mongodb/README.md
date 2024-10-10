@@ -11,7 +11,9 @@ write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
 MONGODB_URI = "mongodb://localhost:27017"
-with MongoDBSaver.from_conn_string(MONGODB_URI) as checkpointer:
+DB_NAME = "checkpoint_example"
+
+with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as checkpointer:
     # call .setup() the first time you're using the checkpointer
     checkpointer.setup()
     checkpoint = {
