@@ -202,7 +202,7 @@ class RemotePregel(PregelProtocol, Runnable):
                 "thread_id": checkpoint["thread_id"],
                 "checkpoint_ns": checkpoint["checkpoint_ns"],
                 "checkpoint_id": checkpoint["checkpoint_id"],
-                "checkpoint_map": checkpoint["checkpoint_map"],
+                "checkpoint_map": checkpoint.get("checkpoint_map", {}),
             }
         }
 

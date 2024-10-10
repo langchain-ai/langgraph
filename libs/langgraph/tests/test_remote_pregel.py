@@ -606,6 +606,20 @@ async def test_langgraph_cloud_integration():
     )
     print("state snapshot:", state_snapshot)
 
+    # test update state
+    response = await remote_pregel.aupdate_state(
+        config={"configurable": {"thread_id": "6645e002-ed50-4022-92a3-d0d186fdf812"}},
+        values={
+            "messages": [
+                {
+                    "role": "ai",
+                    "content": "Hello world again!",
+                }
+            ]
+        },
+    )
+    print("response:", response)
+
     # test get history
     async for state in remote_pregel.aget_state_history(
         config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
