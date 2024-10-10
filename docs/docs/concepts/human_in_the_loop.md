@@ -120,7 +120,7 @@ See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed h
 
 Sometimes we want to review and edit the agent's state. 
  
-As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior the the step we want to check. 
+As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior the step we want to check. 
  
 We can surface the current state to a user and allow the user to edit the agent state.
  
@@ -170,7 +170,7 @@ With editing, the user makes a decision about whether or not to edit the graph s
 
 With input, we explicitly define a node in our graph for collecting human input!
 
-The the state update with the human input then runs *as this node*.
+The state update with the human input then runs *as this node*.
 
 ```python
 # Compile our graph with a checkpoitner and a breakpoint before the step to to collect human input
