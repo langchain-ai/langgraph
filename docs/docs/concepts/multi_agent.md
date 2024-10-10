@@ -6,9 +6,7 @@ An [agent](./agentic_concepts.md#agent-architectures) is *a system that uses an 
 * context grows too complex for a single agent to keep track of
 * there is a need for multiple specialization areas in the system (e.g. planner, researcher, math expert, etc.)
 
-To tackle these, you might consider breaking your application into multiple smaller, independent agents and composing them into a **multi-agent system**.
-
-These independent agents can be as simple as a prompt and an LLM call, or as complex as a [ReAct](./agentic_concepts.md#react-implementation) agent.
+To tackle these, you might consider breaking your application into multiple smaller, independent agents and composing them into a **multi-agent system**. These independent agents can be as simple as a prompt and an LLM call, or as complex as a [ReAct](./agentic_concepts.md#react-implementation) agent.
 
 The primary benefits of using multi-agent systems are:
 
@@ -31,6 +29,8 @@ Agents can be defined as [nodes](./low_level.md#nodes) or as tools in LangGraph.
 
 ![](./img/multi_agent/request.png)
 
+Let's take a look how to create a supervisor architecture using both approaches.
+
 ### Agents as nodes
 
 Agent nodes receive the graph [state](./low_level.md#state) as an input and return an update to the state as their output. Agent nodes can be added as:
@@ -39,32 +39,58 @@ Agent nodes receive the graph [state](./low_level.md#state) as an input and retu
 * [Subgraphs](./low_level.md#subgraphs): individual agents can be defined as separate graphs.
 
 ```python
+from typing import TypedDict, Literal, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, MessagesState, START, END
 
 model = ChatOpenAI(model="gpt-4o-mini")
 
-def research_agent(state: MessagesState):
+class AgentState(MessagesState):
+    next: Literal["researcher", "summarizer"]
+
+class Route(TypedDict):
+    next_agent: Literal["researcher", "summarizer", "END"]
+
+def supervisor(state: AgentState):
+    system_prompt = (
+        "You are supervising a team of two agents: researcher and summarizer. " +
+        "You need to research and summarize information on a given topic. "
+        "Respond with which agent should act next. When finished, respond 'END'"
+    )
+    messages = [{"role": "system", "content": system_prompt}] + state["messages"]
+    response = model.with_structured_output(Route).invoke(messages)
+    # decide which agent to call next
+    return {"next": response["next_agent"]}
+
+def research_agent(state: AgentState):
     """Call research agent"""
     messages = [{"role": "system", "content": "You are a research assistant. Given a topic, provide key facts and information."}] + state["messages"]
     response = model.invoke(messages)
     return {"messages": [response]}
 
-def summarize_agent(state: MessagesState):
+def summarize_agent(state: AgentState):
     """Call summarization agent"""
     messages = [{"role": "system", "content": "You are a summarization expert. Condense the given information into a brief summary."}] + state["messages"]
     response = model.invoke(messages)
     return {"messages": [response]}
 
-graph = StateGraph(MessagesState)
-graph.add_node("research", research_agent)
-graph.add_node("summarize", summarize_agent)
+builder = StateGraph(MessagesState)
+builder.add_node("supervisor", supervisor)
+builder.add_node("researcher", research_agent)
+builder.add_node("summarizer", summarize_agent)
 
-# define the flow explicitly
-graph.add_edge(START, "research")
-graph.add_edge("research", "summarize")
-graph.add_edge("summarize", END)
+builder.add_edge(START, "supervisor")
+# route to one of the agents or exit based on the supervisor's decisiion
+builder.add_conditional_edges(
+    "supervisor",
+    lambda state: state["next"],
+    {"END": END, "researcher": "researcher", "summarizer": "summarizer"}
+)
+builder.add_edge("researcher", "supervisor")
+builder.add_edge("summarizer", "supervisor")
+
+graph = builder.compile()
 ```
 
 ### Agents as tools
@@ -94,7 +120,7 @@ def summarize_agent(state: Annotated[dict, InjectedState]):
     return {"messages": [ToolMessage(response.content, tool_call_id=tool_call["id"])]}
 
 tool_node = ToolNode([research_agent, summarize_agent])
-graph = create_react_agent(model, [research_agent, summarize_agent], state_modifier="First research and then summarize information on a given topic.")
+supervisor = create_react_agent(model, [research_agent, summarize_agent], state_modifier="First research and then summarize information on a given topic.")
 ```
 
 ## Communication in multi-agent systems
