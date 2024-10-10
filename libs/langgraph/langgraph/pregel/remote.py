@@ -373,7 +373,7 @@ class RemotePregel(PregelProtocol, Runnable):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
 
-        async for chunk in await self.client.runs.stream(
+        async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,

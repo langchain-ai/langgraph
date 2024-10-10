@@ -487,12 +487,14 @@ def test_stream():
 @pytest.mark.anyio
 async def test_astream():
     # set up test
-    mock_async_client = AsyncMock()
-    mock_async_client.runs.stream.return_value.__aiter__.return_value = [
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
         {"chunk": "data1"},
         {"chunk": "data2"},
         {"chunk": "data3"},
     ]
+    mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
     remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
@@ -542,7 +544,8 @@ async def test_ainvoke():
 
 
 @pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")
-def test_langgraph_cloud_integration():
+@pytest.mark.anyio
+async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client
 
     from langgraph.checkpoint.memory import MemorySaver
@@ -565,13 +568,23 @@ def test_langgraph_cloud_integration():
         "messages": [
             {
                 "role": "human",
-                "content": "What's the weather in SF?",
+                "content": "Hello world!",
             }
         ]
     }
 
+    # test invoke
     response = app.invoke(
         input,
         config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
     )
-    print("\nresponse:", response["messages"][-1].content)
+    print("response:", response["messages"][-1].content)
+
+    # test stream
+    async for chunk in app.astream(
+        input,
+        config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
+        subgraphs=True,
+        stream_mode=["debug", "messages"],
+    ):
+        print("chunk:", chunk)
