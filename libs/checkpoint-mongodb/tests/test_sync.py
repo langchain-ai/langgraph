@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 from bson.errors import InvalidDocument
@@ -6,7 +6,6 @@ from langchain_core.runnables import RunnableConfig
 from pymongo import MongoClient
 
 from langgraph.checkpoint.base import (
-    Checkpoint,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
@@ -28,66 +27,42 @@ DB_NAME = "langgraph-test"
 
 
 @pytest.fixture(scope="session")
-def setup() -> dict:
+def input_data() -> dict:
     """Setup and store conveniently in a single dictionary."""
-    test_inputs = {}
-    test_inputs["config_1"]: RunnableConfig = {
-        "configurable": {
-            "thread_id": "thread-1",
-            # for backwards compatibility testing
-            "thread_ts": "1",
-            "checkpoint_ns": "",
-        }
-    }
-    test_inputs["config_2"]: RunnableConfig = {
-        "configurable": {
-            "thread_id": "thread-2",
-            "checkpoint_id": "2",
-            "checkpoint_ns": "",
-        }
-    }
-    test_inputs["config_3"]: RunnableConfig = {
-        "configurable": {
-            "thread_id": "thread-2",
-            "checkpoint_id": "2-inner",
-            "checkpoint_ns": "inner",
-        }
-    }
+    inputs: Dict[str, Any] = {}
 
-    test_inputs["config_4"] = RunnableConfig(
+    inputs["config_1"] = RunnableConfig(
+        configurable=dict(thread_id="thread-1", thread_ts="1", checkpoint_ns="")
+    )  # config_1 tests deprecated thread_ts
+
+    inputs["config_2"] = RunnableConfig(
+        configurable=dict(thread_id="thread-2", checkpoint_id="2", checkpoint_ns="")
+    )
+
+    inputs["config_3"] = RunnableConfig(
         configurable=dict(
             thread_id="thread-2", checkpoint_id="2-inner", checkpoint_ns="inner"
         )
     )
 
-    assert test_inputs["config_4"] == test_inputs["config_3"]
+    inputs["chkpnt_1"] = empty_checkpoint()
+    inputs["chkpnt_2"] = create_checkpoint(inputs["chkpnt_1"], {}, 1)
+    inputs["chkpnt_3"] = empty_checkpoint()
 
-    test_inputs["chkpnt_1"]: Checkpoint = empty_checkpoint()
-    test_inputs["chkpnt_2"]: Checkpoint = create_checkpoint(
-        test_inputs["chkpnt_1"], {}, 1
+    inputs["metadata_1"] = CheckpointMetadata(
+        source="input", step=2, writes={}, score=1
     )
-    test_inputs["chkpnt_3"]: Checkpoint = empty_checkpoint()
+    inputs["metadata_2"] = CheckpointMetadata(
+        source="loop", step=1, writes={"foo": "bar"}, score=None
+    )
+    inputs["metadata_3"] = CheckpointMetadata()
 
-    test_inputs["metadata_1"]: CheckpointMetadata = {
-        "source": "input",
-        "step": 2,
-        "writes": {},
-        "score": 1,
-    }
-    test_inputs["metadata_2"]: CheckpointMetadata = {
-        "source": "loop",
-        "step": 1,
-        "writes": {"foo": "bar"},
-        "score": None,
-    }
-    test_inputs["metadata_3"]: CheckpointMetadata = dict()
-
-    return test_inputs
+    return inputs
 
 
-def test_search(setup) -> None:
+def test_search(input_data: Dict[str, Any]) -> None:
     # Clear collections if they exist
-    client = MongoClient(MONGODB_URI)
+    client: MongoClient = MongoClient(MONGODB_URI)
     db = client[DB_NAME]
     for clxn_name in db.list_collection_names():
         db.drop_collection(clxn_name)
@@ -95,21 +70,21 @@ def test_search(setup) -> None:
     with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
         # save checkpoints
         saver.put(
-            setup["config_1"],
-            setup["chkpnt_1"],
-            setup["metadata_1"],
+            input_data["config_1"],
+            input_data["chkpnt_1"],
+            input_data["metadata_1"],
             {},
         )
         saver.put(
-            setup["config_2"],
-            setup["chkpnt_2"],
-            setup["metadata_2"],
+            input_data["config_2"],
+            input_data["chkpnt_2"],
+            input_data["metadata_2"],
             {},
         )
         saver.put(
-            setup["config_3"],
-            setup["chkpnt_3"],
-            setup["metadata_3"],
+            input_data["config_3"],
+            input_data["chkpnt_3"],
+            input_data["metadata_3"],
             {},
         )
 
@@ -124,11 +99,11 @@ def test_search(setup) -> None:
 
         search_results_1 = list(saver.list(None, filter=query_1))
         assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == setup["metadata_1"]
+        assert search_results_1[0].metadata == input_data["metadata_1"]
 
         search_results_2 = list(saver.list(None, filter=query_2))
         assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == setup["metadata_2"]
+        assert search_results_2[0].metadata == input_data["metadata_2"]
 
         search_results_3 = list(saver.list(None, filter=query_3))
         assert len(search_results_3) == 3
@@ -145,7 +120,7 @@ def test_search(setup) -> None:
         } == {"", "inner"}
 
 
-def test_null_chars(setup) -> None:
+def test_null_chars(input_data: Dict[str, Any]) -> None:
     """In MongoDB string *values* can be any valid UTF-8 including nulls.
     *Field names*, however, cannot contain nulls characters."""
     with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
@@ -153,8 +128,8 @@ def test_null_chars(setup) -> None:
 
         # 1. null string in field *value*
         null_value_cfg = saver.put(
-            setup["config_1"],
-            setup["chkpnt_1"],
+            input_data["config_1"],
+            input_data["chkpnt_1"],
             {"my_key": null_str},
             {},
         )
@@ -166,4 +141,9 @@ def test_null_chars(setup) -> None:
 
         # 2. null string in field *name*
         with pytest.raises(InvalidDocument):
-            saver.put(setup["config_1"], setup["chkpnt_1"], {null_str: "my_value"}, {})
+            saver.put(
+                input_data["config_1"],
+                input_data["chkpnt_1"],
+                {null_str: "my_value"},  # type: ignore
+                {},
+            )
