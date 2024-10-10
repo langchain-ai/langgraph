@@ -611,3 +611,14 @@ async def test_langgraph_cloud_integration():
         config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
     ):
         print("state snapshot:", state)
+
+    # test get graph
+    remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
+    graph = await remote_pregel.aget_graph(xray=True)
+    print("graph:", graph)
+
+    # test get subgraphs
+    remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
+    async for name, pregel in remote_pregel.aget_subgraphs():
+        print("name:", name)
+        print("pregel:", pregel)
