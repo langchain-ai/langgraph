@@ -740,6 +740,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
                 **saved.config.get(CONF, {}),
             },
         }
+        self.prev_checkpoint_config = saved.parent_config
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
@@ -867,6 +868,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
                 **saved.config.get(CONF, {}),
             },
         }
+        self.prev_checkpoint_config = saved.parent_config
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
