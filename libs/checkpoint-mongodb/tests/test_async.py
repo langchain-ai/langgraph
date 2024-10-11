@@ -64,16 +64,9 @@ async def test_asearch(input_data: Dict[str, Any]) -> None:
     # Clear collections if they exist
     client: AsyncMongoClient = AsyncMongoClient(MONGODB_URI)
     db = client[DB_NAME]
-    clxns = await db.list_collection_names()
-    if clxns:
-        assert set(clxns) == {"checkpoints", "checkpoint_writes"}
-    try:
-        await client[DB_NAME].drop_collection("checkpoints")
-        await client[DB_NAME].drop_collection("checkpoint_writes")
-    except:
-        pass
-    # async for clxn_name in db.list_collection_names():
-    #     await db.drop_collection(clxn_name)
+
+    for clxn in await db.list_collection_names():
+        await db.drop_collection(clxn)
 
     async with AsyncMongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
         # save checkpoints
@@ -120,7 +113,9 @@ async def test_asearch(input_data: Dict[str, Any]) -> None:
         assert len(search_results_4) == 0
 
         # search by config (defaults to checkpoints across all namespaces)
-        search_results_5 = [c async for c in saver.alist({"configurable": {"thread_id": "thread-2"}})]
+        search_results_5 = [
+            c async for c in saver.alist({"configurable": {"thread_id": "thread-2"}})
+        ]
         assert len(search_results_5) == 2
         assert {
             search_results_5[0].config["configurable"]["checkpoint_ns"],
@@ -141,9 +136,12 @@ async def test_null_chars(input_data: Dict[str, Any]) -> None:
             {"my_key": null_str},
             {},
         )
-        assert await saver.aget_tuple(null_value_cfg).metadata["my_key"] == null_str  # type: ignore
+        null_tuple = await saver.aget_tuple(null_value_cfg)
+        assert null_tuple.metadata["my_key"] == null_str  # type: ignore
         assert (
-            [c async for c in saver.list(None, filter={"my_key": null_str})][0].metadata["my_key"]  # type: ignore
+            [c async for c in saver.alist(None, filter={"my_key": null_str})][
+                0
+            ].metadata["my_key"]  # type: ignore
             == null_str
         )
 
@@ -155,9 +153,3 @@ async def test_null_chars(input_data: Dict[str, Any]) -> None:
                 {null_str: "my_value"},  # type: ignore
                 {},
             )
-
-
-async def test_client() -> None:
-    client = AsyncMongoClient(MONGODB_URI)
-    assert client
-    client.close()

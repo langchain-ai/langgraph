@@ -11,7 +11,7 @@ from typing import (
 
 from langchain_core.runnables import RunnableConfig
 from pymongo import AsyncMongoClient, UpdateOne
-from pymongo.database import Database as MongoDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -27,7 +27,7 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
     """A checkpoint saver that stores checkpoints in a MongoDB database asynchronously."""
 
     client: AsyncMongoClient
-    db: MongoDatabase
+    db: AsyncDatabase
 
     def __init__(
         self,
@@ -46,11 +46,12 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
-            conn_string: str,
-            db_name: str = "checkpointing_db",
-            chkpnt_clxn_name: str = "checkpoints",
-            chkpnt_wrt_clxn_name: str = "checkpoint_writes",
-            **kwargs: Any,
+        cls,
+        conn_string: str,
+        db_name: str = "checkpointing_db",
+        chkpnt_clxn_name: str = "checkpoints",
+        chkpnt_wrt_clxn_name: str = "checkpoint_writes",
+        **kwargs: Any,
     ) -> AsyncIterator["AsyncMongoDBSaver"]:
         client = None
         try:
@@ -88,15 +89,15 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
         else:
             query = {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns}
 
-        result = await self.clxn_chkpnt.find(query, sort=[("checkpoint_id", -1)], limit=1)
-        for doc in result:
+        result = self.clxn_chkpnt.find(query, sort=[("checkpoint_id", -1)], limit=1)
+        async for doc in result:
             config_values = {
                 "thread_id": thread_id,
                 "checkpoint_ns": checkpoint_ns,
                 "checkpoint_id": doc["checkpoint_id"],
             }
             checkpoint = self.serde.loads_typed((doc["type"], doc["checkpoint"]))
-            serialized_writes = await self.clxn_chkpnt_wrt.find(config_values)
+            serialized_writes = self.clxn_chkpnt_wrt.find(config_values)
             pending_writes = [
                 (
                     doc["task_id"],
@@ -108,7 +109,7 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
             return CheckpointTuple(
                 {"configurable": config_values},
                 checkpoint,
-                self.serde.loads(doc["metadata"]),
+                self._loads_metadata(doc["metadata"]),
                 (
                     {
                         "configurable": {
@@ -158,7 +159,7 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
         if before is not None:
             query["checkpoint_id"] = {"$lt": before["configurable"]["checkpoint_id"]}
 
-        result = await self.clxn_chkpnt.find(
+        result = self.clxn_chkpnt.find(
             query, limit=0 if limit is None else limit, sort=[("checkpoint_id", -1)]
         )
 
