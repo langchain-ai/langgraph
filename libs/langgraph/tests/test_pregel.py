@@ -754,7 +754,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
-            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 5}),),
             next=("two",),
             config={
                 "configurable": {
@@ -774,7 +774,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 3},
-            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 4}),),
             next=("one",),
             config={
                 "configurable": {
@@ -814,7 +814,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 20},
-            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 21}),),
             next=("one",),
             config={
                 "configurable": {
@@ -849,7 +849,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "input": 2},
-            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 4}),),
             next=("two",),
             config={
                 "configurable": {
@@ -869,7 +869,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"input": 2},
-            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 3}),),
             next=("one",),
             config={
                 "configurable": {
@@ -955,7 +955,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=5,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -975,7 +975,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=4,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -995,7 +995,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=3,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1015,7 +1015,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=2,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1035,7 +1035,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=1,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1050,7 +1050,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=0,
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__"), result=1),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -1488,7 +1488,7 @@ def test_pending_writes_resume(
     assert state.values == {"value": 1}
     assert state.next == ("one", "two")
     assert state.tasks == (
-        PregelTask(AnyStr(), "one", (PULL, "one")),
+        PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
         PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
     )
     assert state.metadata == {
@@ -1670,7 +1670,11 @@ def test_pending_writes_resume(
             "writes": {"__start__": {"value": 1}},
         },
         parent_config=None,
-        pending_writes=[],
+        pending_writes=UnsortedSequence(
+            (AnyStr(), "value", 1),
+            (AnyStr(), "start:one", "__start__"),
+            (AnyStr(), "start:two", "__start__"),
+        ),
     )
 
 
@@ -9159,7 +9163,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
-            tasks=(PregelTask(AnyStr(), "outer_1", (PULL, "outer_1")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_1",
+                    (PULL, "outer_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9180,7 +9191,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
+            ),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9263,7 +9281,17 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(AnyStr(), "inner_1", (PULL, "inner_1")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner_1",
+                    (PULL, "inner_1"),
+                    result={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                ),
+            ),
         ),
         StateSnapshot(
             values={},
@@ -9286,7 +9314,14 @@ def test_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
         ),
     ]
 
@@ -9354,7 +9389,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
-            tasks=(PregelTask(AnyStr(), "outer_2", (PULL, "outer_2")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_2",
+                    (PULL, "outer_2"),
+                    result={"my_key": "hi my value here and there and back again"},
+                ),
+            ),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -9388,6 +9430,7 @@ def test_nested_graph_state(
                     state={
                         "configurable": {"thread_id": "1", "checkpoint_ns": AnyStr()}
                     },
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
             next=("inner",),
@@ -9415,7 +9458,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
-            tasks=(PregelTask(AnyStr(), "outer_1", (PULL, "outer_1")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_1",
+                    (PULL, "outer_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9436,7 +9486,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
+            ),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9872,6 +9929,7 @@ def test_doubly_nested_graph_state(
                     id=AnyStr(),
                     name="parent_2",
                     path=(PULL, "parent_2"),
+                    result={"my_key": "hi my value here and there and back again"},
                 ),
             ),
         ),
@@ -9888,6 +9946,7 @@ def test_doubly_nested_graph_state(
                             "checkpoint_ns": AnyStr("child"),
                         }
                     },
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
             next=("child",),
@@ -9932,7 +9991,14 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="parent_1", path=(PULL, "parent_1")),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="parent_1",
+                    path=(PULL, "parent_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
         ),
         StateSnapshot(
             values={},
@@ -9953,7 +10019,12 @@ def test_doubly_nested_graph_state(
             created_at=AnyStr(),
             parent_config=None,
             tasks=(
-                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
             ),
         ),
     ]
@@ -10027,6 +10098,7 @@ def test_doubly_nested_graph_state(
                             "checkpoint_ns": AnyStr("child:"),
                         }
                     },
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
         ),
@@ -10052,7 +10124,12 @@ def test_doubly_nested_graph_state(
             created_at=AnyStr(),
             parent_config=None,
             tasks=(
-                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
             ),
         ),
     ]
@@ -10135,7 +10212,10 @@ def test_doubly_nested_graph_state(
             },
             tasks=(
                 PregelTask(
-                    id=AnyStr(), name="grandchild_2", path=(PULL, "grandchild_2")
+                    id=AnyStr(),
+                    name="grandchild_2",
+                    path=(PULL, "grandchild_2"),
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
         ),
@@ -10177,7 +10257,10 @@ def test_doubly_nested_graph_state(
             },
             tasks=(
                 PregelTask(
-                    id=AnyStr(), name="grandchild_1", path=(PULL, "grandchild_1")
+                    id=AnyStr(),
+                    name="grandchild_1",
+                    path=(PULL, "grandchild_1"),
+                    result={"my_key": "hi my value here"},
                 ),
             ),
         ),
@@ -10212,7 +10295,12 @@ def test_doubly_nested_graph_state(
             created_at=AnyStr(),
             parent_config=None,
             tasks=(
-                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
             ),
         ),
     ]
@@ -10492,6 +10580,7 @@ def test_send_to_nested_graphs(
                             "checkpoint_ns": AnyStr("generate_joke:"),
                         }
                     },
+                    result={"jokes": ["Joke about cats - hohoho"]},
                 ),
                 PregelTask(
                     AnyStr(),
@@ -10503,6 +10592,7 @@ def test_send_to_nested_graphs(
                             "checkpoint_ns": AnyStr("generate_joke:"),
                         }
                     },
+                    result={"jokes": ["Joke about turtles - hohoho"]},
                 ),
             ),
             next=("generate_joke", "generate_joke"),
@@ -10525,7 +10615,14 @@ def test_send_to_nested_graphs(
         ),
         StateSnapshot(
             values={"jokes": []},
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"subjects": ["cats", "dogs"]},
+                ),
+            ),
             next=("__start__",),
             config={
                 "configurable": {

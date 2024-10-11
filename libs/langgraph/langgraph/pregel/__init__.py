@@ -485,7 +485,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
-                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
+                tasks_w_writes(
+                    next_tasks.values(),
+                    saved.pending_writes,
+                    task_states,
+                    self.stream_channels_asis,
+                ),
             )
 
     async def _aprepare_state_snapshot(
@@ -561,7 +566,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
-                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
+                tasks_w_writes(
+                    next_tasks.values(),
+                    saved.pending_writes,
+                    task_states,
+                    self.stream_channels_asis,
+                ),
             )
 
     def get_state(

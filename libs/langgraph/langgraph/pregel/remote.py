@@ -155,6 +155,7 @@ class RemoteGraph(PregelProtocol, Runnable):
                     state=self._create_state_snapshot(task["state"])
                     if task["state"]
                     else None,
+                    result=task.get("result"),
                 )
             )
 

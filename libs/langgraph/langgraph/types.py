@@ -108,6 +108,7 @@ class PregelTask(NamedTuple):
     error: Optional[Exception] = None
     interrupts: tuple[Interrupt, ...] = ()
     state: Union[None, RunnableConfig, "StateSnapshot"] = None
+    result: Optional[dict[str, Any]] = None
 
 
 class PregelExecutableTask(NamedTuple):
