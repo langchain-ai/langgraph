@@ -138,12 +138,8 @@ async def test_null_chars(input_data: Dict[str, Any]) -> None:
         )
         null_tuple = await saver.aget_tuple(null_value_cfg)
         assert null_tuple.metadata["my_key"] == null_str  # type: ignore
-        assert (
-            [c async for c in saver.alist(None, filter={"my_key": null_str})][
-                0
-            ].metadata["my_key"]  # type: ignore
-            == null_str
-        )
+        cps = [c async for c in saver.alist(None, filter={"my_key": null_str})]
+        assert cps[0].metadata["my_key"] == null_str
 
         # 2. null string in field *name*
         with pytest.raises(InvalidDocument):
