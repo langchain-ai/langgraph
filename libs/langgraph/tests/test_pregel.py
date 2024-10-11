@@ -6996,11 +6996,14 @@ def test_branch_then(
     # test stream_mode=debug
     tool_two = tool_two_graph.compile(checkpointer=checkpointer)
     thread10 = {"configurable": {"thread_id": "10"}}
-    assert [
+
+    res = [
         *tool_two.stream(
             {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
         )
-    ] == [
+    ]
+
+    assert res == [
         {
             "type": "checkpoint",
             "timestamp": AnyStr(),
@@ -7026,7 +7029,14 @@ def test_branch_then(
                 },
                 "parent_config": None,
                 "next": ["__start__"],
-                "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "__start__",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
             },
         },
         {
@@ -7067,7 +7077,9 @@ def test_branch_then(
                     },
                 },
                 "next": ["prepare"],
-                "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
+                "tasks": [
+                    {"id": AnyStr(), "name": "prepare", "interrupts": (), "state": None}
+                ],
             },
         },
         {
@@ -7131,7 +7143,14 @@ def test_branch_then(
                     },
                 },
                 "next": ["tool_two_slow"],
-                "tasks": [{"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "tool_two_slow",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
             },
         },
         {
@@ -7195,7 +7214,9 @@ def test_branch_then(
                     },
                 },
                 "next": ["finish"],
-                "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
+                "tasks": [
+                    {"id": AnyStr(), "name": "finish", "interrupts": (), "state": None}
+                ],
             },
         },
         {
@@ -11561,3 +11582,229 @@ def test_enum_node_names():
     graph = graph.compile()
 
     assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
+
+
+def test_debug_retry():
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def node(name):
+        def _node(state: State):
+            return {"messages": [f"entered {name} node"]}
+
+        return _node
+
+    builder = StateGraph(State)
+    builder.add_node("one", node("one"))
+    builder.add_node("two", node("two"))
+    builder.add_edge(START, "one")
+    builder.add_edge("one", "two")
+    builder.add_edge("two", END)
+
+    saver = MemorySaver()
+
+    graph = builder.compile(checkpointer=saver)
+
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"messages": []}, config=config)
+
+    # re-run step: 1
+    target_config = next(
+        c.parent_config for c in saver.list(config) if c.metadata["step"] == 1
+    )
+    update_config = graph.update_state(target_config, values=None)
+
+    events = [*graph.stream(None, config=update_config, stream_mode="debug")]
+
+    checkpoint_events = list(
+        reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
+    )
+
+    checkpoint_history = {
+        c.config["configurable"]["checkpoint_id"]: c
+        for c in graph.get_state_history(config)
+    }
+
+    def lax_normalize_config(config: Optional[dict]) -> Optional[dict]:
+        if config is None:
+            return None
+        return config["configurable"]
+
+    for stream in checkpoint_events:
+        stream_conf = lax_normalize_config(stream["config"])
+        stream_parent_conf = lax_normalize_config(stream["parent_config"])
+        assert stream_conf != stream_parent_conf
+
+        # ensure the streamed checkpoint == checkpoint from checkpointer.list()
+        history = checkpoint_history[stream["config"]["configurable"]["checkpoint_id"]]
+        history_conf = lax_normalize_config(history.config)
+        assert stream_conf == history_conf
+
+        history_parent_conf = lax_normalize_config(history.parent_config)
+        assert stream_parent_conf == history_parent_conf
+
+
+def test_debug_subgraphs():
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def node(name):
+        def _node(state: State):
+            return {"messages": [f"entered {name} node"]}
+
+        return _node
+
+    parent = StateGraph(State)
+    child = StateGraph(State)
+
+    child.add_node("c_one", node("c_one"))
+    child.add_node("c_two", node("c_two"))
+    child.add_edge(START, "c_one")
+    child.add_edge("c_one", "c_two")
+    child.add_edge("c_two", END)
+
+    parent.add_node("p_one", node("p_one"))
+    parent.add_node("p_two", child.compile())
+    parent.add_edge(START, "p_one")
+    parent.add_edge("p_one", "p_two")
+    parent.add_edge("p_two", END)
+
+    graph = parent.compile(checkpointer=MemorySaver())
+
+    config = {"configurable": {"thread_id": "1"}}
+    events = [
+        *graph.stream(
+            {"messages": []},
+            config=config,
+            stream_mode="debug",
+        )
+    ]
+
+    checkpoint_events = list(
+        reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
+    )
+    checkpoint_history = list(graph.get_state_history(config))
+
+    assert len(checkpoint_events) == len(checkpoint_history)
+
+    def lax_normalize_config(config: Optional[dict]) -> Optional[dict]:
+        if config is None:
+            return None
+        return config["configurable"]
+
+    for stream, history in zip(checkpoint_events, checkpoint_history):
+        assert stream["values"] == history.values
+        assert stream["next"] == list(history.next)
+        assert lax_normalize_config(stream["config"]) == lax_normalize_config(
+            history.config
+        )
+        assert lax_normalize_config(stream["parent_config"]) == lax_normalize_config(
+            history.parent_config
+        )
+
+        assert len(stream["tasks"]) == len(history.tasks)
+        for stream_task, history_task in zip(stream["tasks"], history.tasks):
+            assert stream_task["id"] == history_task.id
+            assert stream_task["name"] == history_task.name
+            assert stream_task["interrupts"] == history_task.interrupts
+            assert stream_task.get("error") == history_task.error
+            assert stream_task.get("state") == history_task.state
+
+
+def test_debug_nested_subgraphs():
+    from collections import defaultdict
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def node(name):
+        def _node(state: State):
+            return {"messages": [f"entered {name} node"]}
+
+        return _node
+
+    grand_parent = StateGraph(State)
+    parent = StateGraph(State)
+    child = StateGraph(State)
+
+    child.add_node("c_one", node("c_one"))
+    child.add_node("c_two", node("c_two"))
+    child.add_edge(START, "c_one")
+    child.add_edge("c_one", "c_two")
+    child.add_edge("c_two", END)
+
+    parent.add_node("p_one", node("p_one"))
+    parent.add_node("p_two", child.compile())
+    parent.add_edge(START, "p_one")
+    parent.add_edge("p_one", "p_two")
+    parent.add_edge("p_two", END)
+
+    grand_parent.add_node("gp_one", node("gp_one"))
+    grand_parent.add_node("gp_two", parent.compile())
+    grand_parent.add_edge(START, "gp_one")
+    grand_parent.add_edge("gp_one", "gp_two")
+    grand_parent.add_edge("gp_two", END)
+
+    graph = grand_parent.compile(checkpointer=MemorySaver())
+
+    config = {"configurable": {"thread_id": "1"}}
+    events = [
+        *graph.stream(
+            {"messages": []},
+            config=config,
+            stream_mode="debug",
+            subgraphs=True,
+        )
+    ]
+
+    stream_ns: dict[tuple, dict] = defaultdict(list)
+    for ns, e in events:
+        if e["type"] == "checkpoint":
+            stream_ns[ns].append(e["payload"])
+
+    assert list(stream_ns.keys()) == [
+        (),
+        (AnyStr("gp_two:"),),
+        (AnyStr("gp_two:"), AnyStr("p_two:")),
+    ]
+
+    history_ns = {
+        ns: list(
+            graph.get_state_history(
+                {"configurable": {"thread_id": "1", "checkpoint_ns": "|".join(ns)}}
+            )
+        )[::-1]
+        for ns in stream_ns.keys()
+    }
+
+    def normalize_config(config: Optional[dict]) -> Optional[dict]:
+        if config is None:
+            return None
+
+        clean_config = {}
+        clean_config["thread_id"] = config["configurable"]["thread_id"]
+        clean_config["checkpoint_id"] = config["configurable"]["checkpoint_id"]
+        clean_config["checkpoint_ns"] = config["configurable"]["checkpoint_ns"]
+
+        return clean_config
+
+    for checkpoint_events, checkpoint_history in zip(
+        stream_ns.values(), history_ns.values()
+    ):
+        for stream, history in zip(checkpoint_events, checkpoint_history):
+            assert stream["values"] == history.values
+            assert stream["next"] == list(history.next)
+            assert normalize_config(stream["config"]) == normalize_config(
+                history.config
+            )
+            assert normalize_config(stream["parent_config"]) == normalize_config(
+                history.parent_config
+            )
+
+            assert len(stream["tasks"]) == len(history.tasks)
+            for stream_task, history_task in zip(stream["tasks"], history.tasks):
+                assert stream_task["id"] == history_task.id
+                assert stream_task["name"] == history_task.name
+                assert stream_task["interrupts"] == history_task.interrupts
+                assert stream_task.get("error") == history_task.error
+                assert stream_task.get("state") == history_task.state

@@ -77,15 +77,6 @@ plugins:
             options:
               filters:
                 - "!^_"
-  - mkdocs-jupyter:
-      ignore_h1_titles: true
-      execute: false
-      include_source: True
-      include_requirejs: true
-  - exclude:
-      glob:
-        - tutorials/llm-compiler/math_tools.py
-        - tutorials/llm-compiler/output_parser.py
 nav:
   - "index.md"
   - Tutorials:
@@ -167,7 +158,7 @@ nav:
       - Tool calling:
           - Call tools using ToolNode: how-tos/tool-calling.ipynb
           - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
-          - Pass graph state to tools: how-tos/pass-run-time-values-to-tools.ipynb
+          - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
       - Subgraphs:
@@ -326,9 +317,8 @@ markdown_extensions:
   - markdown_include.include:
       base_path: ./
   - github-callouts
-extra_css:
-  - css/mkdocstrings.css
-
+hooks:
+  - _scripts/notebook_hooks.py
 extra:
   social:
     - icon: fontawesome/brands/js
@@ -357,4 +347,8 @@ validation:
   omitted_files: warn
   absolute_links: warn
   unrecognized_links: warn
-  anchors: warn
+  # TODO: figure out how to enable 'warn' for this
+  # it's only an issue for tutorials/storm/storm.ipynb
+  # because it creates anchors in the generated report
+  # and those anchors are not available in the actual doc
+  anchors: info

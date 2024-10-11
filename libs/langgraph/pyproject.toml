@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.2.34"
+version = "0.2.35"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -30,7 +30,7 @@ langgraph-checkpoint = {path = "../checkpoint", develop = true}
 langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 psycopg = {extras = ["binary"], version = ">=3.0.0", python = ">=3.10"}
-uvloop = "^0.20.0"
+uvloop = "0.21.0beta1"
 pyperf = "^2.7.0"
 py-spy = "^0.3.14"
 types-requests = "^2.32.0.20240914"

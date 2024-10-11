@@ -67,7 +67,7 @@ These guides show how to use different streaming modes.
 
 - [How to call tools using ToolNode](tool-calling.ipynb)
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
-- [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
+- [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
