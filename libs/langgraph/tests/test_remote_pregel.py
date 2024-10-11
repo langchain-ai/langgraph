@@ -8,13 +8,13 @@ from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
 
-from langgraph.pregel.remote import RemotePregel
+from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 
 
 def test_with_config():
     # set up test
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         graph_id="test_graph_id",
         config={
             "configurable": {
@@ -62,7 +62,7 @@ def test_get_graph():
         ],
     }
 
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
@@ -111,7 +111,7 @@ async def test_aget_graph():
         ],
     }
 
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client, graph_id="test_graph_id"
     )
 
@@ -157,7 +157,7 @@ def test_get_subgraphs():
         },
     }
 
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id_1"
     )
 
@@ -167,13 +167,13 @@ def test_get_subgraphs():
 
     subgraph_1 = subgraphs[0]
     ns_1 = subgraph_1[0]
-    remote_pregel_1: RemotePregel = subgraph_1[1]
+    remote_pregel_1: RemoteGraph = subgraph_1[1]
     assert ns_1 == "namespace_1"
     assert remote_pregel_1.graph_id == "test_graph_id_2"
 
     subgraph_2 = subgraphs[1]
     ns_2 = subgraph_2[0]
-    remote_pregel_2: RemotePregel = subgraph_2[1]
+    remote_pregel_2: RemoteGraph = subgraph_2[1]
     assert ns_2 == "namespace_2"
     assert remote_pregel_2.graph_id == "test_graph_id_3"
 
@@ -199,7 +199,7 @@ async def test_aget_subgraphs():
         },
     }
 
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client,
         graph_id="test_graph_id_1",
     )
@@ -212,13 +212,13 @@ async def test_aget_subgraphs():
 
     subgraph_1 = subgraphs[0]
     ns_1 = subgraph_1[0]
-    remote_pregel_1: RemotePregel = subgraph_1[1]
+    remote_pregel_1: RemoteGraph = subgraph_1[1]
     assert ns_1 == "namespace_1"
     assert remote_pregel_1.graph_id == "test_graph_id_2"
 
     subgraph_2 = subgraphs[1]
     ns_2 = subgraph_2[0]
-    remote_pregel_2: RemotePregel = subgraph_2[1]
+    remote_pregel_2: RemoteGraph = subgraph_2[1]
     assert ns_2 == "namespace_2"
     assert remote_pregel_2.graph_id == "test_graph_id_3"
 
@@ -242,7 +242,7 @@ def test_get_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
@@ -291,7 +291,7 @@ async def test_aget_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client, graph_id="test_graph_id"
     )
 
@@ -344,7 +344,7 @@ def test_get_state_history():
     ]
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
@@ -394,7 +394,7 @@ async def test_aget_state_history():
     ]
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client, graph_id="test_graph_id"
     )
 
@@ -437,7 +437,7 @@ def test_update_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
@@ -468,7 +468,7 @@ async def test_aupdate_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client, graph_id="test_graph_id"
     )
 
@@ -495,7 +495,7 @@ def test_stream():
     ]
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
@@ -517,7 +517,7 @@ async def test_astream():
     mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client, graph_id="test_graph_id"
     )
 
@@ -536,7 +536,7 @@ def test_invoke():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
@@ -557,7 +557,7 @@ async def test_ainvoke():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=mock_async_client, graph_id="test_graph_id"
     )
 
@@ -580,7 +580,7 @@ async def test_langgraph_cloud_integration():
     # create RemotePregel instance
     client = get_client()
     sync_client = get_sync_client()
-    remote_pregel = RemotePregel(
+    remote_pregel = RemoteGraph(
         client=client, sync_client=sync_client, graph_id="agent"
     )
 
