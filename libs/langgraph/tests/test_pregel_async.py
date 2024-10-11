@@ -291,12 +291,14 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
 
         thread1 = {"configurable": {"thread_id": "1"}}
         # stop when about to enter node
-        assert await tool_two.ainvoke(
-            {"my_key": "value ⛰️", "market": "DE"}, thread1
-        ) == {
-            "my_key": "value ⛰️",
-            "market": "DE",
-        }
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value ⛰️", "market": "DE"}, thread1
+            )
+        ] == [
+            {"__interrupt__": [Interrupt(value="Just because...", when="during")]},
+        ]
         assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
             {
                 "parents": {},
@@ -330,7 +332,6 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
         )
-        # TODO use aget_state_history
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -1103,6 +1104,7 @@ async def test_invoke_two_processes_in_out_interrupt(
             c async for c in app.astream(None, history[2].config, stream_mode="updates")
         ] == [
             {"one": {"inbox": 4}},
+            {"__interrupt__": ()},
         ]
 
 
@@ -3452,6 +3454,7 @@ async def test_conditional_graph_state(
                         ),
                     }
                 },
+                {"__interrupt__": ()},
             ]
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
@@ -3559,6 +3562,7 @@ async def test_conditional_graph_state(
                         ),
                     }
                 },
+                {"__interrupt__": ()},
             ]
 
         async with assert_ctx_once():
@@ -3637,6 +3641,7 @@ async def test_conditional_graph_state(
                     ),
                 }
             },
+            {"__interrupt__": ()},
         ]
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
@@ -3740,6 +3745,7 @@ async def test_conditional_graph_state(
                     ),
                 }
             },
+            {"__interrupt__": ()},
         ]
 
         await app_w_interrupt.aupdate_state(
@@ -4448,6 +4454,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     )
                 }
             },
+            {"__interrupt__": ()},
         ]
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
@@ -4581,6 +4588,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     )
                 },
             },
+            {"__interrupt__": ()},
         ]
 
         tup = await app_w_interrupt.checkpointer.aget_tuple(config)
@@ -4922,6 +4930,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                     id="ai1",
                 )
             },
+            {"__interrupt__": ()},
         ]
 
         tup = await app_w_interrupt.checkpointer.aget_tuple(config)
@@ -5039,6 +5048,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                     id="ai2",
                 )
             },
+            {"__interrupt__": ()},
         ]
 
         tup = await app_w_interrupt.checkpointer.aget_tuple(config)
@@ -6434,6 +6444,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge(checkpointer_name: str) -
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -6525,6 +6536,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -6668,6 +6680,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
                 {"retriever_two": {"docs": ["doc3", "doc4"]}},
                 {"retriever_one": {"docs": ["doc1", "doc2"]}},
+                {"__interrupt__": ()},
             ]
 
         async with assert_ctx_once():
@@ -6833,6 +6846,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -6939,6 +6953,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -7419,6 +7434,7 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
                 (AnyStr("inner:"),),
                 {"inner_1": {"my_key": "got here", "my_other_key": ""}},
             ),
+            ((), {"__interrupt__": ()}),
         ]
         assert [c async for c in app.astream(None, config)] == [
             {"outer_1": {"my_key": " and parallel"}, "__metadata__": {"cached": True}},
@@ -7541,6 +7557,7 @@ async def test_doubly_nested_graph_interrupts(checkpointer_name: str) -> None:
         config = {"configurable": {"thread_id": "2"}}
         assert [c async for c in app.astream({"my_key": "my value"}, config)] == [
             {"parent_1": {"my_key": "hi my value"}},
+            {"__interrupt__": ()},
         ]
         assert [c async for c in app.astream(None, config)] == [
             {"child": {"my_key": "hi my value here and there"}},
@@ -8163,6 +8180,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 (AnyStr("child:"), AnyStr("child_1:")),
                 {"grandchild_1": {"my_key": "hi my value here"}},
             ),
+            ((), {"__interrupt__": ()}),
         ]
         # get state without subgraphs
         outer_state = await app.aget_state(config)
@@ -8895,7 +8913,8 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
             (
                 (AnyStr("child:"), AnyStr("child_1:")),
                 {"grandchild_1": {"my_key": "hi my value here"}},
-            )
+            ),
+            ((), {"__interrupt__": ()}),
         ]
 
 
@@ -9297,6 +9316,7 @@ async def test_weather_subgraph(
         ] == [
             ((), {"router_node": {"route": "weather"}}),
             ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+            ((), {"__interrupt__": ()}),
         ]
 
         # check current state
@@ -9389,6 +9409,7 @@ async def test_weather_subgraph(
         ] == [
             ((), {"router_node": {"route": "weather"}}),
             ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+            ((), {"__interrupt__": ()}),
         ]
         state = await graph.aget_state(config, subgraphs=True)
         assert state == StateSnapshot(
