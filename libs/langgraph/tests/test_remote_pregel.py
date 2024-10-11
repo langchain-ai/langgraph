@@ -62,9 +62,7 @@ def test_get_graph():
         ],
     }
 
-    remote_pregel = RemoteGraph(
-        sync_client=mock_sync_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
     # call method / assertions
     drawable_graph = remote_pregel.get_graph()
@@ -111,9 +109,7 @@ async def test_aget_graph():
         ],
     }
 
-    remote_pregel = RemoteGraph(
-        client=mock_async_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
     # call method / assertions
     drawable_graph = await remote_pregel.aget_graph()
@@ -242,9 +238,7 @@ def test_get_state():
     }
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        sync_client=mock_sync_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_snapshot = remote_pregel.get_state(config)
@@ -291,9 +285,7 @@ async def test_aget_state():
     }
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        client=mock_async_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_snapshot = await remote_pregel.aget_state(config)
@@ -344,9 +336,7 @@ def test_get_state_history():
     ]
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        sync_client=mock_sync_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_history_snapshot = list(
@@ -394,9 +384,7 @@ async def test_aget_state_history():
     ]
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        client=mock_async_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_history_snapshot = []
@@ -437,9 +425,7 @@ def test_update_state():
     }
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        sync_client=mock_sync_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     response = remote_pregel.update_state(config, {"key": "value"})
@@ -468,9 +454,7 @@ async def test_aupdate_state():
     }
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        client=mock_async_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread1"}}
     response = await remote_pregel.aupdate_state(config, {"key": "value"})
@@ -495,9 +479,7 @@ def test_stream():
     ]
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        sync_client=mock_sync_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = list(remote_pregel.stream({"input": "data"}, config))
@@ -517,9 +499,7 @@ async def test_astream():
     mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        client=mock_async_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread_1"}}
     chunks = []
@@ -536,9 +516,7 @@ def test_invoke():
     }
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        sync_client=mock_sync_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = remote_pregel.invoke(
@@ -557,9 +535,7 @@ async def test_ainvoke():
     }
 
     # call method / assertions
-    remote_pregel = RemoteGraph(
-        client=mock_async_client, graph_id="test_graph_id"
-    )
+    remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = await remote_pregel.ainvoke(
