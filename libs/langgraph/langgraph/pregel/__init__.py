@@ -1012,7 +1012,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if saved:
                 await checkpointer.aput_writes(checkpoint_config, writes, task_id)
             # apply to checkpoint and save
-            mv_writes = not apply_writes(
+            mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
