@@ -592,7 +592,10 @@ class PregelLoop:
             self.output = read_channels(self.channels, self.output_keys)
         if suppress:
             # suppress interrupt
-            self._emit("updates", lambda: iter([{INTERRUPT: exc_value.args[0]}]))
+            self._emit(
+                "updates",
+                lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]),
+            )
             return True
 
     def _emit(
