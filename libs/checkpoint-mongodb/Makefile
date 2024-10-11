@@ -1,10 +1,10 @@
-.PHONY: test test_watch lint format
+.PHONY: test lint format help
 
 ######################
 # TESTING AND COVERAGE
 ######################
 
-test:
+test tests:
 #	TODO - Do we want to run mongod in a container?
 	poetry run pytest tests
 
@@ -41,5 +41,3 @@ help:
 	@echo 'format                       - run code formatters'
 	@echo 'lint                         - run linters'
 	@echo 'test                         - run unit tests'
-	@echo 'tests                        - run unit tests'
-	@echo 'test TEST_FILE=<test_file>   - run all tests in file'

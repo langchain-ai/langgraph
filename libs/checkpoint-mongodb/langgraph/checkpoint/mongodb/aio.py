@@ -1,15 +1,8 @@
-"""
-TODO: Update Docs
-    - https://langchain-ai.github.io/langgraph/how-tos/persistence_mongodb
-    - Add docstrings. To the standards of the others.
-    - Build API docs
-"""
-
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from typing import (
     Any,
+    AsyncIterator,
     Dict,
-    Iterator,
     Optional,
     Sequence,
     Tuple,
@@ -17,7 +10,7 @@ from typing import (
 )
 
 from langchain_core.runnables import RunnableConfig
-from pymongo import MongoClient, UpdateOne
+from pymongo import AsyncMongoClient, UpdateOne
 from pymongo.database import Database as MongoDatabase
 
 from langgraph.checkpoint.base import (
@@ -30,15 +23,15 @@ from langgraph.checkpoint.base import (
 )
 
 
-class MongoDBSaver(BaseCheckpointSaver):
-    """A checkpoint saver that stores checkpoints in a MongoDB database."""
+class AsyncMongoDBSaver(BaseCheckpointSaver):
+    """A checkpoint saver that stores checkpoints in a MongoDB database asynchronously."""
 
-    client: MongoClient
+    client: AsyncMongoClient
     db: MongoDatabase
 
     def __init__(
         self,
-        client: MongoClient,
+        client: AsyncMongoClient,
         db_name: str = "checkpointing_db",
         chkpnt_clxn_name: str = "checkpoints",
         chkpnt_wrt_clxn_name: str = "checkpoint_writes",
@@ -51,27 +44,27 @@ class MongoDBSaver(BaseCheckpointSaver):
         self.clxn_chkpnt_wrt = self.db[chkpnt_wrt_clxn_name]
 
     @classmethod
-    @contextmanager
-    def from_conn_string(  # TODO - Naming? conn_string or conn_info?
-        cls,
-        conn_string: str,
-        db_name: str = "checkpointing_db",
-        chkpnt_clxn_name: str = "checkpoints",
-        chkpnt_wrt_clxn_name: str = "checkpoint_writes",
-        **kwargs: Any,
-    ) -> Iterator["MongoDBSaver"]:
-        client: Optional[MongoClient] = None
+    @asynccontextmanager
+    async def from_conn_string(
+            conn_string: str,
+            db_name: str = "checkpointing_db",
+            chkpnt_clxn_name: str = "checkpoints",
+            chkpnt_wrt_clxn_name: str = "checkpoint_writes",
+            **kwargs: Any,
+    ) -> AsyncIterator["AsyncMongoDBSaver"]:
+        client = None
         try:
-            client = MongoClient(conn_string)
-            yield MongoDBSaver(
+            client = AsyncMongoClient(conn_string)
+            # client = await AsyncMongoClient(conn_string).aconnect()
+            yield AsyncMongoDBSaver(
                 client, db_name, chkpnt_clxn_name, chkpnt_wrt_clxn_name, **kwargs
             )
         finally:
             if client:
                 client.close()
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        """Get a checkpoint tuple from the database.
+    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database asynchronously.
 
         This method retrieves a checkpoint tuple from the MongoDB database based on the
         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
@@ -95,7 +88,7 @@ class MongoDBSaver(BaseCheckpointSaver):
         else:
             query = {"thread_id": thread_id, "checkpoint_ns": checkpoint_ns}
 
-        result = self.clxn_chkpnt.find(query, sort=[("checkpoint_id", -1)], limit=1)
+        result = await self.clxn_chkpnt.find(query, sort=[("checkpoint_id", -1)], limit=1)
         for doc in result:
             config_values = {
                 "thread_id": thread_id,
@@ -103,19 +96,19 @@ class MongoDBSaver(BaseCheckpointSaver):
                 "checkpoint_id": doc["checkpoint_id"],
             }
             checkpoint = self.serde.loads_typed((doc["type"], doc["checkpoint"]))
-            serialized_writes = self.clxn_chkpnt_wrt.find(config_values)
+            serialized_writes = await self.clxn_chkpnt_wrt.find(config_values)
             pending_writes = [
                 (
                     doc["task_id"],
                     doc["channel"],
                     self.serde.loads_typed((doc["type"], doc["value"])),
                 )
-                for doc in serialized_writes
+                async for doc in serialized_writes
             ]
             return CheckpointTuple(
                 {"configurable": config_values},
                 checkpoint,
-                self._loads_metadata(doc["metadata"]),
+                self.serde.loads(doc["metadata"]),
                 (
                     {
                         "configurable": {
@@ -130,27 +123,27 @@ class MongoDBSaver(BaseCheckpointSaver):
                 pending_writes,
             )
 
-    def list(
+    async def alist(
         self,
         config: Optional[RunnableConfig],
         *,
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
-    ) -> Iterator[CheckpointTuple]:
-        """List checkpoints from the database.
+    ) -> AsyncIterator[CheckpointTuple]:
+        """List checkpoints from the database asynchronously.
 
         This method retrieves a list of checkpoint tuples from the MongoDB database based
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata. Defaults to None.
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
             before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+            limit (Optional[int]): Maximum number of checkpoints to return.
 
         Yields:
-            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+            AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
         """
         query = {}
         if config is not None:
@@ -165,11 +158,11 @@ class MongoDBSaver(BaseCheckpointSaver):
         if before is not None:
             query["checkpoint_id"] = {"$lt": before["configurable"]["checkpoint_id"]}
 
-        result = self.clxn_chkpnt.find(
+        result = await self.clxn_chkpnt.find(
             query, limit=0 if limit is None else limit, sort=[("checkpoint_id", -1)]
         )
 
-        for doc in result:
+        async for doc in result:
             yield CheckpointTuple(
                 {
                     "configurable": {
@@ -193,14 +186,14 @@ class MongoDBSaver(BaseCheckpointSaver):
                 ),
             )
 
-    def put(
+    async def aput(
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        """Save a checkpoint to the database.
+        """Save a checkpoint to the database asynchronously.
 
         This method saves a checkpoint to the MongoDB database. The checkpoint is associated
         with the provided config and its parent config (if any).
@@ -229,7 +222,8 @@ class MongoDBSaver(BaseCheckpointSaver):
             "checkpoint_ns": checkpoint_ns,
             "checkpoint_id": checkpoint_id,
         }
-        self.clxn_chkpnt.update_one(upsert_query, {"$set": doc}, upsert=True)
+        # Perform your operations here
+        await self.clxn_chkpnt.update_one(upsert_query, {"$set": doc}, upsert=True)
         return {
             "configurable": {
                 "thread_id": thread_id,
@@ -238,15 +232,15 @@ class MongoDBSaver(BaseCheckpointSaver):
             }
         }
 
-    def put_writes(
+    async def aput_writes(
         self,
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
-        """Store intermediate writes linked to a checkpoint.
+        """Store intermediate writes linked to a checkpoint asynchronously.
 
-        This method saves intermediate writes associated with a checkpoint to the MongoDB database.
+        This method saves intermediate writes associated with a checkpoint to the database.
 
         Args:
             config (RunnableConfig): Configuration of the related checkpoint.
@@ -280,7 +274,7 @@ class MongoDBSaver(BaseCheckpointSaver):
                     upsert=True,
                 )
             )
-        self.clxn_chkpnt_wrt.bulk_write(operations)
+        await self.db["checkpoint_writes"].bulk_write(operations)
 
     def _loads_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
         """Deserialize metadata document
