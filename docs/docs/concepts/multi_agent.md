@@ -20,49 +20,140 @@ The primary benefits of using multi-agent systems are:
 
 There are several ways to connect agents in a multi-agent system:
 
-* **Unconstrained Mult-Agent** connections: each agent can communicate with any other agent. Any agent can decide which other agent to call next. This architecture is very flexible but becomes inefficient and harder to scale as the number of agents grows.
-* **Multi-Agent Workflow** connections: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
-* **Supervisor**, or **one-to-many** connections: each agent communicates with a single [supervisor](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
-* **Single tool-calling agent**: this is a special case of supervisor architecture. Individual agents can be represented as tools. In this case, a supervisor agent uses a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
+* **Unconstrained multi-agent**: each agent can communicate with any other agent. Any agent can decide which other agent to call next.
+* **Multi-agent workflow**: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
+* **Supervisor**: each agent communicates with a single [supervisor](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
+* **Supervisor (tool-calling)**: this is a special case of supervisor architecture. Individual agents can be represented as tools. In this case, a supervisor agent uses a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
 
-### Unconstrained many-to-many
+### Unconstrained multi-agent
 
-### Multi-Agent Workflow
+In this architecture, agents are defined as graph nodes. Each agent is connected to all other agents (many-to-many connections) and can decided which agent to call next. While very flexible, this architecture is inefficient and doesn't scale well as the number of agents grows. We recommend avoiding this architecture in production and using one of the below architectures instead.
 
-LangGraph provides multiple methods to control agent communication sequence:
+### Multi-agent workflow
 
-* **Explicit control flow (graph edges)**: LangGraph allows you to explicitly define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via [graph edges](./low_level.md#edges). This is the most deterministic variant of the **constrained** multi-agent architecture above -- we always know which agent will be called next ahead of time.
+In this architecture we add individual agents as graph nodes and define the order in which agents are called ahead of time, in a "constrained" workflow. In LangGraph the workflow can be defined in two ways:
 
-* **Dynamic control flow (conditional edges)**: in LangGraph you can allow LLMs to decide parts of your application control flow. This can be achieved by using [conditional edges](./low_level.md#conditional-edges). A special case of this is a single tool-calling agent that calls [agents as tools](#agents-as-tools). In this case, the tool-calling LLM powering the supervisor agent will make decisions about the order in which the tools (agents) are being called.
+* **Explicit control flow (normal edges)**: LangGraph allows you to explicitly define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via [normal graph edges](./low_level.md#normal-edges). This is the most deterministic variant of this architecture above -- we always know which agent will be called next ahead of time.
+
+* **Dynamic control flow (conditional edges)**: in LangGraph you can allow LLMs to decide parts of your application control flow. This can be achieved by using [conditional edges](./low_level.md#conditional-edges). A special case of this is a [supervisor tool-calling](#supervisor-tool-calling) architecture. In that case, the tool-calling LLM powering the supervisor agent will make decisions about the order in which the tools (agents) are being called.
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+
+model = ChatOpenAI()
+
+def agent_1(state: MessagesState):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+def agent_2(state: MessagesState):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+builder = StateGraph(MessagesState)
+builder.add_node(agent_1)
+builder.add_node(agent_2)
+# define the flow explicitly
+builder.add_edge(START, "agent_1")
+builder.add_edge("agent_1", "agent_2")
+```
 
 ### Supervisor
 
-### Supervisor (Tool Calling)
+In this architecture, we define agents as nodes and add a supervisor node (LLM) that decides which agent nodes should be called next. We use [conditional edges](./low_level.md#conditional-edges) to route execution to the appropriate agent node based on supervisor's decision.
 
+```python
+from typing import Literal
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+
+model = ChatOpenAI()
+
+class AgentState(MessagesState):
+    next: Literal["agent_1", "agent_2"]
+
+def supervisor(state: AgentState):
+    response = model.invoke(...)
+    return {"next": response["next_agent"]}
+
+def agent_1(state: AgentState):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+def agent_2(state: AgentState):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+builder = StateGraph(AgentState)
+builder.add_node(supervisor)
+builder.add_node(agent_1)
+builder.add_node(agent_2)
+
+builder.add_edge(START, "supervisor")
+# route to one of the agents or exit based on the supervisor's decisiion
+builder.add_conditional_edges("supervisor", lambda state: state["next"])
+builder.add_edge("agent_1", "supervisor")
+builder.add_edge("agent_2", "supervisor")
+
+supervisor = builder.compile()
+```
+
+### Supervisor (tool-calling)
+
+In this variant of the [supervisor](#supervisor) architecture, we define individual agents as **tools** and use a tool-calling LLM in the supervisor node. This can be implemented as a [ReAct](./agentic_concepts.md#react-implementation)-style agent with two nodes -- an LLM node (supervisor) and a tool-calling node that executes tools (agents in this case).
+
+```python
+from typing import Annotated
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import InjectedState, create_react_agent
+
+model = ChatOpenAI()
+
+def agent_1(state: Annotated[dict, InjectedState]):
+    tool_message = ...
+    return {"messages": [tool_message]}
+
+def agent_2(state: Annotated[dict, InjectedState]):
+    tool_message = ...
+    return {"messages": [tool_message]}
+
+tools = [agent_1, agent_2]
+supervisor = create_react_agent(model, tools)
+```
 
 ## Communication between agents
 
-The most important thing is to figure out how agents communicate.
-There are few different considerations for how they communcicate
+The most important thing when building multi-agent systems is figuring out how the agents communicate. There are few different considerations:
 
-**Via tool calls or via state**
-...
+* Do agents communicate via [**via graph state or via tool calls**](#graph-state-vs-tool-calls)?
+* What if two agents have [**different state schemas**](#different-state-schemas)?
+* How to communicate over a [**shared message list**](#shared-message-list)?
 
-**What if two agents have different States?**
-...
+### Graph state vs tool calls
 
-**Communicating on a shared message list**
+What is the "payload" that is being passed around between agents? In most of the architectures discussed above the agents communicate via the [graph state](./low_level.md#state). In the case of the [supervisor with tool-calling](#supervisor-tool-calling), the payloads are tool call arguments.
 
-
-### Via tool calls or via state**
 ![](./img/multi_agent/request.png)
 
-### What if two agents have different States?
+#### Graph state
 
-### Communicating on a shared message list
+To communicate via graph state, individual agents need to be defined as [graph nodes](./low_level.md#nodes). These can be added as functions or as entire [subgraphs](./low_level.md#subgraphs). At each step of the graph execution, agent node receives the current state of the graph, executes the agent code and then passes the updated state to the next nodes.
+
+Typically agent nodes share a single [state schema](./low_level.md#schema). However, you might want to design agent nodes with [different state schemas](#different-state-schemas).
+
+### Different state schemas
+
+An agent might need to have a different state schema from the rest of the agents. For example, a search agent might only need to keep track of queries and retrieved documents. There are two ways to achieve this in LangGraph:
+
+* Define [subgraph](./low_level.md#subgraphs) agents with a separate state schema. If there are no shared state keys (channels) between the subgraph and the parent graph, it’s important to [add input / output transformations](https://langchain-ai.github.io/langgraph/how-tos/subgraph-transform-state/) so that the parent graph knows how to communicate with the subgraphs.
+* Define agent node functions with a [private input state schema](https://langchain-ai.github.io/langgraph/how-tos/pass_private_state/) that is distinct from the overall graph state schema. This allows passing information that is only needed for executing that particular agent.
+
+### Shared message list
+
+The most common way for the agents to communicate is via a shared state channel, typically a list of messages. This assumes that there is always at least a single channel (key) in the state that is shared by the agents. When communicating via a shared message list there is an additional consideration: should the agents [share the full history](#share-full-history) of their thought process or only [the final result](#share-final-result)?
 
 ![](./img/multi_agent/response.png)
-
 
 #### Share full history
 
@@ -70,9 +161,6 @@ Agents can **share the full history** of their thought process (i.e. "scratchpad
 
 #### Share final result
 
-Agents can have their own private "scratchpad" and only **share the final result** with the rest of the agents. This approach might work better for systems with many agents or agents that are more complex. There are several ways to achieve this in LangGraph:
-
-* An agent node can have a [private input state schema](https://langchain-ai.github.io/langgraph/how-tos/pass_private_state/) that is distinct from the overall graph state schema. This allows passing additional information during the graph execution that is only needed for executing a particular node.
-* [Subgraph](./low_level.md#subgraphs) agents can have independent [input / output state schemas](https://langchain-ai.github.io/langgraph/how-tos/input_output_schema/). In this case it’s important to [add input / output transformations](https://langchain-ai.github.io/langgraph/how-tos/subgraph-transform-state/) so that the parent graph knows how to communicate with the subgraphs.
+Agents can have their own private "scratchpad" and only **share the final result** with the rest of the agents. This approach might work better for systems with many agents or agents that are more complex. In this case, you would need to define agents with [different state schemas](#different-state-schemas)
 
 For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](https://langchain-ai.github.io/langgraph/how-tos/pass-run-time-values-to-tools/#pass-graph-state-to-tools) to individual tools at runtime, so subordinate agents can access parent state, if needed.
