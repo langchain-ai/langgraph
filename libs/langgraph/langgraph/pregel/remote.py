@@ -5,6 +5,7 @@ from typing import (
     Optional,
     Sequence,
     Union,
+    cast,
 )
 
 import orjson
@@ -19,7 +20,12 @@ from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
 from langchain_core.runnables.schema import StandardStreamEvent, StreamEvent
-from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
+from langgraph_sdk.client import (
+    LangGraphClient,
+    SyncLangGraphClient,
+    get_client,
+    get_sync_client,
+)
 from langgraph_sdk.schema import Checkpoint, ThreadState
 from typing_extensions import Self
 
@@ -33,15 +39,25 @@ from langgraph.utils.config import merge_configs
 class RemotePregel(PregelProtocol, Runnable):
     def __init__(
         self,
-        client: LangGraphClient,
-        sync_client: SyncLangGraphClient,
         graph_id: str,
         config: Optional[RunnableConfig] = None,
+        url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
+        client: Optional[LangGraphClient] = None,
+        sync_client: Optional[SyncLangGraphClient] = None,
     ):
-        self.client = client
-        self.sync_client = sync_client
+        """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
+
+        If `client` or `sync_client` are provided, they will be used instead of the default clients.
+        See `LangGraphClient` and `SyncLangGraphClient` for details on the default clients.
+        """
         self.graph_id = graph_id
         self.config = config
+        self.client = client or get_client(url=url, api_key=api_key, headers=headers)
+        self.sync_client = sync_client or get_sync_client(
+            url=url, api_key=api_key, headers=headers
+        )
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
@@ -50,8 +66,23 @@ class RemotePregel(PregelProtocol, Runnable):
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self:
-        self.config = config
-        return self
+        return self.copy(
+            {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
+        )
+
+    def _get_drawable_nodes(
+        self, graph: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, DrawableNode]:
+        nodes = {}
+        for node in graph["nodes"]:
+            node_id = str(node["id"])
+            nodes[node_id] = DrawableNode(
+                id=node_id,
+                name=node.get("name", ""),
+                data=node.get("data", {}),
+                metadata=node.get("metadata"),
+            )
+        return nodes
 
     def get_graph(
         self,
@@ -63,20 +94,8 @@ class RemotePregel(PregelProtocol, Runnable):
             assistant_id=self.graph_id,
             xray=xray,
         )
-
-        # construct DrawableNodes
-        nodes = {}
-        for node in graph["nodes"]:
-            node_id = node["id"]
-            nodes[node_id] = DrawableNode(
-                id=node_id,
-                name=node.get("name", node_id),
-                data=node.get("data", {}),
-                metadata=node.get("metadata"),
-            )
-
         return DrawableGraph(
-            nodes=nodes,
+            nodes=self._get_drawable_nodes(graph),
             edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
 
@@ -90,20 +109,8 @@ class RemotePregel(PregelProtocol, Runnable):
             assistant_id=self.graph_id,
             xray=xray,
         )
-
-        # construct DrawableNodes
-        nodes = {}
-        for node in graph["nodes"]:
-            node_id = node["id"]
-            nodes[node_id] = DrawableNode(
-                id=node_id,
-                name=node.get("name", node_id),
-                data=node.get("data", {}),
-                metadata=node.get("metadata"),
-            )
-
         return DrawableGraph(
-            nodes=nodes,
+            nodes=self._get_drawable_nodes(graph),
             edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
 

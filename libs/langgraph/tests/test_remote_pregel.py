@@ -15,16 +15,29 @@ from langgraph.pregel.types import StateSnapshot
 def test_with_config():
     # set up test
     remote_pregel = RemotePregel(
-        client=AsyncMock(id="async_client_1"),
-        sync_client=MagicMock(id="sync_client_1"),
         graph_id="test_graph_id",
+        config={
+            "configurable": {
+                "foo": "bar",
+                "thread_id": "thread_id_1",
+            }
+        },
     )
 
     # call method / assertions
-    config = {"configurable": {"thread_id": "thread_id_1"}}
-    remote_pregel = remote_pregel.with_config(config)
+    config = {"configurable": {"hello": "world"}}
+    remote_pregel_copy = remote_pregel.with_config(config)
 
-    assert remote_pregel.config["configurable"]["thread_id"] == "thread_id_1"
+    # assert that a copy was returned
+    assert remote_pregel_copy != remote_pregel
+    # assert that configs were merged
+    assert remote_pregel_copy.config == {
+        "configurable": {
+            "foo": "bar",
+            "thread_id": "thread_id_1",
+            "hello": "world",
+        }
+    }
 
 
 def test_get_graph():
@@ -50,7 +63,7 @@ def test_get_graph():
     }
 
     remote_pregel = RemotePregel(
-        client=AsyncMock(), sync_client=mock_sync_client, graph_id="test_graph_id"
+        sync_client=mock_sync_client, graph_id="test_graph_id"
     )
 
     # call method / assertions
@@ -58,14 +71,12 @@ def test_get_graph():
 
     assert drawable_graph.nodes == {
         "__start__": DrawableNode(
-            id="__start__", name="__start__", data="__start__", metadata=None
+            id="__start__", name="", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(
-            id="__end__", name="__end__", data="__end__", metadata=None
-        ),
+        "__end__": DrawableNode(id="__end__", name="", data="__end__", metadata=None),
         "agent": DrawableNode(
             id="agent",
-            name="agent",
+            name="",
             data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
             metadata=None,
         ),
@@ -101,7 +112,7 @@ async def test_aget_graph():
     }
 
     remote_pregel = RemotePregel(
-        client=mock_async_client, sync_client=MagicMock(), graph_id="test_graph_id"
+        client=mock_async_client, graph_id="test_graph_id"
     )
 
     # call method / assertions
@@ -109,14 +120,12 @@ async def test_aget_graph():
 
     assert drawable_graph.nodes == {
         "__start__": DrawableNode(
-            id="__start__", name="__start__", data="__start__", metadata=None
+            id="__start__", name="", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(
-            id="__end__", name="__end__", data="__end__", metadata=None
-        ),
+        "__end__": DrawableNode(id="__end__", name="", data="__end__", metadata=None),
         "agent": DrawableNode(
             id="agent",
-            name="agent",
+            name="",
             data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
             metadata=None,
         ),
@@ -130,7 +139,7 @@ async def test_aget_graph():
 
 def test_get_subgraphs():
     # set up test
-    mock_sync_client = MagicMock(id=2)
+    mock_sync_client = MagicMock()
     mock_sync_client.assistants.get_subgraphs.return_value = {
         "namespace_1": {
             "graph_id": "test_graph_id_2",
@@ -148,7 +157,9 @@ def test_get_subgraphs():
         },
     }
 
-    remote_pregel = RemotePregel(AsyncMock(id=1), mock_sync_client, "test_graph_id_1")
+    remote_pregel = RemotePregel(
+        sync_client=mock_sync_client, graph_id="test_graph_id_1"
+    )
 
     # call method / assertions
     subgraphs = list(remote_pregel.get_subgraphs())
@@ -159,22 +170,18 @@ def test_get_subgraphs():
     remote_pregel_1: RemotePregel = subgraph_1[1]
     assert ns_1 == "namespace_1"
     assert remote_pregel_1.graph_id == "test_graph_id_2"
-    assert remote_pregel_1.client.id == 1
-    assert remote_pregel_1.sync_client.id == 2
 
     subgraph_2 = subgraphs[1]
     ns_2 = subgraph_2[0]
     remote_pregel_2: RemotePregel = subgraph_2[1]
     assert ns_2 == "namespace_2"
     assert remote_pregel_2.graph_id == "test_graph_id_3"
-    assert remote_pregel_2.client.id == 1
-    assert remote_pregel_2.sync_client.id == 2
 
 
 @pytest.mark.anyio
 async def test_aget_subgraphs():
     # set up test
-    mock_async_client = AsyncMock(id=1)
+    mock_async_client = AsyncMock()
     mock_async_client.assistants.get_subgraphs.return_value = {
         "namespace_1": {
             "graph_id": "test_graph_id_2",
@@ -192,7 +199,10 @@ async def test_aget_subgraphs():
         },
     }
 
-    remote_pregel = RemotePregel(mock_async_client, MagicMock(id=2), "test_graph_id_1")
+    remote_pregel = RemotePregel(
+        client=mock_async_client,
+        graph_id="test_graph_id_1",
+    )
 
     # call method / assertions
     subgraphs = []
@@ -205,16 +215,12 @@ async def test_aget_subgraphs():
     remote_pregel_1: RemotePregel = subgraph_1[1]
     assert ns_1 == "namespace_1"
     assert remote_pregel_1.graph_id == "test_graph_id_2"
-    assert remote_pregel_1.client.id == 1
-    assert remote_pregel_1.sync_client.id == 2
 
     subgraph_2 = subgraphs[1]
     ns_2 = subgraph_2[0]
     remote_pregel_2: RemotePregel = subgraph_2[1]
     assert ns_2 == "namespace_2"
     assert remote_pregel_2.graph_id == "test_graph_id_3"
-    assert remote_pregel_2.client.id == 1
-    assert remote_pregel_2.sync_client.id == 2
 
 
 def test_get_state():
@@ -236,7 +242,9 @@ def test_get_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
+    remote_pregel = RemotePregel(
+        sync_client=mock_sync_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_snapshot = remote_pregel.get_state(config)
@@ -283,7 +291,9 @@ async def test_aget_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
+    remote_pregel = RemotePregel(
+        client=mock_async_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_snapshot = await remote_pregel.aget_state(config)
@@ -334,7 +344,9 @@ def test_get_state_history():
     ]
 
     # call method / assertions
-    remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
+    remote_pregel = RemotePregel(
+        sync_client=mock_sync_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_history_snapshot = list(
@@ -382,7 +394,9 @@ async def test_aget_state_history():
     ]
 
     # call method / assertions
-    remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
+    remote_pregel = RemotePregel(
+        client=mock_async_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread1"}}
     state_history_snapshot = []
@@ -423,7 +437,9 @@ def test_update_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
+    remote_pregel = RemotePregel(
+        sync_client=mock_sync_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread1"}}
     response = remote_pregel.update_state(config, {"key": "value"})
@@ -452,7 +468,9 @@ async def test_aupdate_state():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
+    remote_pregel = RemotePregel(
+        client=mock_async_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread1"}}
     response = await remote_pregel.aupdate_state(config, {"key": "value"})
@@ -477,7 +495,9 @@ def test_stream():
     ]
 
     # call method / assertions
-    remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
+    remote_pregel = RemotePregel(
+        sync_client=mock_sync_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = list(remote_pregel.stream({"input": "data"}, config))
@@ -497,7 +517,9 @@ async def test_astream():
     mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
-    remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
+    remote_pregel = RemotePregel(
+        client=mock_async_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread_1"}}
     chunks = []
@@ -514,7 +536,9 @@ def test_invoke():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(AsyncMock(), mock_sync_client, "test_graph_id")
+    remote_pregel = RemotePregel(
+        sync_client=mock_sync_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = remote_pregel.invoke(
@@ -533,7 +557,9 @@ async def test_ainvoke():
     }
 
     # call method / assertions
-    remote_pregel = RemotePregel(mock_async_client, MagicMock(), "test_graph_id")
+    remote_pregel = RemotePregel(
+        client=mock_async_client, graph_id="test_graph_id"
+    )
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = await remote_pregel.ainvoke(
@@ -554,7 +580,9 @@ async def test_langgraph_cloud_integration():
     # create RemotePregel instance
     client = get_client()
     sync_client = get_sync_client()
-    remote_pregel = RemotePregel(client, sync_client, "agent")
+    remote_pregel = RemotePregel(
+        client=client, sync_client=sync_client, graph_id="agent"
+    )
 
     # define graph
     workflow = StateGraph(MessagesState)
