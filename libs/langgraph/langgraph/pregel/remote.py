@@ -36,7 +36,7 @@ from langgraph.types import Interrupt
 from langgraph.utils.config import merge_configs
 
 
-class RemotePregel(PregelProtocol, Runnable):
+class RemoteGraph(PregelProtocol, Runnable):
     def __init__(
         self,
         graph_id: str,
