@@ -20,120 +20,49 @@ The primary benefits of using multi-agent systems are:
 
 There are several ways to connect agents in a multi-agent system:
 
-* **Unconstrained many-to-many** connections: each agent can communicate with any other agent. Any agent can decide which other agent to call next. This architecture is very flexible but becomes inefficient and harder to scale as the number of agents grows.
-* **Constrained many-to-many** connections: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
+* **Unconstrained Mult-Agent** connections: each agent can communicate with any other agent. Any agent can decide which other agent to call next. This architecture is very flexible but becomes inefficient and harder to scale as the number of agents grows.
+* **Multi-Agent Workflow** connections: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
 * **Supervisor**, or **one-to-many** connections: each agent communicates with a single [supervisor](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
 * **Single tool-calling agent**: this is a special case of supervisor architecture. Individual agents can be represented as tools. In this case, a supervisor agent uses a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
 
-Agents can be defined as [nodes](./low_level.md#nodes) or as tools in LangGraph.
+### Unconstrained many-to-many
 
+### Multi-Agent Workflow
+
+LangGraph provides multiple methods to control agent communication sequence:
+
+* **Explicit control flow (graph edges)**: LangGraph allows you to explicitly define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via [graph edges](./low_level.md#edges). This is the most deterministic variant of the **constrained** multi-agent architecture above -- we always know which agent will be called next ahead of time.
+
+* **Dynamic control flow (conditional edges)**: in LangGraph you can allow LLMs to decide parts of your application control flow. This can be achieved by using [conditional edges](./low_level.md#conditional-edges). A special case of this is a single tool-calling agent that calls [agents as tools](#agents-as-tools). In this case, the tool-calling LLM powering the supervisor agent will make decisions about the order in which the tools (agents) are being called.
+
+### Supervisor
+
+### Supervisor (Tool Calling)
+
+
+## Communication between agents
+
+The most important thing is to figure out how agents communicate.
+There are few different considerations for how they communcicate
+
+**Via tool calls or via state**
+...
+
+**What if two agents have different States?**
+...
+
+**Communicating on a shared message list**
+
+
+### Via tool calls or via state**
 ![](./img/multi_agent/request.png)
 
-Let's take a look how to create a supervisor architecture using both approaches.
+### What if two agents have different States?
 
-### Agents as nodes
-
-Agent nodes receive the graph [state](./low_level.md#state) as an input and return an update to the state as their output. Agent nodes can be added as:
-
-* Functions with **LLM calls**: this can be as simple as a single LLM call with a custom prompt.
-* [Subgraphs](./low_level.md#subgraphs): individual agents can be defined as separate graphs.
-
-```python
-from typing import TypedDict, Literal, Optional
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage
-from langgraph.graph import StateGraph, MessagesState, START, END
-
-model = ChatOpenAI(model="gpt-4o-mini")
-
-class AgentState(MessagesState):
-    next: Literal["researcher", "summarizer"]
-
-class Route(TypedDict):
-    next_agent: Literal["researcher", "summarizer", "END"]
-
-def supervisor(state: AgentState):
-    system_prompt = (
-        "You are supervising a team of two agents: researcher and summarizer. " +
-        "You need to research and summarize information on a given topic. "
-        "Respond with which agent should act next. When finished, respond 'END'"
-    )
-    messages = [{"role": "system", "content": system_prompt}] + state["messages"]
-    response = model.with_structured_output(Route).invoke(messages)
-    # decide which agent to call next
-    return {"next": response["next_agent"]}
-
-def research_agent(state: AgentState):
-    """Call research agent"""
-    messages = [{"role": "system", "content": "You are a research assistant. Given a topic, provide key facts and information."}] + state["messages"]
-    response = model.invoke(messages)
-    return {"messages": [response]}
-
-def summarize_agent(state: AgentState):
-    """Call summarization agent"""
-    messages = [{"role": "system", "content": "You are a summarization expert. Condense the given information into a brief summary."}] + state["messages"]
-    response = model.invoke(messages)
-    return {"messages": [response]}
-
-builder = StateGraph(MessagesState)
-builder.add_node("supervisor", supervisor)
-builder.add_node("researcher", research_agent)
-builder.add_node("summarizer", summarize_agent)
-
-builder.add_edge(START, "supervisor")
-# route to one of the agents or exit based on the supervisor's decisiion
-builder.add_conditional_edges(
-    "supervisor",
-    lambda state: state["next"],
-    {"END": END, "researcher": "researcher", "summarizer": "summarizer"}
-)
-builder.add_edge("researcher", "supervisor")
-builder.add_edge("summarizer", "supervisor")
-
-graph = builder.compile()
-```
-
-### Agents as tools
-
-When agents are defined as tools, the supervisor agent (e.g. [ReAct](./agentic_concepts.md#react-implementation) agent) would use a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
-
-```python
-from typing import Annotated
-from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import ToolNode, InjectedState, create_react_agent
-
-model = ChatOpenAI(model="gpt-4o-mini")
-
-def research_agent(state: Annotated[dict, InjectedState]):
-    """Call research agent"""
-    messages = [SystemMessage(content="You are a research assistant. Given a topic, provide key facts and information.")] + state["messages"][:-1]
-    response = model.invoke(messages)
-    tool_call = state["messages"][-1].tool_calls[0]
-    return {"messages": [ToolMessage(response.content, tool_call_id=tool_call["id"])]}
-
-def summarize_agent(state: Annotated[dict, InjectedState]):
-    """Call summarization agent"""
-    messages = [SystemMessage(content="You are a summarization expert. Condense the given information into a brief summary.")] + state["messages"][:-1]
-    response = model.invoke(messages)
-    tool_call = state["messages"][-1].tool_calls[0]
-    return {"messages": [ToolMessage(response.content, tool_call_id=tool_call["id"])]}
-
-tool_node = ToolNode([research_agent, summarize_agent])
-supervisor = create_react_agent(model, [research_agent, summarize_agent], state_modifier="First research and then summarize information on a given topic.")
-```
-
-## Communication in multi-agent systems
-
-A big question in multi-agent systems is how the agents communicate amongst themselves. This involves both the schema of how they communicate, as well as the sequence in which they communicate. LangGraph is perfect for orchestrating these types of systems and allows you to define both.
-
-### Schema
-
-The first important consideration is **what** information is shared amongst agents and **how** it is passed between them. In LangGraph, information is passed between the nodes via [state](./low_level.md#state) channels (for example, passing [messages](./low_level.md#messages)). When one agent calls another, they would pass all of the necessary information via a state update. In the case of a tool-calling agent with agents defined as individual tools, this information would be passed as tool arguments instead.
-
-When it comes to choosing what information to pass between agents, there are two ends of the spectrum: [share full thought process](#share-full-history) with other agents or [share only the final result](#share-final-result) of agent's invocation. Depending on your application needs, you might also choose to mix these approaches. For example, you could choose to always share only a summary of the scratchpad with other agents, or only share the full "scratchpad" from some of the agents and last message from the rest.
+### Communicating on a shared message list
 
 ![](./img/multi_agent/response.png)
+
 
 #### Share full history
 
@@ -147,11 +76,3 @@ Agents can have their own private "scratchpad" and only **share the final result
 * [Subgraph](./low_level.md#subgraphs) agents can have independent [input / output state schemas](https://langchain-ai.github.io/langgraph/how-tos/input_output_schema/). In this case it’s important to [add input / output transformations](https://langchain-ai.github.io/langgraph/how-tos/subgraph-transform-state/) so that the parent graph knows how to communicate with the subgraphs.
 
 For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](https://langchain-ai.github.io/langgraph/how-tos/pass-run-time-values-to-tools/#pass-graph-state-to-tools) to individual tools at runtime, so subordinate agents can access parent state, if needed.
-
-### Sequence
-
-LangGraph provides multiple methods to control agent communication sequence:
-
-* **Explicit control flow (graph edges)**: LangGraph allows you to explicitly define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via [graph edges](./low_level.md#edges). This is the most deterministic variant of the **constrained** multi-agent architecture above -- we always know which agent will be called next ahead of time.
-
-* **Dynamic control flow (conditional edges)**: in LangGraph you can allow LLMs to decide parts of your application control flow. This can be achieved by using [conditional edges](./low_level.md#conditional-edges). A special case of this is a single tool-calling agent that calls [agents as tools](#agents-as-tools). In this case, the tool-calling LLM powering the supervisor agent will make decisions about the order in which the tools (agents) are being called.
