@@ -53,16 +53,15 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
         chkpnt_wrt_clxn_name: str = "checkpoint_writes",
         **kwargs: Any,
     ) -> AsyncIterator["AsyncMongoDBSaver"]:
-        client = None
+        client: Optional[AsyncMongoClient] = None
         try:
             client = AsyncMongoClient(conn_string)
-            # client = await AsyncMongoClient(conn_string).aconnect()
             yield AsyncMongoDBSaver(
                 client, db_name, chkpnt_clxn_name, chkpnt_wrt_clxn_name, **kwargs
             )
         finally:
             if client:
-                client.close()
+                await client.close()
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database asynchronously.
