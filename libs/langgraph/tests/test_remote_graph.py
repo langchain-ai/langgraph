@@ -479,7 +479,7 @@ def test_stream():
         StreamPart(event="values", data={"chunk": "data2"}),
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
-        StreamPart(event="__interrupt__", data={}),
+        StreamPart(event="updates", data={"__interrupt__": ()}),
     ]
 
     # call method / assertions
@@ -527,7 +527,7 @@ async def test_astream():
         StreamPart(event="values", data={"chunk": "data2"}),
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
-        StreamPart(event="__interrupt__", data={}),
+        StreamPart(event="updates", data={"__interrupt__": ()}),
     ]
     mock_async_client.runs.stream.return_value = async_iter
 

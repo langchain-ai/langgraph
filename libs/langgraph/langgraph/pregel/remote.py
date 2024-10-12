@@ -400,13 +400,14 @@ class RemoteGraph(PregelProtocol, Runnable):
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
-            if chunk.event == INTERRUPT:
-                raise GraphInterrupt()
+            if chunk.event == "updates":
+                if INTERRUPT in chunk.data:
+                    raise GraphInterrupt()
 
-            # Don't emit 'updates' events if the original list of stream modes
-            # didn't include it.
-            if chunk.event == "updates" and not include_updates:
-                continue
+                # Don't emit 'updates' events if the original list of stream
+                # modes didn't include it.
+                if not include_updates:
+                    continue
 
             yield chunk
 
@@ -434,13 +435,14 @@ class RemoteGraph(PregelProtocol, Runnable):
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
-            if chunk.event == INTERRUPT:
-                raise GraphInterrupt()
+            if chunk.event == "updates":
+                if INTERRUPT in chunk.data:
+                    raise GraphInterrupt()
 
-            # Don't emit 'updates' events if the original list of stream modes
-            # didn't include it.
-            if chunk.event == "updates" and not include_updates:
-                continue
+                # Don't emit 'updates' events if the original list of stream
+                # modes didn't include it.
+                if not include_updates:
+                    continue
 
             yield chunk
 
