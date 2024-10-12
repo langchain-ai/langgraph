@@ -26,7 +26,8 @@ from langgraph_sdk.client import (
     get_client,
     get_sync_client,
 )
-from langgraph_sdk.schema import Checkpoint, StreamPart, ThreadState
+from langgraph_sdk.schema import Checkpoint, ThreadState
+from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
@@ -350,7 +351,7 @@ class RemoteGraph(PregelProtocol, Runnable):
     def _get_stream_modes(
         self,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
-    ) -> tuple[list[StreamMode], bool]:
+    ) -> tuple[list[StreamModeSDK], bool]:
         """Return a tuple of the final list of stream modes sent to the
         remote graph and a boolean flag indicating if stream mode 'updates'
         was present in the original list of stream modes.
@@ -395,7 +396,7 @@ class RemoteGraph(PregelProtocol, Runnable):
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=updated_stream_modes,  # type: ignore
+            stream_mode=updated_stream_modes,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
@@ -403,9 +404,6 @@ class RemoteGraph(PregelProtocol, Runnable):
             if chunk.event == "updates":
                 if INTERRUPT in chunk.data:
                     raise GraphInterrupt()
-
-                # Don't emit 'updates' events if the original list of stream
-                # modes didn't include it.
                 if not include_updates:
                     continue
 
@@ -430,7 +428,7 @@ class RemoteGraph(PregelProtocol, Runnable):
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=updated_stream_modes,  # type: ignore
+            stream_mode=updated_stream_modes,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
@@ -438,9 +436,6 @@ class RemoteGraph(PregelProtocol, Runnable):
             if chunk.event == "updates":
                 if INTERRUPT in chunk.data:
                     raise GraphInterrupt()
-
-                # Don't emit 'updates' events if the original list of stream
-                # modes didn't include it.
                 if not include_updates:
                     continue
 
@@ -456,20 +451,27 @@ class RemoteGraph(PregelProtocol, Runnable):
         sanitized_config = self._sanitize_config(merged_config)
 
         # manually add 'events' to stream modes list
-        stream_mode: list[str] = kwargs.get("stream_mode", [])
-        if "events" not in stream_mode:
-            stream_mode.append("events")
+        stream_mode: list[StreamMode] = kwargs.get("stream_mode", [])
+        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
+        if "events" not in updated_stream_modes:
+            updated_stream_modes.append("events")
 
         async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_mode,  # type: ignore
+            stream_mode=updated_stream_modes,
             interrupt_before=kwargs.get("interrupt_before"),
             interrupt_after=kwargs.get("interrupt_after"),
             stream_subgraphs=kwargs.get("subgraphs", False),
         ):
+            if chunk.event == "updates":
+                if INTERRUPT in chunk.data:
+                    raise GraphInterrupt()
+                if not include_updates:
+                    continue
+
             yield StandardStreamEvent(
                 event=chunk.event,
                 data=chunk.data,
