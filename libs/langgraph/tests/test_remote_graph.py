@@ -7,7 +7,9 @@ from langchain_core.runnables.graph import (
 from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
+from langgraph_sdk.schema import StreamPart
 
+from langgraph.errors import GraphInterrupt
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 
@@ -473,17 +475,46 @@ def test_stream():
     # set up test
     mock_sync_client = MagicMock()
     mock_sync_client.runs.stream.return_value = [
-        {"chunk": "data1"},
-        {"chunk": "data2"},
-        {"chunk": "data3"},
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(event="values", data={"chunk": "data3"}),
+        StreamPart(event="updates", data={"chunk": "data4"}),
+        StreamPart(event="__interrupt__", data={}),
     ]
 
     # call method / assertions
     remote_pregel = RemoteGraph(sync_client=mock_sync_client, graph_id="test_graph_id")
 
-    config = {"configurable": {"thread_id": "thread_1"}}
-    result = list(remote_pregel.stream({"input": "data"}, config))
-    assert result == [{"chunk": "data1"}, {"chunk": "data2"}, {"chunk": "data3"}]
+    # stream modes doesn't include 'updates'
+    stream_parts = []
+    with pytest.raises(GraphInterrupt):
+        for stream_part in remote_pregel.stream(
+            {"input": "data"}, config={"configurable": {"thread_id": "thread_1"}}
+        ):
+            stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(event="values", data={"chunk": "data3"}),
+    ]
+
+    # stream modes includes 'updates'
+    stream_parts = []
+    with pytest.raises(GraphInterrupt):
+        for stream_part in remote_pregel.stream(
+            {"input": "data"},
+            config={"configurable": {"thread_id": "thread_1"}},
+            stream_mode=["updates"],
+        ):
+            stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(event="values", data={"chunk": "data3"}),
+        StreamPart(event="updates", data={"chunk": "data4"}),
+    ]
 
 
 @pytest.mark.anyio
@@ -492,20 +523,47 @@ async def test_astream():
     mock_async_client = MagicMock()
     async_iter = MagicMock()
     async_iter.__aiter__.return_value = [
-        {"chunk": "data1"},
-        {"chunk": "data2"},
-        {"chunk": "data3"},
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(event="values", data={"chunk": "data3"}),
+        StreamPart(event="updates", data={"chunk": "data4"}),
+        StreamPart(event="__interrupt__", data={}),
     ]
     mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
     remote_pregel = RemoteGraph(client=mock_async_client, graph_id="test_graph_id")
 
-    config = {"configurable": {"thread_id": "thread_1"}}
-    chunks = []
-    async for chunk in remote_pregel.astream({"input": "data"}, config):
-        chunks.append(chunk)
-    assert chunks == [{"chunk": "data1"}, {"chunk": "data2"}, {"chunk": "data3"}]
+    # stream modes doesn't include 'updates'
+    stream_parts = []
+    with pytest.raises(GraphInterrupt):
+        async for stream_part in remote_pregel.astream(
+            {"input": "data"}, config={"configurable": {"thread_id": "thread_1"}}
+        ):
+            stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(event="values", data={"chunk": "data3"}),
+    ]
+
+    # stream modes includes 'updates'
+    stream_parts = []
+    with pytest.raises(GraphInterrupt):
+        async for stream_part in remote_pregel.astream(
+            {"input": "data"},
+            config={"configurable": {"thread_id": "thread_1"}},
+            stream_mode=["updates"],
+        ):
+            stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(event="values", data={"chunk": "data3"}),
+        StreamPart(event="updates", data={"chunk": "data4"}),
+    ]
 
 
 def test_invoke():
@@ -572,7 +630,7 @@ async def test_langgraph_cloud_integration():
         "messages": [
             {
                 "role": "human",
-                "content": "Hello world!",
+                "content": "What's the weather in SF?",
             }
         ]
     }
@@ -580,7 +638,8 @@ async def test_langgraph_cloud_integration():
     # test invoke
     response = app.invoke(
         input,
-        config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
+        config={"configurable": {"thread_id": "39a6104a-34e7-4f83-929c-d9eb163003c9"}},
+        interrupt_before=["agent"],
     )
     print("response:", response["messages"][-1].content)
 
