@@ -346,10 +346,7 @@ class PregelLoop:
             # after execution, check if we should interrupt
             if should_interrupt(self.checkpoint, interrupt_after, self.tasks.values()):
                 self.status = "interrupt_after"
-                if self.is_nested:
-                    raise GraphInterrupt()
-                else:
-                    return False
+                raise GraphInterrupt()
         else:
             return False
 
@@ -441,10 +438,7 @@ class PregelLoop:
         # before execution, check if we should interrupt
         if should_interrupt(self.checkpoint, interrupt_before, self.tasks.values()):
             self.status = "interrupt_before"
-            if self.is_nested:
-                raise GraphInterrupt()
-            else:
-                return False
+            raise GraphInterrupt()
 
         # produce debug output
         self._emit("debug", map_debug_tasks, self.step, self.tasks.values())
@@ -598,6 +592,10 @@ class PregelLoop:
             self.output = read_channels(self.channels, self.output_keys)
         if suppress:
             # suppress interrupt
+            self._emit(
+                "updates",
+                lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]),
+            )
             return True
 
     def _emit(

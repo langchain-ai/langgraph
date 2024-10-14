@@ -896,6 +896,7 @@ def test_invoke_two_processes_in_out_interrupt(
     ]
     assert [c for c in app.stream(None, history[2].config, stream_mode="updates")] == [
         {"one": {"inbox": 4}},
+        {"__interrupt__": ()},
     ]
 
 
@@ -3198,6 +3199,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            {"__interrupt__": ()},
         ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3295,6 +3297,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            {"__interrupt__": ()},
         ]
 
     with assert_ctx_once():
@@ -3365,6 +3368,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3460,6 +3464,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     app_w_interrupt.update_state(
@@ -3520,7 +3525,9 @@ def test_conditional_state_graph(
 
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == []
+    ] == [
+        {"__interrupt__": ()},
+    ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -3542,6 +3549,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3587,6 +3595,7 @@ def test_conditional_state_graph(
                 ],
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3641,6 +3650,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     # test w interrupt after all
@@ -3661,6 +3671,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3706,6 +3717,7 @@ def test_conditional_state_graph(
                 ],
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3760,6 +3772,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
 
@@ -4630,6 +4643,7 @@ def test_state_graph_packets(
                 )
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -4759,6 +4773,7 @@ def test_state_graph_packets(
                 )
             },
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5130,6 +5145,7 @@ def test_message_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5241,6 +5257,7 @@ def test_message_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5360,6 +5377,7 @@ def test_message_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5471,6 +5489,7 @@ def test_message_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5856,6 +5875,7 @@ def test_root_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5967,6 +5987,7 @@ def test_root_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -6088,6 +6109,7 @@ def test_root_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -6199,6 +6221,7 @@ def test_root_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -7653,6 +7676,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -7672,6 +7696,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
@@ -7785,6 +7810,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -7941,6 +7967,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
     with assert_ctx_once():
@@ -8109,6 +8136,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
     with assert_ctx_once():
@@ -8217,6 +8245,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -8779,6 +8808,7 @@ def test_nested_graph_interrupts_parallel(
         # we got to parallel node first
         ((), {"outer_1": {"my_key": " and parallel"}}),
         ((AnyStr("inner:"),), {"inner_1": {"my_key": "got here", "my_other_key": ""}}),
+        ((), {"__interrupt__": ()}),
     ]
     assert [*app.stream(None, config)] == [
         {"outer_1": {"my_key": " and parallel"}, "__metadata__": {"cached": True}},
@@ -8898,6 +8928,7 @@ def test_doubly_nested_graph_interrupts(
     config = {"configurable": {"thread_id": "2"}}
     assert [*app.stream({"my_key": "my value"}, config)] == [
         {"parent_1": {"my_key": "hi my value"}},
+        {"__interrupt__": ()},
     ]
     assert [*app.stream(None, config)] == [
         {"child": {"my_key": "hi my value here and there"}},
@@ -9493,6 +9524,7 @@ def test_doubly_nested_graph_state(
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_1": {"my_key": "hi my value here"}},
         ),
+        ((), {"__interrupt__": ()}),
     ]
     # get state without subgraphs
     outer_state = app.get_state(config)
@@ -10192,7 +10224,8 @@ def test_doubly_nested_graph_state(
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_1": {"my_key": "hi my value here"}},
-        )
+        ),
+        ((), {"__interrupt__": ()}),
     ]
 
 
@@ -10644,6 +10677,7 @@ def test_weather_subgraph(
     ] == [
         ((), {"router_node": {"route": "weather"}}),
         ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+        ((), {"__interrupt__": ()}),
     ]
 
     # check current state
@@ -10732,6 +10766,7 @@ def test_weather_subgraph(
     ] == [
         ((), {"router_node": {"route": "weather"}}),
         ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+        ((), {"__interrupt__": ()}),
     ]
     state = graph.get_state(config, subgraphs=True)
     assert state == StateSnapshot(
