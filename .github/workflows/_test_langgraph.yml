@@ -18,8 +18,10 @@ jobs:
           - "3.12"
           - "3.13"
         core-version:
-          - ">=0.2.39,<0.3.0"
           - "latest"
+        include:
+          - python-version: "3.11"
+            core-version: ">=0.2.39,<0.3.0"
 
     defaults:
       run:
