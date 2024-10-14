@@ -455,34 +455,20 @@ class SubgraphState(TypedDict):
     bar: str
 
 # Define subgraph
-def subgraph_node_1(state: SubgraphState):
-    return {"bar": "bar"}
-
-def subgraph_node_2(state: SubgraphState):
-    # note that this node is using a state key ('bar') that is only available in the subgraph
-    # and is sending update on the shared state key ('foo')
-    return {"foo": state["foo"] + state["bar"]}
+def subgraph_node(state: SubgraphState):
+    # note that this subgraph nodes can communicate with the parent graph via the shared "foo" key
+    return {"foo": state["foo"] + "bar"}
 
 subgraph_builder = StateGraph(SubgraphState)
-subgraph_builder.add_node(subgraph_node_1)
-subgraph_builder.add_node(subgraph_node_2)
-subgraph_builder.add_edge(START, "subgraph_node_1")
-subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph_builder.add_node(subgraph_node)
+...
 subgraph = subgraph_builder.compile()
 
 # Define parent graph
-def node_1(state: State):
-    return {"foo": "hi! " + state["foo"]}
-
 builder = StateGraph(State)
-builder.add_node("node_1", node_1)
-# note that we're adding the compiled subgraph as a node to the parent graph
-builder.add_node("node_2", subgraph)
-builder.add_edge(START, "node_1")
-builder.add_edge("node_1", "node_2")
+builder.add_node("subgraph", subgraph)
+...
 graph = builder.compile()
-graph.invoke({"foo": "foo"})
-{'foo': 'hi! foobar'}
 ```
 
 ### As a function
@@ -499,38 +485,26 @@ class SubgraphState(TypedDict):
     baz: str
 
 # Define subgraph
-def subgraph_node_1(state: SubgraphState):
-    return {"baz": "baz"}
-
-def subgraph_node_2(state: SubgraphState):
-    return {"bar": state["bar"] + state["baz"]}
+def subgraph_node(state: SubgraphState):
+    return {"bar": state["bar"] + "baz"}
 
 subgraph_builder = StateGraph(SubgraphState)
-subgraph_builder.add_node(subgraph_node_1)
-subgraph_builder.add_node(subgraph_node_2)
-subgraph_builder.add_edge(START, "subgraph_node_1")
-subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+subgraph_builder.add_node(subgraph_node)
+...
 subgraph = subgraph_builder.compile()
 
 # Define parent graph
-def node_1(state: State):
-    return {"foo": "hi! " + state["foo"]}
-
-def node_2(state: State):
+def node(state: State):
     # transform the state to the subgraph state
     response = subgraph.invoke({"bar": state["foo"]})
     # transform response back to the parent state
     return {"foo": response["bar"]}
 
 builder = StateGraph(State)
-builder.add_node("node_1", node_1)
-# note that instead of using the compiled subgraph we are using `node_2` function that is calling the subgraph
-builder.add_node("node_2", node_2)
-builder.add_edge(START, "node_1")
-builder.add_edge("node_1", "node_2")
+builder.add_node(node)
+...
+# note that instead of using the compiled subgraph we are using `node` function that is calling the subgraph
 graph = builder.compile()
-graph.invoke({"foo": "foo"})
-{'foo': 'hi! foobaz'}
 ```
 
 ## Visualization
