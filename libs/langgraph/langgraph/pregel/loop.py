@@ -503,12 +503,13 @@ class PregelLoop:
                 manager=None,
             )
             # apply input writes
-            assert not apply_writes(
+            mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
                 [*discard_tasks.values(), PregelTaskWrites(INPUT, input_writes, [])],
                 self.checkpointer_get_next_version,
-            ), "Can't write to SharedValues in graph input"
+            )
+            assert not mv_writes, "Can't write to SharedValues in graph input"
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
         elif CONFIG_KEY_RESUMING not in configurable:
