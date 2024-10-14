@@ -154,7 +154,10 @@ class RemoteGraph(PregelProtocol, Runnable):
                     interrupts=tuple(interrupts),
                     state=self._create_state_snapshot(task["state"])
                     if task["state"]
+                    else {"configurable": task["checkpoint"]}
+                    if task["checkpoint"]
                     else None,
+                    result=task.get("result"),
                 )
             )
 
@@ -323,7 +326,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
         response: dict = self.sync_client.threads.update_state(  # type: ignore
             thread_id=merged_config["configurable"]["thread_id"],
-            values=values,  # type: ignore
+            values=values,
             as_node=as_node,
             checkpoint=self._get_checkpoint(merged_config),
         )
@@ -339,7 +342,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
         response: dict = await self.client.threads.update_state(  # type: ignore
             thread_id=merged_config["configurable"]["thread_id"],
-            values=values,  # type: ignore
+            values=values,
             as_node=as_node,
             checkpoint=self._get_checkpoint(merged_config),
         )

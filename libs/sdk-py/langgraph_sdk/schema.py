@@ -186,6 +186,7 @@ class ThreadTask(TypedDict):
     interrupts: list[dict]
     checkpoint: Optional[Checkpoint]
     state: Optional["ThreadState"]
+    result: Optional[dict[str, Any]]
 
 
 class ThreadState(TypedDict):
