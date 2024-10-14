@@ -101,7 +101,7 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
 from langgraph.types import All, PregelExecutableTask, StreamMode
-from langgraph.utils.config import patch_checkpoint_map, patch_configurable
+from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")
@@ -176,7 +176,6 @@ class PregelLoop:
     checkpoint_pending_writes: List[PendingWrite]
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
     prev_checkpoint_config: Optional[RunnableConfig]
-    prev_checkpoint_metadata: Optional[CheckpointMetadata]
 
     step: int
     stop: int
@@ -363,16 +362,14 @@ class PregelLoop:
                 "debug",
                 map_debug_checkpoint,
                 self.step - 1,  # printing checkpoint for previous step
-                patch_checkpoint_map(self.checkpoint_config, self.checkpoint_metadata),
+                self.checkpoint_config,
                 self.channels,
                 self.stream_keys,
                 self.checkpoint_metadata,
                 self.checkpoint,
                 self.tasks.values(),
                 self.checkpoint_pending_writes,
-                patch_checkpoint_map(
-                    self.prev_checkpoint_config, self.prev_checkpoint_metadata
-                ),
+                self.prev_checkpoint_config,
                 self.output_keys,
             )
 
@@ -505,7 +502,7 @@ class PregelLoop:
             )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        # assign step
+        # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
         # debug flag
@@ -521,7 +518,6 @@ class PregelLoop:
         self.checkpoint = create_checkpoint(self.checkpoint, self.channels, self.step)
         # bail if no checkpointer
         if self._checkpointer_put_after_previous is not None:
-            self.prev_checkpoint_metadata = self.checkpoint_metadata
             self.checkpoint_metadata = metadata
 
             self.prev_checkpoint_config = (

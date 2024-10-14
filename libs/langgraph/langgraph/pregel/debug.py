@@ -32,6 +32,7 @@ from langgraph.constants import (
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
+from langgraph.utils.config import patch_checkpoint_map
 
 
 class TaskPayload(TypedDict):
@@ -177,8 +178,9 @@ def map_debug_checkpoint(
         "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
-            "config": config,
+            "config": patch_checkpoint_map(config, metadata),
             "parent_config": parent_config,
+            # "parent_config": patch_checkpoint_map(parent_config, metadata),
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
