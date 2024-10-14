@@ -502,7 +502,7 @@ class PregelLoop:
             )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        # assign step
+        # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
         # debug flag
@@ -518,13 +518,14 @@ class PregelLoop:
         self.checkpoint = create_checkpoint(self.checkpoint, self.channels, self.step)
         # bail if no checkpointer
         if self._checkpointer_put_after_previous is not None:
+            self.checkpoint_metadata = metadata
+
             self.prev_checkpoint_config = (
                 self.checkpoint_config
                 if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
                 and self.checkpoint_config[CONF][CONFIG_KEY_CHECKPOINT_ID]
                 else None
             )
-            self.checkpoint_metadata = metadata
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 CONF: {

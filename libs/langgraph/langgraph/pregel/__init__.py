@@ -484,7 +484,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
-                saved.parent_config,
+                patch_checkpoint_map(saved.parent_config, saved.metadata),
                 tasks_w_writes(
                     next_tasks.values(),
                     saved.pending_writes,
@@ -565,7 +565,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
-                saved.parent_config,
+                patch_checkpoint_map(saved.parent_config, saved.metadata),
                 tasks_w_writes(
                     next_tasks.values(),
                     saved.pending_writes,
