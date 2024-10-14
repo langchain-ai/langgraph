@@ -2,6 +2,7 @@ from typing import Any, Dict
 
 import pytest
 from bson.errors import InvalidDocument
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from pymongo import MongoClient
 
@@ -21,9 +22,7 @@ DB_NAME = "langgraph-test"
 # TODO: Test
 #   - before
 #   - limit
-#   - values in checkpoint
-#   - Adding non-trivial additional checkpoints
-#   - Add non-trivial metadata: from langchain_core.messages import HumanMessage
+
 
 
 @pytest.fixture(scope="session")
@@ -147,3 +146,59 @@ def test_null_chars(input_data: Dict[str, Any]) -> None:
                 {null_str: "my_value"},  # type: ignore
                 {},
             )
+
+
+def test_nested_filter():
+    """Test one can filter on nested structure of non-trivial objects.
+
+    This test highlights MongoDBSaver's _loads/(_dumps)_metadata methods,
+    which enable MongoDB's ability to query nested documents,
+    with the caveat that all keys are strings.
+
+    We use a HumanMessage instance as found in the examples.
+    The MQL query created is {metadata.writes.message: <serde dumped HumanMessage>}
+
+    We also use the same message to check values in the Checkpoint.
+    """
+
+    input_message = HumanMessage(content="MongoDB is awesome!")
+    clxn_name = "writes_message"
+    thread_id = "thread-3"
+
+    config = RunnableConfig(
+        configurable=dict(thread_id=thread_id, checkpoint_id="1", checkpoint_ns="")
+    )
+    chkpt = empty_checkpoint()
+    chkpt["channel_values"] = input_message
+
+    metadata = CheckpointMetadata(
+        source="loop", step=1, writes={"message": input_message}
+    )
+
+    with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME, clxn_name) as saver:
+        saver.put(config, chkpt, metadata, {})
+
+        results = list(saver.list(None, filter={"writes.message": input_message}))
+        for cptpl in results:
+            assert cptpl.metadata["writes"]["message"] == input_message
+            break
+
+        # Confirm serialization structure of data in collection
+        doc = saver.clxn_chkpnt.find_one({"thread_id": thread_id})
+        assert isinstance(doc["checkpoint"], bytes)
+        assert (
+            isinstance(doc["metadata"], dict)
+            and isinstance(doc["metadata"]["writes"], dict)
+            and isinstance(doc["metadata"]["writes"]["message"], bytes)
+        )
+
+        # Test values of checkpoint
+        # From checkpointer
+        assert cptpl.checkpoint["channel_values"] == input_message
+        # In database
+        chkpt_db = saver.serde.loads_typed((doc["type"], doc["checkpoint"]))
+        assert chkpt_db["channel_values"] == input_message
+
+        # Drop collections
+        saver.clxn_chkpnt.drop()
+        saver.clxn_chkpnt_wrt.drop()
