@@ -252,8 +252,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if auto_validate:
             self.validate()
 
-    def copy(self, update: dict[str, Any]) -> Self:
-        attrs = {**self.__dict__, **update}
+    def copy(self, update: dict[str, Any] | None = None) -> Self:
+        attrs = {**self.__dict__, **(update or {})}
         return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
