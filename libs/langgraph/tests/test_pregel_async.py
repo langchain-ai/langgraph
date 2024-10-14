@@ -9626,6 +9626,12 @@ async def test_weather_subgraph(
                                 "thread_id": "14",
                                 "checkpoint_ns": AnyStr("weather_graph:"),
                                 "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {
+                                        "": AnyStr(),
+                                        AnyStr("weather_graph:"): AnyStr(),
+                                    }
+                                ),
                             }
                         },
                         tasks=(
@@ -9717,6 +9723,12 @@ async def test_weather_subgraph(
                                 "thread_id": "14",
                                 "checkpoint_ns": AnyStr("weather_graph:"),
                                 "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {
+                                        "": AnyStr(),
+                                        AnyStr("weather_graph:"): AnyStr(),
+                                    }
+                                ),
                             }
                         },
                         tasks=(),
