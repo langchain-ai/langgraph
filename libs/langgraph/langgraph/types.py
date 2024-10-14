@@ -1,6 +1,7 @@
 from collections import deque
 from dataclasses import dataclass
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Literal,
@@ -14,6 +15,9 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+
+if TYPE_CHECKING:
+    from langgraph.store.base import BaseStore
 
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
@@ -213,3 +217,45 @@ class Send:
             and self.node == value.node
             and self.arg == value.arg
         )
+
+
+StreamChunk = tuple[tuple[str, ...], str, Any]
+
+
+class StreamProtocol:
+    __slots__ = ("modes", "__call__")
+
+    modes: set[StreamMode]
+
+    __call__: Callable[[StreamChunk], None]
+
+    def __init__(
+        self,
+        __call__: Callable[[StreamChunk], None],
+        modes: set[StreamMode],
+    ) -> None:
+        self.__call__ = __call__
+        self.modes = modes
+
+
+class LoopProtocol:
+    config: RunnableConfig
+    store: Optional["BaseStore"]
+    stream: Optional[StreamProtocol]
+    step: int
+    stop: int
+
+    def __init__(
+        self,
+        *,
+        step: int,
+        stop: int,
+        config: RunnableConfig,
+        store: Optional["BaseStore"] = None,
+        stream: Optional[StreamProtocol] = None,
+    ) -> None:
+        self.stream = stream
+        self.config = config
+        self.store = store
+        self.step = step
+        self.stop = stop

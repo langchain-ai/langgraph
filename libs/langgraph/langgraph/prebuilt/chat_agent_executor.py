@@ -14,7 +14,7 @@ from langgraph._api.deprecation import deprecated_parameter
 from langgraph.graph import StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
-from langgraph.managed import IsLastStep
+from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
@@ -32,6 +32,8 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     is_last_step: IsLastStep
+
+    remaining_steps: RemainingSteps
 
 
 StateSchema = TypeVar("StateSchema", bound=AgentState)
@@ -529,10 +531,14 @@ def create_react_agent(
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = model_runnable.invoke(state, config)
-        if (
-            state["is_last_step"]
-            and isinstance(response, AIMessage)
-            and response.tool_calls
+        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+        all_tools_return_direct = (
+            all(call["name"] in should_return_direct for call in response.tool_calls)
+            if isinstance(response, AIMessage)
+            else False
+        )
+        if (state["remaining_steps"] < 1 and all_tools_return_direct) or (
+            state["remaining_steps"] < 2 and has_tool_calls
         ):
             return {
                 "messages": [
@@ -547,10 +553,14 @@ def create_react_agent(
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         response = await model_runnable.ainvoke(state, config)
-        if (
-            state["is_last_step"]
-            and isinstance(response, AIMessage)
-            and response.tool_calls
+        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+        all_tools_return_direct = (
+            all(call["name"] in should_return_direct for call in response.tool_calls)
+            if isinstance(response, AIMessage)
+            else False
+        )
+        if (state["remaining_steps"] < 1 and all_tools_return_direct) or (
+            state["remaining_steps"] < 2 and has_tool_calls
         ):
             return {
                 "messages": [
