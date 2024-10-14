@@ -7738,6 +7738,9 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                                 "thread_id": "1",
                                 "checkpoint_ns": AnyStr("inner:"),
                                 "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                                ),
                             }
                         },
                     ),
@@ -7903,6 +7906,9 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                        ),
                     }
                 },
                 tasks=(
@@ -7934,6 +7940,9 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                        ),
                     }
                 },
                 tasks=(
@@ -8328,6 +8337,9 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("child:"),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                        ),
                     }
                 },
             ).tasks[0]
@@ -8374,6 +8386,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
         )
@@ -8439,6 +8458,15 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                             "thread_id": "1",
                                             "checkpoint_ns": AnyStr(),
                                             "checkpoint_id": AnyStr(),
+                                            "checkpoint_map": AnyDict(
+                                                {
+                                                    "": AnyStr(),
+                                                    AnyStr("child:"): AnyStr(),
+                                                    AnyStr(
+                                                        re.compile(r"child:.+|child1:")
+                                                    ): AnyStr(),
+                                                }
+                                            ),
                                         }
                                     },
                                 ),
@@ -8467,6 +8495,9 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                 "thread_id": "1",
                                 "checkpoint_ns": AnyStr("child:"),
                                 "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                                ),
                             }
                         },
                     ),
@@ -8732,6 +8763,9 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("child:"),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                        ),
                     }
                 },
                 tasks=(),
@@ -8761,6 +8795,9 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("child:"),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                        ),
                     }
                 },
                 tasks=(
@@ -8850,6 +8887,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr(),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {
+                                "": AnyStr(),
+                                AnyStr("child:"): AnyStr(),
+                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                            }
+                        ),
                     }
                 },
                 tasks=(),
@@ -8888,6 +8932,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr(),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {
+                                "": AnyStr(),
+                                AnyStr("child:"): AnyStr(),
+                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                            }
+                        ),
                     }
                 },
                 tasks=(
@@ -8933,6 +8984,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr(),
                         "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {
+                                "": AnyStr(),
+                                AnyStr("child:"): AnyStr(),
+                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                            }
+                        ),
                     }
                 },
                 tasks=(

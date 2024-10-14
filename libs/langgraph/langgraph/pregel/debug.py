@@ -179,8 +179,7 @@ def map_debug_checkpoint(
         "step": step,
         "payload": {
             "config": patch_checkpoint_map(config, metadata),
-            "parent_config": parent_config,
-            # "parent_config": patch_checkpoint_map(parent_config, metadata),
+            "parent_config": patch_checkpoint_map(parent_config, metadata),
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
