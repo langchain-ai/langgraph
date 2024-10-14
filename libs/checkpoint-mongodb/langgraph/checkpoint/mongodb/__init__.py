@@ -52,7 +52,7 @@ class MongoDBSaver(BaseCheckpointSaver):
 
     @classmethod
     @contextmanager
-    def from_conn_string(  # TODO - Naming? conn_string or conn_info?
+    def from_conn_string(
         cls,
         conn_string: str,
         db_name: str = "checkpointing_db",
@@ -265,7 +265,6 @@ class MongoDBSaver(BaseCheckpointSaver):
                 "task_id": task_id,
                 "idx": idx,
             }
-            # TODO - Do we need special handling here? \/
             type_, serialized_value = self.serde.dumps_typed(value)
             operations.append(
                 UpdateOne(

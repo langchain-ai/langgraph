@@ -19,11 +19,6 @@ from langgraph.checkpoint.mongodb import MongoDBSaver
 MONGODB_URI = "mongodb://localhost:27017"
 DB_NAME = "langgraph-test"
 
-# TODO: Test
-#   - before
-#   - limit
-
-
 
 @pytest.fixture(scope="session")
 def input_data() -> dict:
@@ -148,7 +143,7 @@ def test_null_chars(input_data: Dict[str, Any]) -> None:
             )
 
 
-def test_nested_filter():
+def test_nested_filter() -> None:
     """Test one can filter on nested structure of non-trivial objects.
 
     This test highlights MongoDBSaver's _loads/(_dumps)_metadata methods,
@@ -184,7 +179,7 @@ def test_nested_filter():
             break
 
         # Confirm serialization structure of data in collection
-        doc = saver.clxn_chkpnt.find_one({"thread_id": thread_id})
+        doc: dict[str, Any] = saver.clxn_chkpnt.find_one({"thread_id": thread_id})  # type: ignore
         assert isinstance(doc["checkpoint"], bytes)
         assert (
             isinstance(doc["metadata"], dict)
