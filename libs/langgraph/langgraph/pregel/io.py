@@ -5,7 +5,7 @@ from langchain_core.runnables.utils import AddableDict
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import EMPTY_SEQ, ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.log import logger
-from langgraph.types import PregelExecutableTask, PregelTask
+from langgraph.types import PregelExecutableTask
 
 
 def read_channel(
@@ -99,20 +99,14 @@ class AddableUpdatesDict(AddableDict):
 
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
-    tasks: list[
-        tuple[Union[PregelTask, PregelExecutableTask], Sequence[tuple[str, Any]]]
-    ],
+    tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
     cached: bool = False,
 ) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
         (t, ww)
         for t, ww in tasks
-        if (
-            not hasattr(t, "config")
-            or not t.config
-            or TAG_HIDDEN not in t.config.get("tags", EMPTY_SEQ)
-        )
+        if (not t.config or TAG_HIDDEN not in t.config.get("tags", EMPTY_SEQ))
         and ww[0][0] != ERROR
         and ww[0][0] != INTERRUPT
     ]
