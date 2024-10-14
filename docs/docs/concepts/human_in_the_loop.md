@@ -120,7 +120,7 @@ See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed h
 
 Sometimes we want to review and edit the agent's state. 
  
-As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior the step we want to check. 
+As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to the step we want to check. 
  
 We can surface the current state to a user and allow the user to edit the agent state.
  
