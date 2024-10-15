@@ -163,8 +163,8 @@ nav:
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
       - Subgraphs:
-          - Create subgraphs: how-tos/subgraph.ipynb
-          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
+          - Add and use subgraphs: how-tos/subgraph.ipynb
+          - View and update state in subgraphs: how-tos/subgraphs-manage-state.ipynb
           - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
