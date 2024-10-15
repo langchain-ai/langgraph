@@ -5,7 +5,6 @@
 ######################
 
 test tests:
-#	TODO - Do we want to run mongod in a container?
 	poetry run pytest tests
 
 ######################

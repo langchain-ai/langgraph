@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict
 
 import pytest
@@ -15,15 +16,9 @@ from langgraph.checkpoint.mongodb.aio import AsyncMongoDBSaver
 # Setup:
 # docker pull mongodb/mongodb-atlas-local:latest
 # docker run --name mongodb -d -p 27017:27017 mongodb/mongodb-community-serve
-MONGODB_URI = "mongodb://localhost:27017"
-DB_NAME = "langgraph-test"
-
-# TODO: Test
-#   - before
-#   - limit
-#   - values in checkpoint
-#   - Adding non-trivial additional checkpoints
-#   - Add non-trivial metadata: from langchain_core.messages import HumanMessage
+MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+DB_NAME = os.environ.get("DB_NAME", "langgraph-test")
+CLXN_NAME = "sync_checkpoints"
 
 
 @pytest.fixture
@@ -68,7 +63,9 @@ async def test_asearch(input_data: Dict[str, Any]) -> None:
     for clxn in await db.list_collection_names():
         await db.drop_collection(clxn)
 
-    async with AsyncMongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
+    async with AsyncMongoDBSaver.from_conn_string(
+        MONGODB_URI, DB_NAME, CLXN_NAME
+    ) as saver:
         # save checkpoints
         await saver.aput(
             input_data["config_1"],
@@ -126,7 +123,9 @@ async def test_asearch(input_data: Dict[str, Any]) -> None:
 async def test_null_chars(input_data: Dict[str, Any]) -> None:
     """In MongoDB string *values* can be any valid UTF-8 including nulls.
     *Field names*, however, cannot contain nulls characters."""
-    async with AsyncMongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
+    async with AsyncMongoDBSaver.from_conn_string(
+        MONGODB_URI, DB_NAME, CLXN_NAME
+    ) as saver:
         null_str = "\x00abc"  # string containing null character
 
         # 1. null string in field *value*

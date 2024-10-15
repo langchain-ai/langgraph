@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict
 
 import pytest
@@ -16,8 +17,9 @@ from langgraph.checkpoint.mongodb import MongoDBSaver
 # Setup:
 # docker pull mongodb/mongodb-atlas-local:latest
 # docker run --name mongodb -d -p 27017:27017 mongodb/mongodb-community-serve
-MONGODB_URI = "mongodb://localhost:27017"
-DB_NAME = "langgraph-test"
+MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+DB_NAME = os.environ.get("DB_NAME", "langgraph-test")
+CLXN_NAME = "sync_checkpoints"
 
 
 @pytest.fixture(scope="session")
@@ -61,7 +63,7 @@ def test_search(input_data: Dict[str, Any]) -> None:
     for clxn_name in db.list_collection_names():
         db.drop_collection(clxn_name)
 
-    with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
+    with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME, CLXN_NAME) as saver:
         # save checkpoints
         saver.put(
             input_data["config_1"],
@@ -117,7 +119,7 @@ def test_search(input_data: Dict[str, Any]) -> None:
 def test_null_chars(input_data: Dict[str, Any]) -> None:
     """In MongoDB string *values* can be any valid UTF-8 including nulls.
     *Field names*, however, cannot contain nulls characters."""
-    with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME) as saver:
+    with MongoDBSaver.from_conn_string(MONGODB_URI, DB_NAME, CLXN_NAME) as saver:
         null_str = "\x00abc"  # string containing null character
 
         # 1. null string in field *value*

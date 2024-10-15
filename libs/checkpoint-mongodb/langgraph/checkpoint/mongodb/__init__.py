@@ -1,8 +1,7 @@
 """
 TODO: Update Docs
-    - https://langchain-ai.github.io/langgraph/how-tos/persistence_mongodb
     - Add docstrings. To the standards of the others.
-    - Build API docs
+    - https://langchain-ai.github.io/langgraph/how-tos/persistence_mongodb [PYTHON-4826]
 """
 
 from contextlib import contextmanager

@@ -259,7 +259,6 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
                 "task_id": task_id,
                 "idx": idx,
             }
-            # TODO - Do we need special handling here? \/
             type_, serialized_value = self.serde.dumps_typed(value)
             operations.append(
                 UpdateOne(
