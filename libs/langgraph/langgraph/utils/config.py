@@ -36,9 +36,11 @@ def patch_configurable(
 
 
 def patch_checkpoint_map(
-    config: RunnableConfig, metadata: Optional[CheckpointMetadata]
+    config: Optional[RunnableConfig], metadata: Optional[CheckpointMetadata]
 ) -> RunnableConfig:
-    if parents := (metadata.get("parents") if metadata else None):
+    if config is None:
+        return config
+    elif parents := (metadata.get("parents") if metadata else None):
         conf = config[CONF]
         return patch_configurable(
             config,

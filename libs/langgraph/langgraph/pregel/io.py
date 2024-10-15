@@ -123,7 +123,7 @@ def map_output_updates(
         updated = (
             (
                 task.name,
-                {chan: value for chan, value in task.writes if chan in output_channels},
+                {chan: value for chan, value in writes if chan in output_channels},
             )
             for task, writes in output_tasks
             if any(chan in output_channels for chan, _ in writes)
