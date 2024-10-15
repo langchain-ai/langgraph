@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from functools import partial
 from typing import (
     Annotated,
     Any,
@@ -35,8 +36,13 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.graph import START, MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
+from langgraph.graph import START, MessagesState, StateGraph, add_messages
+from langgraph.prebuilt import (
+    ToolNode,
+    ValidationNode,
+    create_react_agent,
+    tools_condition,
+)
 from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
@@ -46,7 +52,7 @@ from tests.conftest import (
     IS_LANGCHAIN_CORE_030_OR_GREATER,
     awith_checkpointer,
 )
-from tests.messages import _AnyIdHumanMessage
+from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 
 pytestmark = pytest.mark.anyio
 
@@ -824,6 +830,47 @@ def test_tool_node_ensure_utf8() -> None:
         [AIMessage(content="", tool_calls=tool_calls)]
     )
     assert outputs[0].content == json.dumps(data, ensure_ascii=False)
+
+
+def test_tool_node_messages_key() -> None:
+    @dec_tool
+    def add(a: int, b: int):
+        """Adds a and b."""
+        return a + b
+
+    model = FakeToolCallingModel(
+        tool_calls=[[ToolCall(name=add.name, args={"a": 1, "b": 2}, id="test_id")]]
+    )
+
+    class State(TypedDict):
+        subgraph_messages: Annotated[list[AnyMessage], add_messages]
+
+    def call_model(state: State):
+        response = model.invoke(state["subgraph_messages"])
+        model.tool_calls = []
+        return {"subgraph_messages": response}
+
+    builder = StateGraph(State)
+    builder.add_node("agent", call_model)
+    builder.add_node("tools", ToolNode([add], messages_key="subgraph_messages"))
+    builder.add_conditional_edges(
+        "agent", partial(tools_condition, messages_key="subgraph_messages")
+    )
+    builder.add_edge(START, "agent")
+    builder.add_edge("tools", "agent")
+
+    graph = builder.compile()
+    result = graph.invoke({"subgraph_messages": [HumanMessage(content="hi")]})
+    assert result["subgraph_messages"] == [
+        _AnyIdHumanMessage(content="hi"),
+        AIMessage(
+            content="hi",
+            id="0",
+            tool_calls=[ToolCall(name=add.name, args={"a": 1, "b": 2}, id="test_id")],
+        ),
+        _AnyIdToolMessage(content="3", name=add.name, tool_call_id="test_id"),
+        AIMessage(content="hi-hi-3", id="1"),
+    ]
 
 
 async def test_return_direct() -> None:
