@@ -93,8 +93,8 @@ class BackgroundExecutor(ContextManager):
             if cancel:
                 task.cancel()
         # wait for all tasks to finish
-        if tasks := {t for t in tasks if not t.done()}:
-            concurrent.futures.wait(tasks)
+        if pending := {t for t in tasks if not t.done()}:
+            concurrent.futures.wait(pending)
         # shutdown the executor
         self.stack.__exit__(exc_type, exc_value, traceback)
         # re-raise the first exception that occurred in a task
