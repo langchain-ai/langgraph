@@ -1,9 +1,3 @@
-"""
-TODO: Update Docs
-    - Add docstrings. To the standards of the others.
-    - https://langchain-ai.github.io/langgraph/how-tos/persistence_mongodb [PYTHON-4826]
-"""
-
 from contextlib import contextmanager
 from typing import (
     Any,
@@ -30,7 +24,33 @@ from langgraph.checkpoint.base import (
 
 
 class MongoDBSaver(BaseCheckpointSaver):
-    """A checkpoint saver that stores checkpoints in a MongoDB database."""
+    """A checkpoint saver that stores StateGraph checkpoints in a MongoDB database.
+
+    Args:
+        client (MongoClient): The MongoDB connection.
+        db_name (Optional[str]): Database name
+        chkpnt_clxn_name (Optional[str]): Name of Collection of Checkpoints
+        chkpnt_wrt_clxn_name (Optional[str]): Name of Collection of intermediate writes.
+
+    Examples:
+
+        >>> from langgraph.checkpoint.mongodb import MongoDBSaver
+        >>> from langgraph.graph import StateGraph
+        >>> from pymongo import MongoClient
+        >>>
+        >>> builder = StateGraph(int)
+        >>> builder.add_node("add_one", lambda x: x + 1)
+        >>> builder.set_entry_point("add_one")
+        >>> builder.set_finish_point("add_one")
+        >>> client = MongoClient("mongodb://localhost:27017")
+        >>> memory = MongoDBSaver(client)
+        >>> graph = builder.compile(checkpointer=memory)
+        >>> config = {"configurable": {"thread_id": "1"}}
+        >>> graph.get_state(config)
+        >>> result = graph.invoke(3, config)
+        >>> graph.get_state(config)
+        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef8b22d-df71-6ddc-8001-7c821b5c45fd'}}, metadata={'source': 'loop', 'writes': {'add_one': 4}, 'step': 1, 'parents': {}}, created_at='2024-10-15T18:25:34.088329+00:00', parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef8b22d-df6f-6eec-8000-20f621dcf3b7'}}, tasks=())
+    """
 
     client: MongoClient
     db: MongoDatabase
@@ -59,6 +79,14 @@ class MongoDBSaver(BaseCheckpointSaver):
         chkpnt_wrt_clxn_name: str = "checkpoint_writes",
         **kwargs: Any,
     ) -> Iterator["MongoDBSaver"]:
+        """Context manager to create a MongoDB checkpoint saver.
+        Args:
+            conn_string: MongoDB connection string.
+            db_name: Database name. It will be created if it doesn't exist.
+            chkpnt_clxn_name: Checkpoint Collection name. Created if it doesn't exist.
+            chkpnt_wrt_clxn_name: Collection name of intermediate writes. Created if it doesn't exist.
+        Yields: A new MongoDBSaver.
+        """
         client: Optional[MongoClient] = None
         try:
             client = MongoClient(conn_string)
@@ -72,16 +100,36 @@ class MongoDBSaver(BaseCheckpointSaver):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
 
-        This method retrieves a checkpoint tuple from the MongoDB database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
-        the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
-        for the given thread ID is retrieved.
+         This method retrieves a checkpoint tuple from the MongoDB database based on the
+         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+         the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
+         for the given thread ID is retrieved.
 
-        Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+         Args:
+             config (RunnableConfig): The config to use for retrieving the checkpoint.
 
-        Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+         Returns:
+             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+
+        Examples:
+
+             Basic:
+             >>> config = {"configurable": {"thread_id": "1"}}
+             >>> checkpoint_tuple = memory.get_tuple(config)
+             >>> print(checkpoint_tuple)
+             CheckpointTuple(...)
+
+             With checkpoint ID:
+             >>> config = {
+             ...    "configurable": {
+             ...        "thread_id": "1",
+             ...        "checkpoint_ns": "",
+             ...        "checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875",
+             ...    }
+             ... }
+             >>> checkpoint_tuple = memory.get_tuple(config)
+             >>> print(checkpoint_tuple)
+             CheckpointTuple(...)
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -150,6 +198,15 @@ class MongoDBSaver(BaseCheckpointSaver):
 
         Yields:
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+
+            Examples:
+            >>> from langgraph.checkpoint.mongodb import MongoDBSaver
+            >>> with MongoDBSaver.from_conn_string("mongodb://localhost:27017") as memory:
+            ... # Run a graph, then list the checkpoints
+            >>>     config = {"configurable": {"thread_id": "1"}}
+            >>>     checkpoints = list(memory.list(config, limit=2))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), CheckpointTuple(...)]
         """
         query = {}
         if config is not None:
@@ -212,6 +269,16 @@ class MongoDBSaver(BaseCheckpointSaver):
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
+
+        Examples:
+
+            >>> from langgraph.checkpoint.mongodb import MongoDBSaver
+            >>> with MongoDBSaver.from_conn_string("mongodb://localhost:27017") as memory:
+            >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "data": {"key": "value"}}
+            >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
+            >>> print(saved_config)
+            {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]

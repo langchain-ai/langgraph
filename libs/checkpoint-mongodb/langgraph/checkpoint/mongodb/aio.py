@@ -24,7 +24,32 @@ from langgraph.checkpoint.base import (
 
 
 class AsyncMongoDBSaver(BaseCheckpointSaver):
-    """A checkpoint saver that stores checkpoints in a MongoDB database asynchronously."""
+    """A checkpoint saver that stores checkpoints in a MongoDB database asynchronously.
+
+    The synchronous MongoDBSaver has extended documentation, but
+    Asynchronous usage is shown below.
+
+    Examples:
+        >>> import asyncio
+        >>> from langgraph.checkpoint.mongodb.aio import AsyncMongoDBSaver
+        >>> from langgraph.graph import StateGraph
+
+        >>> async def main():
+        >>>     builder = StateGraph(int)
+        >>>     builder.add_node("add_one", lambda x: x + 1)
+        >>>     builder.set_entry_point("add_one")
+        >>>     builder.set_finish_point("add_one")
+        >>>     async with AsyncMongoDBSaver.from_conn_string("mongodb://localhost:27017") as memory:
+        >>>         graph = builder.compile(checkpointer=memory)
+        >>>         config = {"configurable": {"thread_id": "1"}}
+        >>>         input = 3
+        >>>         output = await graph.ainvoke(input, config)
+        >>>        print(f"{input=}, {output=}")
+
+        >>> if __name__ == "__main__":
+        >>>     asyncio.run(main())
+        input=3, output=4
+    """
 
     client: AsyncIOMotorClient
     db: AsyncIOMotorDatabase
