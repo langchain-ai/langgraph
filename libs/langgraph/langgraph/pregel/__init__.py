@@ -26,7 +26,6 @@ from uuid import UUID, uuid5
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     Runnable,
-    RunnableLambda,
     RunnableSequence,
 )
 from langchain_core.runnables.base import Input, Output
@@ -37,7 +36,6 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
-    get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -86,11 +84,11 @@ from langgraph.pregel.messages import StreamMessagesHandler
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
-from langgraph.pregel.utils import get_new_channel_versions
+from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, StateSnapshot, StreamMode
+from langgraph.types import All, Checkpointer, LoopProtocol, StateSnapshot, StreamMode
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -100,7 +98,6 @@ from langgraph.utils.config import (
 )
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
-from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[Callable[[Input], Output], Any]
 
@@ -255,8 +252,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if auto_validate:
             self.validate()
 
-    def copy(self, update: dict[str, Any]) -> Self:
-        attrs = {**self.__dict__, **update}
+    def copy(self, update: dict[str, Any] | None = None) -> Self:
+        attrs = {**self.__dict__, **(update or {})}
         return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
@@ -391,32 +388,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if namespace is not None:
                 if not namespace.startswith(name):
                     continue
+
             # find the subgraph, if any
-            graph: Optional[Pregel] = None
-            candidates = [node.bound]
-            for candidate in candidates:
-                if (
-                    isinstance(candidate, Pregel)
-                    # subgraphs that disabled checkpointing are not considered
-                    and candidate.checkpointer is not False
-                ):
-                    graph = candidate
-                    break
-                elif isinstance(candidate, RunnableSequence):
-                    candidates.extend(candidate.steps)
-                elif isinstance(candidate, RunnableLambda):
-                    candidates.extend(candidate.deps)
-                elif isinstance(candidate, RunnableCallable):
-                    if candidate.func is not None:
-                        candidates.extend(
-                            nl.__self__ if hasattr(nl, "__self__") else nl
-                            for nl in get_function_nonlocals(candidate.func)
-                        )
-                    if candidate.afunc is not None:
-                        candidates.extend(
-                            nl.__self__ if hasattr(nl, "__self__") else nl
-                            for nl in get_function_nonlocals(candidate.afunc)
-                        )
+            graph = cast(Optional[Pregel], find_subgraph_pregel(node.bound))
+
             # if found, yield recursively
             if graph:
                 if name == namespace:
@@ -458,7 +433,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
 
         with ChannelsManager(
-            self.channels, saved.checkpoint, saved.config, skip_context=True
+            self.channels,
+            saved.checkpoint,
+            LoopProtocol(
+                config=saved.config,
+                step=saved.metadata.get("step", -1) + 1,
+                stop=saved.metadata.get("step", -1) + 2,
+            ),
+            skip_context=True,
         ) as (channels, managed):
             # tasks for this checkpoint
             next_tasks = prepare_next_tasks(
@@ -509,8 +491,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
-                saved.parent_config,
-                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
+                patch_checkpoint_map(saved.parent_config, saved.metadata),
+                tasks_w_writes(
+                    next_tasks.values(),
+                    saved.pending_writes,
+                    task_states,
+                    self.stream_channels_asis,
+                ),
             )
 
     async def _aprepare_state_snapshot(
@@ -531,7 +518,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
 
         async with AsyncChannelsManager(
-            self.channels, saved.checkpoint, saved.config, skip_context=True
+            self.channels,
+            saved.checkpoint,
+            LoopProtocol(
+                config=saved.config,
+                step=saved.metadata.get("step", -1) + 1,
+                stop=saved.metadata.get("step", -1) + 2,
+            ),
+            skip_context=True,
         ) as (
             channels,
             managed,
@@ -585,8 +579,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
-                saved.parent_config,
-                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
+                patch_checkpoint_map(saved.parent_config, saved.metadata),
+                tasks_w_writes(
+                    next_tasks.values(),
+                    saved.pending_writes,
+                    task_states,
+                    self.stream_channels_asis,
+                ),
             )
 
     def get_state(
@@ -850,7 +849,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
-        with ChannelsManager(self.channels, checkpoint, config) as (
+        with ChannelsManager(
+            self.channels,
+            checkpoint,
+            LoopProtocol(config=config, step=step + 1, stop=step + 2),
+        ) as (
             channels,
             managed,
         ):
@@ -891,9 +894,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if saved:
                 checkpointer.put_writes(checkpoint_config, task.writes, task_id)
             # apply to checkpoint and save
-            assert not apply_writes(
+            mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
-            ), "Can't write to SharedValues from update_state"
+            )
+            assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -995,7 +999,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
-        async with AsyncChannelsManager(self.channels, checkpoint, config) as (
+        async with AsyncChannelsManager(
+            self.channels,
+            checkpoint,
+            LoopProtocol(config=config, step=step + 1, stop=step + 2),
+        ) as (
             channels,
             managed,
         ):
@@ -1036,9 +1044,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if saved:
                 await checkpointer.aput_writes(checkpoint_config, writes, task_id)
             # apply to checkpoint and save
-            assert not apply_writes(
+            mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
-            ), "Can't write to SharedValues from update_state"
+            )
+            assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             next_config = await checkpointer.aput(
                 checkpoint_config,

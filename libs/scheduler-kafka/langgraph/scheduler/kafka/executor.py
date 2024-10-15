@@ -37,7 +37,7 @@ from langgraph.scheduler.kafka.types import (
     Sendable,
     Topics,
 )
-from langgraph.types import RetryPolicy
+from langgraph.types import LoopProtocol, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 
@@ -69,6 +69,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
         self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
+        loop = asyncio.get_running_loop()
         self.subgraphs = {
             k: v async for k, v in self.graph.aget_subgraphs(recurse=True)
         }
@@ -81,6 +82,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                     auto_offset_reset="earliest",
                     group_id="executor",
                     enable_auto_commit=False,
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -89,6 +91,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
 
             self.producer = await self.stack.enter_async_context(
                 DefaultAsyncProducer(
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -180,7 +183,14 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
         if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
             raise CheckpointNotLatest()
         async with AsyncChannelsManager(
-            graph.channels, saved.checkpoint, msg["config"], self.graph.store
+            graph.channels,
+            saved.checkpoint,
+            LoopProtocol(
+                config=msg["config"],
+                store=self.graph.store,
+                step=saved.metadata["step"] + 1,
+                stop=saved.metadata["step"] + 2,
+            ),
         ) as (channels, managed), AsyncBackgroundExecutor() as submit:
             if task := await asyncio.to_thread(
                 prepare_single_task,
@@ -376,7 +386,14 @@ class KafkaExecutor(AbstractContextManager):
         if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
             raise CheckpointNotLatest()
         with ChannelsManager(
-            graph.channels, saved.checkpoint, msg["config"], self.graph.store
+            graph.channels,
+            saved.checkpoint,
+            LoopProtocol(
+                config=msg["config"],
+                store=self.graph.store,
+                step=saved.metadata["step"] + 1,
+                stop=saved.metadata["step"] + 2,
+            ),
         ) as (channels, managed), BackgroundExecutor({}) as submit:
             if task := prepare_single_task(
                 msg["task"]["path"],

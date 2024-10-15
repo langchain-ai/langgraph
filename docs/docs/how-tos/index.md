@@ -18,16 +18,22 @@ These how-to guides show how to achieve that controllability.
 
 ## Persistence
 
-LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
+LangGraph makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
 
-- [How to add persistence ("memory") to your graph](persistence.ipynb)
-- [How to manage conversation history](memory/manage-conversation-history.ipynb)
-- [How to delete messages](memory/delete-messages.ipynb)
-- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
-- [How to share state between threads](memory/shared-state.ipynb)
+- [How to add thread-level persistence to your graph](persistence.ipynb)
+- [How to add thread-level persistence to subgraphs](subgraph-persistence.ipynb)
+- [How to add cross-thread persistence to your graph](cross-thread-persistence.ipynb)
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+
+## Memory
+
+LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) in your graph. These how-to guides show how to implement different strategies for that.
+
+- [How to manage conversation history](memory/manage-conversation-history.ipynb)
+- [How to delete messages](memory/delete-messages.ipynb)
+- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
 
 ## Human in the Loop
 
@@ -62,14 +68,14 @@ These guides show how to use different streaming modes.
 
 - [How to call tools using ToolNode](tool-calling.ipynb)
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
-- [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
+- [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
 ## Subgraphs
 
-- [How to create subgraphs](subgraph.ipynb)
-- [How to manage state in subgraphs](subgraphs-manage-state.ipynb)
+- [How to add and use subgraphs](subgraph.ipynb)
+- [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
 - [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
 
 ## State Management

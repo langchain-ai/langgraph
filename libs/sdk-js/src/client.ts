@@ -611,6 +611,7 @@ export class ThreadsClient extends BaseClient {
     options?: {
       limit?: number;
       before?: Config;
+      checkpoint?: Partial<Omit<Checkpoint, "thread_id">>;
       metadata?: Metadata;
     },
   ): Promise<ThreadState<ValuesType>[]> {
@@ -622,6 +623,7 @@ export class ThreadsClient extends BaseClient {
           limit: options?.limit ?? 10,
           before: options?.before,
           metadata: options?.metadata,
+          checkpoint: options?.checkpoint,
         },
       },
     );
@@ -672,11 +674,13 @@ export class RunsClient extends BaseClient {
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
+      checkpoint: payload?.checkpoint,
       checkpoint_id: payload?.checkpointId,
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
+      after_seconds: payload?.afterSeconds,
     };
 
     const endpoint =
@@ -753,8 +757,10 @@ export class RunsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
+      checkpoint: payload?.checkpoint,
       checkpoint_id: payload?.checkpointId,
       multitask_strategy: payload?.multitaskStrategy,
+      after_seconds: payload?.afterSeconds,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
@@ -818,11 +824,13 @@ export class RunsClient extends BaseClient {
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
+      checkpoint: payload?.checkpoint,
       checkpoint_id: payload?.checkpointId,
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
+      after_seconds: payload?.afterSeconds,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;

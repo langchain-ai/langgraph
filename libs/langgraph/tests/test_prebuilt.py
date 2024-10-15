@@ -272,6 +272,44 @@ def test_runnable_state_modifier():
     assert response == expected_response
 
 
+def test_state_modifier_with_store():
+    def add(a: int, b: int):
+        """Adds a and b"""
+        return a + b
+
+    in_memory_store = InMemoryStore()
+    in_memory_store.put(("memories", "1"), "user_name", {"data": "User name is Alice"})
+    in_memory_store.put(("memories", "2"), "user_name", {"data": "User name is Bob"})
+
+    def modify(state, config, *, store):
+        user_id = config["configurable"]["user_id"]
+        system_str = store.get(("memories", user_id), "user_name").value["data"]
+        return [SystemMessage(system_str)] + state["messages"]
+
+    def modify_no_store(state, config):
+        return SystemMessage("foo") + state["messages"]
+
+    model = FakeToolCallingModel()
+
+    # test state modifier that uses store works
+    agent = create_react_agent(
+        model, [add], state_modifier=modify, store=in_memory_store
+    )
+    response = agent.invoke(
+        {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
+    )
+    assert response["messages"][-1].content == "User name is Alice-hi"
+
+    # test state modifier that doesn't use store works
+    agent = create_react_agent(
+        model, [add], state_modifier=modify_no_store, store=in_memory_store
+    )
+    response = agent.invoke(
+        {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
+    )
+    assert response["messages"][-1].content == "foo-hi"
+
+
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
 def test_model_with_tools(tool_style: str):
     model = FakeToolCallingModel(tool_style=tool_style)

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 from langgraph.utils.runnable import RunnableCallable
+
+pytestmark = pytest.mark.anyio
 
 
 def test_runnable_callable_func_accepts():

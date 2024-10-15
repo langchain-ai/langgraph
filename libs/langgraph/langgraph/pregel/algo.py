@@ -57,7 +57,7 @@ from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.store.base import BaseStore
-from langgraph.types import All, PregelExecutableTask, PregelTask
+from langgraph.types import All, LoopProtocol, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
@@ -148,7 +148,7 @@ def local_read(
         with ChannelsManager(
             {k: v for k, v in channels.items() if k in updated},
             checkpoint,
-            config,
+            LoopProtocol(config=config, step=step, stop=step + 1),
             skip_context=True,
         ) as (local_channels, _):
             apply_writes(copy_checkpoint(checkpoint), local_channels, [task], None)
@@ -156,7 +156,7 @@ def local_read(
     else:
         values = read_channels(channels, select)
     if managed_keys:
-        values.update({k: managed[k](step) for k in managed_keys})
+        values.update({k: managed[k]() for k in managed_keys})
     return values
 
 
@@ -493,9 +493,7 @@ def prepare_single_task(
         ):
             try:
                 val = next(
-                    _proc_input(
-                        step, proc, managed, channels, for_execution=for_execution
-                    )
+                    _proc_input(proc, managed, channels, for_execution=for_execution)
                 )
             except StopIteration:
                 return
@@ -583,7 +581,6 @@ def prepare_single_task(
 
 
 def _proc_input(
-    step: int,
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
@@ -605,7 +602,7 @@ def _proc_input(
                     except EmptyChannelError:
                         continue
                 else:
-                    val[k] = managed[k](step)
+                    val[k] = managed[k]()
         except EmptyChannelError:
             return
     elif isinstance(proc.channels, list):
