@@ -87,7 +87,10 @@ class BaseClient {
     this.timeoutMs = config?.timeoutMs || 12_000;
     this.apiUrl = config?.apiUrl || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
-    this.defaultHeaders["X-Api-Key"] = getApiKey(config?.apiKey);
+    const apiKey = getApiKey(config?.apiKey);
+    if (apiKey) {
+      this.defaultHeaders["X-Api-Key"] = apiKey;
+    }
   }
 
   protected prepareFetchOptions(
