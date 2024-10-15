@@ -128,6 +128,7 @@ nav:
           - Control graph recursion limit: how-tos/recursion-limit.ipynb
       - Persistence:
           - Add thread-level persistence: how-tos/persistence.ipynb
+          - Add thread-level persistence to subgraphs: how-tos/subgraph-persistence.ipynb
           - Add cross-thread persistence: how-tos/cross-thread-persistence.ipynb
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
@@ -162,8 +163,8 @@ nav:
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
       - Subgraphs:
-          - Create subgraphs: how-tos/subgraph.ipynb
-          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
+          - Add and use subgraphs: how-tos/subgraph.ipynb
+          - View and update state in subgraphs: how-tos/subgraphs-manage-state.ipynb
           - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
