@@ -13,22 +13,23 @@ from typing import (
     Union,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
+
+from langgraph.types import LoopProtocol
 
 V = TypeVar("V")
 U = TypeVar("U")
 
 
 class ManagedValue(ABC, Generic[V]):
-    def __init__(self, config: RunnableConfig) -> None:
-        self.config = config
+    def __init__(self, loop: LoopProtocol) -> None:
+        self.loop = loop
 
     @classmethod
     @contextmanager
-    def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
+    def enter(cls, loop: LoopProtocol, **kwargs: Any) -> Iterator[Self]:
         try:
-            value = cls(config, **kwargs)
+            value = cls(loop, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -40,9 +41,9 @@ class ManagedValue(ABC, Generic[V]):
 
     @classmethod
     @asynccontextmanager
-    async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
+    async def aenter(cls, loop: LoopProtocol, **kwargs: Any) -> AsyncIterator[Self]:
         try:
-            value = cls(config, **kwargs)
+            value = cls(loop, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -53,7 +54,7 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int) -> V: ...
+    def __call__(self) -> V: ...
 
 
 class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):

@@ -100,7 +100,7 @@ from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
-from langgraph.types import All, PregelExecutableTask, StreamMode
+from langgraph.types import All, LoopProtocol, PregelExecutableTask, StreamProtocol
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
@@ -112,22 +112,6 @@ INPUT_RESUMING = object()
 SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
 
 
-class StreamProtocol:
-    __slots__ = ("modes", "__call__")
-
-    modes: set[StreamMode]
-
-    __call__: Callable[[StreamChunk], None]
-
-    def __init__(
-        self,
-        __call__: Callable[[StreamChunk], None],
-        modes: set[StreamMode],
-    ) -> None:
-        self.__call__ = __call__
-        self.modes = modes
-
-
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     def __call__(value: StreamChunk) -> None:
         for stream in streams:
@@ -137,16 +121,13 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
 
-class PregelLoop:
+class PregelLoop(LoopProtocol):
     input: Optional[Any]
-    config: RunnableConfig
-    store: Optional[BaseStore]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
     output_keys: Union[str, Sequence[str]]
     stream_keys: Union[str, Sequence[str]]
-    stream: Optional[StreamProtocol]
     skip_done_tasks: bool
     is_nested: bool
 
@@ -177,8 +158,6 @@ class PregelLoop:
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
     prev_checkpoint_config: Optional[RunnableConfig]
 
-    step: int
-    stop: int
     status: Literal[
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
@@ -202,10 +181,14 @@ class PregelLoop:
         check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
-        self.stream = stream
+        super().__init__(
+            step=0,
+            stop=0,
+            config=config,
+            stream=stream,
+            store=store,
+        )
         self.input = input
-        self.config = config
-        self.store = store
         self.checkpointer = checkpointer
         self.nodes = nodes
         self.specs = specs
@@ -730,7 +713,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = self.stack.enter_context(
-            ChannelsManager(self.specs, self.checkpoint, self.config, self.store)
+            ChannelsManager(self.specs, self.checkpoint, self)
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"
@@ -858,7 +841,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
 
         self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
         self.channels, self.managed = await self.stack.enter_async_context(
-            AsyncChannelsManager(self.specs, self.checkpoint, self.config, self.store)
+            AsyncChannelsManager(self.specs, self.checkpoint, self)
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"
