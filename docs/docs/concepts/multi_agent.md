@@ -20,15 +20,20 @@ The primary benefits of using multi-agent systems are:
 
 There are several ways to connect agents in a multi-agent system:
 
-- **Network**: each agent can communicate with every other agent. Any agent can decide which other agent to call next.
-- **Supervisor**: each agent communicates with a single [supervisor](../tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
+- **Network**: each agent can communicate with [every other agent](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/). Any agent can decide which other agent to call next.
+- **Supervisor**: each agent communicates with a single [supervisor](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
 - **Supervisor (tool-calling)**: this is a special case of supervisor architecture. Individual agents can be represented as tools. In this case, a supervisor agent uses a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
 - **Hierarchical**: you can define a multi-agent system with a supervisor of supervisors. This is a generalization of the supervisor architecture and allows for more complex control flows.
 - **Custom multi-agent workflow**: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
 
 ### Network
 
-In this architecture, agents are defined as graph nodes. Each agent is connected to all other agents (many-to-many connections) and can decided which agent to call next. While very flexible, this architecture is inefficient and doesn't scale well as the number of agents grows. We recommend avoiding this architecture in production and using one of the below architectures instead.
+In this architecture, agents are defined as graph nodes. Each agent can communicate with every other agent (many-to-many connections) and can decide which agent to call next. While very flexible, this architecture doesn't scale well as the number of agents grows:
+
+- hard to enforce which agent should be called next
+- hard to determine how much [information](#shared-message-list) should be passed between the agents
+
+We recommend avoiding this architecture in production and using one of the below architectures instead.
 
 ### Supervisor
 
@@ -70,7 +75,7 @@ builder.add_edge("agent_2", "supervisor")
 supervisor = builder.compile()
 ```
 
-Check out this [tutorial](../tutorials/multi_agent/agent_supervisor/) for an example of supervisor multi-agent architecture.
+Check out this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) for an example of supervisor multi-agent architecture.
 
 ### Supervisor (tool-calling)
 
