@@ -5,7 +5,7 @@ from langgraph.managed.base import ManagedValue
 
 class IsLastStepManager(ManagedValue[bool]):
     def __call__(self) -> bool:
-        return self.loop.step == self.loop.stop - 1
+        return self.loop.step == self.loop.stop
 
 
 IsLastStep = Annotated[bool, IsLastStepManager]
