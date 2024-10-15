@@ -20,44 +20,15 @@ The primary benefits of using multi-agent systems are:
 
 There are several ways to connect agents in a multi-agent system:
 
-* **Unconstrained multi-agent**: each agent can communicate with any other agent. Any agent can decide which other agent to call next.
-* **Multi-agent workflow**: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
-* **Supervisor**: each agent communicates with a single [supervisor](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
+* **Network**: each agent can communicate with any other agent. Any agent can decide which other agent to call next.
+* **Supervisor**: each agent communicates with a single [supervisor](../tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
 * **Supervisor (tool-calling)**: this is a special case of supervisor architecture. Individual agents can be represented as tools. In this case, a supervisor agent uses a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
+* **Hierarchical**: you can define a multi-agent system with a supervisor of supervisors. This is a generalization of the supervisor architecture and allows for more complex control flows.
+* **Custom multi-agent workflow**: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
 
-### Unconstrained multi-agent
+### Network
 
 In this architecture, agents are defined as graph nodes. Each agent is connected to all other agents (many-to-many connections) and can decided which agent to call next. While very flexible, this architecture is inefficient and doesn't scale well as the number of agents grows. We recommend avoiding this architecture in production and using one of the below architectures instead.
-
-### Multi-agent workflow
-
-In this architecture we add individual agents as graph nodes and define the order in which agents are called ahead of time, in a "constrained" workflow. In LangGraph the workflow can be defined in two ways:
-
-* **Explicit control flow (normal edges)**: LangGraph allows you to explicitly define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via [normal graph edges](./low_level.md#normal-edges). This is the most deterministic variant of this architecture above -- we always know which agent will be called next ahead of time.
-
-* **Dynamic control flow (conditional edges)**: in LangGraph you can allow LLMs to decide parts of your application control flow. This can be achieved by using [conditional edges](./low_level.md#conditional-edges). A special case of this is a [supervisor tool-calling](#supervisor-tool-calling) architecture. In that case, the tool-calling LLM powering the supervisor agent will make decisions about the order in which the tools (agents) are being called.
-
-```python
-from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph, MessagesState, START
-
-model = ChatOpenAI()
-
-def agent_1(state: MessagesState):
-    response = model.invoke(...)
-    return {"messages": [response]}
-
-def agent_2(state: MessagesState):
-    response = model.invoke(...)
-    return {"messages": [response]}
-
-builder = StateGraph(MessagesState)
-builder.add_node(agent_1)
-builder.add_node(agent_2)
-# define the flow explicitly
-builder.add_edge(START, "agent_1")
-builder.add_edge("agent_1", "agent_2")
-```
 
 ### Supervisor
 
@@ -99,9 +70,11 @@ builder.add_edge("agent_2", "supervisor")
 supervisor = builder.compile()
 ```
 
+Check out this [tutorial](../tutorials/multi_agent/agent_supervisor/) for an example of supervisor multi-agent architecture.
+
 ### Supervisor (tool-calling)
 
-In this variant of the [supervisor](#supervisor) architecture, we define individual agents as **tools** and use a tool-calling LLM in the supervisor node. This can be implemented as a [ReAct](./agentic_concepts.md#react-implementation)-style agent with two nodes -- an LLM node (supervisor) and a tool-calling node that executes tools (agents in this case).
+In this variant of the [supervisor](#supervisor) architecture, we define individual agents as **tools** and use a tool-calling LLM in the supervisor node. This can be implemented as a [ReAct](./agentic_concepts.md#react-implementation)-style agent with two nodes — an LLM node (supervisor) and a tool-calling node that executes tools (agents in this case).
 
 ```python
 from typing import Annotated
@@ -120,6 +93,36 @@ def agent_2(state: Annotated[dict, InjectedState]):
 
 tools = [agent_1, agent_2]
 supervisor = create_react_agent(model, tools)
+```
+
+### Custom multi-agent workflow
+
+In this architecture we add individual agents as graph nodes and define the order in which agents are called ahead of time, in a custom workflow. In LangGraph the workflow can be defined in two ways:
+
+* **Explicit control flow (normal edges)**: LangGraph allows you to explicitly define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via [normal graph edges](./low_level.md#normal-edges). This is the most deterministic variant of this architecture above — we always know which agent will be called next ahead of time.
+
+* **Dynamic control flow (conditional edges)**: in LangGraph you can allow LLMs to decide parts of your application control flow. This can be achieved by using [conditional edges](./low_level.md#conditional-edges). A special case of this is a [supervisor tool-calling](#supervisor-tool-calling) architecture. In that case, the tool-calling LLM powering the supervisor agent will make decisions about the order in which the tools (agents) are being called.
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+
+model = ChatOpenAI()
+
+def agent_1(state: MessagesState):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+def agent_2(state: MessagesState):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+builder = StateGraph(MessagesState)
+builder.add_node(agent_1)
+builder.add_node(agent_2)
+# define the flow explicitly
+builder.add_edge(START, "agent_1")
+builder.add_edge("agent_1", "agent_2")
 ```
 
 ## Communication between agents
