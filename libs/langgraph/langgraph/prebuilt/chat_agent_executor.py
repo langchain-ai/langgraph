@@ -573,8 +573,22 @@ def create_react_agent(
             if isinstance(response, AIMessage)
             else False
         )
-        if (state["remaining_steps"] < 1 and all_tools_return_direct) or (
-            state["remaining_steps"] < 2 and has_tool_calls
+        if (
+            (
+                "remaining_steps" not in state
+                and state["is_last_step"]
+                and has_tool_calls
+            )
+            or (
+                "remaining_steps" in state
+                and state["remaining_steps"] < 1
+                and all_tools_return_direct
+            )
+            or (
+                "remaining_steps" in state
+                and state["remaining_steps"] < 2
+                and has_tool_calls
+            )
         ):
             return {
                 "messages": [
