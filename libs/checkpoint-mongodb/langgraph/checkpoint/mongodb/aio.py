@@ -10,8 +10,8 @@ from typing import (
 )
 
 from langchain_core.runnables import RunnableConfig
-from pymongo import AsyncMongoClient, UpdateOne
-from pymongo.asynchronous.database import AsyncDatabase
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo import UpdateOne
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -26,12 +26,12 @@ from langgraph.checkpoint.base import (
 class AsyncMongoDBSaver(BaseCheckpointSaver):
     """A checkpoint saver that stores checkpoints in a MongoDB database asynchronously."""
 
-    client: AsyncMongoClient
-    db: AsyncDatabase
+    client: AsyncIOMotorClient
+    db: AsyncIOMotorDatabase
 
     def __init__(
         self,
-        client: AsyncMongoClient,
+        client: AsyncIOMotorClient,
         db_name: str = "checkpointing_db",
         chkpnt_clxn_name: str = "checkpoints",
         chkpnt_wrt_clxn_name: str = "checkpoint_writes",
@@ -53,15 +53,15 @@ class AsyncMongoDBSaver(BaseCheckpointSaver):
         chkpnt_wrt_clxn_name: str = "checkpoint_writes",
         **kwargs: Any,
     ) -> AsyncIterator["AsyncMongoDBSaver"]:
-        client: Optional[AsyncMongoClient] = None
+        client: Optional[AsyncIOMotorClient] = None
         try:
-            client = AsyncMongoClient(conn_string)
+            client = AsyncIOMotorClient(conn_string)
             yield AsyncMongoDBSaver(
                 client, db_name, chkpnt_clxn_name, chkpnt_wrt_clxn_name, **kwargs
             )
         finally:
             if client:
-                await client.close()
+                client.close()
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database asynchronously.
