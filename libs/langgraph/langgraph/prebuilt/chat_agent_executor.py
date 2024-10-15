@@ -349,6 +349,8 @@ def create_react_agent(
 
         ```pycon
         >>> from typing import TypedDict
+        >>> 
+        >>> from langgraph.managed import IsLastStep
         >>> prompt = ChatPromptTemplate.from_messages(
         ...     [
         ...         ("system", "Today is {today}"),
@@ -359,7 +361,7 @@ def create_react_agent(
         >>> class CustomState(TypedDict):
         ...     today: str
         ...     messages: Annotated[list[BaseMessage], add_messages]
-        ...     is_last_step: str
+        ...     is_last_step: IsLastStep
         >>>
         >>> graph = create_react_agent(model, tools, state_schema=CustomState, state_modifier=prompt)
         >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
