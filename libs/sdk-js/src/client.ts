@@ -60,6 +60,9 @@ class BaseClient {
     this.defaultHeaders = config?.defaultHeaders || {};
     if (config?.apiKey != null) {
       this.defaultHeaders["X-Api-Key"] = config.apiKey;
+    } else if (process.env.LANGCHAIN_API_KEY) {
+      // Attempt to read the API key from the environment
+      this.defaultHeaders["X-Api-Key"] = process.env.LANGCHAIN_API_KEY;
     }
   }
 
