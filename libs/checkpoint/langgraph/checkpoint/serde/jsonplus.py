@@ -206,7 +206,9 @@ class JsonPlusSerializer(SerializerProtocol):
         elif type_ == "json":
             return self.loads(data_)
         elif type_ == "msgpack":
-            return msgpack.unpackb(data_, ext_hook=_msgpack_ext_hook)
+            return msgpack.unpackb(
+                data_, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            )
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
 

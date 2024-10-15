@@ -88,7 +88,7 @@ from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_version
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, StateSnapshot, StreamMode
+from langgraph.types import All, Checkpointer, LoopProtocol, StateSnapshot, StreamMode
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -252,8 +252,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if auto_validate:
             self.validate()
 
-    def copy(self, update: dict[str, Any]) -> Self:
-        attrs = {**self.__dict__, **update}
+    def copy(self, update: dict[str, Any] | None = None) -> Self:
+        attrs = {**self.__dict__, **(update or {})}
         return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
@@ -433,7 +433,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
 
         with ChannelsManager(
-            self.channels, saved.checkpoint, saved.config, skip_context=True
+            self.channels,
+            saved.checkpoint,
+            LoopProtocol(
+                config=saved.config,
+                step=saved.metadata.get("step", -1) + 1,
+                stop=saved.metadata.get("step", -1) + 2,
+            ),
+            skip_context=True,
         ) as (channels, managed):
             # tasks for this checkpoint
             next_tasks = prepare_next_tasks(
@@ -484,8 +491,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
-                saved.parent_config,
-                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
+                patch_checkpoint_map(saved.parent_config, saved.metadata),
+                tasks_w_writes(
+                    next_tasks.values(),
+                    saved.pending_writes,
+                    task_states,
+                    self.stream_channels_asis,
+                ),
             )
 
     async def _aprepare_state_snapshot(
@@ -506,7 +518,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
 
         async with AsyncChannelsManager(
-            self.channels, saved.checkpoint, saved.config, skip_context=True
+            self.channels,
+            saved.checkpoint,
+            LoopProtocol(
+                config=saved.config,
+                step=saved.metadata.get("step", -1) + 1,
+                stop=saved.metadata.get("step", -1) + 2,
+            ),
+            skip_context=True,
         ) as (
             channels,
             managed,
@@ -560,8 +579,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
-                saved.parent_config,
-                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
+                patch_checkpoint_map(saved.parent_config, saved.metadata),
+                tasks_w_writes(
+                    next_tasks.values(),
+                    saved.pending_writes,
+                    task_states,
+                    self.stream_channels_asis,
+                ),
             )
 
     def get_state(
@@ -825,7 +849,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
-        with ChannelsManager(self.channels, checkpoint, config) as (
+        with ChannelsManager(
+            self.channels,
+            checkpoint,
+            LoopProtocol(config=config, step=step + 1, stop=step + 2),
+        ) as (
             channels,
             managed,
         ):
@@ -866,9 +894,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if saved:
                 checkpointer.put_writes(checkpoint_config, task.writes, task_id)
             # apply to checkpoint and save
-            assert not apply_writes(
+            mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
-            ), "Can't write to SharedValues from update_state"
+            )
+            assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -970,7 +999,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
-        async with AsyncChannelsManager(self.channels, checkpoint, config) as (
+        async with AsyncChannelsManager(
+            self.channels,
+            checkpoint,
+            LoopProtocol(config=config, step=step + 1, stop=step + 2),
+        ) as (
             channels,
             managed,
         ):
@@ -1011,9 +1044,10 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if saved:
                 await checkpointer.aput_writes(checkpoint_config, writes, task_id)
             # apply to checkpoint and save
-            assert not apply_writes(
+            mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
-            ), "Can't write to SharedValues from update_state"
+            )
+            assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             next_config = await checkpointer.aput(
                 checkpoint_config,

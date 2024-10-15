@@ -754,7 +754,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
-            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 5}),),
             next=("two",),
             config={
                 "configurable": {
@@ -774,7 +774,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 3},
-            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 4}),),
             next=("one",),
             config={
                 "configurable": {
@@ -814,7 +814,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 20},
-            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 21}),),
             next=("one",),
             config={
                 "configurable": {
@@ -849,7 +849,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "input": 2},
-            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 4}),),
             next=("two",),
             config={
                 "configurable": {
@@ -869,7 +869,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"input": 2},
-            tasks=(PregelTask(AnyStr(), "one", (PULL, "one")),),
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 3}),),
             next=("one",),
             config={
                 "configurable": {
@@ -896,6 +896,7 @@ def test_invoke_two_processes_in_out_interrupt(
     ]
     assert [c for c in app.stream(None, history[2].config, stream_mode="updates")] == [
         {"one": {"inbox": 4}},
+        {"__interrupt__": ()},
     ]
 
 
@@ -954,7 +955,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=5,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -974,7 +975,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=4,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -994,7 +995,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=3,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1014,7 +1015,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=2,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1034,7 +1035,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=1,
-            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one")),),
+            tasks=(PregelTask(AnyStr(), "add_one", (PULL, "add_one"), result=1),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -1049,7 +1050,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=0,
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__"), result=1),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -1487,7 +1488,7 @@ def test_pending_writes_resume(
     assert state.values == {"value": 1}
     assert state.next == ("one", "two")
     assert state.tasks == (
-        PregelTask(AnyStr(), "one", (PULL, "one")),
+        PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
         PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
     )
     assert state.metadata == {
@@ -1669,7 +1670,11 @@ def test_pending_writes_resume(
             "writes": {"__start__": {"value": 1}},
         },
         parent_config=None,
-        pending_writes=[],
+        pending_writes=UnsortedSequence(
+            (AnyStr(), "value", 1),
+            (AnyStr(), "start:one", "__start__"),
+            (AnyStr(), "start:two", "__start__"),
+        ),
     )
 
 
@@ -3198,6 +3203,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            {"__interrupt__": ()},
         ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3295,6 +3301,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            {"__interrupt__": ()},
         ]
 
     with assert_ctx_once():
@@ -3365,6 +3372,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3460,6 +3468,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     app_w_interrupt.update_state(
@@ -3520,7 +3529,9 @@ def test_conditional_state_graph(
 
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == []
+    ] == [
+        {"__interrupt__": ()},
+    ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -3542,6 +3553,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3587,6 +3599,7 @@ def test_conditional_state_graph(
                 ],
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3641,6 +3654,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     # test w interrupt after all
@@ -3661,6 +3675,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3706,6 +3721,7 @@ def test_conditional_state_graph(
                 ],
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3760,6 +3776,7 @@ def test_conditional_state_graph(
                 ),
             }
         },
+        {"__interrupt__": ()},
     ]
 
 
@@ -4630,6 +4647,7 @@ def test_state_graph_packets(
                 )
             }
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -4759,6 +4777,7 @@ def test_state_graph_packets(
                 )
             },
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5130,6 +5149,7 @@ def test_message_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5241,6 +5261,7 @@ def test_message_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5360,6 +5381,7 @@ def test_message_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5471,6 +5493,7 @@ def test_message_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5856,6 +5879,7 @@ def test_root_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -5967,6 +5991,7 @@ def test_root_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -6088,6 +6113,7 @@ def test_root_graph(
                 id="ai1",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -6199,6 +6225,7 @@ def test_root_graph(
                 id="ai2",
             )
         },
+        {"__interrupt__": ()},
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -7653,6 +7680,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -7672,6 +7700,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
@@ -7785,6 +7814,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -7941,6 +7971,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
     with assert_ctx_once():
@@ -8109,6 +8140,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
             {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
         ]
 
     with assert_ctx_once():
@@ -8217,6 +8249,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -8779,6 +8812,7 @@ def test_nested_graph_interrupts_parallel(
         # we got to parallel node first
         ((), {"outer_1": {"my_key": " and parallel"}}),
         ((AnyStr("inner:"),), {"inner_1": {"my_key": "got here", "my_other_key": ""}}),
+        ((), {"__interrupt__": ()}),
     ]
     assert [*app.stream(None, config)] == [
         {"outer_1": {"my_key": " and parallel"}, "__metadata__": {"cached": True}},
@@ -8898,6 +8932,7 @@ def test_doubly_nested_graph_interrupts(
     config = {"configurable": {"thread_id": "2"}}
     assert [*app.stream({"my_key": "my value"}, config)] == [
         {"parent_1": {"my_key": "hi my value"}},
+        {"__interrupt__": ()},
     ]
     assert [*app.stream(None, config)] == [
         {"child": {"my_key": "hi my value here and there"}},
@@ -9057,6 +9092,9 @@ def test_nested_graph_state(
                             "thread_id": "1",
                             "checkpoint_ns": AnyStr("inner:"),
                             "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                            ),
                         }
                     },
                 ),
@@ -9128,7 +9166,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
-            tasks=(PregelTask(AnyStr(), "outer_1", (PULL, "outer_1")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_1",
+                    (PULL, "outer_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9149,7 +9194,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
+            ),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9201,6 +9253,9 @@ def test_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("inner:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
@@ -9230,9 +9285,22 @@ def test_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("inner:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
-            tasks=(PregelTask(AnyStr(), "inner_1", (PULL, "inner_1")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner_1",
+                    (PULL, "inner_1"),
+                    result={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                ),
+            ),
         ),
         StateSnapshot(
             values={},
@@ -9255,7 +9323,14 @@ def test_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
         ),
     ]
 
@@ -9323,7 +9398,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
-            tasks=(PregelTask(AnyStr(), "outer_2", (PULL, "outer_2")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_2",
+                    (PULL, "outer_2"),
+                    result={"my_key": "hi my value here and there and back again"},
+                ),
+            ),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -9357,6 +9439,7 @@ def test_nested_graph_state(
                     state={
                         "configurable": {"thread_id": "1", "checkpoint_ns": AnyStr()}
                     },
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
             next=("inner",),
@@ -9384,7 +9467,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
-            tasks=(PregelTask(AnyStr(), "outer_1", (PULL, "outer_1")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_1",
+                    (PULL, "outer_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9405,7 +9495,14 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
+            ),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9493,6 +9590,7 @@ def test_doubly_nested_graph_state(
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_1": {"my_key": "hi my value here"}},
         ),
+        ((), {"__interrupt__": ()}),
     ]
     # get state without subgraphs
     outer_state = app.get_state(config)
@@ -9618,6 +9716,13 @@ def test_doubly_nested_graph_state(
                 "thread_id": "1",
                 "checkpoint_ns": AnyStr(),
                 "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                        AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                    }
+                ),
             }
         },
     )
@@ -9681,6 +9786,15 @@ def test_doubly_nested_graph_state(
                                         "thread_id": "1",
                                         "checkpoint_ns": AnyStr(),
                                         "checkpoint_id": AnyStr(),
+                                        "checkpoint_map": AnyDict(
+                                            {
+                                                "": AnyStr(),
+                                                AnyStr("child:"): AnyStr(),
+                                                AnyStr(
+                                                    re.compile(r"child:.+|child1:")
+                                                ): AnyStr(),
+                                            }
+                                        ),
                                     }
                                 },
                             ),
@@ -9709,6 +9823,9 @@ def test_doubly_nested_graph_state(
                             "thread_id": "1",
                             "checkpoint_ns": AnyStr("child:"),
                             "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                            ),
                         }
                     },
                 ),
@@ -9840,6 +9957,7 @@ def test_doubly_nested_graph_state(
                     id=AnyStr(),
                     name="parent_2",
                     path=(PULL, "parent_2"),
+                    result={"my_key": "hi my value here and there and back again"},
                 ),
             ),
         ),
@@ -9856,6 +9974,7 @@ def test_doubly_nested_graph_state(
                             "checkpoint_ns": AnyStr("child"),
                         }
                     },
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
             next=("child",),
@@ -9900,7 +10019,14 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            tasks=(PregelTask(id=AnyStr(), name="parent_1", path=(PULL, "parent_1")),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="parent_1",
+                    path=(PULL, "parent_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
         ),
         StateSnapshot(
             values={},
@@ -9921,7 +10047,12 @@ def test_doubly_nested_graph_state(
             created_at=AnyStr(),
             parent_config=None,
             tasks=(
-                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
             ),
         ),
     ]
@@ -9953,6 +10084,9 @@ def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             tasks=(),
@@ -9982,6 +10116,9 @@ def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             tasks=(
@@ -9995,6 +10132,7 @@ def test_doubly_nested_graph_state(
                             "checkpoint_ns": AnyStr("child:"),
                         }
                     },
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
         ),
@@ -10020,7 +10158,12 @@ def test_doubly_nested_graph_state(
             created_at=AnyStr(),
             parent_config=None,
             tasks=(
-                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
             ),
         ),
     ]
@@ -10061,6 +10204,13 @@ def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             tasks=(),
@@ -10099,11 +10249,21 @@ def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             tasks=(
                 PregelTask(
-                    id=AnyStr(), name="grandchild_2", path=(PULL, "grandchild_2")
+                    id=AnyStr(),
+                    name="grandchild_2",
+                    path=(PULL, "grandchild_2"),
+                    result={"my_key": "hi my value here and there"},
                 ),
             ),
         ),
@@ -10141,11 +10301,21 @@ def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             tasks=(
                 PregelTask(
-                    id=AnyStr(), name="grandchild_1", path=(PULL, "grandchild_1")
+                    id=AnyStr(),
+                    name="grandchild_1",
+                    path=(PULL, "grandchild_1"),
+                    result={"my_key": "hi my value here"},
                 ),
             ),
         ),
@@ -10180,7 +10350,12 @@ def test_doubly_nested_graph_state(
             created_at=AnyStr(),
             parent_config=None,
             tasks=(
-                PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
             ),
         ),
     ]
@@ -10192,7 +10367,8 @@ def test_doubly_nested_graph_state(
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_1": {"my_key": "hi my value here"}},
-        )
+        ),
+        ((), {"__interrupt__": ()}),
     ]
 
 
@@ -10323,6 +10499,12 @@ def test_send_to_nested_graphs(
                 "thread_id": "1",
                 "checkpoint_ns": AnyStr("generate_joke:"),
                 "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("generate_joke:"): AnyStr(),
+                    }
+                ),
             }
         },
         tasks=(PregelTask(id=AnyStr(""), name="generate", path=(PULL, "generate")),),
@@ -10355,6 +10537,12 @@ def test_send_to_nested_graphs(
                 "thread_id": "1",
                 "checkpoint_ns": AnyStr("generate_joke:"),
                 "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("generate_joke:"): AnyStr(),
+                    }
+                ),
             }
         },
         tasks=(PregelTask(id=AnyStr(""), name="generate", path=(PULL, "generate")),),
@@ -10459,6 +10647,7 @@ def test_send_to_nested_graphs(
                             "checkpoint_ns": AnyStr("generate_joke:"),
                         }
                     },
+                    result={"jokes": ["Joke about cats - hohoho"]},
                 ),
                 PregelTask(
                     AnyStr(),
@@ -10470,6 +10659,7 @@ def test_send_to_nested_graphs(
                             "checkpoint_ns": AnyStr("generate_joke:"),
                         }
                     },
+                    result={"jokes": ["Joke about turtles - hohoho"]},
                 ),
             ),
             next=("generate_joke", "generate_joke"),
@@ -10492,7 +10682,14 @@ def test_send_to_nested_graphs(
         ),
         StateSnapshot(
             values={"jokes": []},
-            tasks=(PregelTask(AnyStr(), "__start__", (PULL, "__start__")),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"subjects": ["cats", "dogs"]},
+                ),
+            ),
             next=("__start__",),
             config={
                 "configurable": {
@@ -10644,6 +10841,7 @@ def test_weather_subgraph(
     ] == [
         ((), {"router_node": {"route": "weather"}}),
         ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+        ((), {"__interrupt__": ()}),
     ]
 
     # check current state
@@ -10732,6 +10930,7 @@ def test_weather_subgraph(
     ] == [
         ((), {"router_node": {"route": "weather"}}),
         ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+        ((), {"__interrupt__": ()}),
     ]
     state = graph.get_state(config, subgraphs=True)
     assert state == StateSnapshot(
@@ -10799,6 +10998,12 @@ def test_weather_subgraph(
                             "thread_id": "14",
                             "checkpoint_ns": AnyStr("weather_graph:"),
                             "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {
+                                    "": AnyStr(),
+                                    AnyStr("weather_graph:"): AnyStr(),
+                                }
+                            ),
                         }
                     },
                     tasks=(
@@ -10888,6 +11093,12 @@ def test_weather_subgraph(
                             "thread_id": "14",
                             "checkpoint_ns": AnyStr("weather_graph:"),
                             "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {
+                                    "": AnyStr(),
+                                    AnyStr("weather_graph:"): AnyStr(),
+                                }
+                            ),
                         }
                     },
                     tasks=(),
@@ -11785,6 +11996,8 @@ def test_debug_nested_subgraphs():
         clean_config["thread_id"] = config["configurable"]["thread_id"]
         clean_config["checkpoint_id"] = config["configurable"]["checkpoint_id"]
         clean_config["checkpoint_ns"] = config["configurable"]["checkpoint_ns"]
+        if "checkpoint_map" in config["configurable"]:
+            clean_config["checkpoint_map"] = config["configurable"]["checkpoint_map"]
 
         return clean_config
 
