@@ -6,7 +6,7 @@ An [agent](./agentic_concepts.md#agent-architectures) is _a system that uses an 
 - context grows too complex for a single agent to keep track of
 - there is a need for multiple specialization areas in the system (e.g. planner, researcher, math expert, etc.)
 
-To tackle these, you might consider breaking your application into multiple smaller, independent agents and composing them into a **multi-agent system**. These independent agents can be as simple as a prompt and an LLM call, or as complex as a [ReAct](./agentic_concepts.md#react-implementation) agent.
+To tackle these, you might consider breaking your application into multiple smaller, independent agents and composing them into a **multi-agent system**. These independent agents can be as simple as a prompt and an LLM call, or as complex as a [ReAct](./agentic_concepts.md#react-implementation) agent (and more!).
 
 The primary benefits of using multi-agent systems are:
 
@@ -32,7 +32,7 @@ In this architecture, agents are defined as graph nodes. Each agent is connected
 
 ### Supervisor
 
-In this architecture, we define agents as nodes and add a supervisor node (LLM) that decides which agent nodes should be called next. We use [conditional edges](./low_level.md#conditional-edges) to route execution to the appropriate agent node based on supervisor's decision.
+In this architecture, we define agents as nodes and add a supervisor node (LLM) that decides which agent nodes should be called next. We use [conditional edges](./low_level.md#conditional-edges) to route execution to the appropriate agent node based on supervisor's decision. This architecture also lends itself well to running multiple agents in parallel or using [map-reduce](../how-tos/map-reduce.ipynb) pattern.
 
 ```python
 from typing import Literal
