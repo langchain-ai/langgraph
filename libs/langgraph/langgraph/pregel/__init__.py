@@ -437,8 +437,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             saved.checkpoint,
             LoopProtocol(
                 config=saved.config,
-                step=saved.metadata["step"],
-                stop=saved.metadata["step"] + 1,
+                step=saved.metadata.get("step", -1) + 1,
+                stop=saved.metadata.get("step", -1) + 2,
             ),
             skip_context=True,
         ) as (channels, managed):
@@ -522,8 +522,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             saved.checkpoint,
             LoopProtocol(
                 config=saved.config,
-                step=saved.metadata["step"],
-                stop=saved.metadata["step"] + 1,
+                step=saved.metadata.get("step", -1) + 1,
+                stop=saved.metadata.get("step", -1) + 2,
             ),
             skip_context=True,
         ) as (
@@ -852,7 +852,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         with ChannelsManager(
             self.channels,
             checkpoint,
-            LoopProtocol(config=config, step=step, stop=step + 1),
+            LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (
             channels,
             managed,
@@ -1002,7 +1002,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         async with AsyncChannelsManager(
             self.channels,
             checkpoint,
-            LoopProtocol(config=config, step=step, stop=step + 1),
+            LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (
             channels,
             managed,
