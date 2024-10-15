@@ -11,9 +11,9 @@ class IsLastStepManager(ManagedValue[bool]):
 IsLastStep = Annotated[bool, IsLastStepManager]
 
 
-class RemainingStepsManager(ManagedValue[bool]):
-    def __call__(self) -> bool:
+class RemainingStepsManager(ManagedValue[int]):
+    def __call__(self) -> int:
         return self.loop.stop - self.loop.step
 
 
-RemainingSteps = Annotated[bool, RemainingStepsManager]
+RemainingSteps = Annotated[int, RemainingStepsManager]
