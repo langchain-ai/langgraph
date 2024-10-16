@@ -20,7 +20,7 @@ A super-step can be considered a single iteration over the graph nodes. Nodes th
 
 ### StateGraph
 
-The `StateGraph` class is the main graph class to uses. This is parameterized by a user defined `State` object.
+The `StateGraph` class is the main graph class to users. This is parameterized by a user defined `State` object.
 
 ### MessageGraph
 
