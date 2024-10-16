@@ -25,8 +25,8 @@ Learn from example implementations of graphs designed for specific scenarios and
 
 #### Multi-Agent Systems
 
-- [Collaboration](multi_agent/multi-agent-collaboration.ipynb): Enable two agents to collaborate on a task
-- [Supervision](multi_agent/agent_supervisor.ipynb): Use an LLM to orchestrate and delegate to individual agents
+- [Network](multi_agent/multi-agent-collaboration.ipynb): Enable two or more agents to collaborate on a task
+- [Supervisor](multi_agent/agent_supervisor.ipynb): Use an LLM to orchestrate and delegate to individual agents
 - [Hierarchical Teams](multi_agent/hierarchical_agent_teams.ipynb): Orchestrate nested teams of agents to solve problems
 
 #### RAG
