@@ -97,8 +97,8 @@ nav:
           - SQL Agent: tutorials/sql-agent.ipynb
       - Agent Architectures:
           - Multi-Agent Systems:
-              - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
-              - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
+              - Network: tutorials/multi_agent/multi-agent-collaboration.ipynb
+              - Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
               - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
           - Planning Agents:
               - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
