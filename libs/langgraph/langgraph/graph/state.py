@@ -538,7 +538,9 @@ class CompiledStateGraph(CompiledGraph):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
             else:
-                raise InvalidUpdateError(f"Expected dict, got {input}")
+                raise InvalidUpdateError(
+                    f"Expected dict, got {input}", "INVALID_GRAPH_NODE_RETURN_VALUE"
+                )
 
         # state updaters
         write_entries = (

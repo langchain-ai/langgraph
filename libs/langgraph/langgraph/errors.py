@@ -1,7 +1,7 @@
 from typing import Any, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
-from langgraph.types import Interrupt
+from langgraph.types import Interrupt, Optional
 
 # EmptyChannelError re-exported for backwards compatibility
 
@@ -22,13 +22,22 @@ class GraphRecursionError(RecursionError):
         )
     """
 
-    pass
+    def __init__(
+        self,
+        message: str = "Recursion limit reached.\n\nTroubleshooting URL: https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_LIMIT/",
+    ):
+        self.message = message
+        super().__init__(self.message)
 
 
 class InvalidUpdateError(Exception):
     """Raised when attempting to update a channel with an invalid set of updates."""
 
-    pass
+    def __init__(self, message: str, code: Optional[str] = None):
+        if code is not None:
+            message = f"{message}\n\nTroubleshooting URL: https://python.langchain.com/docs/troubleshooting/errors/{code}/"
+        self.message = message
+        super().__init__(self.message)
 
 
 class GraphInterrupt(Exception):
@@ -74,7 +83,12 @@ class CheckpointNotLatest(Exception):
 class MultipleSubgraphsError(Exception):
     """Raised when multiple subgraphs are called inside the same node."""
 
-    pass
+    def __init__(
+        self,
+        message: str = "Multiple subgraphs called inside the same node\n\nTroubleshooting URL: https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS/",
+    ):
+        self.message = message
+        super().__init__(self.message)
 
 
 _SEEN_CHECKPOINT_NS: set[str] = set()

@@ -36,7 +36,8 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
             return False
         if len(values) != 1:
             raise InvalidUpdateError(
-                f"At key '{self.key}': Can receive only one value per step. Use an Annotated key to handle multiple values."
+                f"At key '{self.key}': Can receive only one value per step. Use an Annotated key to handle multiple values.",
+                "INVALID_CONCURRENT_GRAPH_UPDATE",
             )
 
         self.value = values[-1]
