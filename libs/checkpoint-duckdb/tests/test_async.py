@@ -1,7 +1,6 @@
 from typing import Any
 
 import pytest
-from conftest import DEFAULT_URI  # type: ignore
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
@@ -57,11 +56,10 @@ class TestAsyncDuckDBSaver:
             "score": None,
         }
         self.metadata_3: CheckpointMetadata = {}
-        async with AsyncDuckDBSaver.from_conn_string(DEFAULT_URI) as saver:
-            await saver.setup()
 
     async def test_asearch(self) -> None:
-        async with AsyncDuckDBSaver.from_conn_string(DEFAULT_URI) as saver:
+        async with AsyncDuckDBSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
             await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1, {})
             await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2, {})
             await saver.aput(self.config_3, self.chkpnt_3, self.metadata_3, {})
@@ -103,7 +101,8 @@ class TestAsyncDuckDBSaver:
             # TODO: test before and limit params
 
     async def test_null_chars(self) -> None:
-        async with AsyncDuckDBSaver.from_conn_string(DEFAULT_URI) as saver:
+        async with AsyncDuckDBSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
             config = await saver.aput(
                 self.config_1, self.chkpnt_1, {"my_key": "\x00abc"}, {}
             )

@@ -1,14 +1,11 @@
 import asyncio
+import json
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Sequence
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
-from psycopg.errors import UndefinedTable
-from psycopg.rows import DictRow, dict_row
-from psycopg.types.json import Jsonb
-from psycopg_pool import AsyncConnectionPool
 
+import duckdb
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     ChannelVersions,
@@ -20,39 +17,17 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.duckdb.base import BaseDuckDBSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
-Conn = Union[AsyncConnection[DictRow], AsyncConnectionPool[AsyncConnection[DictRow]]]
-
-
-@asynccontextmanager
-async def _get_connection(
-    conn: Conn,
-) -> AsyncIterator[AsyncConnection[DictRow]]:
-    if isinstance(conn, AsyncConnection):
-        yield conn
-    elif isinstance(conn, AsyncConnectionPool):
-        async with conn.connection() as conn:
-            yield conn
-    else:
-        raise TypeError(f"Invalid connection type: {type(conn)}")
-
 
 class AsyncDuckDBSaver(BaseDuckDBSaver):
     lock: asyncio.Lock
 
     def __init__(
         self,
-        conn: Conn,
-        pipe: Optional[AsyncPipeline] = None,
+        conn: duckdb.DuckDBPyConnection,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
-        if isinstance(conn, AsyncConnectionPool) and pipe is not None:
-            raise ValueError(
-                "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
-            )
-
         self.conn = conn
-        self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
 
@@ -61,55 +36,46 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
     async def from_conn_string(
         cls,
         conn_string: str,
-        *,
-        pipeline: bool = False,
-        serde: Optional[SerializerProtocol] = None,
     ) -> AsyncIterator["AsyncDuckDBSaver"]:
-        """Create a new DuckDBSaver instance from a connection string.
+        """Create a new AsyncDuckDBSaver instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use AsyncPipeline
+            conn_string (str): The DuckDB connection info string.
 
         Returns:
             AsyncDuckDBSaver: A new AsyncDuckDBSaver instance.
         """
-        async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield AsyncDuckDBSaver(conn=conn, pipe=pipe, serde=serde)
-            else:
-                yield AsyncDuckDBSaver(conn=conn, serde=serde)
+        with duckdb.connect(conn_string) as conn:
+            yield AsyncDuckDBSaver(conn)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
-        This method creates the necessary tables in the Postgres database if they don't
+        This method creates the necessary tables in the DuckDB database if they don't
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
         async with self._cursor() as cur:
             try:
-                results = await cur.execute(
-                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                await asyncio.to_thread(
+                    cur.execute,
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1",
                 )
-                row = await results.fetchone()
+                row = await asyncio.to_thread(cur.fetchone)
                 if row is None:
                     version = -1
                 else:
-                    version = row["v"]
-            except UndefinedTable:
+                    version = row[0]
+            except duckdb.CatalogException:
                 version = -1
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
             ):
-                await cur.execute(migration)
-                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
-        if self.pipe:
-            await self.pipe.sync()
+                await asyncio.to_thread(cur.execute, migration)
+                await asyncio.to_thread(
+                    cur.execute, "INSERT INTO checkpoint_migrations (v) VALUES (?)", [v]
+                )
 
     async def alist(
         self,
@@ -121,7 +87,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
     ) -> AsyncIterator[CheckpointTuple]:
         """List checkpoints from the database asynchronously.
 
-        This method retrieves a list of checkpoint tuples from the Postgres database based
+        This method retrieves a list of checkpoint tuples from the DuckDB database based
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
@@ -139,39 +105,53 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
         async with self._cursor() as cur:
-            await cur.execute(query, args, binary=True)
-            async for value in cur:
+            await asyncio.to_thread(cur.execute, query, args)
+            results = await asyncio.to_thread(cur.fetchall)
+            for value in results:
+                (
+                    thread_id,
+                    checkpoint,
+                    checkpoint_ns,
+                    checkpoint_id,
+                    parent_checkpoint_id,
+                    metadata,
+                    channel_values,
+                    pending_writes,
+                    pending_sends,
+                ) = value
                 yield CheckpointTuple(
                     {
                         "configurable": {
-                            "thread_id": value["thread_id"],
-                            "checkpoint_ns": value["checkpoint_ns"],
-                            "checkpoint_id": value["checkpoint_id"],
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
                         }
                     },
                     await asyncio.to_thread(
                         self._load_checkpoint,
-                        value["checkpoint"],
-                        value["channel_values"],
-                        value["pending_sends"],
+                        checkpoint,
+                        channel_values,
+                        pending_sends,
                     ),
-                    self._load_metadata(value["metadata"]),
-                    {
-                        "configurable": {
-                            "thread_id": value["thread_id"],
-                            "checkpoint_ns": value["checkpoint_ns"],
-                            "checkpoint_id": value["parent_checkpoint_id"],
+                    self._load_metadata(metadata),
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
                         }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None,
-                    await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+                        if parent_checkpoint_id
+                        else None
+                    ),
+                    await asyncio.to_thread(self._load_writes, pending_writes),
                 )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database asynchronously.
 
-        This method retrieves a checkpoint tuple from the Postgres database based on the
+        This method retrieves a checkpoint tuple from the DuckDBdatabase based on the
         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
         the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
@@ -187,44 +167,58 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id:
             args: tuple[Any, ...] = (thread_id, checkpoint_ns, checkpoint_id)
-            where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
+            where = "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?"
         else:
             args = (thread_id, checkpoint_ns)
-            where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
+            where = "WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC LIMIT 1"
 
         async with self._cursor() as cur:
-            await cur.execute(
+            await asyncio.to_thread(
+                cur.execute,
                 self.SELECT_SQL + where,
                 args,
-                binary=True,
             )
 
-            async for value in cur:
+            value = await asyncio.to_thread(cur.fetchone)
+            if value:
+                (
+                    thread_id,
+                    checkpoint,
+                    checkpoint_ns,
+                    checkpoint_id,
+                    parent_checkpoint_id,
+                    metadata,
+                    channel_values,
+                    pending_writes,
+                    pending_sends,
+                ) = value
                 return CheckpointTuple(
                     {
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["checkpoint_id"],
+                            "checkpoint_id": checkpoint_id,
                         }
                     },
                     await asyncio.to_thread(
                         self._load_checkpoint,
-                        value["checkpoint"],
-                        value["channel_values"],
-                        value["pending_sends"],
+                        checkpoint,
+                        channel_values,
+                        pending_sends,
                     ),
-                    self._load_metadata(value["metadata"]),
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["parent_checkpoint_id"],
+                    self._load_metadata(metadata),
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
                         }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None,
-                    await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+                        if parent_checkpoint_id
+                        else None
+                    ),
+                    await asyncio.to_thread(self._load_writes, pending_writes),
                 )
 
     async def aput(
@@ -236,7 +230,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
     ) -> RunnableConfig:
         """Save a checkpoint to the database asynchronously.
 
-        This method saves a checkpoint to the Postgres database. The checkpoint is associated
+        This method saves a checkpoint to the DuckDB database. The checkpoint is associated
         with the provided config and its parent config (if any).
 
         Args:
@@ -264,28 +258,31 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
             }
         }
 
-        async with self._cursor(pipeline=True) as cur:
-            await cur.executemany(
-                self.UPSERT_CHECKPOINT_BLOBS_SQL,
+        checkpoint_blobs = await asyncio.to_thread(
+            self._dump_blobs,
+            thread_id,
+            checkpoint_ns,
+            copy.pop("channel_values"),
+            new_versions,
+        )
+        async with self._cursor() as cur:
+            if checkpoint_blobs:
                 await asyncio.to_thread(
-                    self._dump_blobs,
-                    thread_id,
-                    checkpoint_ns,
-                    copy.pop("channel_values"),  # type: ignore[misc]
-                    new_versions,
-                ),
-            )
-            await cur.execute(
+                    cur.executemany, self.UPSERT_CHECKPOINT_BLOBS_SQL, checkpoint_blobs
+                )
+            await asyncio.to_thread(
+                cur.execute,
                 self.UPSERT_CHECKPOINTS_SQL,
                 (
                     thread_id,
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    Jsonb(self._dump_checkpoint(copy)),
+                    json.dumps(self._dump_checkpoint(copy)),
                     self._dump_metadata(metadata),
                 ),
             )
+
         return next_config
 
     async def aput_writes(
@@ -316,36 +313,14 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
             task_id,
             writes,
         )
-        async with self._cursor(pipeline=True) as cur:
-            await cur.executemany(query, params)
+        async with self._cursor() as cur:
+            await asyncio.to_thread(cur.executemany, query, params)
 
     @asynccontextmanager
-    async def _cursor(
-        self, *, pipeline: bool = False
-    ) -> AsyncIterator[AsyncCursor[DictRow]]:
-        async with _get_connection(self.conn) as conn:
-            if self.pipe:
-                # a connection in pipeline mode can be used concurrently
-                # in multiple threads/coroutines, but only one cursor can be
-                # used at a time
-                try:
-                    async with conn.cursor(binary=True, row_factory=dict_row) as cur:
-                        yield cur
-                finally:
-                    if pipeline:
-                        await self.pipe.sync()
-            elif pipeline:
-                # a connection not in pipeline mode can only be used by one
-                # thread/coroutine at a time, so we acquire a lock
-                async with self.lock, conn.pipeline(), conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
-                    yield cur
-            else:
-                async with self.lock, conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
-                    yield cur
+    async def _cursor(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
+        async with self.lock:
+            with self.conn.cursor() as cur:
+                yield cur
 
     def list(
         self,
@@ -357,7 +332,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
 
-        This method retrieves a list of checkpoint tuples from the Postgres database based
+        This method retrieves a list of checkpoint tuples from the DuckDB database based
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
@@ -382,7 +357,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
 
-        This method retrieves a checkpoint tuple from the Postgres database based on the
+        This method retrieves a checkpoint tuple from the DuckDB database based on the
         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
         the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
@@ -418,7 +393,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
     ) -> RunnableConfig:
         """Save a checkpoint to the database.
 
-        This method saves a checkpoint to the Postgres database. The checkpoint is associated
+        This method saves a checkpoint to the DuckDB database. The checkpoint is associated
         with the provided config and its parent config (if any).
 
         Args:
