@@ -68,7 +68,7 @@ select
     (
         select array_agg(array[bl.channel::bytea, bl.type::bytea, bl.blob])
         from (
-            SELECT unnest(json_keys(json_extract(checkpoint, '$.channel_versions'))) as key,
+            SELECT unnest(json_keys(json_extract(checkpoint, '$.channel_versions'))) as key
         ) cv
         inner join checkpoint_blobs bl
             on bl.thread_id = checkpoints.thread_id
