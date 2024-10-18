@@ -11,6 +11,7 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.duckdb import DuckDBSaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -58,6 +59,13 @@ def checkpointer_sqlite():
 @asynccontextmanager
 async def _checkpointer_sqlite_aio():
     async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
+        yield checkpointer
+
+
+@pytest.fixture(scope="function")
+def checkpointer_duckdb():
+    with DuckDBSaver.from_conn_string(":memory:") as checkpointer:
+        checkpointer.setup()
         yield checkpointer
 
 
@@ -285,6 +293,7 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
 ALL_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
+    "duckdb",
     "postgres",
     "postgres_pipe",
     "postgres_pool",
