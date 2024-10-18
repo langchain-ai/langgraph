@@ -30,7 +30,7 @@ class GraphRecursionError(RecursionError):
 
     Troubleshooting Guides:
 
-    - [GRAPH_RECURSION_ERROR](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_ERROR)
+    - [GRAPH_RECURSION_LIMIT](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_LIMIT)
 
     Examples:
 
