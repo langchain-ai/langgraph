@@ -180,10 +180,10 @@ nav:
           - Return state before hitting recursion limit: how-tos/return-when-recursion-limit-hits.ipynb
           - Error reference:
               - "troubleshooting/errors/index.md"
-              - GRAPH_RECURSION_LIMIT: "troubleshooting/errors/GRAPH_RECURSION_LIMIT.ipynb"
-              - INVALID_CONCURRENT_GRAPH_UPDATE: "troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.ipynb"
-              - INVALID_GRAPH_NODE_RETURN_VALUE: "troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.ipynb"
-              - MULTIPLE_SUBGRAPHS: "troubleshooting/errors/MULTIPLE_SUBGRAPHS.ipynb"
+              - GRAPH_RECURSION_LIMIT: "troubleshooting/errors/GRAPH_RECURSION_LIMIT.md"
+              - INVALID_CONCURRENT_GRAPH_UPDATE: "troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md"
+              - INVALID_GRAPH_NODE_RETURN_VALUE: "troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md"
+              - MULTIPLE_SUBGRAPHS: "troubleshooting/errors/MULTIPLE_SUBGRAPHS.md"
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb

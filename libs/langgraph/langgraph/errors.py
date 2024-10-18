@@ -29,6 +29,7 @@ class GraphRecursionError(RecursionError):
     run your graph with a config specifying a higher `recursion_limit`.
 
     Troubleshooting Guides:
+
     - [GRAPH_RECURSION_ERROR](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_ERROR)
 
     Examples:
@@ -48,6 +49,7 @@ class InvalidUpdateError(Exception):
     """Raised when attempting to update a channel with an invalid set of updates.
 
     Troubleshooting Guides:
+
     - [INVALID_CONCURRENT_GRAPH_UPDATE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE)
     - [INVALID_GRAPH_NODE_RETURN_VALUE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE)
     """
@@ -99,6 +101,7 @@ class MultipleSubgraphsError(Exception):
     """Raised when multiple subgraphs are called inside the same node.
 
     Troubleshooting guides:
+
     - [MULTIPLE_SUBGRAPHS](https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS)
     """
 
