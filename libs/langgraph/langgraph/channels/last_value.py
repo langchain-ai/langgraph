@@ -3,7 +3,12 @@ from typing import Generic, Optional, Sequence, Type
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.errors import (
+    EmptyChannelError,
+    ErrorCode,
+    InvalidUpdateError,
+    create_error_message,
+)
 
 
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
@@ -35,9 +40,11 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
         if len(values) == 0:
             return False
         if len(values) != 1:
-            raise InvalidUpdateError(
-                f"At key '{self.key}': Can receive only one value per step. Use an Annotated key to handle multiple values."
+            msg = create_error_message(
+                message=f"At key '{self.key}': Can receive only one value per step. Use an Annotated key to handle multiple values.",
+                error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
             )
+            raise InvalidUpdateError(msg)
 
         self.value = values[-1]
         return True
