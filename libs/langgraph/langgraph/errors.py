@@ -1,9 +1,25 @@
+from enum import Enum
 from typing import Any, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
-from langgraph.types import Interrupt, Optional
+from langgraph.types import Interrupt
 
 # EmptyChannelError re-exported for backwards compatibility
+
+
+class ErrorCode(Enum):
+    GRAPH_RECURSION_LIMIT = "GRAPH_RECURSION_LIMIT"
+    INVALID_CONCURRENT_GRAPH_UPDATE = "INVALID_CONCURRENT_GRAPH_UPDATE"
+    INVALID_GRAPH_NODE_RETURN_VALUE = "INVALID_GRAPH_NODE_RETURN_VALUE"
+    MULTIPLE_SUBGRAPHS = "MULTIPLE_SUBGRAPHS"
+
+
+def create_error_message(*, message: str, error_code: ErrorCode) -> str:
+    return (
+        f"{message}\n"
+        "For troubleshooting, visit: https://python.langchain.com/docs/"
+        f"troubleshooting/errors/{error_code.value}"
+    )
 
 
 class GraphRecursionError(RecursionError):
@@ -11,6 +27,9 @@ class GraphRecursionError(RecursionError):
 
     This prevents infinite loops. To increase the maximum number of steps,
     run your graph with a config specifying a higher `recursion_limit`.
+
+    Troubleshooting Guides:
+    - [GRAPH_RECURSION_ERROR](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_ERROR)
 
     Examples:
 
@@ -22,22 +41,18 @@ class GraphRecursionError(RecursionError):
         )
     """
 
-    def __init__(
-        self,
-        message: str = "Recursion limit reached.\n\nTroubleshooting URL: https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_LIMIT/",
-    ):
-        self.message = message
-        super().__init__(self.message)
+    pass
 
 
 class InvalidUpdateError(Exception):
-    """Raised when attempting to update a channel with an invalid set of updates."""
+    """Raised when attempting to update a channel with an invalid set of updates.
 
-    def __init__(self, message: str, code: Optional[str] = None):
-        if code is not None:
-            message = f"{message}\n\nTroubleshooting URL: https://python.langchain.com/docs/troubleshooting/errors/{code}/"
-        self.message = message
-        super().__init__(self.message)
+    Troubleshooting Guides:
+    - [INVALID_CONCURRENT_GRAPH_UPDATE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE)
+    - [INVALID_GRAPH_NODE_RETURN_VALUE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE)
+    """
+
+    pass
 
 
 class GraphInterrupt(Exception):
@@ -81,14 +96,13 @@ class CheckpointNotLatest(Exception):
 
 
 class MultipleSubgraphsError(Exception):
-    """Raised when multiple subgraphs are called inside the same node."""
+    """Raised when multiple subgraphs are called inside the same node.
 
-    def __init__(
-        self,
-        message: str = "Multiple subgraphs called inside the same node\n\nTroubleshooting URL: https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS/",
-    ):
-        self.message = message
-        super().__init__(self.message)
+    Troubleshooting guides:
+    - [MULTIPLE_SUBGRAPHS](https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS)
+    """
+
+    pass
 
 
 _SEEN_CHECKPOINT_NS: set[str] = set()
