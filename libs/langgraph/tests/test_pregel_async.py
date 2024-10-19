@@ -62,7 +62,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import Control, Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -1967,6 +1967,65 @@ async def test_max_concurrency() -> None:
     ]
     assert node2.max_currently == 10
     assert node2.currently == 0
+
+
+async def test_max_concurrency_control() -> None:
+    async def node1(state) -> Control[Literal["2"]]:
+        return Control(update_state=["1"], send=[Send("2", state)] * 100)
+
+    node2_currently = 0
+    node2_max_currently = 0
+
+    async def node2(state) -> Control[Literal["3"]]:
+        nonlocal node2_currently, node2_max_currently
+        node2_currently += 1
+        if node2_currently > node2_max_currently:
+            node2_max_currently = node2_currently
+        await asyncio.sleep(0.1)
+        node2_currently -= 1
+
+        return Control(update_state=["2"], trigger="3")
+
+    async def node3(state) -> Literal["3"]:
+        return ["3"]
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node("1", node1)
+    builder.add_node("2", node2)
+    builder.add_node("3", node3)
+    builder.add_edge(START, "1")
+    graph = builder.compile()
+
+    assert (
+        graph.get_graph().draw_mermaid()
+        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	1(1)
+	2(2)
+	3([3]):::last
+	__start__ --> 1;
+	1 -.-> 2;
+	2 -.-> 3;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+"""
+    )
+
+    assert await graph.ainvoke(["0"], debug=True) == ["0", "1", *(["2"] * 100), "3"]
+    assert node2_max_currently == 100
+    assert node2_currently == 0
+    node2_max_currently = 0
+
+    assert await graph.ainvoke(["0"], {"max_concurrency": 10}) == [
+        "0",
+        "1",
+        *(["2"] * 100),
+        "3",
+    ]
+    assert node2_max_currently == 10
+    assert node2_currently == 0
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
