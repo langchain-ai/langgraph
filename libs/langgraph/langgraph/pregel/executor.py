@@ -124,7 +124,9 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
         if max_concurrency := config.get("max_concurrency"):
-            self.semaphore = asyncio.Semaphore(max_concurrency)
+            self.semaphore: Optional[asyncio.Semaphore] = asyncio.Semaphore(
+                max_concurrency
+            )
         else:
             self.semaphore = None
 
