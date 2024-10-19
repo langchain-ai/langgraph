@@ -118,11 +118,17 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     - re-raises the first exception from tasks with `__reraise_on_exit__=True`
       ignoring CancelledError"""
 
-    def __init__(self) -> None:
+    def __init__(self, config: RunnableConfig) -> None:
         self.context_not_supported = sys.version_info < (3, 11)
         self.tasks: dict[asyncio.Task, tuple[bool, bool]] = {}
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
+        if max_concurrency := config.get("max_concurrency"):
+            self.semaphore: Optional[asyncio.Semaphore] = asyncio.Semaphore(
+                max_concurrency
+            )
+        else:
+            self.semaphore = None
 
     def submit(  # type: ignore[valid-type]
         self,
@@ -134,6 +140,8 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         **kwargs: P.kwargs,
     ) -> asyncio.Task[T]:
         coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
+        if self.semaphore:
+            coro = gated(self.semaphore, coro)
         if self.context_not_supported:
             task = self.loop.create_task(coro, name=__name__)
         else:
@@ -183,3 +191,9 @@ class AsyncBackgroundExecutor(AsyncContextManager):
                         raise exc
                 except asyncio.CancelledError:
                     pass
+
+
+async def gated(semaphore: asyncio.Semaphore, coro: Coroutine[None, None, T]) -> T:
+    """A coroutine that waits for a semaphore before running another coroutine."""
+    async with semaphore:
+        return await coro
