@@ -839,7 +839,9 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             else []
         )
 
-        self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
+        self.submit = await self.stack.enter_async_context(
+            AsyncBackgroundExecutor(self.config)
+        )
         self.channels, self.managed = await self.stack.enter_async_context(
             AsyncChannelsManager(self.specs, self.checkpoint, self)
         )
