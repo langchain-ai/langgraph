@@ -226,8 +226,8 @@ class BaseDuckDBSaver(BaseCheckpointSaver[str]):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def _load_metadata(self, metadata: str) -> CheckpointMetadata:
-        return self.jsonplus_serde.loads(metadata.encode())
+    def _load_metadata(self, metadata_json_str: str) -> CheckpointMetadata:
+        return self.jsonplus_serde.loads(metadata_json_str.encode())
 
     def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
         serialized_metadata = self.jsonplus_serde.dumps(metadata)
