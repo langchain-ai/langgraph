@@ -1867,6 +1867,7 @@
 
     "/store/items": {
       "put": {
+        "tags": ["store/manage"],
         "summary": "Store or update an item.",
         "operationId": "put_item",
         "requestBody": {
@@ -1892,6 +1893,7 @@
         }
       },
       "delete": {
+        "tags": ["store/manage"],
         "summary": "Delete an item.",
         "operationId": "delete_item",
         "requestBody": {
@@ -1917,6 +1919,7 @@
         }
       },
       "get": {
+        "tags": ["store/manage"],
         "summary": "Retrieve a single item.",
         "operationId": "get_item",
         "parameters": [
@@ -1962,6 +1965,7 @@
     },
     "/store/items/search": {
       "post": {
+        "tags": ["store/manage"],
         "summary": "Search for items within a namespace prefix.",
         "operationId": "search_items",
         "requestBody": {
@@ -1994,6 +1998,7 @@
     },
     "/store/namespaces": {
       "post": {
+        "tags": ["store/manage"],
         "summary": "List namespaces with optional match conditions.",
         "operationId": "list_namespaces",
         "requestBody": {

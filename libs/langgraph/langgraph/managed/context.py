@@ -13,10 +13,10 @@ from typing import (
     Union,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.managed.base import ConfiguredManagedValue, ManagedValue, V
+from langgraph.types import LoopProtocol
 
 
 class Context(ManagedValue[V], Generic[V]):
@@ -46,14 +46,14 @@ class Context(ManagedValue[V], Generic[V]):
 
     @classmethod
     @contextmanager
-    def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
-        with super().enter(config, **kwargs) as self:
+    def enter(cls, loop: LoopProtocol, **kwargs: Any) -> Iterator[Self]:
+        with super().enter(loop, **kwargs) as self:
             if self.ctx is None:
                 raise ValueError(
                     "Synchronous context manager not found. Please initialize Context value with a sync context manager, or invoke your graph asynchronously."
                 )
             ctx = (
-                self.ctx(config)  # type: ignore[call-arg]
+                self.ctx(loop.config)  # type: ignore[call-arg]
                 if signature(self.ctx).parameters.get("config")
                 else self.ctx()
             )
@@ -63,17 +63,17 @@ class Context(ManagedValue[V], Generic[V]):
 
     @classmethod
     @asynccontextmanager
-    async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
-        async with super().aenter(config, **kwargs) as self:
+    async def aenter(cls, loop: LoopProtocol, **kwargs: Any) -> AsyncIterator[Self]:
+        async with super().aenter(loop, **kwargs) as self:
             if self.actx is not None:
                 ctx = (
-                    self.actx(config)  # type: ignore[call-arg]
+                    self.actx(loop.config)  # type: ignore[call-arg]
                     if signature(self.actx).parameters.get("config")
                     else self.actx()
                 )
             elif self.ctx is not None:
                 ctx = (
-                    self.ctx(config)  # type: ignore
+                    self.ctx(loop.config)  # type: ignore
                     if signature(self.ctx).parameters.get("config")
                     else self.ctx()
                 )
@@ -96,7 +96,7 @@ class Context(ManagedValue[V], Generic[V]):
 
     def __init__(
         self,
-        config: RunnableConfig,
+        loop: LoopProtocol,
         *,
         ctx: Union[None, Type[ContextManager[V]], Type[AsyncContextManager[V]]] = None,
         actx: Optional[Type[AsyncContextManager[V]]] = None,
@@ -104,5 +104,5 @@ class Context(ManagedValue[V], Generic[V]):
         self.ctx = ctx
         self.actx = actx
 
-    def __call__(self, step: int) -> V:
+    def __call__(self) -> V:
         return self.value

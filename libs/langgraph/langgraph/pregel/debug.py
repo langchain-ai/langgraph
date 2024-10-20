@@ -32,6 +32,7 @@ from langgraph.constants import (
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
+from langgraph.utils.config import patch_checkpoint_map
 
 
 class TaskPayload(TypedDict):
@@ -148,6 +149,7 @@ def map_debug_checkpoint(
     tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
     parent_config: Optional[RunnableConfig],
+    output_keys: Union[str, Sequence[str]],
 ) -> Iterator[DebugOutputCheckpoint]:
     """Produce "checkpoint" events for stream_mode=debug."""
 
@@ -176,8 +178,8 @@ def map_debug_checkpoint(
         "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
-            "config": config,
-            "parent_config": parent_config,
+            "config": patch_checkpoint_map(config, metadata),
+            "parent_config": patch_checkpoint_map(parent_config, metadata),
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
@@ -195,7 +197,7 @@ def map_debug_checkpoint(
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
                     "state": t.state,
                 }
-                for t in tasks_w_writes(tasks, pending_writes, task_states)
+                for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
             ],
         },
     }
@@ -251,6 +253,7 @@ def tasks_w_writes(
     tasks: Iterable[Union[PregelTask, PregelExecutableTask]],
     pending_writes: Optional[list[PendingWrite]],
     states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
+    output_keys: Union[str, Sequence[str]],
 ) -> tuple[PregelTask, ...]:
     """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
     pending_writes = pending_writes or []
@@ -271,6 +274,32 @@ def tasks_w_writes(
                 v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
             ),
             states.get(task.id) if states else None,
+            (
+                next(
+                    (
+                        val
+                        for tid, chan, val in pending_writes
+                        if tid == task.id and chan == output_keys
+                    ),
+                    None,
+                )
+                if isinstance(output_keys, str)
+                else {
+                    chan: val
+                    for tid, chan, val in pending_writes
+                    if tid == task.id
+                    and (
+                        chan == output_keys
+                        if isinstance(output_keys, str)
+                        else chan in output_keys
+                    )
+                }
+            )
+            if any(
+                w[0] == task.id and w[1] not in (ERROR, INTERRUPT)
+                for w in pending_writes
+            )
+            else None,
         )
         for task in tasks
     )

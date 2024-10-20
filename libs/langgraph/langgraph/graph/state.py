@@ -33,7 +33,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
-from langgraph.errors import InvalidUpdateError
+from langgraph.errors import ErrorCode, InvalidUpdateError, create_error_message
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -527,7 +527,11 @@ class CompiledStateGraph(CompiledGraph):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
             else:
-                raise InvalidUpdateError(f"Expected dict, got {input}")
+                msg = create_error_message(
+                    message=f"Expected dict, got {input}",
+                    error_code=ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE,
+                )
+                raise InvalidUpdateError(msg)
 
         # state updaters
         write_entries = (
