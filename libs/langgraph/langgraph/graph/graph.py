@@ -27,6 +27,7 @@ from typing_extensions import Self
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.constants import (
+    EMPTY_SEQ,
     END,
     NS_END,
     NS_SEP,
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 class NodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]] = None
+    ends: Optional[tuple[str, ...]] = EMPTY_SEQ
 
 
 class Branch(NamedTuple):
@@ -123,7 +125,7 @@ class Branch(NamedTuple):
         result: Any,
         config: RunnableConfig,
     ) -> Union[Runnable, Any]:
-        if not isinstance(result, list):
+        if not isinstance(result, (list, tuple)):
             result = [result]
         if self.ends:
             destinations: Sequence[Union[Send, str]] = [
@@ -364,6 +366,9 @@ class Graph:
                         for node in self.nodes:
                             if node != start and node != branch.then:
                                 all_sources.add(node)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_sources.add(name)
         # validate sources
         for source in all_sources:
             if source not in self.nodes and source != START:
@@ -387,6 +392,9 @@ class Graph:
                     for node in self.nodes:
                         if node != start and node != branch.then:
                             all_targets.add(node)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_targets.update(spec.ends)
         # validate targets
         for node in self.nodes:
             if node not in all_targets:
@@ -612,5 +620,9 @@ class CompiledGraph(Pregel):
                     )
                     if branch.then is not None:
                         add_edge(end, branch.then)
+        for key, n in self.builder.nodes.items():
+            if n.ends:
+                for end in n.ends:
+                    add_edge(key, end, conditional=True)
 
         return graph

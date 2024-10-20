@@ -4,11 +4,13 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Generic,
     Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -217,6 +219,22 @@ class Send:
             and self.node == value.node
             and self.arg == value.arg
         )
+
+
+N = TypeVar("N")
+
+
+class Control(Generic[N]):
+    def __init__(
+        self,
+        *,
+        update_state: Optional[dict[str, Any]] = None,
+        trigger: Union[str, Sequence[str]] = (),
+        send: Union[Send, Sequence[Send]] = (),
+    ) -> None:
+        self.update_state = update_state
+        self.trigger = trigger
+        self.send = send
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]

@@ -20,6 +20,8 @@ START = sys.intern("__start__")
 """The first (maybe virtual) node in graph-style Pregel."""
 END = sys.intern("__end__")
 """The last (maybe virtual) node in graph-style Pregel."""
+SELF = sys.intern("__self__")
+"""The implicit branch that handles each node's Control values."""
 
 # --- Reserved write keys ---
 INPUT = sys.intern("__input__")
