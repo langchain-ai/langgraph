@@ -137,11 +137,11 @@ class BaseDuckDBSaver(BaseCheckpointSaver[str]):
 
     def _load_checkpoint(
         self,
-        checkpoint: dict[str, Any],
+        checkpoint_json_str: str,
         channel_values: list[tuple[bytes, bytes, bytes]],
         pending_sends: list[tuple[bytes, bytes]],
     ) -> Checkpoint:
-        checkpoint = json.loads(checkpoint)
+        checkpoint = json.loads(checkpoint_json_str)
         return {
             **checkpoint,
             "pending_sends": [
@@ -226,8 +226,8 @@ class BaseDuckDBSaver(BaseCheckpointSaver[str]):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def _load_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
-        return self.jsonplus_serde.loads(metadata)
+    def _load_metadata(self, metadata: str) -> CheckpointMetadata:
+        return self.jsonplus_serde.loads(metadata.encode())
 
     def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
         serialized_metadata = self.jsonplus_serde.dumps(metadata)

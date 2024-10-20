@@ -66,14 +66,12 @@ async def _checkpointer_sqlite_aio():
 @pytest.fixture(scope="function")
 def checkpointer_duckdb():
     with DuckDBSaver.from_conn_string(":memory:") as checkpointer:
-        checkpointer.setup()
         yield checkpointer
 
 
 @asynccontextmanager
 async def _checkpointer_duckdb_aio():
     async with AsyncDuckDBSaver.from_conn_string(":memory:") as checkpointer:
-        await checkpointer.setup()
         yield checkpointer
 
 

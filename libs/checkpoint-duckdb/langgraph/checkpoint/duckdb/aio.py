@@ -1,5 +1,4 @@
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Iterator, Optional, Sequence
 
@@ -20,6 +19,7 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 
 class AsyncDuckDBSaver(BaseDuckDBSaver):
     lock: asyncio.Lock
+    is_setup: bool
 
     def __init__(
         self,
@@ -30,6 +30,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         self.conn = conn
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
+        self.is_setup = False
 
     @classmethod
     @asynccontextmanager
@@ -55,27 +56,35 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        async with self._cursor() as cur:
-            try:
-                await asyncio.to_thread(
-                    cur.execute,
-                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1",
-                )
-                row = await asyncio.to_thread(cur.fetchone)
-                if row is None:
+        if self.is_setup:
+            return
+
+        async with self.lock:
+            with self.conn.cursor() as cur:
+                try:
+                    await asyncio.to_thread(
+                        cur.execute,
+                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1",
+                    )
+                    row = await asyncio.to_thread(cur.fetchone)
+                    if row is None:
+                        version = -1
+                    else:
+                        version = row[0]
+                except duckdb.CatalogException:
                     version = -1
-                else:
-                    version = row[0]
-            except duckdb.CatalogException:
-                version = -1
-            for v, migration in zip(
-                range(version + 1, len(self.MIGRATIONS)),
-                self.MIGRATIONS[version + 1 :],
-            ):
-                await asyncio.to_thread(cur.execute, migration)
-                await asyncio.to_thread(
-                    cur.execute, "INSERT INTO checkpoint_migrations (v) VALUES (?)", [v]
-                )
+                for v, migration in zip(
+                    range(version + 1, len(self.MIGRATIONS)),
+                    self.MIGRATIONS[version + 1 :],
+                ):
+                    await asyncio.to_thread(cur.execute, migration)
+                    await asyncio.to_thread(
+                        cur.execute,
+                        "INSERT INTO checkpoint_migrations (v) VALUES (?)",
+                        [v],
+                    )
+
+        self.is_setup = True
 
     async def alist(
         self,
@@ -262,7 +271,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
             self._dump_blobs,
             thread_id,
             checkpoint_ns,
-            copy.pop("channel_values"),
+            copy.pop("channel_values"),  # type: ignore[misc]
             new_versions,
         )
         async with self._cursor() as cur:
@@ -278,7 +287,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    json.dumps(self._dump_checkpoint(copy)),
+                    self._dump_checkpoint(copy),
                     self._dump_metadata(metadata),
                 ),
             )
@@ -318,6 +327,7 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
 
     @asynccontextmanager
     async def _cursor(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
+        await self.setup()
         async with self.lock:
             with self.conn.cursor() as cur:
                 yield cur

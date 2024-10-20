@@ -1,4 +1,3 @@
-import json
 import threading
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional, Sequence
@@ -20,6 +19,7 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 
 class DuckDBSaver(BaseDuckDBSaver):
     lock: threading.Lock
+    is_setup: bool
 
     def __init__(
         self,
@@ -29,6 +29,7 @@ class DuckDBSaver(BaseDuckDBSaver):
         super().__init__(serde=serde)
 
         self.conn = conn
+        self.is_setup = False
         self.lock = threading.Lock()
 
     @classmethod
@@ -52,7 +53,10 @@ class DuckDBSaver(BaseDuckDBSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        with self._cursor() as cur:
+        if self.is_setup:
+            return
+
+        with self.lock, self.conn.cursor() as cur:
             try:
                 row = cur.execute(
                     "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
@@ -69,6 +73,8 @@ class DuckDBSaver(BaseDuckDBSaver):
             ):
                 cur.execute(migration)
                 cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (?)", [v])
+
+        self.is_setup = True
 
     def list(
         self,
@@ -274,7 +280,7 @@ class DuckDBSaver(BaseDuckDBSaver):
             >>> from langgraph.checkpoint.duckdb import DuckDBSaver
             >>> with DuckDBSaver.from_conn_string(":memory:") as memory:
             >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
-            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "data": {"key": "value"}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
             >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
             >>> print(saved_config)
             {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
@@ -310,7 +316,7 @@ class DuckDBSaver(BaseDuckDBSaver):
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    json.dumps(self._dump_checkpoint(copy)),
+                    self._dump_checkpoint(copy),
                     self._dump_metadata(metadata),
                 ),
             )
@@ -350,6 +356,7 @@ class DuckDBSaver(BaseDuckDBSaver):
 
     @contextmanager
     def _cursor(self) -> Iterator[duckdb.DuckDBPyConnection]:
+        self.setup()
         with self.lock, self.conn.cursor() as cur:
             yield cur
 
