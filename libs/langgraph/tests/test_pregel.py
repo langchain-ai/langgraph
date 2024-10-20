@@ -53,7 +53,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import ERROR, PULL, PUSH
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph
@@ -268,11 +268,11 @@ def test_graph_validation() -> None:
 
 
 def test_checkpoint_errors() -> None:
-    class FaultyGetCheckpointer(MemorySaver):
+    class FaultyGetCheckpointer(InMemorySaver):
         def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
-    class FaultyPutCheckpointer(MemorySaver):
+    class FaultyPutCheckpointer(InMemorySaver):
         def put(
             self,
             config: RunnableConfig,
@@ -282,13 +282,13 @@ def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
-    class FaultyPutWritesCheckpointer(MemorySaver):
+    class FaultyPutWritesCheckpointer(InMemorySaver):
         def put_writes(
             self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
-    class FaultyVersionCheckpointer(MemorySaver):
+    class FaultyVersionCheckpointer(InMemorySaver):
         def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
             raise ValueError("Faulty get_next_version")
 
@@ -11470,7 +11470,7 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     interview_builder.add_conditional_edges("answer_question", route_messages)
 
     # Set up memory
-    memory = MemorySaver()
+    memory = InMemorySaver()
 
     # Interview
     interview_graph = interview_builder.compile(checkpointer=memory).with_config(
@@ -11698,7 +11698,7 @@ def test_subgraph_retries():
     parent.add_edge("parent_node", "child_graph")
     parent.set_entry_point("parent_node")
 
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     app = parent.compile(checkpointer=checkpointer)
     with pytest.raises(RandomError):
         app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})

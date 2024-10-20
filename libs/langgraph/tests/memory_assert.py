@@ -12,7 +12,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     copy_checkpoint,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class NoopSerializer(SerializerProtocol):
@@ -23,7 +23,7 @@ class NoopSerializer(SerializerProtocol):
         return "type", obj
 
 
-class MemorySaverAssertImmutable(MemorySaver):
+class MemorySaverAssertImmutable(InMemorySaver):
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
     def __init__(
@@ -64,7 +64,7 @@ class MemorySaverAssertImmutable(MemorySaver):
         return super().put(config, checkpoint, metadata, new_versions)
 
 
-class MemorySaverAssertCheckpointMetadata(MemorySaver):
+class MemorySaverAssertCheckpointMetadata(InMemorySaver):
     """This custom checkpointer is for verifying that a run's configurable
     fields are merged with the previous checkpoint config for each step in
     the run. This is the desired behavior. Because the checkpointer's (a)put()
@@ -119,7 +119,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         )
 
 
-class MemorySaverNoPending(MemorySaver):
+class MemorySaverNoPending(InMemorySaver):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         result = super().get_tuple(config)
         if result:
