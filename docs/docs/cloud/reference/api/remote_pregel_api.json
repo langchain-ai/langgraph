@@ -1,0 +1,901 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Remote Pregel API Specification",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/assistants/{assistant_id}/graph": {
+      "get": {
+        "tags": ["assistants/manage"],
+        "summary": "Get Assistant Graph",
+        "description": "Get an assistant by ID.",
+        "operationId": "get_assistant_graph_assistants__assistant_id__graph_get",
+        "parameters": [
+          {
+            "description": "The ID of the assistant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assistant Id",
+              "description": "The ID of the assistant."
+            },
+            "name": "assistant_id",
+            "in": "path"
+          },
+          {
+            "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.",
+            "required": false,
+            "schema": {
+              "oneOf": [{ "type": "boolean" }, { "type": "integer" }],
+              "title": "Xray",
+              "default": false,
+              "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included."
+            },
+            "name": "xray",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object",
+                  "title": "Response Get Assistant Graph Assistants  Assistant Id  Graph Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistants/{assistant_id}/subgraphs": {
+      "get": {
+        "tags": ["assistants/manage"],
+        "summary": "Get Assistant Subgraphs",
+        "description": "Get an assistant's subgraphs.",
+        "operationId": "get_assistant_subgraphs_assistants__assistant_id__subgraphs_get",
+        "parameters": [
+          {
+            "description": "The ID of the assistant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assistant Id"
+            },
+            "name": "assistant_id",
+            "in": "path"
+          },
+          {
+            "description": "Recursively retrieve subgraphs of subgraphs.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Recurse",
+              "default": false
+            },
+            "name": "recurse",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subgraphs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistants/{assistant_id}/subgraphs/{namespace}": {
+      "get": {
+        "tags": ["assistants/manage"],
+        "summary": "Get Assistant Subgraphs by Namespace",
+        "description": "Get an assistant's subgraphs filtered by namespace.",
+        "operationId": "get_assistant_subgraphs_assistants__assistant_id__subgraphs__namespace__get",
+        "parameters": [
+          {
+            "description": "The ID of the assistant.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assistant Id"
+            },
+            "name": "assistant_id",
+            "in": "path"
+          },
+          {
+            "description": "Namespace of the subgraph to filter by.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Namespace"
+            },
+            "name": "namespace",
+            "in": "path"
+          },
+          {
+            "description": "Recursively retrieve subgraphs of subgraphs.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Recurse",
+              "default": false
+            },
+            "name": "recurse",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subgraphs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/state": {
+      "get": {
+        "tags": ["threads/state"],
+        "summary": "Get Latest Thread State",
+        "description": "Get state for a thread.",
+        "operationId": "get_latest_thread_state_threads__thread_id__state_get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["threads/state"],
+        "summary": "Update Thread State",
+        "description": "Add state to a thread.",
+        "operationId": "update_thread_state_threads__thread_id__state_post",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadStateUpdateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/state/checkpoint": {
+      "post": {
+        "tags": ["threads/state"],
+        "summary": "Get Thread State At Checkpoint",
+        "description": "Get state for a thread at a specific checkpoint.",
+        "operationId": "post_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateCheckpointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/history": {
+      "post": {
+        "tags": ["threads/state"],
+        "summary": "Get Thread History Post",
+        "description": "Get all past states for a thread.",
+        "operationId": "get_thread_history_post_threads__thread_id__history_post",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ThreadState"
+                  },
+                  "type": "array",
+                  "title": "Response Get Thread History Post Threads  Thread Id  History Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/runs/stream": {
+      "post": {
+        "tags": ["runs/create"],
+        "summary": "Create Streaming Run",
+        "description": "Create a run, stream the output.",
+        "operationId": "stream_run_threads__thread_id__runs_stream_post",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateStateful"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/runs/wait": {
+      "post": {
+        "tags": ["runs/create"],
+        "summary": "Create Run and Get Output",
+        "description": "Create a run, return the final output.",
+        "operationId": "wait_run_threads__thread_id__runs_wait_post",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateStateful"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GraphSchemaNoId": {
+        "properties": {
+          "input_schema": {
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "state_schema": {
+            "type": "object",
+            "title": "State Schema"
+          },
+          "config_schema": {
+            "type": "object",
+            "title": "Config Schema"
+          }
+        },
+        "type": "object",
+        "required": ["input_schema", "output_schema", "state_schema", "config_schema"],
+        "title": "GraphSchemaNoId"
+      },
+      "Subgraphs": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/GraphSchemaNoId"
+        },
+        "title": "Subgraphs",
+        "description": "Map of graph name to graph schema metadata (`input_schema`, `output_schema`, `state_schema`, `config_schema`)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "RunCreateStateful": {
+        "properties": {
+          "assistant_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "title": "Assistant Id"
+              },
+              {
+                "type": "string",
+                "title": "Graph Id"
+              }
+            ]
+          },
+          "checkpoint_id": {
+            "type": "string",
+            "title": "Checkpoint Id"
+          },
+          "input": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input"
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata for the run."
+          },
+          "config": {
+            "properties": {
+              "tags": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "title": "Tags"
+              },
+              "recursion_limit": {
+                "type": "integer",
+                "title": "Recursion Limit"
+              },
+              "configurable": {
+                "type": "object",
+                "title": "Configurable"
+              }
+            },
+            "type": "object",
+            "title": "Config"
+          },
+          "webhook": {
+            "type": "string",
+            "maxLength": 65536,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Webhook"
+          },
+          "interrupt_before": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Interrupt Before"
+          },
+          "interrupt_after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Interrupt After"
+          },
+          "stream_mode": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "values",
+                    "messages",
+                    "updates",
+                    "events",
+                    "debug",
+                    "custom"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "values",
+                  "messages",
+                  "updates",
+                  "events",
+                  "debug",
+                  "custom"
+                ]
+              }
+            ],
+            "title": "Stream Mode",
+            "default": ["values"]
+          },
+          "on_disconnect": {
+            "type": "string",
+            "enum": ["cancel", "continue"],
+            "title": "On Disconnect",
+            "default": "cancel"
+          },
+          "feedback_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Feedback Keys"
+          },
+          "multitask_strategy": {
+            "type": "string",
+            "enum": ["reject", "rollback", "interrupt", "enqueue"],
+            "title": "Multitask Strategy",
+            "default": "reject"
+          },
+          "after_seconds": {
+            "type": "integer",
+            "title": "After Seconds",
+            "description": "Number of seconds to wait before starting the run."
+          }
+        },
+        "type": "object",
+        "required": ["assistant_id"],
+        "title": "RunCreateStateful",
+        "description": "Payload for creating a run."
+      },
+      "ThreadStateCheckpointRequest": {
+        "properties": {
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint",
+            "description": "The checkpoint to get the state for."
+          },
+          "subgraphs": {
+            "type": "boolean",
+            "title": "Subgraphs",
+            "description": "Include subgraph states."
+          }
+        },
+        "required": ["checkpoint"],
+        "type": "object",
+        "title": "ThreadStateCheckpointRequest",
+        "description": "Payload for getting the state of a thread at a checkpoint."
+      },
+      "ThreadState": {
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "object"
+              }
+            ],
+            "title": "Values"
+          },
+          "next": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Next"
+          },
+          "tasks": {
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "title": "Task Id"
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Node Name"
+                },
+                "error": {
+                  "type": "string",
+                  "title": "Error"
+                },
+                "interrupts": {
+                  "type": "array",
+                  "items": {}
+                },
+                "checkpoint": {
+                  "type": "object",
+                  "title": "Checkpoint"
+                },
+                "state": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
+              },
+              "required": ["id", "name"]
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "parent_checkpoint": {
+            "type": "object",
+            "title": "Parent Checkpoint"
+          }
+        },
+        "type": "object",
+        "required": ["values", "next", "checkpoint", "metadata", "created_at"],
+        "title": "ThreadState"
+      },
+      "ThreadStateSearch": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "The maximum number of states to return.",
+            "default": 10,
+            "maximum": 1000,
+            "minimum": 1
+          },
+          "before": {
+            "title": "Before",
+            "description": "Return states before this checkpoint ID.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Filter states by metadata key-value pairs."
+          },
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint",
+            "description": "Return states for this subgraph."
+          }
+        },
+        "type": "object",
+        "title": "ThreadStateSearch"
+      },
+      "ThreadStateUpdate": {
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          },
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
+          },
+          "as_node": {
+            "type": "string",
+            "title": "As Node"
+          }
+        },
+        "type": "object",
+        "title": "ThreadStateUpdate",
+        "description": "Payload for adding state to a thread."
+      },
+      "ThreadStateUpdateResponse": {
+        "properties": {
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
+          }
+        },
+        "type": "object",
+        "title": "ThreadStateUpdateResponse",
+        "description": "Response for adding state to a thread."
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
