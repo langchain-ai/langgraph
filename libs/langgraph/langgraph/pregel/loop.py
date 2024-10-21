@@ -209,7 +209,11 @@ class PregelLoop(LoopProtocol):
             )
         if check_subgraphs and self.is_nested and self.checkpointer is not None:
             if self.config[CONF][CONFIG_KEY_CHECKPOINT_NS] in _SEEN_CHECKPOINT_NS:
-                raise MultipleSubgraphsError
+                raise MultipleSubgraphsError(
+                    "Multiple subgraphs called inside the same node\n\n"
+                    "Troubleshooting URL: https://python.langchain.com/docs"
+                    "/troubleshooting/errors/MULTIPLE_SUBGRAPHS/"
+                )
             else:
                 _SEEN_CHECKPOINT_NS.add(self.config[CONF][CONFIG_KEY_CHECKPOINT_NS])
         if (
@@ -281,9 +285,11 @@ class PregelLoop(LoopProtocol):
                 print_step_writes(
                     self.step,
                     writes,
-                    [self.stream_keys]
-                    if isinstance(self.stream_keys, str)
-                    else self.stream_keys,
+                    (
+                        [self.stream_keys]
+                        if isinstance(self.stream_keys, str)
+                        else self.stream_keys
+                    ),
                 )
             # all tasks have finished
             mv_writes = apply_writes(
@@ -493,9 +499,11 @@ class PregelLoop(LoopProtocol):
             print_step_checkpoint(
                 metadata,
                 self.channels,
-                [self.stream_keys]
-                if isinstance(self.stream_keys, str)
-                else self.stream_keys,
+                (
+                    [self.stream_keys]
+                    if isinstance(self.stream_keys, str)
+                    else self.stream_keys
+                ),
             )
         # create new checkpoint
         self.checkpoint = create_checkpoint(self.checkpoint, self.channels, self.step)
@@ -839,7 +847,9 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             else []
         )
 
-        self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
+        self.submit = await self.stack.enter_async_context(
+            AsyncBackgroundExecutor(self.config)
+        )
         self.channels, self.managed = await self.stack.enter_async_context(
             AsyncChannelsManager(self.specs, self.checkpoint, self)
         )

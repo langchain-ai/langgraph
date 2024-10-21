@@ -12,6 +12,8 @@ EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 EMPTY_SEQ: tuple[str, ...] = tuple()
 
 # --- Public constants ---
+TAG_NOSTREAM = sys.intern("langsmith:nostream")
+"""Tag to disable streaming for a chat model."""
 TAG_HIDDEN = sys.intern("langsmith:hidden")
 """Tag to hide a node/edge from certain tracing/streaming environments."""
 START = sys.intern("__start__")
