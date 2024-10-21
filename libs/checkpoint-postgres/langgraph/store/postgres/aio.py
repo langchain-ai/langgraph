@@ -44,7 +44,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[AsyncConnectio
         super().__init__()
         self._deserializer = deserializer
         self.conn = conn
-        self.conn = conn
         self.loop = asyncio.get_running_loop()
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
