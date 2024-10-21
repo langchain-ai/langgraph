@@ -37,6 +37,10 @@ from typing_extensions import TypedDict
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
+from langgraph.prebuilt.chat_agent_executor import (
+    _add_responses_to_unanswered_tool_calls,
+    _remove_unanswered_tool_calls,
+)
 from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
@@ -270,6 +274,144 @@ def test_runnable_state_modifier():
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
     assert response == expected_response
+
+
+def test_remove_unanswered_tool_calls():
+    # No tool calls
+    messages = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    result = _remove_unanswered_tool_calls(messages)
+    assert result == messages
+
+    # Answered tool calls
+    messages = [
+        HumanMessage(content="What's the weather?"),
+        AIMessage(
+            content="Let me check that for you.",
+            tool_calls=[{"id": "call1", "name": "get_weather", "args": {}}],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F."),
+    ]
+    result = _remove_unanswered_tool_calls(messages)
+    assert result == messages
+
+    # Unanswered tool calls
+    messages = [
+        HumanMessage(content="What's the weather and time?"),
+        AIMessage(
+            content="I'll check that for you.",
+            tool_calls=[
+                {"id": "call1", "name": "get_weather", "args": {}},
+                {"id": "call2", "name": "get_time", "args": {}},
+            ],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F. Let me check the time."),
+    ]
+    result = _remove_unanswered_tool_calls(messages)
+    assert len(result) == 4
+    assert result[0] == messages[0]
+    assert result[1].tool_calls == [
+        {"id": "call1", "name": "get_weather", "args": {}, "type": "tool_call"}
+    ]
+    assert result[2:] == messages[2:]
+
+    # Content as list with tool use blocks
+    messages = [
+        HumanMessage(content="What's the weather and time?"),
+        AIMessage(
+            content=[
+                {"type": "text", "text": "I'll check that for you."},
+                {"type": "tool_use", "id": "call1", "name": "get_weather", "input": {}},
+                {"type": "tool_use", "id": "call2", "name": "get_time", "input": {}},
+            ],
+            tool_calls=[
+                {"id": "call1", "name": "get_weather", "args": {}},
+                {"id": "call2", "name": "get_time", "args": {}},
+            ],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F. Let me check the time."),
+    ]
+    result = _remove_unanswered_tool_calls(messages)
+    assert result[0] == messages[0]
+    assert len(result) == 4
+    assert result[1].tool_calls == [
+        {"id": "call1", "name": "get_weather", "args": {}, "type": "tool_call"}
+    ]
+    assert len(result[1].content) == 2
+    assert result[1].content[0] == {"type": "text", "text": "I'll check that for you."}
+    assert result[1].content[1] == {
+        "type": "tool_use",
+        "id": "call1",
+        "name": "get_weather",
+        "input": {},
+    }
+    assert result[2:] == messages[2:]
+
+
+def test_add_responses_to_unanswered_tool_calls():
+    # No tool calls
+    messages = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert result == messages
+
+    # Answered tool calls
+    messages = [
+        HumanMessage(content="What's the weather?"),
+        AIMessage(
+            content="Let me check that for you.",
+            tool_calls=[{"id": "call1", "name": "get_weather", "args": {}}],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F."),
+    ]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert result == messages
+
+    # Unanswered tool calls
+    messages = [
+        HumanMessage(content="What's the weather and time?"),
+        AIMessage(
+            content="I'll check that for you.",
+            tool_calls=[
+                {"id": "call1", "name": "get_weather", "args": {}},
+                {"id": "call2", "name": "get_time", "args": {}},
+            ],
+        ),
+        ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+        AIMessage(content="The weather is sunny and 75°F. Let me check the time."),
+    ]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert len(result) == 5
+    assert result[:2] == messages[:2]
+    # we insert tool message right after the AIMessage with unanswered tool call
+    assert isinstance(result[2], ToolMessage)
+    assert result[2].tool_call_id == "call2"
+    assert result[2].content == ""
+    assert result[3:] == messages[2:]
+
+    # Flipped order
+    messages = [
+        HumanMessage(content="What's the weather and time?"),
+        AIMessage(
+            content="I'll check that for you.",
+            tool_calls=[
+                {"id": "call2", "name": "get_time", "args": {}},
+                {"id": "call1", "name": "get_weather", "args": {}},
+            ],
+        ),
+        ToolMessage(content="6pm", tool_call_id="call2"),
+        AIMessage(content="The time is 6pm. Let me check the weather."),
+    ]
+    result = _add_responses_to_unanswered_tool_calls(messages)
+    assert len(result) == 5
+    assert result[:2] == messages[:2]
+    # we insert tool message right after the AIMessage with unanswered tool call
+    assert isinstance(result[2], ToolMessage)
+    assert result[2].tool_call_id == "call1"
+    assert result[2].content == ""
+    assert result[3:] == messages[2:]
 
 
 def test_state_modifier_with_store():

@@ -1,4 +1,15 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+from itertools import filterfalse
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -8,6 +19,7 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
@@ -127,6 +139,92 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier, store)
 
 
+def _remove_unanswered_tool_calls(
+    messages: Sequence[BaseMessage],
+) -> AgentState:
+    """Clear unanswered tool calls from the messages and return updated messages."""
+    answered_tool_call_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    }
+
+    updated_messages: list[BaseMessage] = []
+    for message in messages:
+        if isinstance(message, AIMessage):
+            updated_tool_calls = [
+                tool_call
+                for tool_call in message.tool_calls
+                if tool_call["id"] in answered_tool_call_ids
+            ]
+
+            # update content blocks (e.g. Anthropic)
+            if isinstance(message.content, list):
+
+                def is_tool_content_block(
+                    content_block: Union[str, dict[str, Any]],
+                ) -> bool:
+                    if not isinstance(content_block, dict):
+                        return False
+                    return content_block.get("type") == "tool_use"
+
+                tool_content_blocks = [
+                    content_block
+                    for content_block in filter(is_tool_content_block, message.content)
+                    if cast(dict[str, Any], content_block)["id"]
+                    in answered_tool_call_ids
+                ]
+                updated_content: Union[list[Union[str, dict[str, Any]]], str] = (
+                    list(filterfalse(is_tool_content_block, message.content))
+                    + tool_content_blocks
+                )
+            else:
+                updated_content = message.content
+
+            if updated_tool_calls != message.tool_calls:
+                updated_message = (
+                    message.model_copy()
+                    if isinstance(message, BaseModel)
+                    else message.copy()
+                )
+                updated_message.tool_calls = updated_tool_calls
+                updated_message.additional_kwargs.pop("tool_calls", None)
+                updated_message.content = updated_content
+                updated_messages.append(updated_message)
+            else:
+                updated_messages.append(message)
+        else:
+            updated_messages.append(message)
+
+    return updated_messages
+
+
+def _add_responses_to_unanswered_tool_calls(
+    messages: Sequence[BaseMessage],
+) -> AgentState:
+    """Add responses (ToolMessages) to unanswered tool calls and return updated messages."""
+    answered_tool_call_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    }
+
+    updated_messages: list[BaseMessage] = []
+    for message in messages:
+        updated_messages.append(message)
+        if isinstance(message, AIMessage):
+            unanswered_tool_calls = [
+                tool_call
+                for tool_call in message.tool_calls
+                if tool_call["id"] not in answered_tool_call_ids
+            ]
+            for unanswered_tool_call in unanswered_tool_calls:
+                tool_message = ToolMessage(
+                    content="",
+                    name=unanswered_tool_call["name"],
+                    tool_call_id=unanswered_tool_call["id"],
+                )
+                updated_messages.append(tool_message)
+
+    return updated_messages
+
+
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
     if not isinstance(model, RunnableBinding):
         return True
@@ -169,6 +267,9 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
+    handle_unanswered_tool_calls: Literal[
+        "remove_tool_calls", "add_tool_responses", False
+    ] = False,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -193,7 +294,7 @@ def create_react_agent(
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
             !!! Warning
-                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.2.0
+                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.3.0
         state_modifier: An optional
             state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
 
@@ -203,6 +304,14 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+        handle_unanswered_tool_calls: An optional parameter that defines how to handle AIMessages with tool calls that
+            do not have corresponding ToolMessages. This is useful to handle errors from LLM providers that require
+            AIMessages with tool calls to be followed by ToolMessages with corresponding tool call IDs.
+            If provided, the list of messages sent to the model will be modified according to the specified strategy:
+
+            - "remove_tool_calls": modify AIMessages to remove tool_calls that do not have corresponding ToolMessages
+            - "add_tool_messages": add a ToolMessage for each unanswered tool call, following each AIMessage with unanswered tool calls
+            - False: do nothing (default)
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -530,6 +639,17 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        # "Update" the messages in the state before sending the state to the model runnable
+        # This will only update the input to the runnable and will not alter the original state
+        if handle_unanswered_tool_calls == "remove_tool_calls":
+            state["messages"] = _remove_unanswered_tool_calls(state["messages"])
+        elif handle_unanswered_tool_calls == "add_tool_responses":
+            state["messages"] = _add_responses_to_unanswered_tool_calls(
+                state["messages"]
+            )
+        else:
+            pass
+
         response = model_runnable.invoke(state, config)
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
@@ -566,6 +686,17 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        # "Update" the messages in the state before sending the state to the model runnable
+        # This will only update the input to the runnable and will not alter the original state
+        if handle_unanswered_tool_calls == "remove_tool_calls":
+            state["messages"] = _remove_unanswered_tool_calls(state["messages"])
+        elif handle_unanswered_tool_calls == "add_tool_responses":
+            state["messages"] = _add_responses_to_unanswered_tool_calls(
+                state["messages"]
+            )
+        else:
+            pass
+
         response = await model_runnable.ainvoke(state, config)
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
