@@ -389,7 +389,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             >>> from langgraph.checkpoint.sqlite import SqliteSaver
             >>> with SqliteSaver.from_conn_string(":memory:") as memory:
             >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
-            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "data": {"key": "value"}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
             >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
             >>> print(saved_config)
             {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}

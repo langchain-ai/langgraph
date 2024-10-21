@@ -27,6 +27,7 @@ jupyter = "^1.0.0"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
+langgraph-checkpoint-duckdb = {path = "../checkpoint-duckdb", develop = true}
 langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 langgraph-sdk = {path = "../sdk-py", develop = true}

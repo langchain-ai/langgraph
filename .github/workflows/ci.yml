@@ -31,6 +31,7 @@ jobs:
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
+            "libs/checkpoint-duckdb",
             "libs/checkpoint-postgres",
             "libs/scheduler-kafka",
           ]
@@ -47,6 +48,7 @@ jobs:
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
+            "libs/checkpoint-duckdb",
             "libs/checkpoint-postgres"
           ]
     uses: ./.github/workflows/_test.yml
