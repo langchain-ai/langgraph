@@ -4079,18 +4079,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         )
     ] == [
         (
-            _AnyIdHumanMessage(
-                content="what is weather in sf",
-            ),
-            {
-                "langgraph_step": 0,
-                "langgraph_node": "__start__",
-                "langgraph_triggers": ["__start__"],
-                "langgraph_path": ("__pregel_pull", "__start__"),
-                "langgraph_checkpoint_ns": AnyStr("__start__:"),
-            },
-        ),
-        (
             _AnyIdAIMessageChunk(
                 content="",
                 tool_calls=[
