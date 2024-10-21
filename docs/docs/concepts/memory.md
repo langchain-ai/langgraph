@@ -183,7 +183,7 @@ store = InMemoryStore()
 user_id = "my-user"
 application_context = "chitchat"
 namespace = (user_id, application_context)
-store.put(namespace, key="a-memory", value={"rules": ["User likes short, direct language", "User only speaks English & python"], "my-key": "my-value"})
+store.put(namespace, "a-memory", {"rules": ["User likes short, direct language", "User only speaks English & python"], "my-key": "my-value"})
 # get the "memory" by ID
 item = store.get(namespace, key="a-memory")
 # list "memories" within this namespace, filtering on content equivalence
