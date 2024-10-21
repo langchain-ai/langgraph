@@ -27,9 +27,12 @@ from langgraph_sdk.client import (
     get_sync_client,
 )
 from langgraph_sdk.schema import Checkpoint, ThreadState
+from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.constants import INTERRUPT
+from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 from langgraph.types import Interrupt
@@ -348,6 +351,35 @@ class RemoteGraph(PregelProtocol, Runnable):
         )
         return self._get_config(response["checkpoint"])
 
+    def _get_stream_modes(
+        self,
+        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
+    ) -> tuple[list[StreamModeSDK], bool]:
+        """Return a tuple of the final list of stream modes sent to the
+        remote graph and a boolean flag indicating if stream mode 'updates'
+        was present in the original list of stream modes.
+
+        'updates' mode is added to the list of stream modes so that interrupts
+        can be detected in the remote graph.
+        """
+        updated_stream_modes = []
+        updates_mode = False
+
+        if stream_mode:
+            if isinstance(stream_mode, str):
+                updated_stream_modes.append(stream_mode)
+            else:
+                updated_stream_modes.extend(stream_mode)
+
+            if "updates" in updated_stream_modes:
+                updates_mode = True
+            else:
+                updated_stream_modes.append("updates")
+        else:
+            updated_stream_modes.extend(["values", "updates"])
+
+        return (updated_stream_modes, updates_mode)
+
     def stream(
         self,
         input: Union[dict[str, Any], Any],
@@ -360,17 +392,24 @@ class RemoteGraph(PregelProtocol, Runnable):
     ) -> Iterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
+        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
 
         for chunk in self.sync_client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_mode,  # type: ignore
+            stream_mode=updated_stream_modes,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
+            if chunk.event == "updates":
+                if INTERRUPT in chunk.data:
+                    raise GraphInterrupt()
+                if not include_updates:
+                    continue
+
             yield chunk
 
     async def astream(
@@ -385,17 +424,24 @@ class RemoteGraph(PregelProtocol, Runnable):
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
+        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
 
         async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_mode if stream_mode else "values",  # type: ignore
+            stream_mode=updated_stream_modes,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
+            if chunk.event == "updates":
+                if INTERRUPT in chunk.data:
+                    raise GraphInterrupt()
+                if not include_updates:
+                    continue
+
             yield chunk
 
     async def astream_events(
@@ -408,20 +454,27 @@ class RemoteGraph(PregelProtocol, Runnable):
         sanitized_config = self._sanitize_config(merged_config)
 
         # manually add 'events' to stream modes list
-        stream_mode: list[str] = kwargs.get("stream_mode", [])
-        if "events" not in stream_mode:
-            stream_mode.append("events")
+        stream_mode: list[StreamMode] = kwargs.get("stream_mode", [])
+        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
+        if "events" not in updated_stream_modes:
+            updated_stream_modes.append("events")
 
         async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_mode,  # type: ignore
+            stream_mode=updated_stream_modes,
             interrupt_before=kwargs.get("interrupt_before"),
             interrupt_after=kwargs.get("interrupt_after"),
             stream_subgraphs=kwargs.get("subgraphs", False),
         ):
+            if chunk.event == "updates":
+                if INTERRUPT in chunk.data:
+                    raise GraphInterrupt()
+                if not include_updates:
+                    continue
+
             yield StandardStreamEvent(
                 event=chunk.event,
                 data=chunk.data,
