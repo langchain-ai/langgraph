@@ -122,7 +122,7 @@ def add_vcr_to_notebook(
     # Add import statement
     vcr_import_lines = [
         "import nest_asyncio",
-        "nest_asyncio.apply()",
+        # "nest_asyncio.apply()",
         "import vcr",
         "import msgpack",
         "import base64",
