@@ -83,7 +83,7 @@ We can now call `.get_schemas` to get schemas associated with this graph:
         assistant_id=assistant["assistant_id"]
     )
     # There are multiple types of schemas
-    # We can get the `config_schema` to look at the the configurable parameters
+    # We can get the `config_schema` to look at the configurable parameters
     print(schemas["config_schema"])
     ```
 
@@ -94,7 +94,7 @@ We can now call `.get_schemas` to get schemas associated with this graph:
       assistant["assistant_id"]
     );
     // There are multiple types of schemas
-    // We can get the `config_schema` to look at the the configurable parameters
+    // We can get the `config_schema` to look at the configurable parameters
     console.log(schemas.config_schema);
     ```
 
