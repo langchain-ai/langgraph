@@ -47,7 +47,7 @@ from langgraph.graph import StateGraph, MessagesState, START
 model = ChatOpenAI()
 
 class AgentState(MessagesState):
-    next: Literal["agent_1", "agent_2"]
+    next: Literal["agent_1", "agent_2", "finish"]
 
 def supervisor(state: AgentState):
     response = model.invoke(...)
@@ -89,15 +89,96 @@ from langgraph.prebuilt import InjectedState, create_react_agent
 model = ChatOpenAI()
 
 def agent_1(state: Annotated[dict, InjectedState]):
-    tool_message = ...
-    return {"messages": [tool_message]}
+    response = model.invoke(...)
+    return response.content
 
 def agent_2(state: Annotated[dict, InjectedState]):
-    tool_message = ...
-    return {"messages": [tool_message]}
+    response = model.invoke(...)
+    return response.content
 
 tools = [agent_1, agent_2]
 supervisor = create_react_agent(model, tools)
+```
+
+### Hierarchical
+
+This is a generalization of the supervisor architecture and allows for more complex control flows. For example, you can define a separate teams of agents managed by individual supervisors, and a top-level supervisor to manage the teams.
+
+```python
+from typing import Literal
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+
+model = ChatOpenAI()
+
+# define team 1
+class Team1State(MessagesState):
+    next: Literal["team_1_agent_1", "team_1_agent_2", "finish"]
+
+def team_1_supervisor(state: Team1State):
+    response = model.invoke(...)
+    return {"next": response["next_agent"]}
+
+def team_1_agent_1(state: Team1State):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+def team_1_agent_2(state: Team1State):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+team_1_builder = StateGraph(Team1State)
+team_1_builder.add_node(team_1_supervisor)
+team_1_builder.add_node(team_1_agent_1)
+team_1_builder.add_node(team_1_agent_2)
+team_1_builder.add_edge(START, "team_1_supervisor")
+# route to one of the agents or exit based on the supervisor's decisiion
+team_1_builder.add_conditional_edges("team_1_supervisor", lambda state: state["next"])
+team_1_builder.add_edge("team_1_agent_1", "team_1_supervisor")
+team_1_builder.add_edge("team_1_agent_2", "team_1_supervisor")
+
+team_1_graph = team_1_builder.compile()
+
+# define team 2
+class Team2State(MessagesState):
+    next: Literal["team_2_agent_1", "team_2_agent_2", "finish"]
+
+def team_2_supervisor(state: Team2State):
+    ...
+
+def team_2_agent_1(state: Team2State):
+    ...
+
+def team_2_agent_2(state: Team2State):
+    ...
+
+team_2_builder = StateGraph(Team2State)
+...
+team_2_graph = team_2_builder.compile()
+
+
+# define top-level supervisor
+
+class TopLevelState(MessagesState):
+    next: Literal["team_1", "team_2", "finish"]
+
+builder = StateGraph(TopLevelState)
+def top_level_supervisor(state: TopLevelState):
+    response = model.invoke(...)
+    return {"next": response["next_team"]}
+
+builder = StateGraph(TopLevelState)
+builder.add_node(top_level_supervisor)
+builder.add_node(team_1_graph)
+builder.add_node(team_2_graph)
+
+builder.add_edge(START, "top_level_supervisor")
+# route to one of the teams or exit based on the supervisor's decisiion
+builder.add_conditional_edges("top_level_supervisor", lambda state: state["next"])
+builder.add_edge("team_1_graph", "top_level_supervisor")
+builder.add_edge("team_2_graph", "top_level_supervisor")
+
+graph = builder.compile()
 ```
 
 ### Custom multi-agent workflow
