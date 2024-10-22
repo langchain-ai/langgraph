@@ -832,12 +832,12 @@ def _get_input_schema_from_type_hint(
         return None
     action = cast(Callable, action)
 
-    hints = get_type_hints(getattr(action, "__call__")) or get_type_hints(action)
     try:
+        hints = get_type_hints(getattr(action, "__call__")) or get_type_hints(action)
         first_parameter_name = next(iter(inspect.signature(action).parameters.keys()))
         input_hint = hints.get(first_parameter_name)
         if isinstance(input_hint, type) and get_type_hints(input_hint):
             return input_hint
-    except StopIteration:
+    except (TypeError, StopIteration):
         pass
     return None
