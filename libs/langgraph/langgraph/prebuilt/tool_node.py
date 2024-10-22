@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from copy import copy
 from typing import (
@@ -16,6 +17,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.messages import (
@@ -30,7 +32,7 @@ from langchain_core.runnables.config import (
     get_executor_for_config,
 )
 from langchain_core.runnables.utils import Input
-from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
+from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from pydantic import ValidationError
 from pydantic.v1 import ValidationError as ValidationErrorV1
@@ -38,8 +40,6 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
-
-PydanticValidationErrors = (ValidationError, ValidationErrorV1)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -95,11 +95,16 @@ def _handle_validation_error(
 
 
 def _handle_tool_error(
-    e: ToolException,
+    e: Exception,
     *,
-    flag: Union[Literal[True], str, Callable[[ToolException], str]],
+    flag: Union[
+        bool,
+        str,
+        Callable[..., str],
+        tuple[type[Exception], ...],
+    ],
 ) -> str:
-    if isinstance(flag, bool):
+    if isinstance(flag, (bool, tuple)):
         content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
     elif isinstance(flag, str):
         content = flag
@@ -111,6 +116,27 @@ def _handle_tool_error(
             f"or callable. Received: {flag}"
         )
     return content
+
+
+def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
+    sig = inspect.signature(handler)
+    params = list(sig.parameters.values())
+    if params:
+        # If it's a method, the first argument is typically 'self' or 'cls'
+        if params[0].name in ["self", "cls"] and len(params) == 2:
+            first_param = params[1]
+        else:
+            first_param = params[0]
+
+        type_hints = get_type_hints(handler)
+        if first_param.name in type_hints:
+            if get_origin(first_param.annotation) is Union:
+                return tuple(get_args(first_param.annotation))
+            return (type_hints[first_param.name],)
+
+    # If no type information is available, return (Exception,) for backwards
+    # compatibility.
+    return (Exception,)
 
 
 class ToolNode(RunnableCallable):
@@ -127,13 +153,13 @@ class ToolNode(RunnableCallable):
         handle_tool_errors: How to handle tool errors raised by tools inside the node. Defaults to "all".
             Must be one of the following:
 
-            - "all": all non-validation errors will be caught and
+            - True: all non-validation errors will be caught and
                 a ToolMessage with a default error message (TOOL_CALL_ERROR_TEMPLATE) will be returned.
-            - True: ToolExceptions will be caught and
-                a ToolMessage with a default error message (TOOL_CALL_ERROR_TEMPLATE) will be returned.
-            - str: ToolExceptions will be caught and
+            - str: all non-validation errors will be caught and
                 a ToolMessage with the string value of 'handle_tool_errors' will be returned.
-            - Callable[[ToolException], str]: ToolExceptions will be caught and
+            - tuple[type[Exception], ...]: exceptions in the tuple will be caught and
+                a ToolMessage with a default error message (TOOL_CALL_ERROR_TEMPLATE) will be returned.
+            - Callable[..., str]: exceptions from the signature of the callable will be caught and
                 a ToolMessage with the string value of the result of the 'handle_tool_errors' callable will be returned.
             - False: none of the errors raised by the tools will be caught
 
@@ -176,8 +202,8 @@ class ToolNode(RunnableCallable):
         name: str = "tools",
         tags: Optional[list[str]] = None,
         handle_tool_errors: Union[
-            Literal["all"], bool, str, Callable[[ToolException], str]
-        ] = "all",
+            bool, str, Callable[..., str], tuple[type[Exception], ...]
+        ] = True,
         handle_validation_errors: Union[
             bool, str, Callable[[Union[ValidationError, ValidationErrorV1]], str]
         ] = True,
@@ -261,28 +287,33 @@ class ToolNode(RunnableCallable):
                 Union[str, list], msg_content_output(tool_message.content)
             )
             return tool_message
-        except PydanticValidationErrors as e:
-            if not self.handle_validation_errors:
-                error_to_raise = e
-            else:
-                content = _handle_validation_error(
-                    e, flag=self.handle_validation_errors
-                )
-        except ToolException as e:
-            if not self.handle_tool_errors:
-                error_to_raise = e
-            else:
-                flag = (
-                    True
-                    if self.handle_tool_errors == "all"
-                    else self.handle_tool_errors
-                )
-                content = _handle_tool_error(e, flag=flag)
         except Exception as e:
-            if self.handle_tool_errors != "all":
-                error_to_raise = e
+            # Validation error (args don't match pydantic schema)
+            if isinstance(e, (ValidationError, ValidationErrorV1)):
+                # Unhandled
+                if not self.handle_validation_errors:
+                    error_to_raise = e
+                # Handled
+                else:
+                    content = _handle_validation_error(
+                        e, flag=self.handle_validation_errors
+                    )
+            # Tool error (error raised at tool runtime)
             else:
-                content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
+                if isinstance(self.handle_tool_errors, tuple):
+                    handled_types: tuple = self.handle_tool_errors
+                elif callable(self.handle_tool_errors):
+                    handled_types = _infer_handled_types(self.handle_tool_errors)
+                else:
+                    # default behavior is catching all exceptions
+                    handled_types = (Exception,)
+
+                # Unhandled
+                if not self.handle_tool_errors or not isinstance(e, handled_types):
+                    error_to_raise = e
+                # Handled
+                else:
+                    content = _handle_tool_error(e, flag=self.handle_tool_errors)
 
         if error_to_raise:
             raise error_to_raise
@@ -305,28 +336,33 @@ class ToolNode(RunnableCallable):
                 Union[str, list], msg_content_output(tool_message.content)
             )
             return tool_message
-        except ValidationError as e:
-            if not self.handle_validation_errors:
-                error_to_raise = e
-            else:
-                content = _handle_validation_error(
-                    e, flag=self.handle_validation_errors
-                )
-        except ToolException as e:
-            if not self.handle_tool_errors:
-                error_to_raise = e
-            else:
-                flag = (
-                    True
-                    if self.handle_tool_errors == "all"
-                    else self.handle_tool_errors
-                )
-                content = _handle_tool_error(e, flag=flag)
         except Exception as e:
-            if self.handle_tool_errors != "all":
-                error_to_raise = e
+            # Validation error (args don't match pydantic schema)
+            if isinstance(e, (ValidationError, ValidationErrorV1)):
+                # Unhandled
+                if not self.handle_validation_errors:
+                    error_to_raise = e
+                # Handled
+                else:
+                    content = _handle_validation_error(
+                        e, flag=self.handle_validation_errors
+                    )
+            # Tool error (error raised at tool runtime)
             else:
-                content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
+                if isinstance(self.handle_tool_errors, tuple):
+                    handled_types: tuple = self.handle_tool_errors
+                elif callable(self.handle_tool_errors):
+                    handled_types = _infer_handled_types(self.handle_tool_errors)
+                else:
+                    # default behavior is catching all exceptions
+                    handled_types = (Exception,)
+
+                # Unhandled
+                if not self.handle_tool_errors or not isinstance(e, handled_types):
+                    error_to_raise = e
+                # Handled
+                else:
+                    content = _handle_tool_error(e, flag=self.handle_tool_errors)
 
         if error_to_raise:
             raise error_to_raise
