@@ -116,8 +116,8 @@ def _handle_tool_error(
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
-    It can be used either in StateGraph with a "messages" key or in MessageGraph. If
-    multiple tool calls are requested, they will be run in parallel. The output will be
+    It can be used either in StateGraph with a "messages" key (or a custom key passed via ToolNode's 'messages_key').
+    If multiple tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
 
     Args:
@@ -181,6 +181,7 @@ class ToolNode(RunnableCallable):
         handle_validation_errors: Union[
             bool, str, Callable[[Union[ValidationError, ValidationErrorV1]], str]
         ] = True,
+        messages_key: str = "messages",
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: Dict[str, BaseTool] = {}
@@ -188,6 +189,7 @@ class ToolNode(RunnableCallable):
         self.tool_to_store_arg: Dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.handle_validation_errors = handle_validation_errors
+        self.messages_key = messages_key
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = cast(BaseTool, create_tool(tool_))
@@ -211,7 +213,7 @@ class ToolNode(RunnableCallable):
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {"messages": outputs}
+        return outputs if output_type == "list" else {self.messages_key: outputs}
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -243,7 +245,7 @@ class ToolNode(RunnableCallable):
             *(self._arun_one(call, config) for call in tool_calls)
         )
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {"messages": outputs}
+        return outputs if output_type == "list" else {self.messages_key: outputs}
 
     def _run_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -345,10 +347,10 @@ class ToolNode(RunnableCallable):
         if isinstance(input, list):
             output_type = "list"
             message: AnyMessage = input[-1]
-        elif isinstance(input, dict) and (messages := input.get("messages", [])):
+        elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             output_type = "dict"
             message = messages[-1]
-        elif messages := getattr(input, "messages", None):
+        elif messages := getattr(input, self.messages_key, None):
             # Assume dataclass-like state that can coerce from dict
             output_type = "dict"
             message = messages[-1]
@@ -389,10 +391,10 @@ class ToolNode(RunnableCallable):
             required_fields = list(state_args.values())
             if (
                 len(required_fields) == 1
-                and required_fields[0] == "messages"
+                and required_fields[0] == self.messages_key
                 or required_fields[0] is None
             ):
-                input = {"messages": input}
+                input = {self.messages_key: input}
             else:
                 err_msg = (
                     f"Invalid input to ToolNode. Tool {tool_call['name']} requires "
@@ -458,6 +460,7 @@ class ToolNode(RunnableCallable):
 
 def tools_condition(
     state: Union[list[AnyMessage], dict[str, Any], BaseModel],
+    messages_key: str = "messages",
 ) -> Literal["tools", "__end__"]:
     """Use in the conditional_edge to route to the ToolNode if the last message
 
@@ -510,9 +513,9 @@ def tools_condition(
     """
     if isinstance(state, list):
         ai_message = state[-1]
-    elif isinstance(state, dict) and (messages := state.get("messages", [])):
+    elif isinstance(state, dict) and (messages := state.get(messages_key, [])):
         ai_message = messages[-1]
-    elif messages := getattr(state, "messages", []):
+    elif messages := getattr(state, messages_key, []):
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
