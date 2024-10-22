@@ -61,6 +61,9 @@ def test_state_schema_with_type_hint():
     class OutputState(TypedDict):
         input_state: InputState
 
+    class FooState(InputState):
+        foo: str
+
     def complete_hint(state: InputState) -> OutputState:
         return {"input_state": state}
 
@@ -73,24 +76,46 @@ def test_state_schema_with_type_hint():
     def miss_all_hint(state, config):
         return {"input_state": state}
 
+    def pre_foo(_) -> FooState:
+        return {"foo": "bar"}
+
+    class Foo:
+        def __call__(self, state: FooState) -> OutputState:
+            assert state.pop("foo") == "bar"
+            return {"input_state": state}
+
     graph = StateGraph(InputState, output=OutputState)
-    actions = [complete_hint, miss_first_hint, only_return_hint, miss_all_hint]
+    actions = [
+        complete_hint,
+        miss_first_hint,
+        only_return_hint,
+        miss_all_hint,
+        pre_foo,
+        Foo(),
+    ]
 
     for action in actions:
         graph.add_node(action)
 
-    graph.set_entry_point(actions[0].__name__)
+    def get_name(action) -> str:
+        return getattr(action, "__name__", action.__class__.__name__)
+
+    graph.set_entry_point(get_name(actions[0]))
     for i in range(len(actions) - 1):
-        graph.add_edge(actions[i].__name__, actions[i + 1].__name__)
-    graph.set_finish_point(actions[-1].__name__)
+        graph.add_edge(get_name(actions[i]), get_name(actions[i + 1]))
+    graph.set_finish_point(get_name(actions[-1]))
 
     graph = graph.compile()
 
     input_state = InputState(question="Hello World!")
     output_state = OutputState(input_state=input_state)
+    foo_state = FooState(foo="bar")
     for i, c in enumerate(graph.stream(input_state, stream_mode="updates")):
-        node_name = actions[i].__name__
-        assert c[node_name] == output_state
+        node_name = get_name(actions[i])
+        if node_name == get_name(pre_foo):
+            assert c[node_name] == foo_state
+        else:
+            assert c[node_name] == output_state
 
 
 @pytest.mark.parametrize("total_", [True, False])
