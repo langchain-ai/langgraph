@@ -351,7 +351,8 @@ class RemoteGraph(PregelProtocol, Runnable):
     def _get_stream_modes(
         self,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
-    ) -> tuple[list[StreamModeSDK], bool]:
+        default: StreamMode = "updates",
+    ) -> tuple[list[StreamModeSDK], bool, bool]:
         """Return a tuple of the final list of stream modes sent to the
         remote graph and a boolean flag indicating if stream mode 'updates'
         was present in the original list of stream modes.
@@ -359,23 +360,24 @@ class RemoteGraph(PregelProtocol, Runnable):
         'updates' mode is added to the list of stream modes so that interrupts
         can be detected in the remote graph.
         """
-        updated_stream_modes = []
-        updates_mode = False
-
+        updated_stream_modes: list[StreamMode] = []
+        req_updates = False
+        req_single = True
+        # coerce to list, or add default stream mode
         if stream_mode:
             if isinstance(stream_mode, str):
                 updated_stream_modes.append(stream_mode)
             else:
+                req_single = False
                 updated_stream_modes.extend(stream_mode)
-
-            if "updates" in updated_stream_modes:
-                updates_mode = True
-            else:
-                updated_stream_modes.append("updates")
         else:
-            updated_stream_modes.extend(["values", "updates"])
-
-        return (updated_stream_modes, updates_mode)
+            updated_stream_modes.append(default)
+        # add 'updates' mode if not present
+        if "updates" in updated_stream_modes:
+            req_updates = True
+        else:
+            updated_stream_modes.append("updates")
+        return (updated_stream_modes, req_updates, req_single)
 
     def stream(
         self,
@@ -389,25 +391,28 @@ class RemoteGraph(PregelProtocol, Runnable):
     ) -> Iterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
-        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
+        stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
+        # TODO if req_subgraphs transform chunk to match Pregel
 
         for chunk in self.sync_client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=updated_stream_modes,
+            stream_mode=stream_modes,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
             if chunk.event == "updates":
-                if INTERRUPT in chunk.data:
-                    raise GraphInterrupt()
-                if not include_updates:
+                if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
+                    raise GraphInterrupt(chunk.data[INTERRUPT])
+                if not req_updates:
                     continue
-
-            yield chunk
+            if req_single:
+                yield chunk.data
+            else:
+                yield chunk
 
     async def astream(
         self,
@@ -421,25 +426,27 @@ class RemoteGraph(PregelProtocol, Runnable):
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
-        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
+        stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
 
         async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
-            stream_mode=updated_stream_modes,
+            stream_mode=stream_modes,
             interrupt_before=interrupt_before,  # type: ignore
             interrupt_after=interrupt_after,  # type: ignore
             stream_subgraphs=subgraphs,
         ):
             if chunk.event == "updates":
-                if INTERRUPT in chunk.data:
-                    raise GraphInterrupt()
-                if not include_updates:
+                if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
+                    raise GraphInterrupt(chunk.data[INTERRUPT])
+                if not req_updates:
                     continue
-
-            yield chunk
+            if req_single:
+                yield chunk.data
+            else:
+                yield chunk
 
     async def astream_events(
         self,
@@ -451,10 +458,11 @@ class RemoteGraph(PregelProtocol, Runnable):
         sanitized_config = self._sanitize_config(merged_config)
 
         # manually add 'events' to stream modes list
-        stream_mode: list[StreamMode] = kwargs.get("stream_mode", [])
-        updated_stream_modes, include_updates = self._get_stream_modes(stream_mode)
+        stream_mode: Union[StreamMode, list[StreamMode]] = kwargs.get("stream_mode", [])
+        updated_stream_modes, include_updates, _ = self._get_stream_modes(stream_mode)
         if "events" not in updated_stream_modes:
             updated_stream_modes.append("events")
+        # TODO bundle main stream events back into StreamEvent
 
         async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
