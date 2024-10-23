@@ -251,7 +251,7 @@ class BaseDuckDBSaver(BaseCheckpointSaver[str]):
         filter: MetadataInput,
         before: Optional[RunnableConfig] = None,
     ) -> Tuple[str, List[Any]]:
-        """Return WHERE clause predicates for alist() given config, filter, cursor.
+        """Return WHERE clause predicates for alist() given config, filter, before.
 
         This method returns a tuple of a string and a tuple of values. The string
         is the parametered WHERE clause predicate (including the WHERE keyword):
