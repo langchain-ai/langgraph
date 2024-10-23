@@ -7,18 +7,18 @@ from langgraph.graph.state import END, START, CompiledStateGraph, StateGraph
 from langgraph.store.base import BaseStore
 
 
-def _get_name(runnable_like: RunnableLike) -> str:
-    if isinstance(runnable_like, Runnable):
-        if runnable_like.name is None:
+def _get_name(step: RunnableLike) -> str:
+    if isinstance(step, Runnable):
+        if step.name is None:
             raise ValueError(
-                f"Runnable ({runnable_like}) needs to have a name attribute. "
+                f"Runnable ({step}) needs to have a name attribute. "
                 "Consider setting the name or passing it as a tuple (name, runnable)."
             )
-        return runnable_like.name
-    elif callable(runnable_like):
-        return runnable_like.__name__
+        return step.name
+    elif callable(step):
+        return step.__name__
     else:
-        raise ValueError(f"Unsupported runnable_like: {runnable_like}")
+        raise TypeError(f"Unsupported step type: {step}")
 
 
 def create_sequential_executor(
