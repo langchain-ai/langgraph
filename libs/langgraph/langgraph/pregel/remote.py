@@ -48,12 +48,12 @@ class RemoteGraph(PregelProtocol, Runnable):
     def __init__(
         self,
         graph_id: str,
-        config: Optional[RunnableConfig] = None,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
         client: Optional[LangGraphClient] = None,
         sync_client: Optional[SyncLangGraphClient] = None,
+        config: Optional[RunnableConfig] = None,
     ):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
