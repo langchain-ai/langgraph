@@ -407,6 +407,7 @@ class RemoteGraph(PregelProtocol, Runnable):
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs,
+            if_not_exists="create",
         ):
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
@@ -453,6 +454,7 @@ class RemoteGraph(PregelProtocol, Runnable):
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs,
+            if_not_exists="create",
         ):
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
@@ -494,6 +496,7 @@ class RemoteGraph(PregelProtocol, Runnable):
             config=sanitized_config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            if_not_exists="create",
         )
 
     async def ainvoke(
@@ -514,4 +517,5 @@ class RemoteGraph(PregelProtocol, Runnable):
             config=sanitized_config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            if_not_exists="create",
         )
