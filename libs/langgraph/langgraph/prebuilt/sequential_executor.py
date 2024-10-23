@@ -1,4 +1,4 @@
-from typing import Any, Optional, Type, Union
+from typing import Any, Optional, Type, Union, cast
 
 from langchain_core.runnables.base import Runnable, RunnableLike
 
@@ -16,7 +16,7 @@ def _get_name(step: RunnableLike) -> str:
             )
         return step.name
     elif callable(step):
-        return step.__name__
+        return getattr(step, "__name__", step.__class__.__name__)
     else:
         raise TypeError(f"Unsupported step type: {step}")
 
@@ -52,22 +52,22 @@ def create_sequential_executor(
         raise ValueError("Sequential executor requires at least two steps.")
 
     builder = StateGraph(state_schema)
-    previous_name = None
-    for step_idx, step in enumerate(steps):
+    previous_name: Optional[str] = None
+    for step in steps:
         if isinstance(step, tuple) and len(step) == 2:
             name, step = step
         else:
             name = _get_name(step)
 
         builder.add_node(name, step)
-        if step_idx == 0:
+        if previous_name is None:
             builder.add_edge(START, name)
         else:
             builder.add_edge(previous_name, name)
 
         previous_name = name
 
-    builder.add_edge(previous_name, END)
+    builder.add_edge(cast(str, previous_name), END)
     return builder.compile(
         checkpointer=checkpointer,
         store=store,
