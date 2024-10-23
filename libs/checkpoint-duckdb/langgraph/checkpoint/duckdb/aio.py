@@ -29,7 +29,6 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         self.conn = conn
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
-        self.is_setup = False
 
     @classmethod
     @asynccontextmanager
@@ -52,8 +51,8 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         """Set up the checkpoint database asynchronously.
 
         This method creates the necessary tables in the DuckDB database if they don't
-        already exist and runs database migrations. It is called automatically when needed and should not be called
-        directly by the user.
+        already exist and runs database migrations. It MUST be called directly by the user
+        the first time checkpointer is used.
         """
         async with self.lock:
             with self.conn.cursor() as cur:
