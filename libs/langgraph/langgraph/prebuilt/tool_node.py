@@ -237,7 +237,6 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
-        error_to_raise: Optional[Exception] = None
         try:
             input = {**call, **{"type": "tool_call"}}
             tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
@@ -258,13 +257,10 @@ class ToolNode(RunnableCallable):
 
             # Unhandled
             if not self.handle_tool_errors or not isinstance(e, handled_types):
-                error_to_raise = e
+                raise e
             # Handled
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
-
-        if error_to_raise:
-            raise error_to_raise
 
         return ToolMessage(
             content=content, name=call["name"], tool_call_id=call["id"], status="error"
@@ -274,7 +270,6 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
-        error_to_raise: Optional[Exception] = None
         try:
             input = {**call, **{"type": "tool_call"}}
             tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
@@ -295,13 +290,10 @@ class ToolNode(RunnableCallable):
 
             # Unhandled
             if not self.handle_tool_errors or not isinstance(e, handled_types):
-                error_to_raise = e
+                raise e
             # Handled
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
-
-        if error_to_raise:
-            raise error_to_raise
 
         return ToolMessage(
             content=content, name=call["name"], tool_call_id=call["id"], status="error"
