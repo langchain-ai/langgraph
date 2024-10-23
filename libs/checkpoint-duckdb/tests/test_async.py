@@ -59,6 +59,7 @@ class TestAsyncDuckDBSaver:
 
     async def test_asearch(self) -> None:
         async with AsyncDuckDBSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
             await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1, {})
             await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2, {})
             await saver.aput(self.config_3, self.chkpnt_3, self.metadata_3, {})
@@ -101,6 +102,7 @@ class TestAsyncDuckDBSaver:
 
     async def test_null_chars(self) -> None:
         async with AsyncDuckDBSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
             config = await saver.aput(
                 self.config_1, self.chkpnt_1, {"my_key": "\x00abc"}, {}
             )

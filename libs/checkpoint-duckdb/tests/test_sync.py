@@ -59,6 +59,7 @@ class TestDuckDBSaver:
 
     def test_search(self) -> None:
         with DuckDBSaver.from_conn_string(":memory:") as saver:
+            saver.setup()
             # save checkpoints
             saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
             saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
@@ -101,6 +102,7 @@ class TestDuckDBSaver:
 
     def test_null_chars(self) -> None:
         with DuckDBSaver.from_conn_string(":memory:") as saver:
+            saver.setup()
             config = saver.put(self.config_1, self.chkpnt_1, {"my_key": "\x00abc"}, {})
             assert saver.get_tuple(config).metadata["my_key"] == "abc"  # type: ignore
             assert (

@@ -4,6 +4,9 @@ Implementation of LangGraph CheckpointSaver that uses DuckDB.
 
 ## Usage
 
+> [!IMPORTANT]
+> When using DuckDB checkpointers for the first time, make sure to call `.setup()` method on them to create required tables. See example below.
+
 ```python
 from langgraph.checkpoint.duckdb import DuckDBSaver
 
@@ -11,6 +14,8 @@ write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
 with DuckDBSaver.from_conn_string(":memory:") as checkpointer:
+    # call .setup() the first time you're using the checkpointer
+    checkpointer.setup()
     checkpoint = {
         "v": 1,
         "ts": "2024-07-31T20:14:19.804150+00:00",

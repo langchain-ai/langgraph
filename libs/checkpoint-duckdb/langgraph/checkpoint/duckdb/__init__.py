@@ -19,7 +19,6 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 
 class DuckDBSaver(BaseDuckDBSaver):
     lock: threading.Lock
-    is_setup: bool
 
     def __init__(
         self,
@@ -53,9 +52,6 @@ class DuckDBSaver(BaseDuckDBSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        if self.is_setup:
-            return
-
         with self.lock, self.conn.cursor() as cur:
             try:
                 row = cur.execute(
@@ -73,8 +69,6 @@ class DuckDBSaver(BaseDuckDBSaver):
             ):
                 cur.execute(migration)
                 cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (?)", [v])
-
-        self.is_setup = True
 
     def list(
         self,
@@ -356,7 +350,6 @@ class DuckDBSaver(BaseDuckDBSaver):
 
     @contextmanager
     def _cursor(self) -> Iterator[duckdb.DuckDBPyConnection]:
-        self.setup()
         with self.lock, self.conn.cursor() as cur:
             yield cur
 
