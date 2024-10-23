@@ -86,6 +86,7 @@ from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.messages import StreamMessagesHandler
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
@@ -179,7 +180,9 @@ class Channel:
         )
 
 
-class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
+class Pregel(
+    Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]], PregelProtocol
+):
     nodes: dict[str, PregelNode]
 
     channels: dict[str, Union[BaseChannel, ManagedValueSpec]]

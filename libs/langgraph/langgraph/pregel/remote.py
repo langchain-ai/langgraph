@@ -47,7 +47,9 @@ class RemoteException(Exception):
 class RemoteGraph(PregelProtocol, Runnable):
     def __init__(
         self,
-        graph_id: str,
+        name: str,  # graph_id
+        /,
+        *,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
@@ -60,7 +62,7 @@ class RemoteGraph(PregelProtocol, Runnable):
         If `client` or `sync_client` are provided, they will be used instead of the default clients.
         See `LangGraphClient` and `SyncLangGraphClient` for details on the default clients.
         """
-        self.graph_id = graph_id
+        self.name = name
         self.config = config
         self.client = client or get_client(url=url, api_key=api_key, headers=headers)
         self.sync_client = sync_client or get_sync_client(
@@ -69,7 +71,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
-        return self.__class__(**attrs)
+        return self.__class__(attrs.pop("name"), **attrs)
 
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -99,7 +101,7 @@ class RemoteGraph(PregelProtocol, Runnable):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         graph = self.sync_client.assistants.get_graph(
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             xray=xray,
         )
         return DrawableGraph(
@@ -114,7 +116,7 @@ class RemoteGraph(PregelProtocol, Runnable):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         graph = await self.client.assistants.get_graph(
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             xray=xray,
         )
         return DrawableGraph(
@@ -126,24 +128,24 @@ class RemoteGraph(PregelProtocol, Runnable):
         self, namespace: Optional[str] = None, recurse: bool = False
     ) -> Iterator[tuple[str, "PregelProtocol"]]:
         subgraphs = self.sync_client.assistants.get_subgraphs(
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             namespace=namespace,
             recurse=recurse,
         )
         for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"graph_id": graph_schema["graph_id"]})
+            remote_subgraph = self.copy({"name": graph_schema["graph_id"]})
             yield (namespace, remote_subgraph)
 
     async def aget_subgraphs(
         self, namespace: Optional[str] = None, recurse: bool = False
     ) -> AsyncIterator[tuple[str, "PregelProtocol"]]:
         subgraphs = await self.client.assistants.get_subgraphs(
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             namespace=namespace,
             recurse=recurse,
         )
         for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"graph_id": graph_schema["graph_id"]})
+            remote_subgraph = self.copy({"name": graph_schema["graph_id"]})
             yield (namespace, remote_subgraph)
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
@@ -403,7 +405,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
         for chunk in self.sync_client.runs.stream(
             thread_id=cast(str, sanitized_config["configurable"]["thread_id"]),
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             stream_mode=stream_modes,
@@ -450,7 +452,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
         async for chunk in self.client.runs.stream(
             thread_id=sanitized_config["configurable"]["thread_id"],
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             stream_mode=stream_modes,
@@ -481,6 +483,22 @@ class RemoteGraph(PregelProtocol, Runnable):
             else:
                 yield chunk
 
+    async def astream_events(
+        self,
+        input: Any,
+        config: RunnableConfig | None = None,
+        *,
+        version: All | All,
+        include_names: Sequence[All] | None = None,
+        include_types: Sequence[All] | None = None,
+        include_tags: Sequence[All] | None = None,
+        exclude_names: Sequence[All] | None = None,
+        exclude_types: Sequence[All] | None = None,
+        exclude_tags: Sequence[All] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        raise NotImplementedError
+
     def invoke(
         self,
         input: Union[dict[str, Any], Any],
@@ -494,7 +512,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
         return self.sync_client.runs.wait(
             thread_id=sanitized_config["configurable"]["thread_id"],
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             interrupt_before=interrupt_before,
@@ -515,7 +533,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
         return await self.client.runs.wait(
             thread_id=sanitized_config["configurable"]["thread_id"],
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             interrupt_before=interrupt_before,
