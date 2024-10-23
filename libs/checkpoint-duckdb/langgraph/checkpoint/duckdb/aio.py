@@ -29,7 +29,6 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         self.conn = conn
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
-        self.is_setup = False
 
     @classmethod
     @asynccontextmanager

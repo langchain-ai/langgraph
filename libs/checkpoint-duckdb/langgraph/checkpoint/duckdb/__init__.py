@@ -28,7 +28,6 @@ class DuckDBSaver(BaseDuckDBSaver):
         super().__init__(serde=serde)
 
         self.conn = conn
-        self.is_setup = False
         self.lock = threading.Lock()
 
     @classmethod
