@@ -48,6 +48,7 @@ from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
     InjectedStore,
+    _infer_handled_types,
 )
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
@@ -371,6 +372,39 @@ def test_model_with_tools(tool_style: str):
     # test missing bound tools
     with pytest.raises(ValueError):
         create_react_agent(model.bind_tools([tool1]), [tool2])
+
+
+def test__infer_handled_types() -> None:
+    def handle(e):  # type: ignore
+        return ""
+
+    def handle2(e: Exception) -> str:
+        return ""
+
+    def handle3(e: Union[ValueError, ToolException]) -> str:
+        return ""
+
+    class Handler:
+        def handle(self, e: ValueError) -> str:
+            return ""
+
+    handle4 = Handler().handle
+
+    expected: tuple = (Exception,)
+    actual = _infer_handled_types(handle)
+    assert expected == actual
+
+    expected = (Exception,)
+    actual = _infer_handled_types(handle2)
+    assert expected == actual
+
+    expected = (ValueError, ToolException)
+    actual = _infer_handled_types(handle3)
+    assert expected == actual
+
+    expected = (ValueError,)
+    actual = _infer_handled_types(handle4)
+    assert expected == actual
 
 
 async def test_tool_node():
@@ -709,10 +743,35 @@ async def test_tool_node():
     assert tool_message.content == "Tool Failed"
     assert tool_message.tool_call_id == "some 6"
 
-    # test validation errors get raised
+    # test validation errors handled if handle_tool_errors is True
+    result_validation_error = ToolNode([tool1]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0},
+                            "id": "some 7",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result_validation_error["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.status == "error"
+    assert (
+        tool_message.content
+        == "Error: 1 validation error for tool1\nsome_other_val\n  Field required [type=missing, input_value={'some_val': 0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n Please fix your mistakes."
+    )
+    assert tool_message.tool_call_id == "some 7"
 
+    # test validation errors get raised if handle_tool_errors is False
     with pytest.raises((ValidationError, ValidationErrorV1)) as exc_info:
-        ToolNode([tool1], handle_validation_errors=False).invoke(
+        ToolNode([tool1], handle_tool_errors=False).invoke(
             {
                 "messages": [
                     AIMessage(
@@ -741,7 +800,7 @@ async def test_tool_node():
                         {
                             "name": "tool5",
                             "args": {"some_val": 0},
-                            "id": "some 7",
+                            "id": "some 8",
                         }
                     ],
                 )
@@ -753,35 +812,7 @@ async def test_tool_node():
     assert tool_message.type == "tool"
     assert tool_message.status == "error"
     assert tool_message.content == "foo"
-    assert tool_message.tool_call_id == "some 7"
-
-    if IS_LANGCHAIN_CORE_030_OR_GREATER:
-        result_individual_validation_error_handler = ToolNode(
-            [tool6], handle_validation_errors="bar"
-        ).invoke(
-            {
-                "messages": [
-                    AIMessage(
-                        "hi?",
-                        tool_calls=[
-                            {
-                                "name": "tool6",
-                                "args": {"some_val": 0},
-                                "id": "some 8",
-                            }
-                        ],
-                    )
-                ]
-            }
-        )
-
-        tool_message: ToolMessage = result_individual_validation_error_handler[
-            "messages"
-        ][-1]
-        assert tool_message.type == "tool"
-        assert tool_message.status == "error"
-        assert tool_message.content == "foo"
-        assert tool_message.tool_call_id == "some 8"
+    assert tool_message.tool_call_id == "some 8"
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
