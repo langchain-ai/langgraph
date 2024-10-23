@@ -11,6 +11,8 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.duckdb import DuckDBSaver
+from langgraph.checkpoint.duckdb.aio import AsyncDuckDBSaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -58,6 +60,20 @@ def checkpointer_sqlite():
 @asynccontextmanager
 async def _checkpointer_sqlite_aio():
     async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
+        yield checkpointer
+
+
+@pytest.fixture(scope="function")
+def checkpointer_duckdb():
+    with DuckDBSaver.from_conn_string(":memory:") as checkpointer:
+        checkpointer.setup()
+        yield checkpointer
+
+
+@asynccontextmanager
+async def _checkpointer_duckdb_aio():
+    async with AsyncDuckDBSaver.from_conn_string(":memory:") as checkpointer:
+        await checkpointer.setup()
         yield checkpointer
 
 
@@ -212,6 +228,9 @@ async def awith_checkpointer(
     elif checkpointer_name == "sqlite_aio":
         async with _checkpointer_sqlite_aio() as checkpointer:
             yield checkpointer
+    elif checkpointer_name == "duckdb_aio":
+        async with _checkpointer_duckdb_aio() as checkpointer:
+            yield checkpointer
     elif checkpointer_name == "postgres_aio":
         async with _checkpointer_postgres_aio() as checkpointer:
             yield checkpointer
@@ -285,6 +304,7 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
 ALL_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
+    "duckdb",
     "postgres",
     "postgres_pipe",
     "postgres_pool",
@@ -292,6 +312,7 @@ ALL_CHECKPOINTERS_SYNC = [
 ALL_CHECKPOINTERS_ASYNC = [
     "memory",
     "sqlite_aio",
+    "duckdb_aio",
     "postgres_aio",
     "postgres_aio_pipe",
     "postgres_aio_pool",

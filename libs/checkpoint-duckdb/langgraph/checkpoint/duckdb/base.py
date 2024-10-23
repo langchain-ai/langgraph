@@ -1,8 +1,8 @@
+import json
 import random
 from typing import Any, List, Optional, Sequence, Tuple, cast
 
 from langchain_core.runnables import RunnableConfig
-from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -31,8 +31,8 @@ MIGRATIONS = [
     checkpoint_id TEXT NOT NULL,
     parent_checkpoint_id TEXT,
     type TEXT,
-    checkpoint JSONB NOT NULL,
-    metadata JSONB NOT NULL DEFAULT '{}',
+    checkpoint JSON NOT NULL,
+    metadata JSON NOT NULL DEFAULT '{}',
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
 );""",
     """CREATE TABLE IF NOT EXISTS checkpoint_blobs (
@@ -41,7 +41,7 @@ MIGRATIONS = [
     channel TEXT NOT NULL,
     version TEXT NOT NULL,
     type TEXT NOT NULL,
-    blob BYTEA,
+    blob BLOB,
     PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
 );""",
     """CREATE TABLE IF NOT EXISTS checkpoint_writes (
@@ -52,10 +52,9 @@ MIGRATIONS = [
     idx INTEGER NOT NULL,
     channel TEXT NOT NULL,
     type TEXT,
-    blob BYTEA NOT NULL,
+    blob BLOB NOT NULL,
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
 );""",
-    "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
 ]
 
 SELECT_SQL = f"""
@@ -68,23 +67,25 @@ select
     metadata,
     (
         select array_agg(array[bl.channel::bytea, bl.type::bytea, bl.blob])
-        from jsonb_each_text(checkpoint -> 'channel_versions')
+        from (
+            SELECT unnest(json_keys(json_extract(checkpoint, '$.channel_versions'))) as key
+        ) cv
         inner join checkpoint_blobs bl
             on bl.thread_id = checkpoints.thread_id
             and bl.checkpoint_ns = checkpoints.checkpoint_ns
-            and bl.channel = jsonb_each_text.key
-            and bl.version = jsonb_each_text.value
+            and bl.channel = cv.key
+            and bl.version = json_extract_string(checkpoint, '$.channel_versions.' || cv.key)
     ) as channel_values,
     (
         select
-        array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
+        array_agg(array[cw.task_id::blob, cw.channel::blob, cw.type::blob, cw.blob])
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.checkpoint_id = checkpoints.checkpoint_id
     ) as pending_writes,
     (
-        select array_agg(array[cw.type::bytea, cw.blob] order by cw.idx)
+        select array_agg(array[cw.type::blob, cw.blob])
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -95,13 +96,13 @@ from checkpoints """
 
 UPSERT_CHECKPOINT_BLOBS_SQL = """
     INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT (thread_id, checkpoint_ns, channel, version) DO NOTHING
 """
 
 UPSERT_CHECKPOINTS_SQL = """
     INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
-    VALUES (%s, %s, %s, %s, %s, %s)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id)
     DO UPDATE SET
         checkpoint = EXCLUDED.checkpoint,
@@ -110,7 +111,7 @@ UPSERT_CHECKPOINTS_SQL = """
 
 UPSERT_CHECKPOINT_WRITES_SQL = """
     INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
         channel = EXCLUDED.channel,
         type = EXCLUDED.type,
@@ -119,12 +120,12 @@ UPSERT_CHECKPOINT_WRITES_SQL = """
 
 INSERT_CHECKPOINT_WRITES_SQL = """
     INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
 
-class BasePostgresSaver(BaseCheckpointSaver[str]):
+class BaseDuckDBSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
     MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
@@ -136,10 +137,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     def _load_checkpoint(
         self,
-        checkpoint: dict[str, Any],
+        checkpoint_json_str: str,
         channel_values: list[tuple[bytes, bytes, bytes]],
         pending_sends: list[tuple[bytes, bytes]],
     ) -> Checkpoint:
+        checkpoint = json.loads(checkpoint_json_str)
         return {
             **checkpoint,
             "pending_sends": [
@@ -224,8 +226,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def _load_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
-        return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
+    def _load_metadata(self, metadata_json_str: str) -> CheckpointMetadata:
+        return self.jsonplus_serde.loads(metadata_json_str.encode())
 
     def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
         serialized_metadata = self.jsonplus_serde.dumps(metadata)
@@ -261,25 +263,25 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
         # construct predicate for config filter
         if config:
-            wheres.append("thread_id = %s ")
+            wheres.append("thread_id = ?")
             param_values.append(config["configurable"]["thread_id"])
             checkpoint_ns = config["configurable"].get("checkpoint_ns")
             if checkpoint_ns is not None:
-                wheres.append("checkpoint_ns = %s")
+                wheres.append("checkpoint_ns = ?")
                 param_values.append(checkpoint_ns)
 
             if checkpoint_id := get_checkpoint_id(config):
-                wheres.append("checkpoint_id = %s ")
+                wheres.append("checkpoint_id = ?")
                 param_values.append(checkpoint_id)
 
         # construct predicate for metadata filter
         if filter:
-            wheres.append("metadata @> %s ")
-            param_values.append(Jsonb(filter))
+            wheres.append("json_contains(metadata, ?)")
+            param_values.append(json.dumps(filter))
 
         # construct predicate for `before`
         if before is not None:
-            wheres.append("checkpoint_id < %s ")
+            wheres.append("checkpoint_id < ?")
             param_values.append(get_checkpoint_id(before))
 
         return (
