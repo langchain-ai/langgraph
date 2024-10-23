@@ -23,7 +23,7 @@ There are several ways to connect agents in a multi-agent system:
 - **Network**: each agent can communicate with [every other agent](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/). Any agent can decide which other agent to call next.
 - **Supervisor**: each agent communicates with a single [supervisor](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/) agent. Supervisor agent makes decisions on which agent should be called next.
 - **Supervisor (tool-calling)**: this is a special case of supervisor architecture. Individual agents can be represented as tools. In this case, a supervisor agent uses a tool-calling LLM to decide which of the agent tools to call, as well as the arguments to pass to those agents.
-- **Hierarchical**: you can define a multi-agent system with a supervisor of supervisors. This is a generalization of the supervisor architecture and allows for more complex control flows.
+- **Hierarchical**: you can define a multi-agent system with [a supervisor of supervisors](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/hierarchical_agent_teams/). This is a generalization of the supervisor architecture and allows for more complex control flows.
 - **Custom multi-agent workflow**: each agent communicates with only a subset of agents. Parts of the flow are deterministic, and only some agents can decide which other agents to call next.
 
 ### Network
@@ -47,13 +47,20 @@ from langgraph.graph import StateGraph, MessagesState, START
 model = ChatOpenAI()
 
 class AgentState(MessagesState):
-    next: Literal["agent_1", "agent_2"]
+    next: Literal["agent_1", "agent_2", "__end__"]
 
 def supervisor(state: AgentState):
+    # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
+    # to determine which agent to call next. a common pattern is to call the model
+    # with a structured output (e.g. force it to return an output with a "next_agent" field)
     response = model.invoke(...)
+    # the "next" key will be used by the conditional edges to route execution
+    # to the appropriate agent
     return {"next": response["next_agent"]}
 
 def agent_1(state: AgentState):
+    # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
+    # and add any additional logic (different models, custom prompts, structured output, etc.)
     response = model.invoke(...)
     return {"messages": [response]}
 
@@ -68,6 +75,7 @@ builder.add_node(agent_2)
 
 builder.add_edge(START, "supervisor")
 # route to one of the agents or exit based on the supervisor's decisiion
+# if the supervisor returns "__end__", the graph will finish execution
 builder.add_conditional_edges("supervisor", lambda state: state["next"])
 builder.add_edge("agent_1", "supervisor")
 builder.add_edge("agent_2", "supervisor")
@@ -88,16 +96,115 @@ from langgraph.prebuilt import InjectedState, create_react_agent
 
 model = ChatOpenAI()
 
+# this is the agent function that will be called as tool
+# notice that you can pass the state to the tool via InjectedState annotation
 def agent_1(state: Annotated[dict, InjectedState]):
-    tool_message = ...
-    return {"messages": [tool_message]}
+    # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
+    # and add any additional logic (different models, custom prompts, structured output, etc.)
+    response = model.invoke(...)
+    # return the LLM response as a string (expected tool response format)
+    # this will be automatically turned to ToolMessage
+    # by the prebuilt create_react_agent (supervisor)
+    return response.content
 
 def agent_2(state: Annotated[dict, InjectedState]):
-    tool_message = ...
-    return {"messages": [tool_message]}
+    response = model.invoke(...)
+    return response.content
 
 tools = [agent_1, agent_2]
+# the simplest way to build a supervisor w/ tool-calling is to use prebuilt ReAct agent graph
+# that consists of a tool-calling LLM node (i.e. supervisor) and a tool-executing node
 supervisor = create_react_agent(model, tools)
+```
+
+### Hierarchical
+
+As you add more agents to your system, it might become too hard for the supervisor to manage all of them. The supervisor might start making poor decisions about which agent to call next, the context might become too complex for a single supervisor to keep track of. In other words, you end up with the same problems that motivated the multi-agent architecture in the first place.
+
+To address this, you can design your system _hierarchically_. For example, you can create separate, specialized teams of agents managed by individual supervisors, and a top-level supervisor to manage the teams.
+
+```python
+from typing import Literal
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+
+model = ChatOpenAI()
+
+# define team 1 (same as the single supervisor example above)
+class Team1State(MessagesState):
+    next: Literal["team_1_agent_1", "team_1_agent_2", "__end__"]
+
+def team_1_supervisor(state: Team1State):
+    response = model.invoke(...)
+    return {"next": response["next_agent"]}
+
+def team_1_agent_1(state: Team1State):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+def team_1_agent_2(state: Team1State):
+    response = model.invoke(...)
+    return {"messages": [response]}
+
+team_1_builder = StateGraph(Team1State)
+team_1_builder.add_node(team_1_supervisor)
+team_1_builder.add_node(team_1_agent_1)
+team_1_builder.add_node(team_1_agent_2)
+team_1_builder.add_edge(START, "team_1_supervisor")
+# route to one of the agents or exit based on the supervisor's decisiion
+# if the supervisor returns "__end__", the graph will finish execution
+team_1_builder.add_conditional_edges("team_1_supervisor", lambda state: state["next"])
+team_1_builder.add_edge("team_1_agent_1", "team_1_supervisor")
+team_1_builder.add_edge("team_1_agent_2", "team_1_supervisor")
+
+team_1_graph = team_1_builder.compile()
+
+# define team 2 (same as the single supervisor example above)
+class Team2State(MessagesState):
+    next: Literal["team_2_agent_1", "team_2_agent_2", "__end__"]
+
+def team_2_supervisor(state: Team2State):
+    ...
+
+def team_2_agent_1(state: Team2State):
+    ...
+
+def team_2_agent_2(state: Team2State):
+    ...
+
+team_2_builder = StateGraph(Team2State)
+...
+team_2_graph = team_2_builder.compile()
+
+
+# define top-level supervisor
+
+class TopLevelState(MessagesState):
+    next: Literal["team_1", "team_2", "__end__"]
+
+builder = StateGraph(TopLevelState)
+def top_level_supervisor(state: TopLevelState):
+    # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
+    # to determine which team to call next. a common pattern is to call the model
+    # with a structured output (e.g. force it to return an output with a "next_team" field)
+    response = model.invoke(...)
+    # the "next" key will be used by the conditional edges to route execution
+    # to the appropriate team
+    return {"next": response["next_team"]}
+
+builder = StateGraph(TopLevelState)
+builder.add_node(top_level_supervisor)
+builder.add_node(team_1_graph)
+builder.add_node(team_2_graph)
+
+builder.add_edge(START, "top_level_supervisor")
+# route to one of the teams or exit based on the supervisor's decision
+# if the top-level supervisor returns "__end__", the graph will finish execution
+builder.add_conditional_edges("top_level_supervisor", lambda state: state["next"])
+builder.add_edge("team_1_graph", "top_level_supervisor")
+builder.add_edge("team_2_graph", "top_level_supervisor")
+
+graph = builder.compile()
 ```
 
 ### Custom multi-agent workflow
