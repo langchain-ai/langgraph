@@ -407,46 +407,46 @@ def test__infer_handled_types() -> None:
     assert expected == actual
 
 
-async def test_tool_node():
-    def tool1(some_val: int, some_other_val: str) -> str:
-        """Tool 1 docstring."""
-        if some_val == 0:
-            raise ValueError("Test error")
-        return f"{some_val} - {some_other_val}"
+# tools for testing Too
+def tool1(some_val: int, some_other_val: str) -> str:
+    """Tool 1 docstring."""
+    if some_val == 0:
+        raise ValueError("Test error")
+    return f"{some_val} - {some_other_val}"
 
-    async def tool2(some_val: int, some_other_val: str) -> str:
-        """Tool 2 docstring."""
-        if some_val == 0:
-            raise ToolException("Test error")
-        return f"tool2: {some_val} - {some_other_val}"
 
-    async def tool3(some_val: int, some_other_val: str) -> str:
-        """Tool 3 docstring."""
-        return [
-            {"key_1": some_val, "key_2": "foo"},
-            {"key_1": some_other_val, "key_2": "baz"},
-        ]
-
-    async def tool4(some_val: int, some_other_val: str) -> str:
-        """Tool 4 docstring."""
-        return [
-            {"type": "image_url", "image_url": {"url": "abdc"}},
-        ]
-
-    @dec_tool
-    def tool5(some_val: int):
-        """Tool 5 docstring."""
+async def tool2(some_val: int, some_other_val: str) -> str:
+    """Tool 2 docstring."""
+    if some_val == 0:
         raise ToolException("Test error")
+    return f"tool2: {some_val} - {some_other_val}"
 
-    tool5.handle_tool_error = "foo"
 
-    @dec_tool
-    def tool6(some_val: str):
-        """Tool 6 docstring."""
-        return some_val
+async def tool3(some_val: int, some_other_val: str) -> str:
+    """Tool 3 docstring."""
+    return [
+        {"key_1": some_val, "key_2": "foo"},
+        {"key_1": some_other_val, "key_2": "baz"},
+    ]
 
-    tool6.handle_validation_error = "foo"
 
+async def tool4(some_val: int, some_other_val: str) -> str:
+    """Tool 4 docstring."""
+    return [
+        {"type": "image_url", "image_url": {"url": "abdc"}},
+    ]
+
+
+@dec_tool
+def tool5(some_val: int):
+    """Tool 5 docstring."""
+    raise ToolException("Test error")
+
+
+tool5.handle_tool_error = "foo"
+
+
+async def test_tool_node():
     result = ToolNode([tool1]).invoke(
         {
             "messages": [
@@ -537,24 +537,22 @@ async def test_tool_node():
     assert tool_message.content == [{"type": "image_url", "image_url": {"url": "abdc"}}]
     assert tool_message.tool_call_id == "some 3"
 
-    # ERROR HANDLING
 
-    def handle_value_error(e: ValueError):
-        return "Value error"
-
-    def handle_tool_exception(e: ToolException):
-        return "Tool exception"
-
-    def handle_both(e: Union[ValueError, ToolException]):
+async def test_tool_node_error_handling():
+    def handle_all(e: Union[ValueError, ToolException, ValidationError]):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
     # test catching all exceptions, via:
     # - handle_tool_errors = True
     # - passing a tuple of all exceptions
     # - passing a callable with all exceptions in the signature
-    for handle_tool_errors in (True, (ValueError, ToolException), handle_both):
+    for handle_tool_errors in (
+        True,
+        (ValueError, ToolException, ValidationError),
+        handle_all,
+    ):
         result_error = await ToolNode(
-            [tool1, tool2], handle_tool_errors=handle_tool_errors
+            [tool1, tool2, tool3], handle_tool_errors=handle_tool_errors
         ).ainvoke(
             {
                 "messages": [
@@ -564,12 +562,17 @@ async def test_tool_node():
                             {
                                 "name": "tool1",
                                 "args": {"some_val": 0, "some_other_val": "foo"},
-                                "id": "some 4",
+                                "id": "some id",
                             },
                             {
                                 "name": "tool2",
                                 "args": {"some_val": 0, "some_other_val": "bar"},
-                                "id": "some 5",
+                                "id": "some other id",
+                            },
+                            {
+                                "name": "tool3",
+                                "args": {"some_val": 0},
+                                "id": "another id",
                             },
                         ],
                     )
@@ -587,10 +590,106 @@ async def test_tool_node():
             result_error["messages"][1].content
             == f"Error: {repr(ToolException('Test error'))}\n Please fix your mistakes."
         )
-        assert result_error["messages"][0].tool_call_id == "some 4"
-        assert result_error["messages"][1].tool_call_id == "some 5"
+        assert (
+            result_error["messages"][2].content
+            == "Error: 1 validation error for tool3\nsome_other_val\n  Field required [type=missing, input_value={'some_val': 0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n Please fix your mistakes."
+        )
 
-    # test handle_tool_errors = False
+        assert result_error["messages"][0].tool_call_id == "some id"
+        assert result_error["messages"][1].tool_call_id == "some other id"
+        assert result_error["messages"][2].tool_call_id == "another id"
+
+
+async def test_tool_node_error_handling_callable():
+    def handle_value_error(e: ValueError):
+        return "Value error"
+
+    def handle_tool_exception(e: ToolException):
+        return "Tool exception"
+
+    for handle_tool_errors in ("Value error", handle_value_error):
+        result_error = await ToolNode(
+            [tool1], handle_tool_errors=handle_tool_errors
+        ).ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool1",
+                                "args": {"some_val": 0, "some_other_val": "foo"},
+                                "id": "some id",
+                            },
+                        ],
+                    )
+                ]
+            }
+        )
+        tool_message: ToolMessage = result_error["messages"][-1]
+        assert tool_message.type == "tool"
+        assert tool_message.status == "error"
+        assert tool_message.content == "Value error"
+
+    # test raising for an unhandled exception, via:
+    # - passing a tuple of all exceptions
+    # - passing a callable with all exceptions in the signature
+    for handle_tool_errors in ((ValueError,), handle_value_error):
+        with pytest.raises(ToolException) as exc_info:
+            await ToolNode(
+                [tool1, tool2], handle_tool_errors=handle_tool_errors
+            ).ainvoke(
+                {
+                    "messages": [
+                        AIMessage(
+                            "hi?",
+                            tool_calls=[
+                                {
+                                    "name": "tool1",
+                                    "args": {"some_val": 0, "some_other_val": "foo"},
+                                    "id": "some id",
+                                },
+                                {
+                                    "name": "tool2",
+                                    "args": {"some_val": 0, "some_other_val": "bar"},
+                                    "id": "some other id",
+                                },
+                            ],
+                        )
+                    ]
+                }
+            )
+        assert str(exc_info.value) == "Test error"
+
+    for handle_tool_errors in ((ToolException,), handle_tool_exception):
+        with pytest.raises(ValueError) as exc_info:
+            await ToolNode(
+                [tool1, tool2], handle_tool_errors=handle_tool_errors
+            ).ainvoke(
+                {
+                    "messages": [
+                        AIMessage(
+                            "hi?",
+                            tool_calls=[
+                                {
+                                    "name": "tool1",
+                                    "args": {"some_val": 0, "some_other_val": "foo"},
+                                    "id": "some id",
+                                },
+                                {
+                                    "name": "tool2",
+                                    "args": {"some_val": 0, "some_other_val": "bar"},
+                                    "id": "some other id",
+                                },
+                            ],
+                        )
+                    ]
+                }
+            )
+        assert str(exc_info.value) == "Test error"
+
+
+async def test_tool_node_handle_tool_errors_false():
     with pytest.raises(ValueError) as exc_info:
         ToolNode([tool1], handle_tool_errors=False).invoke(
             {
@@ -631,146 +730,8 @@ async def test_tool_node():
 
     assert str(exc_info.value) == "Test error"
 
-    # test raising for an unhandled exception, via:
-    # - passing a tuple of all exceptions
-    # - passing a callable with all exceptions in the signature
-    for handle_tool_errors in ((ValueError,), handle_value_error):
-        with pytest.raises(ToolException):
-            await ToolNode(
-                [tool1, tool2], handle_tool_errors=handle_tool_errors
-            ).ainvoke(
-                {
-                    "messages": [
-                        AIMessage(
-                            "hi?",
-                            tool_calls=[
-                                {
-                                    "name": "tool1",
-                                    "args": {"some_val": 0, "some_other_val": "foo"},
-                                    "id": "some id",
-                                },
-                                {
-                                    "name": "tool2",
-                                    "args": {"some_val": 0, "some_other_val": "bar"},
-                                    "id": "some other id",
-                                },
-                            ],
-                        )
-                    ]
-                }
-            )
-        assert str(exc_info.value) == "Test error"
-
-    for handle_tool_errors in ((ToolException,), handle_tool_exception):
-        with pytest.raises(ValueError):
-            await ToolNode(
-                [tool1, tool2], handle_tool_errors=handle_tool_errors
-            ).ainvoke(
-                {
-                    "messages": [
-                        AIMessage(
-                            "hi?",
-                            tool_calls=[
-                                {
-                                    "name": "tool1",
-                                    "args": {"some_val": 0, "some_other_val": "foo"},
-                                    "id": "some id",
-                                },
-                                {
-                                    "name": "tool2",
-                                    "args": {"some_val": 0, "some_other_val": "bar"},
-                                    "id": "some other id",
-                                },
-                            ],
-                        )
-                    ]
-                }
-            )
-        assert str(exc_info.value) == "Test error"
-
-    # incorrect tool name
-    result_incorrect_name = ToolNode([tool1, tool2]).invoke(
-        {
-            "messages": [
-                AIMessage(
-                    "hi?",
-                    tool_calls=[
-                        {
-                            "name": "tool3",
-                            "args": {"some_val": 1, "some_other_val": "foo"},
-                            "id": "some 5",
-                        }
-                    ],
-                )
-            ]
-        }
-    )
-
-    tool_message: ToolMessage = result_incorrect_name["messages"][-1]
-    assert tool_message.type == "tool"
-    assert tool_message.status == "error"
-    assert (
-        tool_message.content
-        == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
-    )
-    assert tool_message.tool_call_id == "some 5"
-
-    def dummy_tool_error_handling(e):
-        return "Tool Failed"
-
-    result_callable_error_handler = await ToolNode(
-        [tool2], handle_tool_errors=dummy_tool_error_handling
-    ).ainvoke(
-        {
-            "messages": [
-                AIMessage(
-                    "hi?",
-                    tool_calls=[
-                        {
-                            "name": "tool2",
-                            "args": {"some_val": 0, "some_other_val": "foo"},
-                            "id": "some 6",
-                        }
-                    ],
-                )
-            ]
-        }
-    )
-
-    tool_message: ToolMessage = result_callable_error_handler["messages"][-1]
-    assert tool_message.type == "tool"
-    assert tool_message.status == "error"
-    assert tool_message.content == "Tool Failed"
-    assert tool_message.tool_call_id == "some 6"
-
-    # test validation errors handled if handle_tool_errors is True
-    result_validation_error = ToolNode([tool1]).invoke(
-        {
-            "messages": [
-                AIMessage(
-                    "hi?",
-                    tool_calls=[
-                        {
-                            "name": "tool1",
-                            "args": {"some_val": 0},
-                            "id": "some 7",
-                        }
-                    ],
-                )
-            ]
-        }
-    )
-    tool_message: ToolMessage = result_validation_error["messages"][-1]
-    assert tool_message.type == "tool"
-    assert tool_message.status == "error"
-    assert (
-        tool_message.content
-        == "Error: 1 validation error for tool1\nsome_other_val\n  Field required [type=missing, input_value={'some_val': 0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n Please fix your mistakes."
-    )
-    assert tool_message.tool_call_id == "some 7"
-
     # test validation errors get raised if handle_tool_errors is False
-    with pytest.raises((ValidationError, ValidationErrorV1)) as exc_info:
+    with pytest.raises((ValidationError, ValidationErrorV1)):
         ToolNode([tool1], handle_tool_errors=False).invoke(
             {
                 "messages": [
@@ -788,6 +749,8 @@ async def test_tool_node():
             }
         )
 
+
+def test_tool_node_individual_tool_error_handling():
     # test error handling on individual tools (and that it overrides overall error handling!)
     result_individual_tool_error_handler = ToolNode(
         [tool5], handle_tool_errors="bar"
@@ -800,7 +763,7 @@ async def test_tool_node():
                         {
                             "name": "tool5",
                             "args": {"some_val": 0},
-                            "id": "some 8",
+                            "id": "some 0",
                         }
                     ],
                 )
@@ -812,7 +775,35 @@ async def test_tool_node():
     assert tool_message.type == "tool"
     assert tool_message.status == "error"
     assert tool_message.content == "foo"
-    assert tool_message.tool_call_id == "some 8"
+    assert tool_message.tool_call_id == "some 0"
+
+
+def test_tool_node_incorrect_tool_name():
+    result_incorrect_name = ToolNode([tool1, tool2]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool3",
+                            "args": {"some_val": 1, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+
+    tool_message: ToolMessage = result_incorrect_name["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.status == "error"
+    assert (
+        tool_message.content
+        == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
+    )
+    assert tool_message.tool_call_id == "some 0"
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
