@@ -19,7 +19,6 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 
 class AsyncDuckDBSaver(BaseDuckDBSaver):
     lock: asyncio.Lock
-    is_setup: bool
 
     def __init__(
         self,
@@ -56,9 +55,6 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
         already exist and runs database migrations. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
-
         async with self.lock:
             with self.conn.cursor() as cur:
                 try:
@@ -83,8 +79,6 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
                         "INSERT INTO checkpoint_migrations (v) VALUES (?)",
                         [v],
                     )
-
-        self.is_setup = True
 
     async def alist(
         self,
@@ -327,7 +321,6 @@ class AsyncDuckDBSaver(BaseDuckDBSaver):
 
     @asynccontextmanager
     async def _cursor(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
-        await self.setup()
         async with self.lock:
             with self.conn.cursor() as cur:
                 yield cur
