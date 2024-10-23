@@ -107,16 +107,28 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
         if first_param.name in type_hints:
             origin = get_origin(first_param.annotation)
             if origin is Union:
-                return tuple(get_args(first_param.annotation))
-            elif origin is not None:
-                raise ValueError(
-                    "Generic types are not supported in the error handler signature. "
-                    "Please use only Exception types or a union of Exception types."
-                )
-            return (type_hints[first_param.name],)
+                args = get_args(first_param.annotation)
+                if all(issubclass(arg, Exception) for arg in args):
+                    return tuple(args)
+                else:
+                    raise ValueError(
+                        "All types in the error handler error annotation must be Exception types. "
+                        "For example, `def custom_handler(e: Union[ValueError, TypeError])`. "
+                        f"Got '{first_param.annotation}' instead."
+                    )
 
-    # If no type information is available, return (Exception,) for backwards
-    # compatibility.
+            exception_type = type_hints[first_param.name]
+            if issubclass(exception_type, Exception):
+                return (exception_type,)
+            else:
+                raise ValueError(
+                    f"Arbitrary types are not supported in the error handler signature. "
+                    "Please annotate the error with either a specific Exception type or a union of Exception types. "
+                    "For example, `def custom_handler(e: ValueError)` or `def custom_handler(e: Union[ValueError, TypeError])`. "
+                    f"Got '{exception_type}' instead."
+                )
+
+    # If no type information is available, return (Exception,) for backwards compatibility.
     return (Exception,)
 
 

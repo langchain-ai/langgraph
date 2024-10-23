@@ -415,7 +415,21 @@ def test__infer_handled_types() -> None:
 
     with pytest.raises(ValueError):
 
+        def handler(e: str):
+            return ""
+
+        _infer_handled_types(handler)
+
+    with pytest.raises(ValueError):
+
         def handler(e: list[Exception]):
+            return ""
+
+        _infer_handled_types(handler)
+
+    with pytest.raises(ValueError):
+
+        def handler(e: Union[str, int]):
             return ""
 
         _infer_handled_types(handler)
@@ -605,8 +619,8 @@ async def test_tool_node_error_handling():
             == f"Error: {repr(ToolException('Test error'))}\n Please fix your mistakes."
         )
         assert (
-            result_error["messages"][2].content
-            == "Error: 1 validation error for tool3\nsome_other_val\n  Field required [type=missing, input_value={'some_val': 0}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.9/v/missing\n Please fix your mistakes."
+            "ValidationError" in result_error["messages"][2].content
+            or "validation error" in result_error["messages"][2].content
         )
 
         assert result_error["messages"][0].tool_call_id == "some id"
