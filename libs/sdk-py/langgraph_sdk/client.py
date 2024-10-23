@@ -39,6 +39,7 @@ from langgraph_sdk.schema import (
     Cron,
     DisconnectMode,
     GraphSchema,
+    IfNotExists,
     Item,
     Json,
     ListNamespaceResponse,
@@ -1181,6 +1182,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -1223,6 +1225,7 @@ class RunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
@@ -1248,6 +1251,8 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1293,6 +1298,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
@@ -1341,6 +1347,7 @@ class RunsClient:
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Run: ...
 
@@ -1360,6 +1367,7 @@ class RunsClient:
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
     ) -> Run:
@@ -1383,6 +1391,8 @@ class RunsClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1466,6 +1476,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
         }
@@ -1500,6 +1511,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
@@ -1536,6 +1548,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
@@ -1558,6 +1571,8 @@ class RunsClient:
                 Must be one of 'delete' or 'keep'.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1619,6 +1634,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
