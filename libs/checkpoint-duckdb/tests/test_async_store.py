@@ -253,6 +253,7 @@ async def test_batch_list_namespaces_ops(store: AsyncDuckDBStore) -> None:
 
 async def test_basic_store_ops() -> None:
     async with AsyncDuckDBStore.from_conn_string(":memory:") as store:
+        await store.setup()
         namespace = ("test", "documents")
         item_id = "doc1"
         item_value = {"title": "Test Document", "content": "Hello, World!"}
@@ -305,6 +306,7 @@ async def test_basic_store_ops() -> None:
 
 async def test_list_namespaces() -> None:
     async with AsyncDuckDBStore.from_conn_string(":memory:") as store:
+        await store.setup()
         test_pref = str(uuid.uuid4())
         test_namespaces = [
             (test_pref, "test", "documents", "public", test_pref),
@@ -403,6 +405,7 @@ async def test_list_namespaces() -> None:
 
 async def test_search():
     async with AsyncDuckDBStore.from_conn_string(":memory:") as store:
+        await store.setup()
         test_namespaces = [
             ("test_search", "documents", "user1"),
             ("test_search", "documents", "user2"),

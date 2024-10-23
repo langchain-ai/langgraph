@@ -250,6 +250,7 @@ def test_batch_list_namespaces_ops(store: DuckDBStore) -> None:
 
 def test_basic_store_ops() -> None:
     with DuckDBStore.from_conn_string(":memory:") as store:
+        store.setup()
         namespace = ("test", "documents")
         item_id = "doc1"
         item_value = {"title": "Test Document", "content": "Hello, World!"}
@@ -302,6 +303,7 @@ def test_basic_store_ops() -> None:
 
 def test_list_namespaces() -> None:
     with DuckDBStore.from_conn_string(":memory:") as store:
+        store.setup()
         test_pref = str(uuid.uuid4())
         test_namespaces = [
             (test_pref, "test", "documents", "public", test_pref),
@@ -401,6 +403,7 @@ def test_list_namespaces() -> None:
 
 def test_search():
     with DuckDBStore.from_conn_string(":memory:") as store:
+        store.setup()
         test_namespaces = [
             ("test_search", "documents", "user1"),
             ("test_search", "documents", "user2"),

@@ -209,10 +209,8 @@ class DuckDBStore(BaseStore, BaseDuckDBStore[duckdb.DuckDBPyConnection]):
     ) -> None:
         super().__init__()
         self.conn = conn
-        self.is_setup = False
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
-        self.setup()
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
@@ -242,7 +240,6 @@ class DuckDBStore(BaseStore, BaseDuckDBStore[duckdb.DuckDBPyConnection]):
         return results
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        await asyncio.get_running_loop().run_in_executor(None, self.setup)
         return await asyncio.get_running_loop().run_in_executor(None, self.batch, ops)
 
     def _batch_get_ops(
@@ -334,9 +331,6 @@ class DuckDBStore(BaseStore, BaseDuckDBStore[duckdb.DuckDBPyConnection]):
         already exist and runs database migrations. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
-
         with self.conn.cursor() as cur:
             try:
                 cur.execute("SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1")
@@ -360,8 +354,6 @@ class DuckDBStore(BaseStore, BaseDuckDBStore[duckdb.DuckDBPyConnection]):
             ):
                 cur.execute(migration)
                 cur.execute("INSERT INTO store_migrations (v) VALUES (?)", (v,))
-
-        self.is_setup = True
 
 
 def _namespace_to_text(

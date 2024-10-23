@@ -29,10 +29,8 @@ class AsyncDuckDBStore(AsyncBatchedBaseStore, BaseDuckDBStore):
         super().__init__()
         self.conn = conn
         self.loop = asyncio.get_running_loop()
-        self.is_setup = False
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        await self.setup()
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
@@ -167,9 +165,6 @@ class AsyncDuckDBStore(AsyncBatchedBaseStore, BaseDuckDBStore):
         already exist and runs database migrations. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
-
         cur = self.conn.cursor()
         try:
             await asyncio.to_thread(
@@ -198,5 +193,3 @@ class AsyncDuckDBStore(AsyncBatchedBaseStore, BaseDuckDBStore):
             await asyncio.to_thread(
                 cur.execute, "INSERT INTO store_migrations (v) VALUES (?)", (v,)
             )
-
-        self.is_setup = True

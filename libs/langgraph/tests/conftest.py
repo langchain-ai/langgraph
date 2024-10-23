@@ -270,6 +270,7 @@ async def _store_postgres_aio():
 @asynccontextmanager
 async def _store_duckdb_aio():
     async with AsyncDuckDBStore.from_conn_string(":memory:") as store:
+        await store.setup()
         yield store
 
 
@@ -293,6 +294,7 @@ def store_postgres():
 @pytest.fixture(scope="function")
 def store_duckdb():
     with DuckDBStore.from_conn_string(":memory:") as store:
+        store.setup()
         yield store
 
 
