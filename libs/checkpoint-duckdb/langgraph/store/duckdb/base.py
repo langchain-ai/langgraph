@@ -136,12 +136,8 @@ class BaseDuckDBStore(Generic[C]):
             if op.filter:
                 filter_conditions = []
                 for key, value in op.filter.items():
-                    if isinstance(value, list):
-                        filter_conditions.append(f"json_extract(value, '$.{key}') = ?")
-                        params.append(json.dumps(value))
-                    else:
-                        filter_conditions.append(f"json_extract(value, '$.{key}') = ?")
-                        params.append(json.dumps(value))
+                    filter_conditions.append(f"json_extract(value, '$.{key}') = ?")
+                    params.append(json.dumps(value))
                 query += " AND " + " AND ".join(filter_conditions)
 
             query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
