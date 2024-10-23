@@ -399,7 +399,7 @@ class RemoteGraph(PregelProtocol, Runnable):
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
 
         for chunk in self.sync_client.runs.stream(
-            thread_id=sanitized_config["configurable"]["thread_id"],
+            thread_id=cast(str, sanitized_config["configurable"]["thread_id"]),
             assistant_id=self.graph_id,
             input=input,
             config=sanitized_config,
