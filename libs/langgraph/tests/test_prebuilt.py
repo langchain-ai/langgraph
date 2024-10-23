@@ -406,6 +406,13 @@ def test__infer_handled_types() -> None:
     actual = _infer_handled_types(handle4)
     assert expected == actual
 
+    with pytest.raises(ValueError):
+
+        def handler(e: list[Exception]):
+            return ""
+
+        _infer_handled_types(handler)
+
 
 # tools for testing Too
 def tool1(some_val: int, some_other_val: str) -> str:

@@ -105,8 +105,14 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
 
         type_hints = get_type_hints(handler)
         if first_param.name in type_hints:
-            if get_origin(first_param.annotation) is Union:
+            origin = get_origin(first_param.annotation)
+            if origin is Union:
                 return tuple(get_args(first_param.annotation))
+            elif origin is not None:
+                raise ValueError(
+                    "Generic types are not supported in the error handler signature. "
+                    "Please use only Exception types or a union of Exception types."
+                )
             return (type_hints[first_param.name],)
 
     # If no type information is available, return (Exception,) for backwards
