@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import operator
 from functools import partial
 from typing import (
     Annotated,
@@ -41,6 +42,7 @@ from langgraph.prebuilt import (
     ToolNode,
     ValidationNode,
     create_react_agent,
+    create_sequential_executor,
     tools_condition,
 )
 from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
@@ -967,4 +969,45 @@ async def test_return_direct() -> None:
             tool_call_id="4",
             id=result["messages"][3].id,
         ),
+    ]
+
+
+def test_sequential_executor():
+    class State(TypedDict):
+        foo: Annotated[list[str], operator.add]
+        bar: str
+
+    def step1(state: State):
+        return {"foo": ["step1"], "bar": "baz"}
+
+    def step2(state: State):
+        return {"foo": ["step2"]}
+
+    # test raising if less than 2 steps
+    with pytest.raises(ValueError):
+        create_sequential_executor(state_schema=State)
+
+    with pytest.raises(ValueError):
+        create_sequential_executor(step1, state_schema=State)
+
+    # test unnamed steps
+    executor = create_sequential_executor(step1, step2, state_schema=State)
+    result = executor.invoke({"foo": []})
+    assert result == {"foo": ["step1", "step2"], "bar": "baz"}
+    stream_chunks = list(executor.stream({"foo": []}))
+    assert stream_chunks == [
+        {"step1": {"foo": ["step1"], "bar": "baz"}},
+        {"step2": {"foo": ["step2"]}},
+    ]
+
+    # test named steps
+    executor_named_steps = create_sequential_executor(
+        ("meow1", step1), ("meow2", step2), state_schema=State
+    )
+    result = executor_named_steps.invoke({"foo": []})
+    stream_chunks = list(executor_named_steps.stream({"foo": []}))
+    assert result == {"foo": ["step1", "step2"], "bar": "baz"}
+    assert stream_chunks == [
+        {"meow1": {"foo": ["step1"], "bar": "baz"}},
+        {"meow2": {"foo": ["step2"]}},
     ]
