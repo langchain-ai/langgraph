@@ -390,6 +390,9 @@ def test__infer_handled_types() -> None:
 
     handle4 = Handler().handle
 
+    def handle5(e: Union[Union[TypeError, ValueError], ToolException]):
+        return ""
+
     expected: tuple = (Exception,)
     actual = _infer_handled_types(handle)
     assert expected == actual
@@ -404,6 +407,10 @@ def test__infer_handled_types() -> None:
 
     expected = (ValueError,)
     actual = _infer_handled_types(handle4)
+    assert expected == actual
+
+    expected = (TypeError, ValueError, ToolException)
+    actual = _infer_handled_types(handle5)
     assert expected == actual
 
     with pytest.raises(ValueError):
