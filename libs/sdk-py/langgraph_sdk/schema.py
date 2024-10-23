@@ -69,6 +69,13 @@ Defines action after completion:
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
 
+IfNotExists = Literal["create", "reject"]
+"""
+Specifies behavior if the thread doesn't exist:
+- "create": Create a new thread if it doesn't exist.
+- "reject": Reject the operation if the thread doesn't exist.
+"""
+
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""

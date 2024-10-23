@@ -3,7 +3,7 @@ import logging
 import typing
 import warnings
 from functools import partial
-from inspect import isclass, isfunction, signature
+from inspect import isclass, isfunction, ismethod, signature
 from typing import (
     Any,
     Callable,
@@ -33,7 +33,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
-from langgraph.errors import InvalidUpdateError
+from langgraph.errors import ErrorCode, InvalidUpdateError, create_error_message
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -338,19 +338,8 @@ class StateGraph(Graph):
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
 
-        try:
-            if isfunction(action) and (
-                hints := get_type_hints(action.__call__) or get_type_hints(action)
-            ):
-                if input is None:
-                    first_parameter_name = next(
-                        iter(inspect.signature(action).parameters.keys())
-                    )
-                    if input_hint := hints.get(first_parameter_name):
-                        if isinstance(input_hint, type) and get_type_hints(input_hint):
-                            input = input_hint
-        except (TypeError, StopIteration):
-            pass
+        if input is None:
+            input = _get_input_schema_from_type_hint(action)
         if input is not None:
             self._add_schema(input)
         self.nodes[cast(str, node)] = StateNodeSpec(
@@ -538,7 +527,11 @@ class CompiledStateGraph(CompiledGraph):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
             else:
-                raise InvalidUpdateError(f"Expected dict, got {input}")
+                msg = create_error_message(
+                    message=f"Expected dict, got {input}",
+                    error_code=ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE,
+                )
+                raise InvalidUpdateError(msg)
 
         # state updaters
         write_entries = (
@@ -830,3 +823,21 @@ def _get_schema(
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
             )
+
+
+def _get_input_schema_from_type_hint(
+    action: Optional[RunnableLike],
+) -> Optional[Type[Any]]:
+    if not isfunction(action) and not ismethod(getattr(action, "__call__", None)):
+        return None
+    action = cast(Callable, action)
+
+    try:
+        hints = get_type_hints(getattr(action, "__call__")) or get_type_hints(action)
+        first_parameter_name = next(iter(inspect.signature(action).parameters.keys()))
+        input_hint = hints.get(first_parameter_name)
+        if isinstance(input_hint, type) and get_type_hints(input_hint):
+            return input_hint
+    except (TypeError, StopIteration):
+        pass
+    return None

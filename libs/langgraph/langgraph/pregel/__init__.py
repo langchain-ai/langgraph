@@ -67,7 +67,12 @@ from langgraph.constants import (
     NS_END,
     NS_SEP,
 )
-from langgraph.errors import GraphRecursionError, InvalidUpdateError
+from langgraph.errors import (
+    ErrorCode,
+    GraphRecursionError,
+    InvalidUpdateError,
+    create_error_message,
+)
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
     PregelTaskWrites,
@@ -164,9 +169,11 @@ class Channel:
         return ChannelWrite(
             [ChannelWriteEntry(c) for c in channels]
             + [
-                ChannelWriteEntry(k, mapper=v)
-                if callable(v)
-                else ChannelWriteEntry(k, value=v)
+                (
+                    ChannelWriteEntry(k, mapper=v)
+                    if callable(v)
+                    else ChannelWriteEntry(k, value=v)
+                )
                 for k, v in kwargs.items()
             ]
         )
@@ -1291,6 +1298,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                             return waiter
                         else:
                             return waiter
+
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1316,11 +1324,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             yield from output()
             # handle exit
             if loop.status == "out_of_steps":
-                raise GraphRecursionError(
-                    f"Recursion limit of {config['recursion_limit']} reached "
-                    "without hitting a stop condition. You can increase the "
-                    "limit by setting the `recursion_limit` config key."
+                msg = create_error_message(
+                    message=(
+                        f"Recursion limit of {config['recursion_limit']} reached "
+                        "without hitting a stop condition. You can increase the "
+                        "limit by setting the `recursion_limit` config key."
+                    ),
+                    error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
                 )
+                raise GraphRecursionError(msg)
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -1495,6 +1507,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())
+
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1522,11 +1535,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 yield o
             # handle exit
             if loop.status == "out_of_steps":
-                raise GraphRecursionError(
-                    f"Recursion limit of {config['recursion_limit']} reached "
-                    "without hitting a stop condition. You can increase the "
-                    "limit by setting the `recursion_limit` config key."
+                msg = create_error_message(
+                    message=(
+                        f"Recursion limit of {config['recursion_limit']} reached "
+                        "without hitting a stop condition. You can increase the "
+                        "limit by setting the `recursion_limit` config key."
+                    ),
+                    error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
                 )
+                raise GraphRecursionError(msg)
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:

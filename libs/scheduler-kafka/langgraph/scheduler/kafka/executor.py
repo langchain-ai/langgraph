@@ -191,7 +191,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 step=saved.metadata["step"] + 1,
                 stop=saved.metadata["step"] + 2,
             ),
-        ) as (channels, managed), AsyncBackgroundExecutor() as submit:
+        ) as (channels, managed), AsyncBackgroundExecutor(msg["config"]) as submit:
             if task := await asyncio.to_thread(
                 prepare_single_task,
                 msg["task"]["path"],

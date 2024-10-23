@@ -39,6 +39,7 @@ from langgraph_sdk.schema import (
     Cron,
     DisconnectMode,
     GraphSchema,
+    IfNotExists,
     Item,
     Json,
     ListNamespaceResponse,
@@ -1169,18 +1170,19 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        feedback_keys: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -1191,13 +1193,13 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        feedback_keys: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
@@ -1210,19 +1212,20 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        feedback_keys: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
@@ -1248,6 +1251,8 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1293,6 +1298,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
@@ -1313,12 +1319,12 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
@@ -1331,16 +1337,17 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Run: ...
 
@@ -1350,16 +1357,17 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
     ) -> Run:
@@ -1383,6 +1391,8 @@ class RunsClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1466,6 +1476,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
         }
@@ -1495,11 +1506,12 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
@@ -1512,8 +1524,8 @@ class RunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -1530,12 +1542,13 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
@@ -1558,6 +1571,8 @@ class RunsClient:
                 Must be one of 'delete' or 'keep'.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -1619,6 +1634,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
@@ -3232,18 +3248,19 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        feedback_keys: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Iterator[StreamPart]: ...
 
@@ -3254,13 +3271,13 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        feedback_keys: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
@@ -3273,19 +3290,20 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        feedback_keys: Optional[list[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
@@ -3311,6 +3329,8 @@ class SyncRunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -3356,6 +3376,7 @@ class SyncRunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
@@ -3376,12 +3397,12 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
@@ -3394,16 +3415,17 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Run: ...
 
@@ -3413,17 +3435,18 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
-        stream_mode: Union[StreamMode, list[StreamMode]] = "values",
+        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Run:
         """Create a background run.
@@ -3446,6 +3469,8 @@ class SyncRunsClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_completion: Whether to delete or keep the thread created for a stateless run.
                 Must be one of 'delete' or 'keep'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -3529,6 +3554,7 @@ class SyncRunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
         }
@@ -3558,11 +3584,12 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
@@ -3575,8 +3602,8 @@ class SyncRunsClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
@@ -3593,12 +3620,13 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
@@ -3621,6 +3649,8 @@ class SyncRunsClient:
                 Must be one of 'delete' or 'keep'.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            if_not_exists: How to handle missing thread. Defaults to 'reject'.
+                Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
 
@@ -3682,6 +3712,7 @@ class SyncRunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,

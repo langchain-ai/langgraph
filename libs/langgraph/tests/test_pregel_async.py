@@ -1922,6 +1922,53 @@ async def test_cond_edge_after_send() -> None:
     assert await graph.ainvoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
+async def test_max_concurrency() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+            self.currently = 0
+            self.max_currently = 0
+
+        async def __call__(self, state):
+            self.currently += 1
+            if self.currently > self.max_currently:
+                self.max_currently = self.currently
+            await asyncio.sleep(0.1)
+            self.currently -= 1
+            return [self.name]
+
+    async def send_to_many(state):
+        return [Send("2", state)] * 100
+
+    async def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    node2 = Node("2")
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node(Node("1"))
+    builder.add_node(node2)
+    builder.add_node(Node("3"))
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_to_many)
+    builder.add_conditional_edges("2", route_to_three)
+    graph = builder.compile()
+
+    assert await graph.ainvoke(["0"]) == ["0", "1", *(["2"] * 100), "3"]
+    assert node2.max_currently == 100
+    assert node2.currently == 0
+    node2.max_currently = 0
+
+    assert await graph.ainvoke(["0"], {"max_concurrency": 10}) == [
+        "0",
+        "1",
+        *(["2"] * 100),
+        "3",
+    ]
+    assert node2.max_currently == 10
+    assert node2.currently == 0
+
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_invoke_checkpoint_three(
     mocker: MockerFixture, checkpointer_name: str
