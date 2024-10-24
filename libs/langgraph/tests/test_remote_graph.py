@@ -135,90 +135,6 @@ async def test_aget_graph():
     ]
 
 
-def test_get_subgraphs():
-    # set up test
-    mock_sync_client = MagicMock()
-    mock_sync_client.assistants.get_subgraphs.return_value = {
-        "namespace_1": {
-            "graph_id": "test_graph_id_2",
-            "input_schema": {},
-            "output_schema": {},
-            "state_schema": {},
-            "config_schema": {},
-        },
-        "namespace_2": {
-            "graph_id": "test_graph_id_3",
-            "input_schema": {},
-            "output_schema": {},
-            "state_schema": {},
-            "config_schema": {},
-        },
-    }
-
-    remote_pregel = RemoteGraph("test_graph_id_1", sync_client=mock_sync_client)
-
-    # call method / assertions
-    subgraphs = list(remote_pregel.get_subgraphs())
-    assert len(subgraphs) == 2
-
-    subgraph_1 = subgraphs[0]
-    ns_1 = subgraph_1[0]
-    remote_pregel_1: RemoteGraph = subgraph_1[1]
-    assert ns_1 == "namespace_1"
-    assert remote_pregel_1.graph_id == "test_graph_id_2"
-
-    subgraph_2 = subgraphs[1]
-    ns_2 = subgraph_2[0]
-    remote_pregel_2: RemoteGraph = subgraph_2[1]
-    assert ns_2 == "namespace_2"
-    assert remote_pregel_2.graph_id == "test_graph_id_3"
-
-
-@pytest.mark.anyio
-async def test_aget_subgraphs():
-    # set up test
-    mock_async_client = AsyncMock()
-    mock_async_client.assistants.get_subgraphs.return_value = {
-        "namespace_1": {
-            "graph_id": "test_graph_id_2",
-            "input_schema": {},
-            "output_schema": {},
-            "state_schema": {},
-            "config_schema": {},
-        },
-        "namespace_2": {
-            "graph_id": "test_graph_id_3",
-            "input_schema": {},
-            "output_schema": {},
-            "state_schema": {},
-            "config_schema": {},
-        },
-    }
-
-    remote_pregel = RemoteGraph(
-        "test_graph_id_1",
-        client=mock_async_client,
-    )
-
-    # call method / assertions
-    subgraphs = []
-    async for subgraph in remote_pregel.aget_subgraphs():
-        subgraphs.append(subgraph)
-    assert len(subgraphs) == 2
-
-    subgraph_1 = subgraphs[0]
-    ns_1 = subgraph_1[0]
-    remote_pregel_1: RemoteGraph = subgraph_1[1]
-    assert ns_1 == "namespace_1"
-    assert remote_pregel_1.graph_id == "test_graph_id_2"
-
-    subgraph_2 = subgraphs[1]
-    ns_2 = subgraph_2[0]
-    remote_pregel_2: RemoteGraph = subgraph_2[1]
-    assert ns_2 == "namespace_2"
-    assert remote_pregel_2.graph_id == "test_graph_id_3"
-
-
 def test_get_state():
     # set up test
     mock_sync_client = MagicMock()
@@ -866,9 +782,3 @@ async def test_langgraph_cloud_integration():
     remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
     graph = await remote_pregel.aget_graph(xray=True)
     print("graph:", graph)
-
-    # test get subgraphs
-    remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
-    async for name, pregel in remote_pregel.aget_subgraphs():
-        print("name:", name)
-        print("pregel:", pregel)

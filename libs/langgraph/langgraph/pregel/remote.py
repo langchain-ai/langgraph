@@ -9,7 +9,7 @@ from typing import (
 )
 
 import orjson
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
 )
@@ -44,7 +44,9 @@ class RemoteException(Exception):
     pass
 
 
-class RemoteGraph(PregelProtocol, Runnable):
+class RemoteGraph(PregelProtocol):
+    name: str
+
     def __init__(
         self,
         name: str,  # graph_id
@@ -123,30 +125,6 @@ class RemoteGraph(PregelProtocol, Runnable):
             nodes=self._get_drawable_nodes(graph),
             edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
-
-    def get_subgraphs(
-        self, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, "PregelProtocol"]]:
-        subgraphs = self.sync_client.assistants.get_subgraphs(
-            assistant_id=self.name,
-            namespace=namespace,
-            recurse=recurse,
-        )
-        for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"name": graph_schema["graph_id"]})
-            yield (namespace, remote_subgraph)
-
-    async def aget_subgraphs(
-        self, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, "PregelProtocol"]]:
-        subgraphs = await self.client.assistants.get_subgraphs(
-            assistant_id=self.name,
-            namespace=namespace,
-            recurse=recurse,
-        )
-        for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"name": graph_schema["graph_id"]})
-            yield (namespace, remote_subgraph)
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
         tasks = []
