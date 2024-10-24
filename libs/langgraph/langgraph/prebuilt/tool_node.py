@@ -135,7 +135,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
-    It can be used either in StateGraph with a "messages" key (or a custom key passed via ToolNode's 'messages_key').
+    It can be used either in StateGraph with a "messages" state key (or a custom key passed via ToolNode's 'messages_key').
     If multiple tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
 
@@ -155,6 +155,9 @@ class ToolNode(RunnableCallable):
             - Callable[..., str]: exceptions from the signature of the callable will be caught and
                 a ToolMessage with the string value of the result of the 'handle_tool_errors' callable will be returned.
             - False: none of the errors raised by the tools will be caught
+        messages_key: The state key in the input that contains the list of messages.
+            The same key will be used for the output from the ToolNode.
+            Defaults to "messages".
 
     The `ToolNode` is roughly analogous to:
 
