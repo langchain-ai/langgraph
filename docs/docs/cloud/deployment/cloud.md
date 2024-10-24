@@ -11,7 +11,7 @@ LangGraph Cloud is available within <a href="https://www.langchain.com/langsmith
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `Deployments`. The `Deployments` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Cloud`. The `LangGraph Cloud` view contains a list of existing LangGraph Cloud deployments.
 1. In the top-right corner, select `+ New Deployment` to create a new deployment.
 1. In the `Create New Deployment` panel, fill out the required fields.
     1. `Deployment details`
@@ -38,7 +38,7 @@ When [creating a new deployment](#create-new-deployment), a new revision is crea
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `Deployments`. The `Deployments` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Cloud`. The `LangGraph Cloud` view contains a list of existing LangGraph Cloud deployments.
 1. Select an existing deployment to create a new revision for.
 1. In the `Deployment` view, in the top-right corner, select `+ New Revision`.
 1. In the `New Revision` modal, fill out the required fields.
@@ -79,13 +79,13 @@ Starting from the `Deployment` view...
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `Deployments`. The `Deployments` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Cloud`. The `LangGraph Cloud` view contains a list of existing LangGraph Cloud deployments.
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired deployment and select `Delete`.
 1. A `Confirmation` modal will appear. Select `Delete`.
 
 ## Deployment Settings
 
-Starting from the `Deployment` view...
+Starting from the `LangGraph Cloud` view...
 
 1. In the top-right corner, select the gear icon (`Deployment Settings`).
 1. Update the `Git Branch` to the desired branch.
