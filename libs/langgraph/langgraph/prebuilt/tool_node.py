@@ -36,6 +36,7 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from typing_extensions import Annotated, get_args, get_origin
 
+from langgraph.errors import NodeInterrupt
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
 
@@ -267,6 +268,10 @@ class ToolNode(RunnableCallable):
                 Union[str, list], msg_content_output(tool_message.content)
             )
             return tool_message
+        # NodeInterrupt is a special exception that will always be raised
+        # if a tool is raising it
+        except NodeInterrupt as e:
+            raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
                 handled_types: tuple = self.handle_tool_errors
@@ -300,6 +305,10 @@ class ToolNode(RunnableCallable):
                 Union[str, list], msg_content_output(tool_message.content)
             )
             return tool_message
+        # NodeInterrupt is a special exception that will always be raised
+        # if a tool is raising it
+        except NodeInterrupt as e:
+            raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
                 handled_types: tuple = self.handle_tool_errors

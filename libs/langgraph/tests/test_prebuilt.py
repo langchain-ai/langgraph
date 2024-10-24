@@ -37,6 +37,8 @@ from pydantic.v1 import ValidationError as ValidationErrorV1
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.errors import NodeInterrupt
 from langgraph.graph import START, MessagesState, StateGraph, add_messages
 from langgraph.prebuilt import (
     ToolNode,
@@ -52,6 +54,7 @@ from langgraph.prebuilt.tool_node import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
+from langgraph.types import Interrupt
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
@@ -832,6 +835,85 @@ def test_tool_node_incorrect_tool_name():
         == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
     )
     assert tool_message.tool_call_id == "some 0"
+
+
+def test_tool_node_node_interrupt():
+    def tool_normal(some_val: int) -> str:
+        """Tool docstring."""
+        return "normal"
+
+    def tool_interrupt(some_val: int) -> str:
+        """Tool docstring."""
+        raise NodeInterrupt("foo")
+
+    def handle(e: NodeInterrupt):
+        return "handled"
+
+    for handle_tool_errors in (True, (NodeInterrupt,), "handled", handle, False):
+        node = ToolNode([tool_interrupt], handle_tool_errors=handle_tool_errors)
+        with pytest.raises(NodeInterrupt) as exc_info:
+            node.invoke(
+                {
+                    "messages": [
+                        AIMessage(
+                            "hi?",
+                            tool_calls=[
+                                {
+                                    "name": "tool_interrupt",
+                                    "args": {"some_val": 0},
+                                    "id": "some 0",
+                                }
+                            ],
+                        )
+                    ]
+                }
+            )
+            assert exc_info.value == "foo"
+
+    # test inside react agent
+    model = FakeToolCallingModel(
+        tool_calls=[
+            [
+                ToolCall(name="tool_interrupt", args={"some_val": 0}, id="1"),
+                ToolCall(name="tool_normal", args={"some_val": 1}, id="2"),
+            ],
+            [],
+        ]
+    )
+    checkpointer = MemorySaver()
+    config = {"configurable": {"thread_id": "1"}}
+    agent = create_react_agent(
+        model, [tool_interrupt, tool_normal], checkpointer=checkpointer
+    )
+    result = agent.invoke({"messages": [HumanMessage("hi?")]}, config)
+    assert result["messages"] == [
+        _AnyIdHumanMessage(
+            content="hi?",
+        ),
+        AIMessage(
+            content="hi?",
+            id="0",
+            tool_calls=[
+                {
+                    "name": "tool_interrupt",
+                    "args": {"some_val": 0},
+                    "id": "1",
+                    "type": "tool_call",
+                },
+                {
+                    "name": "tool_normal",
+                    "args": {"some_val": 1},
+                    "id": "2",
+                    "type": "tool_call",
+                },
+            ],
+        ),
+    ]
+    state = agent.get_state(config)
+    assert state.next == ("tools",)
+    task = state.tasks[0]
+    assert task.name == "tools"
+    assert task.interrupts == (Interrupt(value="foo", when="during"),)
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
