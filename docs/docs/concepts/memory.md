@@ -2,7 +2,9 @@
 
 ## What is Memory?
 
-Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
+Memory is a system that retains information from past interactions. Consider the frustration of working with a colleague who forgets everything you tell them, requiring constant repetition! As AI agents undertake more complex tasks involving numerous user interactions, equipping them with memory becomes equally crucial for efficiency and user satisfaction. 
+
+Memory in AI agents refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
 **Short-term memory**, or [thread](persistence.md#threads)-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Short-term memory updates when the graph is invoked or a step is completed, and the State is read at the start of each step.
 
@@ -173,6 +175,8 @@ trim_messages(
 
 Long-term memory in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is thread-scoped, long-term memory is saved within custom "namespaces."
 
+### Storing memories
+
 LangGraph stores long-term memories as JSON documents in a [store](persistence.md#memory-store) ([reference doc](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.BaseStore)). Each memory is organized under a custom `namespace` (similar to a folder) and a distinct `key` (like a filename). Namespaces often include user or org IDs or other labels that makes it easier to organize information. This structure enables hierarchical organization of memories. Cross-namespace searching is then supported through content filters. See the example below for an example.
 
 ```python
@@ -190,33 +194,50 @@ item = store.get(namespace, "a-memory")
 items = store.search(namespace, filter={"my-key": "my-value"})
 ```
 
-When adding long-term memory to your agent, it's important to think about how to **write memories**, how to **store and manage memory updates**, and how to **recall & represent memories** for the LLM in your application. These questions are all interdependent: how you want to recall & format memories for the LLM dictates what you should store and how to manage it. Furthermore, each technique has tradeoffs. The right approach for you largely depends on your application's needs.
-LangGraph aims to give you the low-level primitives to directly control the long-term memory of your application, based on memory [Store](persistence.md#memory-store)'s.
+### Framework for thinking about long-term memory
 
-Long-term memory is far from a solved problem. While it is hard to provide generic advice, we have provided a few reliable patterns below for your consideration as you implement long-term memory.
+Long-term memory is a complex challenge without a one-size-fits-all solution. However, the following questions provide a structure framework to help you navigate the different techniques:
 
-**Do you want to write memories "on the hot path" or "in the background"**
+**What is the type of memory?**
 
-Memory can be updated either as part of your primary application logic (e.g. "on the hot path" of the application) or as a background task (as a separate function that generates memories based on the primary application's state). We document some tradeoffs for each approach in [the writing memories section below](#writing-memories).
+Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_memory), [experiences](https://en.wikipedia.org/wiki/Episodic_memory), and [rules](https://en.wikipedia.org/wiki/Procedural_memory). AI agents can use memory in the same ways. For example, AI agents can use memory to remember specific facts about a user or to accomplish a task. We expand on several types of memories in the [section below](#memory-types).
 
-**Do you want to manage memories as a single profile or as a collection of documents?**
+**When do you want to update memories?**
 
-We provide two main approaches to managing long-term memory: a single, continuously updated document (referred to as a "profile" or "schema") or a collection of documents. Each method offers its own benefits, depending on the type of information you need to store and how you intend to access it.
+Memory can be updated as part of an agent's application logic (e.g. "on the hot path"). In this case, the agent typically decides to remember facts before responding to a user. Alternatively, memory can be updated as a background task (as a separate function that generates memories based on the primary application's state). We explain the tradeoffs between these approaches in [section below](#writing-memories).
 
-Managing memories as a single, continuously updated "profile" or "schema" is useful when there is well-scoped, specific information you want to remember about a user, organization, or other entity (including the agent itself). You can define the schema of the profile ahead of time, and then use an LLM to update this based on interactions. Querying the "memory" is easy since it's a simple GET operation on a JSON document. We explain this in more detail in [remember a profile](#manage-individual-profiles). This technique can provide higher precision (on known information use cases) at the expense of lower recall (since you have to anticipate and model your domain, and updates to the doc tend to delete or rewrite away old information at a greater frequency).
+**How are memories managed?**
 
-Managing long-term memory as a collection of documents, on the other hand, lets you store an unbounded amount of information. This technique is useful when you want to repeatedly extract & remember items over a long time horizon but can be more complicated to query and manage over time.
-Similar to the "profile" memory, you still define schema(s) for each memory. Rather than overwriting a single document, you instead will insert new ones (and potentially update or re-contextualize existing ones in the process). We explain this approach in more detail in ["managing a collection of memories"](#manage-a-collection-of-memories).
+Memories can be managed in different ways. For example, memories can be a single, continuously updated "profile" of well-scoped and specific information about a user, organization, or other entity (including the agent itself). Alternatively, memories can be a collection of documents that are continuously updated and extended over time. We expand on both approaches in the [remember a profile](#manage-individual-profiles) and [managing a collection of memories](#manage-a-collection-of-memories) sections below.
 
-**Do you want to present memories to your agent as updated instructions or as few-shot examples?**
+**How are memories presented?**
 
-Memories are typically provided to the LLM as a part of the system prompt. Some common ways to "frame" memories for the LLM include providing raw information as "memories from previous interactions with user A", as system instructions or rules, or as few-shot examples.
+Presenting memories is intimately connected to [the type of memory](#memory-types)! For example, [Episodic Memory](#memory-types) with AI agents often uses prior actions to guide future actions. In this case, memories can be presented as [few-shot examples](https://python.langchain.com/docs/concepts/few_shot_prompting/), as we expand on in [this section](#few-shot-examples). Alternatively, [Procedural Memory](#memory-types) with AI agents often involves reflecting on past actions [and allowing the agent to update its own instructions](https://www.youtube.com/watch?v=Vn8A3BxfplE), as we discuss in [this section](#update-own-instructions).
 
-Framing memories as "learning rules or instructions" typically means dedicating a portion of the system prompt to instructions the LLM can manage itself. After each conversation, you can prompt the LLM to evaluate its performance and update the instructions to better handle this type of task in the future. We explain this approach in more detail in [this section](#update-own-instructions).
+### Memory types
 
-Storing memories as few-shot examples lets you store and manage instructions as cause and effect. Each memory stores an input or context and expected response. Including a reasoning trajectory (a chain-of-thought) can also help provide sufficient context so that the memory is less likely to be mis-used in the future. We elaborate on this concept more in [this section](#few-shot-examples).
+Different applications require various types of memory. Although the analogy isn't perfect, examining [human memory types](https://www.psychologytoday.com/us/basics/memory/types-of-memory?ref=blog.langchain.dev) can be insightful. Some [research papers](https://arxiv.org/pdf/2309.02427) have even mapped these human memory types to those used in AI agents.
 
-We will expand on techniques for writing, managing, and recalling & formatting memories in the following section.
+![](img/memory/memory_types.png)
+
+#### Semantic Memory
+
+[Semantic memory](https://en.wikipedia.org/wiki/Semantic_memory), both in humans and AI agents, involves the retention of specific facts and concepts. In humans, it can include information learned in school and the understanding of concepts and their relationships. For AI agents, semantic memory is often used to personalize applications by remembering facts or concepts from past interactions. 
+
+In practice, semantic memories are often added to the agent's [system prompt](https://python.langchain.com/docs/concepts/messages/#systemmessage) directly. Semantic memories in different formats, such as [a profile](#manage-individual-profiles) or as a [collection](#manage-a-collection-of-memories). Regardless of the format, the central point is that the agent will use the semantic memories to [ground its responses](https://python.langchain.com/docs/concepts/rag/) when responding to the user, which often leads to more personalized and relevant responses.
+
+#### Episodic Memory
+
+[Episodic memory](https://en.wikipedia.org/wiki/Episodic_memory), in both humans and AI agents, involves recalling past events or actions. The [CoALA paper](https://arxiv.org/pdf/2309.02427) frames this well: facts can be written to semantic memory, whereas *experiences* can be written to episodic memory. For AI agents, episodic memory is often used to help an agent remember how to accomplish a task. 
+
+In practice, episodic memories are often implemented through [few-shot example prompting](https://python.langchain.com/docs/concepts/few_shot_prompting/), where agents learn from past sequences to perform tasks correctly. 
+We elaborate on representing memories as few-shot examples in [this section](#few-shot-examples), but the central concept is that they can give guidance on [specific tasks](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/) (e.g., a multi-step workflow [using tools](https://python.langchain.com/docs/concepts/tool_calling/)).
+
+#### Procedural Memory
+
+[Procedural memory](https://en.wikipedia.org/wiki/Procedural_memory), in both humans and AI agents, involves remembering the rules used to perform tasks. In humans, procedural memory is like the internalized knowledge of how to perform tasks, such as riding a bike via basic motor skills and balance. Episodic memory, on the other hand, involves recalling specific experiences, such as the first time you successfully rode a bike without training wheels or a memorable bike ride through a scenic route. For AI agents, procedural memory is a combination of model weights, agent code, and agent's system prompt that collectively determine the agent's functionality. 
+
+In practice, it is fairly uncommon for agents to modify their model weights or rewrite their code. However, it is more common for models to [modify their own prompts](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/prompt-generator). In particular, a model can evaluate its own performance and update its instructions to better handle this type of task in the future. We elaborate on representing memories as instructions in [this section](#update-own-instructions).
 
 ### Writing memories
 
@@ -248,6 +269,10 @@ We will outline some tradeoffs between these two approaches below, understanding
 
 #### Manage individual profiles
 
+Querying the "memory" is easy since it's a simple GET operation on a JSON document. 
+
+This technique can provide higher precision (on known information use cases) at the expense of lower recall (since you have to anticipate and model your domain, and updates to the doc tend to delete or rewrite away old information at a greater frequency).
+
 A profile is generally just a JSON document with various key-value pairs you've selected to represent your domain. When remembering a profile, you will want to make sure that you are **updating** the profile each time. As a result, you will want to pass in the previous profile and ask the LLM to generate a new profile (or some JSON patch to apply to the old profile).
 
 The larger the document, the more error-prone this can become. If your document becomes **too** large, you may want to consider splitting up the profiles into separate sections. You will likely need to use generation with retries and/or **strict** decoding when generating documents to ensure the memory schemas remains valid.
@@ -273,7 +298,7 @@ The following sections present a couple of common approaches. Note that these se
 
 #### Update own instructions
 
-While instructions are often static text written by the developer, many AI applications benefit from letting the users personalize the rules and instructions the agent should follow whenever it interacts with that user. This ideally can be inferred by its interactions with the user (so the user doesn't have to explicitly change settings in yoru app). In this sense, instructions are a form of long-form memory!
+While instructions are often static text written by the developer, many AI applications benefit from letting the users personalize the rules and instructions the agent should follow whenever it interacts with that user. This ideally can be inferred by its interactions with the user (so the user doesn't have to explicitly change settings in your app). In this sense, instructions are a form of long-form memory!
 
 One way to apply this is using "reflection" or "Meta-prompting" steps. Prompt the LLM with the current instruction set (from the system prompt) and a conversation with the user, and instruct the LLM to refine its instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori.
 
