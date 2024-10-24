@@ -118,7 +118,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
                     )
 
             exception_type = type_hints[first_param.name]
-            if issubclass(exception_type, Exception):
+            if Exception in exception_type.__mro__:
                 return (exception_type,)
             else:
                 raise ValueError(
