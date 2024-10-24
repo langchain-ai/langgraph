@@ -2,6 +2,7 @@ from typing import (
     Any,
     AsyncIterator,
     Iterator,
+    Literal,
     Optional,
     Sequence,
     Union,
@@ -9,7 +10,7 @@ from typing import (
 )
 
 import orjson
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
 )
@@ -44,10 +45,14 @@ class RemoteException(Exception):
     pass
 
 
-class RemoteGraph(PregelProtocol, Runnable):
+class RemoteGraph(PregelProtocol):
+    name: str
+
     def __init__(
         self,
-        graph_id: str,
+        name: str,  # graph_id
+        /,
+        *,
         url: Optional[str] = None,
         api_key: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
@@ -60,7 +65,7 @@ class RemoteGraph(PregelProtocol, Runnable):
         If `client` or `sync_client` are provided, they will be used instead of the default clients.
         See `LangGraphClient` and `SyncLangGraphClient` for details on the default clients.
         """
-        self.graph_id = graph_id
+        self.name = name
         self.config = config
         self.client = client or get_client(url=url, api_key=api_key, headers=headers)
         self.sync_client = sync_client or get_sync_client(
@@ -69,7 +74,7 @@ class RemoteGraph(PregelProtocol, Runnable):
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
-        return self.__class__(**attrs)
+        return self.__class__(attrs.pop("name"), **attrs)
 
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -99,7 +104,7 @@ class RemoteGraph(PregelProtocol, Runnable):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         graph = self.sync_client.assistants.get_graph(
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             xray=xray,
         )
         return DrawableGraph(
@@ -114,37 +119,13 @@ class RemoteGraph(PregelProtocol, Runnable):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         graph = await self.client.assistants.get_graph(
-            assistant_id=self.graph_id,
+            assistant_id=self.name,
             xray=xray,
         )
         return DrawableGraph(
             nodes=self._get_drawable_nodes(graph),
             edges=[DrawableEdge(**edge) for edge in graph["edges"]],
         )
-
-    def get_subgraphs(
-        self, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, "PregelProtocol"]]:
-        subgraphs = self.sync_client.assistants.get_subgraphs(
-            assistant_id=self.graph_id,
-            namespace=namespace,
-            recurse=recurse,
-        )
-        for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"graph_id": graph_schema["graph_id"]})
-            yield (namespace, remote_subgraph)
-
-    async def aget_subgraphs(
-        self, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, "PregelProtocol"]]:
-        subgraphs = await self.client.assistants.get_subgraphs(
-            assistant_id=self.graph_id,
-            namespace=namespace,
-            recurse=recurse,
-        )
-        for namespace, graph_schema in subgraphs.items():
-            remote_subgraph = self.copy({"graph_id": graph_schema["graph_id"]})
-            yield (namespace, remote_subgraph)
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
         tasks = []
@@ -258,7 +239,11 @@ class RemoteGraph(PregelProtocol, Runnable):
             if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
 
-        return {"configurable": new_configurable}
+        return {
+            "tags": config.get("tags"),
+            "metadata": config.get("metadata"),
+            "configurable": new_configurable,
+        }
 
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
@@ -402,8 +387,8 @@ class RemoteGraph(PregelProtocol, Runnable):
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
 
         for chunk in self.sync_client.runs.stream(
-            thread_id=cast(str, sanitized_config["configurable"]["thread_id"]),
-            assistant_id=self.graph_id,
+            thread_id=sanitized_config["configurable"].get("thread_id"),
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             stream_mode=stream_modes,
@@ -449,8 +434,8 @@ class RemoteGraph(PregelProtocol, Runnable):
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
 
         async for chunk in self.client.runs.stream(
-            thread_id=sanitized_config["configurable"]["thread_id"],
-            assistant_id=self.graph_id,
+            thread_id=sanitized_config["configurable"].get("thread_id"),
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             stream_mode=stream_modes,
@@ -481,6 +466,22 @@ class RemoteGraph(PregelProtocol, Runnable):
             else:
                 yield chunk
 
+    async def astream_events(
+        self,
+        input: Any,
+        config: Optional[RunnableConfig] = None,
+        *,
+        version: Literal["v1", "v2"],
+        include_names: Optional[Sequence[All]] = None,
+        include_types: Optional[Sequence[All]] = None,
+        include_tags: Optional[Sequence[All]] = None,
+        exclude_names: Optional[Sequence[All]] = None,
+        exclude_types: Optional[Sequence[All]] = None,
+        exclude_tags: Optional[Sequence[All]] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        raise NotImplementedError
+
     def invoke(
         self,
         input: Union[dict[str, Any], Any],
@@ -493,8 +494,8 @@ class RemoteGraph(PregelProtocol, Runnable):
         sanitized_config = self._sanitize_config(merged_config)
 
         return self.sync_client.runs.wait(
-            thread_id=sanitized_config["configurable"]["thread_id"],
-            assistant_id=self.graph_id,
+            thread_id=sanitized_config["configurable"].get("thread_id"),
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             interrupt_before=interrupt_before,
@@ -514,8 +515,8 @@ class RemoteGraph(PregelProtocol, Runnable):
         sanitized_config = self._sanitize_config(merged_config)
 
         return await self.client.runs.wait(
-            thread_id=sanitized_config["configurable"]["thread_id"],
-            assistant_id=self.graph_id,
+            thread_id=sanitized_config["configurable"].get("thread_id"),
+            assistant_id=self.name,
             input=input,
             config=sanitized_config,
             interrupt_before=interrupt_before,

@@ -25,7 +25,6 @@ from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
-    Runnable,
     RunnableSequence,
 )
 from langchain_core.runnables.base import Input, Output
@@ -34,6 +33,7 @@ from langchain_core.runnables.config import (
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
 )
+from langchain_core.runnables.graph import Graph
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
@@ -86,6 +86,7 @@ from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.messages import StreamMessagesHandler
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
@@ -179,7 +180,7 @@ class Channel:
         )
 
 
-class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
+class Pregel(PregelProtocol):
     nodes: dict[str, PregelNode]
 
     channels: dict[str, Union[BaseChannel, ManagedValueSpec]]
@@ -258,6 +259,16 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         self.name = name
         if auto_validate:
             self.validate()
+
+    def get_graph(
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+    ) -> Graph:
+        raise NotImplementedError
+
+    async def aget_graph(
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+    ) -> Graph:
+        raise NotImplementedError
 
     def copy(self, update: dict[str, Any] | None = None) -> Self:
         attrs = {**self.__dict__, **(update or {})}

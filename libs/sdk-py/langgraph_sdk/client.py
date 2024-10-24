@@ -1202,6 +1202,7 @@ class RunsClient:
         feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
     ) -> AsyncIterator[StreamPart]: ...
@@ -1327,6 +1328,7 @@ class RunsClient:
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Run: ...
 
@@ -1529,6 +1531,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
@@ -3280,6 +3283,7 @@ class SyncRunsClient:
         feedback_keys: Optional[Sequence[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
     ) -> Iterator[StreamPart]: ...
@@ -3405,6 +3409,7 @@ class SyncRunsClient:
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Run: ...
 
@@ -3607,6 +3612,7 @@ class SyncRunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 

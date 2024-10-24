@@ -4,6 +4,7 @@ from langchain_core.runnables import RunnableLambda, RunnableSequence
 from langchain_core.runnables.utils import get_function_nonlocals
 
 from langgraph.checkpoint.base import ChannelVersions
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.utils.runnable import Runnable, RunnableCallable, RunnableSeq
 
 
@@ -32,9 +33,9 @@ def find_subgraph_pregel(candidate: Runnable) -> Optional[Runnable]:
 
     for c in candidates:
         if (
-            isinstance(c, Pregel)
+            isinstance(c, PregelProtocol)
             # subgraphs that disabled checkpointing are not considered
-            and c.checkpointer is not False
+            and (not isinstance(c, Pregel) or c.checkpointer is not False)
         ):
             return c
         elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):

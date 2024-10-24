@@ -1,27 +1,29 @@
+from abc import ABC, abstractmethod
 from typing import (
     Any,
     AsyncIterator,
     Iterator,
     Optional,
-    Protocol,
     Sequence,
     Union,
-    runtime_checkable,
 )
 
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.pregel.types import All, StateSnapshot, StreamMode
 
 
-@runtime_checkable
-class PregelProtocol(Protocol):
+class PregelProtocol(
+    Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]], ABC
+):
+    @abstractmethod
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self: ...
 
+    @abstractmethod
     def get_graph(
         self,
         config: Optional[RunnableConfig] = None,
@@ -29,6 +31,7 @@ class PregelProtocol(Protocol):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph: ...
 
+    @abstractmethod
     async def aget_graph(
         self,
         config: Optional[RunnableConfig] = None,
@@ -36,22 +39,17 @@ class PregelProtocol(Protocol):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph: ...
 
-    def get_subgraphs(
-        self, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, "PregelProtocol"]]: ...
-
-    def aget_subgraphs(
-        self, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, "PregelProtocol"]]: ...
-
+    @abstractmethod
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot: ...
 
+    @abstractmethod
     async def aget_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot: ...
 
+    @abstractmethod
     def get_state_history(
         self,
         config: RunnableConfig,
@@ -61,6 +59,7 @@ class PregelProtocol(Protocol):
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]: ...
 
+    @abstractmethod
     def aget_state_history(
         self,
         config: RunnableConfig,
@@ -70,6 +69,7 @@ class PregelProtocol(Protocol):
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]: ...
 
+    @abstractmethod
     def update_state(
         self,
         config: RunnableConfig,
@@ -77,6 +77,7 @@ class PregelProtocol(Protocol):
         as_node: Optional[str] = None,
     ) -> RunnableConfig: ...
 
+    @abstractmethod
     async def aupdate_state(
         self,
         config: RunnableConfig,
@@ -84,6 +85,7 @@ class PregelProtocol(Protocol):
         as_node: Optional[str] = None,
     ) -> RunnableConfig: ...
 
+    @abstractmethod
     def stream(
         self,
         input: Union[dict[str, Any], Any],
@@ -95,6 +97,7 @@ class PregelProtocol(Protocol):
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]: ...
 
+    @abstractmethod
     def astream(
         self,
         input: Union[dict[str, Any], Any],
@@ -106,6 +109,7 @@ class PregelProtocol(Protocol):
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]: ...
 
+    @abstractmethod
     def invoke(
         self,
         input: Union[dict[str, Any], Any],
@@ -115,6 +119,7 @@ class PregelProtocol(Protocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]: ...
 
+    @abstractmethod
     async def ainvoke(
         self,
         input: Union[dict[str, Any], Any],
