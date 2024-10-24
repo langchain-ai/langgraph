@@ -17,12 +17,13 @@ Represents the status of a run:
 - "interrupted": The run was manually stopped or interrupted.
 """
 
-ThreadStatus = Literal["idle", "busy", "interrupted"]
+ThreadStatus = Literal["idle", "busy", "interrupted", "error"]
 """
 Represents the status of a thread:
 - "idle": The thread is not currently processing any task.
 - "busy": The thread is actively processing a task.
 - "interrupted": The thread's execution was interrupted.
+- "error": An exception occurred during task processing.
 """
 
 StreamMode = Literal["values", "messages", "updates", "events", "debug", "custom"]
