@@ -71,3 +71,84 @@ langgraph build -t my-image
 ```
 
 This will build a docker image with the LangGraph Deploy server.
+
+When running this server, you need to pass three environment variables:
+
+# TODO: change DATABASE_URL name to POSTGRES_URI?
+
+- `REDIS_URI`: Connection details to a Redis instance. This will be used for...
+- `DATABASE_URI`: Postgres connection details. This will be used for...
+- `LANGSMITH_API_KEY`: LangSmith API key. This will be used to authenticate ONCE at server start up.
+
+```shell
+docker run  -e REDIS_URI="foo" -e DATABASE_URI="bar" -e LANGSMITH_API_KEY="baz" my-image
+```
+
+If you want to run this quickly without setting up a separate Redis and Postgres instance, you can use this docker compose file. 
+
+**NOTE #1:** notice the points below where you will need to put your own `IMAGE_NAME` (from `langgraph build` step above) and your `LANGSMITH_API_KEY` 
+
+**NOTE #2:** if your graph requires other environment variables, you will need to add them in the langgraph-api service.
+
+```text
+volumes:
+    langgraph-data:
+        driver: local
+services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
+    langgraph-postgres:
+        image: postgres:16
+        ports:
+            - "5433:5432"
+        environment:
+            POSTGRES_DB: postgres
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+        volumes:
+            - langgraph-data:/var/lib/postgresql/data
+        healthcheck:
+            test: pg_isready -U postgres
+            start_period: 10s
+            timeout: 1s
+            retries: 5
+            interval: 5s
+    langgraph-api:
+        image: {IMAGE_NAME}
+        ports:
+            - "8123:8000"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy
+            langgraph-postgres:
+                condition: service_healthy
+        environment:
+            REDIS_URI: redis://langgraph-redis:6379
+            LANGSMITH_API_KEY: {LANGSMITH_API_KEY}
+            POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable
+```
+
+You can then run `docker compose up` with this Docker compose file in the same folder.
+
+This will spin up LangGraph Deploy on port 8123 (if you want to change this, you can change this by changing the ports in the `langgraph-api` volume).
+
+You can test that this up by trying to create a thread:
+
+```shell
+curl --request POST \
+  --url 0.0.0.0:8123/threads \
+  --header 'Content-Type: application/json' \
+  --data '{}'
+```
+
+Assuming everything is running correctly, you should see a response like:
+
+```shell
+{"thread_id":"166177a7-ad9f-4e5e-ac74-2645072cb434","created_at":"2024-10-24T02:29:28.710696+00:00","updated_at":"2024-10-24T02:29:28.710696+00:00","metadata":{},"status":"idle","config":{},"values":null}%
+```
+
