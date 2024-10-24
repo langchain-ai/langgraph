@@ -238,7 +238,11 @@ class RemoteGraph(PregelProtocol):
             if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
 
-        return {"configurable": new_configurable}
+        return {
+            "tags": config.get("tags"),
+            "metadata": config.get("metadata"),
+            "configurable": new_configurable,
+        }
 
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
@@ -382,7 +386,7 @@ class RemoteGraph(PregelProtocol):
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
 
         for chunk in self.sync_client.runs.stream(
-            thread_id=cast(str, sanitized_config["configurable"]["thread_id"]),
+            thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
@@ -429,7 +433,7 @@ class RemoteGraph(PregelProtocol):
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
 
         async for chunk in self.client.runs.stream(
-            thread_id=sanitized_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
@@ -464,15 +468,15 @@ class RemoteGraph(PregelProtocol):
     async def astream_events(
         self,
         input: Any,
-        config: RunnableConfig | None = None,
+        config: Optional[RunnableConfig] = None,
         *,
         version: All | All,
-        include_names: Sequence[All] | None = None,
-        include_types: Sequence[All] | None = None,
-        include_tags: Sequence[All] | None = None,
-        exclude_names: Sequence[All] | None = None,
-        exclude_types: Sequence[All] | None = None,
-        exclude_tags: Sequence[All] | None = None,
+        include_names: Optional[Sequence[All]] = None,
+        include_types: Optional[Sequence[All]] = None,
+        include_tags: Optional[Sequence[All]] = None,
+        exclude_names: Optional[Sequence[All]] = None,
+        exclude_types: Optional[Sequence[All]] = None,
+        exclude_tags: Optional[Sequence[All]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any]]:
         raise NotImplementedError
@@ -489,7 +493,7 @@ class RemoteGraph(PregelProtocol):
         sanitized_config = self._sanitize_config(merged_config)
 
         return self.sync_client.runs.wait(
-            thread_id=sanitized_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
@@ -510,7 +514,7 @@ class RemoteGraph(PregelProtocol):
         sanitized_config = self._sanitize_config(merged_config)
 
         return await self.client.runs.wait(
-            thread_id=sanitized_config["configurable"]["thread_id"],
+            thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,

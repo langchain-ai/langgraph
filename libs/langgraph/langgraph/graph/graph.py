@@ -170,7 +170,7 @@ class Graph:
     def add_node(
         self,
         node: Union[str, RunnableLike],
-        action: Optional[Union[RunnableLike]] = None,
+        action: Optional[RunnableLike] = None,
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Self:
