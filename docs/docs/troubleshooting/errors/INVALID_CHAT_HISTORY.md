@@ -5,7 +5,7 @@ This error is raised in the prebuilt [create_react_agent][langgraph.prebuilt.cha
 There could be a few reasons you're seeing this error:
 
 1. You manually passed a malformed list of messages when invoking the graph, e.g. `graph.invoke({'messages': [AIMessage(..., tool_calls=[...])]})`
-2. The graph was interrupted before receving updates from the `tools` node (i.e. a list of ToolMessages)
+2. The graph was interrupted before receiving updates from the `tools` node (i.e. a list of ToolMessages)
 and you invoked it with a an input that is not None or a ToolMessage,
 e.g. `graph.invoke({'messages': [HumanMessage(...)]}, config)`.
     This interrupt could have been triggered in one of the following ways:

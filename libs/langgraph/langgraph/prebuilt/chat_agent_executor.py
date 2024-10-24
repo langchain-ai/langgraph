@@ -162,7 +162,7 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
 
 
 def _validate_messages(
-    messages: list[BaseMessage],
+    messages: Sequence[BaseMessage],
 ) -> None:
     """Validate that all tool calls in AIMessages have a corresponding ToolMessage."""
     all_tool_calls = [
