@@ -184,6 +184,7 @@ nav:
               - INVALID_CONCURRENT_GRAPH_UPDATE: "troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md"
               - INVALID_GRAPH_NODE_RETURN_VALUE: "troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md"
               - MULTIPLE_SUBGRAPHS: "troubleshooting/errors/MULTIPLE_SUBGRAPHS.md"
+              - INVALID_CHAT_HISTORY: "troubleshooting/errors/INVALID_CHAT_HISTORY.md"
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb

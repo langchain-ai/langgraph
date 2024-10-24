@@ -161,6 +161,37 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     return False
 
 
+def _validate_messages(
+    messages: list[BaseMessage],
+) -> None:
+    """Validate that all tool calls in AIMessages have a corresponding ToolMessage."""
+    all_tool_calls = [
+        tool_call
+        for message in messages
+        if isinstance(message, AIMessage)
+        for tool_call in message.tool_calls
+    ]
+    answered_tool_call_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    }
+    unanswered_tool_calls = [
+        tool_call
+        for tool_call in all_tool_calls
+        if tool_call["id"] not in answered_tool_call_ids
+    ]
+    if not unanswered_tool_calls:
+        return
+
+    error_message = (
+        "Found AIMessages with tool_calls that do not have a corresponding ToolMessage. "
+        f"Here are the first few of those tool calls: {unanswered_tool_calls[:3]}.\n\n"
+        "ALL tool calls in message history MUST have a corresponding ToolMessage - this is required by most LLM providers.\n\n"
+        "Troubleshooting guide:\n"
+        "- [INVALID_CHAT_HISTORY](https://python.langchain.com/docs/troubleshooting/errors/INVALID_CHAT_HISTORY)"
+    )
+    raise ValueError(error_message)
+
+
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
     model: LanguageModelLike,
@@ -530,6 +561,7 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        _validate_messages(state["messages"])
         response = model_runnable.invoke(state, config)
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
@@ -566,6 +598,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        _validate_messages(state["messages"])
         response = await model_runnable.ainvoke(state, config)
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
