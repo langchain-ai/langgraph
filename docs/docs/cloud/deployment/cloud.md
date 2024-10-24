@@ -56,7 +56,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 
 Build and deployment logs are available for each revision.
 
-Starting from the `Deployment` view...
+Starting from the `LangGraph Cloud` view...
 
 1. Select the desired revision from the `Revisions` table. A panel slides open from the right-hand side and the `Build` tab is selected by default, which displays build logs for the revision.
 1. In the panel, select the `Deploy` tab to view deployment logs for the revision.
@@ -69,7 +69,7 @@ Interrupting a revision will stop deployment of the revision.
 !!! warning "Undefined Behavior"
     Interrupted revisions have undefined behavior. This is only useful if you need to deploy a new revision and you already have a revision "stuck" in progress. In the future, this feature may be removed.
 
-Starting from the `Deployment` view...
+Starting from the `LangGraph Cloud` view...
 
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired revision from the `Revisions` table.
 1. Select `Interrupt` from the menu.
