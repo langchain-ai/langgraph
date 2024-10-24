@@ -240,8 +240,8 @@ class RemoteGraph(PregelProtocol):
         }
 
         return {
-            "tags": config.get("tags"),
-            "metadata": config.get("metadata"),
+            "tags": config.get("tags") or [],
+            "metadata": config.get("metadata") or {},
             "configurable": new_configurable,
         }
 
