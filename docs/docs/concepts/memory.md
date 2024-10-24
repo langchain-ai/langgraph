@@ -200,7 +200,7 @@ Long-term memory is a complex challenge without a one-size-fits-all solution. Ho
 
 **What is the type of memory?**
 
-Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_memory), [experiences](https://en.wikipedia.org/wiki/Episodic_memory), and [rules](https://en.wikipedia.org/wiki/Procedural_memory). AI agents can use memory in the same ways. For example, AI agents can use memory to remember specific facts about a user or to accomplish a task. We expand on several types of memories in the [section below](#memory-types).
+Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_memory), [experiences](https://en.wikipedia.org/wiki/Episodic_memory), and [rules](https://en.wikipedia.org/wiki/Procedural_memory). AI agents can use memory in the same ways. For example, AI agents can use memory to remember specific facts about a user.  to accomplish a task. We expand on several types of memories in the [section below](#memory-types).
 
 **When do you want to update memories?**
 
@@ -209,10 +209,6 @@ Memory can be updated as part of an agent's application logic (e.g. "on the hot 
 **How are memories managed?**
 
 Memories can be managed in different ways. For example, memories can be a single, continuously updated "profile" of well-scoped and specific information about a user, organization, or other entity (including the agent itself). Alternatively, memories can be a collection of documents that are continuously updated and extended over time. We expand on both approaches in the [remember a profile](#manage-individual-profiles) and [managing a collection of memories](#manage-a-collection-of-memories) sections below.
-
-**How are memories presented?**
-
-Presenting memories is intimately connected to [the type of memory](#memory-types)! For example, [Episodic Memory](#memory-types) with AI agents often uses prior actions to guide future actions. In this case, memories can be presented as [few-shot examples](https://python.langchain.com/docs/concepts/few_shot_prompting/), as we expand on in [this section](#few-shot-examples). Alternatively, [Procedural Memory](#memory-types) with AI agents often involves reflecting on past actions [and allowing the agent to update its own instructions](https://www.youtube.com/watch?v=Vn8A3BxfplE), as we discuss in [this section](#update-own-instructions).
 
 ### Memory types
 
@@ -230,14 +226,45 @@ In practice, semantic memories are often added to the agent's [system prompt](ht
 
 [Episodic memory](https://en.wikipedia.org/wiki/Episodic_memory), in both humans and AI agents, involves recalling past events or actions. The [CoALA paper](https://arxiv.org/pdf/2309.02427) frames this well: facts can be written to semantic memory, whereas *experiences* can be written to episodic memory. For AI agents, episodic memory is often used to help an agent remember how to accomplish a task. 
 
-In practice, episodic memories are often implemented through [few-shot example prompting](https://python.langchain.com/docs/concepts/few_shot_prompting/), where agents learn from past sequences to perform tasks correctly. 
-We elaborate on representing memories as few-shot examples in [this section](#few-shot-examples), but the central concept is that they can give guidance on [specific tasks](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/) (e.g., a multi-step workflow [using tools](https://python.langchain.com/docs/concepts/tool_calling/)).
+In practice, episodic memories are often implemented through [few-shot example prompting](https://python.langchain.com/docs/concepts/few_shot_prompting/), where agents learn from past sequences to perform tasks correctly. Sometimes it's easier to "show" than "tell" and LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
+
+Note that the memory store is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets) to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). 
+
+See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
 
 #### Procedural Memory
 
 [Procedural memory](https://en.wikipedia.org/wiki/Procedural_memory), in both humans and AI agents, involves remembering the rules used to perform tasks. In humans, procedural memory is like the internalized knowledge of how to perform tasks, such as riding a bike via basic motor skills and balance. Episodic memory, on the other hand, involves recalling specific experiences, such as the first time you successfully rode a bike without training wheels or a memorable bike ride through a scenic route. For AI agents, procedural memory is a combination of model weights, agent code, and agent's system prompt that collectively determine the agent's functionality. 
 
-In practice, it is fairly uncommon for agents to modify their model weights or rewrite their code. However, it is more common for models to [modify their own prompts](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/prompt-generator). In particular, a model can evaluate its own performance and update its instructions to better handle this type of task in the future. We elaborate on representing memories as instructions in [this section](#update-own-instructions).
+In practice, it is fairly uncommon for agents to modify their model weights or rewrite their code. However, it is more common for models to [modify their own prompts](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/prompt-generator). In particular, a model can evaluate its own performance and update its instructions to better handle this type of task in the future. 
+
+One way to apply this is using "reflection" or "Meta-prompting" steps. Prompt the LLM with the current instruction set (from the system prompt) and a conversation with the user, and instruct the LLM to refine its instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori.
+
+Meta-prompting uses past information to refine prompts. For instance, a [Tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) employs meta-prompting to enhance its paper summarization prompt for Twitter. You could implement this using LangGraph's memory store to save updated instructions in a shared namespace. In this case, we will namespace the memories as "agent_instructions" and key the memory based on the agent.
+
+```python
+# Node that *uses* the instructions
+def call_model(state: State, store: BaseStore):
+    namespace = ("agent_instructions", )
+    instructions = store.get(namespace, key="agent_a")[0]
+    # Application logic
+    prompt = prompt_template.format(instructions=instructions.value["instructions"])
+    ...
+
+
+# Node that updates instructions
+def update_instructions(state: State, store: BaseStore):
+    namespace = ("instructions",)
+    current_instructions = store.search(namespace)[0]
+    # Memory logic
+    prompt = prompt_template.format(instructions=instructions.value["instructions"], conversation=state["messages"])
+    output = llm.invoke(prompt)
+    new_instructions = output['new_instructions']
+    store.put(("agent_instructions",), "agent_a", {"instructions": new_instructions})
+    ...
+```
+
+![](img/memory/update-instructions.png)
 
 ### Writing memories
 
@@ -290,46 +317,3 @@ This also shifts complexity to memory **search** (recall). You have to think abo
 Finally, this shifts some complexity to how you represent the memories for the LLM (and by extension, the schemas you use to save each memories). It's very easy to write memories that can easily be mistaken out-of-context. It's important to prompt the LLM to include all necessary contextual information in the given memory so that when you use it in later conversations it doesn't mistakenly mis-apply that information.
 
 ![](img/memory/update-list.png)
-
-### Representing memories
-
-Once you have saved memories, the way you then retrieve and present the memory content for the LLM can play a large role in how well your LLM incorporates that information in its responses.
-The following sections present a couple of common approaches. Note that these sections also will largely inform how you write and manage memories. Everything in memory is connected!
-
-#### Update own instructions
-
-While instructions are often static text written by the developer, many AI applications benefit from letting the users personalize the rules and instructions the agent should follow whenever it interacts with that user. This ideally can be inferred by its interactions with the user (so the user doesn't have to explicitly change settings in your app). In this sense, instructions are a form of long-form memory!
-
-One way to apply this is using "reflection" or "Meta-prompting" steps. Prompt the LLM with the current instruction set (from the system prompt) and a conversation with the user, and instruct the LLM to refine its instructions. This approach allows the system to dynamically update and improve its own behavior, potentially leading to better performance on various tasks. This is particularly useful for tasks where the instructions are challenging to specify a priori.
-
-Meta-prompting uses past information to refine prompts. For instance, a [Tweet generator](https://www.youtube.com/watch?v=Vn8A3BxfplE) employs meta-prompting to enhance its paper summarization prompt for Twitter. You could implement this using LangGraph's memory store to save updated instructions in a shared namespace. In this case, we will namespace the memories as "agent_instructions" and key the memory based on the agent.
-
-```python
-# Node that *uses* the instructions
-def call_model(state: State, store: BaseStore):
-    namespace = ("agent_instructions", )
-    instructions = store.get(namespace, key="agent_a")[0]
-    # Application logic
-    prompt = prompt_template.format(instructions=instructions.value["instructions"])
-    ...
-
-
-# Node that updates instructions
-def update_instructions(state: State, store: BaseStore):
-    namespace = ("instructions",)
-    current_instructions = store.search(namespace)[0]
-    # Memory logic
-    prompt = prompt_template.format(instructions=instructions.value["instructions"], conversation=state["messages"])
-    output = llm.invoke(prompt)
-    new_instructions = output['new_instructions']
-    store.put(("agent_instructions",), "agent_a", {"instructions": new_instructions})
-    ...
-```
-
-![](img/memory/update-instructions.png)
-
-#### Few-shot examples
-
-Sometimes it's easier to "show" than "tell." LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
-
-Note that the memory store is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets) to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
