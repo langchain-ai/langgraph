@@ -64,13 +64,11 @@ pip install langgraph-cli
 
 You can then use:
 
-# TODO: why is `-t` needed?
-
 ```
 langgraph build -t my-image
 ```
 
-This will build a docker image with the LangGraph Deploy server.
+This will build a docker image with the LangGraph Deploy server. The `-t my-image` is used to tag the image with a name.
 
 When running this server, you need to pass three environment variables:
 
