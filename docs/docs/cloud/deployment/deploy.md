@@ -74,8 +74,8 @@ When running this server, you need to pass three environment variables:
 
 # TODO: change DATABASE_URL name to POSTGRES_URI?
 
-- `REDIS_URI`: Connection details to a Redis instance. This will be used for...
-- `DATABASE_URI`: Postgres connection details. This will be used for...
+- `REDIS_URI`: Connection details to a Redis instance. Redis will be used as a pub-sub broker to enable streaming real time output from background runs.
+- `DATABASE_URI`: Postgres connection details. Postgres will be used to store assistants, threads, runs, persist thread state and long term memory, and to manage the state of the background task queue with 'exactly once' semantics.
 - `LANGSMITH_API_KEY`: LangSmith API key. This will be used to authenticate ONCE at server start up.
 
 ```shell
