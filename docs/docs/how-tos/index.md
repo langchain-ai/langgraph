@@ -80,7 +80,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 ## Subgraphs
 
-[Subgraphs](../concepts/low_level/#subgraphs) allow you to reuse an existing graph from another graph. These how-to guides show how to use subgraphs:
+[Subgraphs](../concepts/low_level.md#subgraphs) allow you to reuse an existing graph from another graph. These how-to guides show how to use subgraphs:
 
 - [How to add and use subgraphs](subgraph.ipynb)
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
@@ -105,7 +105,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 ## Prebuilt ReAct Agent
 
-The LangGraph [prebuilt ReAct agent](../reference/prebuilt/#langgraph.prebuilt.chat_agent_executor.create_react_agent) is pre-built implementation of a [tool calling agent](concepts/agentic_concepts/#tool-calling-agent).
+The LangGraph [prebuilt ReAct agent](../reference/prebuilt.md#langgraph.prebuilt.chat_agent_executor.create_react_agent) is pre-built implementation of a [tool calling agent](concepts/agentic_concepts/#tool-calling-agent).
 
 One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
 
