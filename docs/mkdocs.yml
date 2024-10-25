@@ -91,6 +91,68 @@ nav:
       - Errors: reference/errors.md
       - Types: reference/types.md
       - Constants: reference/constants.md
+  - "Cloud (beta)":
+      - "cloud/index.md"
+      - Tutorials:
+          - Quick Start: "cloud/quick_start.md"
+      - How-to Guides:
+          - "cloud/how-tos/index.md"
+          - Setup:
+              - Setup App: "cloud/deployment/setup.md"
+              - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
+              - Setup App (JavaScript): "cloud/deployment/setup_javascript.md"
+              - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
+              - Customize Dockerfile: "cloud/deployment/custom_docker.md"
+              - Test App Locally: "cloud/deployment/test_locally.md"
+          - Deployment:
+              - Deploy to Cloud: "cloud/deployment/cloud.md"
+          - Streaming:
+              - Stream Values: "cloud/how-tos/stream_values.md"
+              - Stream Updates: "cloud/how-tos/stream_updates.md"
+              - Stream Messages: "cloud/how-tos/stream_messages.md"
+              - Stream Events: "cloud/how-tos/stream_events.md"
+              - Stream Debug: "cloud/how-tos/stream_debug.md"
+              - Multiple Modes: "cloud/how-tos/stream_multiple.md"
+          - Double Texting:
+              - Interrupt: "cloud/how-tos/interrupt_concurrent.md"
+              - Rollback: "cloud/how-tos/rollback_concurrent.md"
+              - Reject: "cloud/how-tos/reject_concurrent.md"
+              - Enqueue: "cloud/how-tos/enqueue_concurrent.md"
+          - Human-in-the-Loop:
+              - Add Breakpoint: "cloud/how-tos/human_in_the_loop_breakpoint.md"
+              - Wait for User Input: "cloud/how-tos/human_in_the_loop_user_input.md"
+              - Edit Graph State: "cloud/how-tos/human_in_the_loop_edit_state.md"
+              - Replay and Branch from Prior States: "cloud/how-tos/human_in_the_loop_time_travel.md"
+              - Review Tool Calls: "cloud/how-tos/human_in_the_loop_review_tool_calls.md"
+          - LangGraph Studio:
+              - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
+              - Test Local Deployment: "cloud/how-tos/test_local_deployment.md"
+              - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
+              - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
+          - Different Types of Runs:
+              - Run an Agent in the Background: "cloud/how-tos/background_run.md"
+              - Run Multiple Agents in Same Thread: "cloud/how-tos/same-thread.md"
+              - Create Cron Jobs: "cloud/how-tos/cron_jobs.md"
+              - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
+          - Other:
+              - Configure Agents: "cloud/how-tos/configuration_cloud.md"
+              - Versioning Assistants: "cloud/how-tos/assistant_versioning.md"
+              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
+              - Integrate Webhooks: "cloud/how-tos/webhooks.md"
+              - Copy Threads: "cloud/how-tos/copy_threads.md"
+              - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
+      - Conceptual Guides:
+          - API Concepts: "cloud/concepts/api.md"
+          - Cloud Concepts: "cloud/concepts/cloud.md"
+      - Reference:
+          - API: "cloud/reference/api/api_ref.md"
+          - SDK:
+              - Python: "cloud/reference/sdk/python_sdk_ref.md"
+              - JS/TS: "cloud/reference/sdk/js_ts_sdk_ref.md"
+          - CLI: "cloud/reference/cli.md"
+          - Environment Variables: "cloud/reference/env_var.md"
+      - FAQ:
+          - Studio: "cloud/faq/studio.md"
 
 markdown_extensions:
   - abbr
