@@ -2,9 +2,7 @@
 
 ## What is Memory?
 
-Memory is the ability to encode, store, retain, and subsequently recall information and experiences. Consider the frustration of working with a colleague who forgets everything you tell them, requiring constant repetition! As AI agents undertake more complex tasks involving numerous user interactions, equipping them with memory becomes equally crucial for efficiency and user satisfaction. 
-
-Memory in AI agents refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
+[Memory](https://pmc.ncbi.nlm.nih.gov/articles/PMC10410470/) is a cognitive function that allows people to store, retrieve, and use information to understand their present and future. Consider the frustration of working with a colleague who forgets everything you tell them, requiring constant repetition! As AI agents undertake more complex tasks involving numerous user interactions, equipping them with memory becomes equally crucial for efficiency and user satisfaction. With memory, agents can learn from feedback and adapt to users' preferences. This guide covers two types of memory based on recall scope:
 
 **Short-term memory**, or [thread](persistence.md#threads)-scoped memory, can be recalled at any time **from within** a single conversational thread with a user. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Short-term memory updates when the graph is invoked or a step is completed, and the State is read at the start of each step.
 
@@ -206,11 +204,11 @@ Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_m
 
 **When do you want to update memories?**
 
-Memory can be updated as part of an agent's application logic (e.g. "on the hot path"). In this case, the agent typically decides to remember facts before responding to a user. Alternatively, memory can be updated as a background task (as a separate function that generates memories based on the primary application's state). We explain the tradeoffs between these approaches in the [section below](#writing-memories).
+Memory can be updated as part of an agent's application logic (e.g. "on the hot path"). In this case, the agent typically decides to remember facts before responding to a user. Alternatively, memory can be updated as a background task (logic that runs in the background / asynchronously and generates memories). We explain the tradeoffs between these approaches in the [section below](#writing-memories).
 
 ## Memory types
 
-Different applications require various types of memory. Although the analogy isn't perfect, examining [human memory types](https://www.psychologytoday.com/us/basics/memory/types-of-memory?ref=blog.langchain.dev) can be insightful. Some [research papers](https://arxiv.org/pdf/2309.02427) have even mapped these human memory types to those used in AI agents.
+Different applications require various types of memory. Although the analogy isn't perfect, examining [human memory types](https://www.psychologytoday.com/us/basics/memory/types-of-memory?ref=blog.langchain.dev) can be insightful. Some research (e.g., the [CoALA paper](https://arxiv.org/pdf/2309.02427)) have even mapped these human memory types to those used in AI agents.
 
 ![](img/memory/memory_types_agent.png)
 
@@ -232,7 +230,7 @@ Alternatively, memories can be a collection of documents that are continuously u
 
 However, this shifts some complexity memory updating. The model must now _delete_ or _update_ existing items in the list, which can be tricky. In addition, some models may default to over-inserting and others may default to over-updating. See the [Trustcall](https://github.com/hinthornw/trustcall) package for one way to manage this and consider evaluation (e.g., with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation)) to help you tune the behavior.
 
-Document collections also shift complexity to memory **search** over the list. The `Store` currently supports [filtering by metadata](https://langchain-ai.github.io/langgraph/reference/store/#storage) and will soon add [semantic search shortly](https://python.langchain.com/docs/concepts/vectorstores/), but selecting the most relevant documents can be tricky as the list grows.
+Working with document collections also shifts complexity to memory **search** over the list. The `Store` currently supports [filtering by metadata](https://langchain-ai.github.io/langgraph/reference/store/#storage) and will soon add [semantic search shortly](https://python.langchain.com/docs/concepts/vectorstores/), but selecting the most relevant documents can be tricky as the list grows.
 
 Finally, using a collection of memories can make it challenging to provide comprehensive context to the model. While individual memories may follow a specific schema, this structure might not capture the full context or relationships between memories. As a result, when using these memories to generate responses, the model may lack important contextual information that would be more readily available in a unified profile approach.
 
@@ -295,7 +293,7 @@ While [humans often form long-term memories during sleep](https://medicine.yale.
 
 Creating memories during runtime offers both advantages and challenges. On the positive side, this approach allows for real-time updates, making new memories immediately available for use in subsequent interactions. It also enables transparency, as users can be notified when memories are created and stored.
 
-However, this method also presents challenges. It increases complexity, as the agent must decide what to commit to memory alongside its primary task. This can impact performance, potentially slowing down response times due to additional decision-making and degrading tool-calling performance and task completion rates. Additionally, the multitasking involved may result in fewer memories being saved, affecting recall in future conversations.
+However, this method also presents challenges. It may increase complexity if the agent requires a new tool to decide what to commit to memory. In addition, the process of reasoning about what to save to memory can impact agent latency. Finally, the agent must multitask between memory creation and its other responsibilities, potentially affecting the quantity and quality of memories created.
 
 As an example, ChatGPT uses a [save_memories](https://openai.com/index/memory-and-new-controls-for-chatgpt/) tool to upsert memories as content strings, deciding whether and how to use this tool with each user message. See our [memory-agent](https://github.com/langchain-ai/memory-agent) template as an reference implementation.
 
