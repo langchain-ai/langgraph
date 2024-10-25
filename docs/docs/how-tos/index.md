@@ -1,11 +1,11 @@
 ---
 hide:
   - navigation
-title: How-to guides
+title: How-to Guides
 description: How to accomplish common tasks in LangGraph
 ---
 
-# How-to guides
+# How-to Guides
 
 Welcome to the LangGraph how-to guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph.
 
