@@ -18,19 +18,14 @@ Learn the basics of LangGraph through a comprehensive quick start in which you w
 
 Learn from example implementations of graphs designed for specific scenarios and that implement common design patterns.
 
-#### Chatbots
+### Chatbots
 
 - [Customer Support](customer-support/customer-support.ipynb): Build a customer support chatbot to manage flights, hotel reservations, car rentals, and other tasks
 - [Prompt Generation from User Requirements](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot
 - [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Build a code analysis and generation assistant
 
-#### Multi-Agent Systems
 
-- [Network](multi_agent/multi-agent-collaboration.ipynb): Enable two or more agents to collaborate on a task
-- [Supervisor](multi_agent/agent_supervisor.ipynb): Use an LLM to orchestrate and delegate to individual agents
-- [Hierarchical Teams](multi_agent/hierarchical_agent_teams.ipynb): Orchestrate nested teams of agents to solve problems
-
-#### RAG
+### RAG
 
 - [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb)
     - [Adaptive RAG using local LLMs](rag/langgraph_adaptive_rag_local.ipynb)
@@ -41,6 +36,15 @@ Learn from example implementations of graphs designed for specific scenarios and
     - [Self-RAG using local LLMs](rag/langgraph_self_rag_local.ipynb)
 - [SQL Agent](sql-agent.ipynb)
 
+
+### Agent Architectures
+
+#### Multi-Agent Systems
+
+- [Network](multi_agent/multi-agent-collaboration.ipynb): Enable two or more agents to collaborate on a task
+- [Supervisor](multi_agent/agent_supervisor.ipynb): Use an LLM to orchestrate and delegate to individual agents
+- [Hierarchical Teams](multi_agent/hierarchical_agent_teams.ipynb): Orchestrate nested teams of agents to solve problems
+ 
 #### Planning Agents
 
 - [Plan-and-Execute](plan-and-execute/plan-and-execute.ipynb): Implement a basic planning and execution agent
@@ -54,12 +58,12 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Language Agent Tree Search](lats/lats.ipynb): Use reflection and rewards to drive a tree search over agents
 - [Self-Discover Agent](self-discover/self-discover.ipynb): Analyze an agent that learns about its own capabilities
 
-#### Evaluation
+### Evaluation
 
 - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluate chatbots via simulated user interactions
 - [In LangSmith](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluate chatbots in LangSmith over a dialog dataset
 
-#### Experimental
+### Experimental
 
 - [Web Research (STORM)](storm/storm.ipynb): Generate Wikipedia-like articles via research and multi-perspective QA
 - [TNT-LLM](tnt-llm/tnt-llm.ipynb): Build rich, interpretable taxonomies of user intentand using the classification system developed by Microsoft for their Bing Copilot application.
