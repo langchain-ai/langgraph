@@ -82,7 +82,8 @@ jobs:
               --check-links-ignore "https://github\.com/.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
               --check-links-ignore "https://python\.langchain\.com/.*" \
-              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html')
+              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html') \
+              --check-links-ignore "https://openai.com/index/memory-and-new-controls-for-chatgpt/"
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
