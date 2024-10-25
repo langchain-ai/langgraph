@@ -7,11 +7,12 @@ description: Conceptual Guide for LangGraph
 
 # Conceptual Guide
 
-This guide provides explanations of the key concepts behind the LangChain framework and AI applications more broadly.
+This guide provides explanations of the key concepts behind the LangGraph framework and AI applications more broadly.
 
-We recommend that you go through at least one of the Tutorials before diving into the conceptual guide. This will provide practical context that will make it easier to understand the concepts discussed here.
+We recommend that you go through at least the [Quick Start](../tutorials/introduction.ipynb) before diving into the conceptual guide. This will provide practical context that will make it easier to understand the concepts discussed here.
 
-The conceptual guide does not cover step-by-step instructions or specific implementation examples — those are found in the How-to guides and Tutorials. For detailed reference material, please see the API reference.
+The conceptual guide does not cover step-by-step instructions or specific implementation examples — those are found in the [Tutorials](../tutorials/index.md) and [How-to guides](../how-tos/index.md). 
+For detailed reference material, please see the [API reference](../reference/index.md).
 
 ## Concepts
 
@@ -24,15 +25,3 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 - [Memory](memory.md): Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences.  
 - [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs. 
 - [FAQ](faq.md): Frequently asked questions about LangGraph.
-
-## LangGraph Platform Concepts
-
-The LangGraph platform is built on top of LangChain's LangGraph framework. 
-
-The LangGraph Platform exposes the functionality of your LangGraph application through Assistants. An assistant abstracts the cognitive architecture of your graph. Invoke an assistant by calling the pre-built API endpoints.
-
-
-- [Assistants](streaming.md): ...
-- [Threads](streaming.md): ...
-- [Double Texting](streaming.md): ...
-
