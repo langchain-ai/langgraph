@@ -1,6 +1,8 @@
 ---
 hide:
-  - toc
+  - navigation
+title: How-to guides
+description: How to accomplish common tasks in LangGraph
 ---
 
 # How-to guides

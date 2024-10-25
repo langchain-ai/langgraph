@@ -1,6 +1,5 @@
 ---
 hide:
-  - toc
   - navigation
 title: Concepts
 description: Conceptual Guide for LangGraph
@@ -14,7 +13,7 @@ We recommend that you go through at least one of the Tutorials before diving int
 
 The conceptual guide does not cover step-by-step instructions or specific implementation examples — those are found in the How-to guides and Tutorials. For detailed reference material, please see the API reference.
 
-# Concepts
+## Concepts
 
 - [Why LangGraph?](high_level.md): A high-level overview of LangGraph and its goals.
 - [LangGraph Glossary](low_level.md): LangGraph workflows are designed as graphs, with nodes representing different components and edges representing the flow of information between them. This guide provides an overview of the key concepts associated with LangGraph graph primitives.
@@ -26,7 +25,7 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 - [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs. 
 - [FAQ](faq.md): Frequently asked questions about LangGraph.
 
-# LangGraph Platform Concepts
+## LangGraph Platform Concepts
 
 The LangGraph platform is built on top of LangChain's LangGraph framework. 
 

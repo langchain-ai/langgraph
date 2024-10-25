@@ -1,7 +1,7 @@
 ---
 hide:
-  - toc
   - navigation
+title: Tutorials
 ---
 
 # Tutorials
