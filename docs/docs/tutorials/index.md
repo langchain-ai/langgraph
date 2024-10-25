@@ -32,7 +32,7 @@ Learn from example implementations of graphs designed for specific scenarios and
 #### RAG
 
 - [Agentic RAG](rag/langgraph_agentic_rag.ipynb): Use an agent to figure out how to retrieve the most relevant information before using the retrieved information to answer the user's question.
-- [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb): Adaptive RAG is a strategy for RAG that unites (1) query analysis with (2) active / self-corrective RAG. Implementation of: https://arxiv.org/abs/2401.15884
+- [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb): Adaptive RAG is a strategy for RAG that unites (1) query analysis with (2) active / self-corrective RAG. Implementation of: https://arxiv.org/abs/2403.14403
     - For a version that uses a local LLM: [Adaptive RAG using local LLMs](rag/langgraph_adaptive_rag_local.ipynb)
 - [Corrective RAG](rag/langgraph_crag.ipynb): Uses an LLM to grade the quality of the retrieved information from the given source, and if the quality is low, it will try to retrieve the information from another source. Implementation of: https://arxiv.org/pdf/2401.15884.pdf 
     - For a version that uses a local LLM: [Corrective RAG using local LLMs](rag/langgraph_crag_local.ipynb)
