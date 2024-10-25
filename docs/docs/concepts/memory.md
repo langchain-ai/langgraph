@@ -2,7 +2,7 @@
 
 ## What is Memory?
 
-Memory is a system that retains information from past interactions. Consider the frustration of working with a colleague who forgets everything you tell them, requiring constant repetition! As AI agents undertake more complex tasks involving numerous user interactions, equipping them with memory becomes equally crucial for efficiency and user satisfaction. 
+Memory is the ability to encode, store, retain, and subsequently recall information and experiences. Consider the frustration of working with a colleague who forgets everything you tell them, requiring constant repetition! As AI agents undertake more complex tasks involving numerous user interactions, equipping them with memory becomes equally crucial for efficiency and user satisfaction. 
 
 Memory in AI agents refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences. This guide is divided into two sections based on the scope of memory recall: short-term memory and long-term memory.
 
@@ -200,7 +200,9 @@ Long-term memory is a complex challenge without a one-size-fits-all solution. Ho
 
 **What is the type of memory?**
 
-Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_memory), [experiences](https://en.wikipedia.org/wiki/Episodic_memory), and [rules](https://en.wikipedia.org/wiki/Procedural_memory). AI agents can use memory in the same ways. For example, AI agents can use memory to remember specific facts about a user.  to accomplish a task. We expand on several types of memories in the [section below](#memory-types).
+Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_memory), [experiences](https://en.wikipedia.org/wiki/Episodic_memory), and [rules](https://en.wikipedia.org/wiki/Procedural_memory). AI agents can use memory in the same ways. For example, AI agents can use memory to remember specific facts about a user to accomplish a task. We expand on several types of memories in the [section below](#memory-types).
+
+![](img/memory/memory_types.png)
 
 **When do you want to update memories?**
 
@@ -210,11 +212,13 @@ Memory can be updated as part of an agent's application logic (e.g. "on the hot 
 
 Different applications require various types of memory. Although the analogy isn't perfect, examining [human memory types](https://www.psychologytoday.com/us/basics/memory/types-of-memory?ref=blog.langchain.dev) can be insightful. Some [research papers](https://arxiv.org/pdf/2309.02427) have even mapped these human memory types to those used in AI agents.
 
-![](img/memory/memory_types.png)
+![](img/memory/memory_types_agent.png)
 
 ### Semantic Memory
 
 [Semantic memory](https://en.wikipedia.org/wiki/Semantic_memory), both in humans and AI agents, involves the retention of specific facts and concepts. In humans, it can include information learned in school and the understanding of concepts and their relationships. For AI agents, semantic memory is often used to personalize applications by remembering facts or concepts from past interactions. 
+
+#### Profile
 
 Semantic memories can be managed in different ways. For example, memories can be a single, continuously updated "profile" of well-scoped and specific information about a user, organization, or other entity (including the agent itself). A profile is generally just a JSON document with various key-value pairs you've selected to represent your domain. 
 
@@ -222,13 +226,15 @@ When remembering a profile, you will want to make sure that you are **updating**
 
 ![](img/memory/update-profile.png)
 
+#### Collection
+
 Alternatively, memories can be a collection of documents that are continuously updated and extended over time. Each individual memory can be more narrowly scoped and easier to generate, which means that you're less likely to **lose** information over time. It's easier for an LLM to generate _new_ objects for new information than reconcile new information with an existing profile. As a result, a document collection tends to lead to [higher recall downstream](https://en.wikipedia.org/wiki/Precision_and_recall).
 
 However, this shifts some complexity memory updating. The model must now _delete_ or _update_ existing items in the list, which can be tricky. In addition, some models may default to over-inserting and others may default to over-updating. See the [Trustcall](https://github.com/hinthornw/trustcall) package for one way to manage this and consider evaluation (e.g., with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation)) to help you tune the behavior.
 
 Document collections also shift complexity to memory **search** over the list. The `Store` currently supports [filtering by metadata](https://langchain-ai.github.io/langgraph/reference/store/#storage) and will soon add [semantic search shortly](https://python.langchain.com/docs/concepts/vectorstores/), but selecting the most relevant documents can be tricky as the list grows.
 
-Finally, using a collection of memories can make it challenging to provide comprehensive context tow the model. While individual memories may follow a specific schema, this structure might not capture the full context or relationships between memories. As a result, when using these memories to generate responses, the model may lack important contextual information that would be more readily available in a unified profile approach.
+Finally, using a collection of memories can make it challenging to provide comprehensive context to the model. While individual memories may follow a specific schema, this structure might not capture the full context or relationships between memories. As a result, when using these memories to generate responses, the model may lack important contextual information that would be more readily available in a unified profile approach.
 
 ![](img/memory/update-list.png)
 
@@ -240,7 +246,7 @@ Regardless of memory management approach, the central point is that the agent wi
 
 In practice, episodic memories are often implemented through [few-shot example prompting](https://python.langchain.com/docs/concepts/few_shot_prompting/), where agents learn from past sequences to perform tasks correctly. Sometimes it's easier to "show" than "tell" and LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
 
-Note that the memory [store](persistence.md#memory-store) is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a [LangSmith Dataset](https://docs.smith.langchain.com/how_to_guides/datasets) to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). 
+Note that the memory [store](persistence.md#memory-store) is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a [LangSmith Dataset](https://docs.smith.langchain.com/evaluation/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). 
 
 See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
 
