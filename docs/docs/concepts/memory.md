@@ -200,8 +200,6 @@ Long-term memory is a complex challenge without a one-size-fits-all solution. Ho
 
 Humans use memories to remember [facts](https://en.wikipedia.org/wiki/Semantic_memory), [experiences](https://en.wikipedia.org/wiki/Episodic_memory), and [rules](https://en.wikipedia.org/wiki/Procedural_memory). AI agents can use memory in the same ways. For example, AI agents can use memory to remember specific facts about a user to accomplish a task. We expand on several types of memories in the [section below](#memory-types).
 
-![](img/memory/memory_types.png)
-
 **When do you want to update memories?**
 
 Memory can be updated as part of an agent's application logic (e.g. "on the hot path"). In this case, the agent typically decides to remember facts before responding to a user. Alternatively, memory can be updated as a background task (logic that runs in the background / asynchronously and generates memories). We explain the tradeoffs between these approaches in the [section below](#writing-memories).
@@ -210,7 +208,11 @@ Memory can be updated as part of an agent's application logic (e.g. "on the hot 
 
 Different applications require various types of memory. Although the analogy isn't perfect, examining [human memory types](https://www.psychologytoday.com/us/basics/memory/types-of-memory?ref=blog.langchain.dev) can be insightful. Some research (e.g., the [CoALA paper](https://arxiv.org/pdf/2309.02427)) have even mapped these human memory types to those used in AI agents.
 
-![](img/memory/memory_types_agent.png)
+| Memory Type | What is Stored | Human Example | Agent Example |
+|-------------|----------------|---------------|---------------|
+| Semantic | Facts | Things I learned in school | Facts about a user |
+| Episodic | Experiences | Things I did | Past agent actions |
+| Procedural | Instructions | Instincts or motor skills | Agent system prompt |
 
 ### Semantic Memory
 
