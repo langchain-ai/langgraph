@@ -81,6 +81,7 @@ nav:
   - "index.md"
   - "tutorials/index.md"
   - "concepts/index.md"
+  - "how-tos/index.md"
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
