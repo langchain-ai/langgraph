@@ -235,13 +235,14 @@ extra:
           note: >-
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
 validation:
-  # We're `ignoring` nav.ommitted_files because we are going to rely
+  # https://www.mkdocs.org/user-guide/configuration/
+  # We're `ignoring` nav.omitted_files because we are going to rely
   # on files being properly links to from the index pages of:
   # - tutorials
   # - concepts
   # - how-tos
   # - reference
-  nav.omitted_files: ignore
+  omitted_files: ignore
   absolute_links: warn
   unrecognized_links: warn
   # TODO: figure out how to enable 'warn' for this
