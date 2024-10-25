@@ -110,13 +110,11 @@ Please note that here will we use a **prebuilt agent**. One of the big benefits 
 
 ## Troubleshooting
 
-### Errors Reference
+The [Error Reference](../troubleshooting/errors/index.md) page contains guides around resolving common errors you may find while building with LangChain. Errors referenced below will have an `lc_error_code` property corresponding to one of the below codes when they are thrown in code.
 
-The [error reference](troubleshooting/errors/index.md) page contains guides around resolving common errors you may find while building with LangChain. Errors referenced below will have an `lc_error_code` property corresponding to one of the below codes when they are thrown in code.
-
-- [GRAPH_RECURSION_LIMIT](troubleshooting/errors/GRAPH_RECURSION_LIMIT.md)
-- [INVALID_CONCURRENT_GRAPH_UPDATE](troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md)
-- [INVALID_GRAPH_NODE_RETURN_VALUE](troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
-- [MULTIPLE_SUBGRAPHS](troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
+- [GRAPH_RECURSION_LIMIT](../troubleshooting/errors/GRAPH_RECURSION_LIMIT.md)
+- [INVALID_CONCURRENT_GRAPH_UPDATE](../troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md)
+- [INVALID_GRAPH_NODE_RETURN_VALUE](../troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
+- [MULTIPLE_SUBGRAPHS](../troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
 
 
