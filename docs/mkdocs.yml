@@ -83,6 +83,7 @@ nav:
   - "concepts/index.md"
   - "how-tos/index.md"
   - Reference:
+      - "reference/index.md"
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
