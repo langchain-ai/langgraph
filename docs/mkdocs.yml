@@ -26,6 +26,7 @@ theme:
     - navigation.instant.progress
     - navigation.prune
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.top
     - navigation.tracking
     - search.highlight

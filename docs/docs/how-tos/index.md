@@ -11,7 +11,8 @@ Welcome to the LangGraph how-to guides! These guides provide practical, step-by-
 
 ## Controllability
 
-LangGraph is known for being a highly controllable agent framework.
+LangGraph offers a high level of control over the execution of your graph.
+
 These how-to guides show how to achieve that controllability.
 
 - [How to create branches for parallel execution](branching.ipynb)
@@ -20,7 +21,7 @@ These how-to guides show how to achieve that controllability.
 
 ## Persistence
 
-LangGraph makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
+[LangGraph Persistence](../concepts/persistence.md) makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
 
 - [How to add thread-level persistence to your graph](persistence.ipynb)
 - [How to add thread-level persistence to subgraphs](subgraph-persistence.ipynb)
@@ -39,8 +40,8 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 
 ## Human in the Loop
 
-One of LangGraph's main benefits is that it makes human-in-the-loop workflows easy.
-These guides cover common examples of that.
+[Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
+you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
 
 - [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
 - [How to add dynamic breakpoints](human_in_the_loop/dynamic_breakpoints.ipynb)
@@ -51,8 +52,7 @@ These guides cover common examples of that.
 
 ## Streaming
 
-LangGraph is built to be streaming first.
-These guides show how to use different streaming modes.
+[Streaming](../concepts/streaming.md) is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
 
 - [How to stream full state of your graph](stream-values.ipynb)
 - [How to stream state updates of your graph](stream-updates.ipynb)
@@ -68,6 +68,10 @@ These guides show how to use different streaming modes.
 
 ## Tool calling
 
+[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of chat model API that accepts tool schemas, along with messages, as input and returns invocations of those tools as part of the output message. 
+
+These how-to guides show common patterns for tool calling with LangGraph:
+
 - [How to call tools using ToolNode](tool-calling.ipynb)
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
 - [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
@@ -75,6 +79,8 @@ These guides show how to use different streaming modes.
 - [How to handle large numbers of tools](many-tools.ipynb)
 
 ## Subgraphs
+
+[Subgraphs](../concepts/low_level/#subgraphs) allow you to reuse an existing graph from another graph. These how-to guides show how to use subgraphs:
 
 - [How to add and use subgraphs](subgraph.ipynb)
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
@@ -99,8 +105,11 @@ These guides show how to use different streaming modes.
 
 ## Prebuilt ReAct Agent
 
-These guides show how to use the prebuilt ReAct agent.
-Please note that here will we use a **prebuilt agent**. One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
+The LangGraph [prebuilt ReAct agent](../reference/prebuilt/#langgraph.prebuilt.chat_agent_executor.create_react_agent) is pre-built implementation of a [tool calling agent](concepts/agentic_concepts/#tool-calling-agent).
+
+One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
+
+These guides show how to use the prebuilt ReAct agent:
 
 - [How to create a ReAct agent](create-react-agent.ipynb)
 - [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
