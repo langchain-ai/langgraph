@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = ">=0.3.13,<0.4"
+langchain-core = ">=0.2.39,<0.4"
 langgraph-checkpoint = "^2.0.0"
 langgraph-sdk = "^0.1.32"
 
@@ -31,7 +31,7 @@ langgraph-checkpoint-duckdb = {path = "../checkpoint-duckdb", develop = true}
 langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 langgraph-sdk = {path = "../sdk-py", develop = true}
-psycopg = {extras = ["binary"], version = "<3.1.20", python = ">=3.10"}
+psycopg = {extras = ["binary"], version = ">=3.0.0,<3.1.20", python = ">=3.10"}
 uvloop = "0.21.0beta1"
 pyperf = "^2.7.0"
 py-spy = "^0.3.14"

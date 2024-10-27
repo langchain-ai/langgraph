@@ -1,4 +1,5 @@
 import uuid
+import warnings
 from functools import partial
 from typing import (
     Annotated,
@@ -19,7 +20,6 @@ from langchain_core.messages import (
     MessageLikeRepresentation,
     RemoveMessage,
     convert_to_messages,
-    convert_to_openai_messages,
     message_chunk_to_message,
 )
 
@@ -203,4 +203,16 @@ class MessagesState(TypedDict):
 
 
 def _format_messages_content(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
-    return convert_to_messages(convert_to_openai_messages(messages))
+    try:
+        from langchain_core.messages import convert_to_openai_messages
+    except ImportError:
+        msg = (
+            "Must have langchain-core>=0.3.11 installed to use automatic content "
+            "formatting (content_format='openai'). Please update your langchain-core "
+            "version or remove the content_format flag. Returning un-formatted "
+            "messages."
+        )
+        warnings.warn(msg)
+        return list(messages)
+    else:
+        return convert_to_messages(convert_to_openai_messages(messages))
