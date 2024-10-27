@@ -204,8 +204,8 @@ class MessagesState(TypedDict):
 
 def _format_messages_content(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
     try:
-        from langchain_core.messages import (
-            convert_to_openai_messages,  # type: ignore[attr-defined]
+        from langchain_core.messages import (  # type: ignore[attr-defined]
+            convert_to_openai_messages,
         )
     except ImportError:
         msg = (
