@@ -285,4 +285,6 @@ def test_messages_state_format_openai():
     app = graph.compile()
 
     result = app.invoke({"messages": [("user", "meow")]})
+    for m in result["messages"]:
+        m.id = None
     assert result == {"messages": expected}
