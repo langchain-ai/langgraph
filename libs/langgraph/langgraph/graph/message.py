@@ -1,12 +1,25 @@
 import uuid
-from typing import Annotated, TypedDict, Union, cast
+from functools import partial
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from langchain_core.messages import (
     AnyMessage,
+    BaseMessage,
     BaseMessageChunk,
     MessageLikeRepresentation,
     RemoveMessage,
     convert_to_messages,
+    convert_to_openai_messages,
     message_chunk_to_message,
 )
 
@@ -15,7 +28,29 @@ from langgraph.graph.state import StateGraph
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
 
 
-def add_messages(left: Messages, right: Messages) -> Messages:
+def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
+    def _add_messages(
+        left: Optional[Messages] = None, right: Optional[Messages] = None, **kwargs: Any
+    ) -> Union[Messages, Callable[[Messages, Messages], Messages]]:
+        if left is not None and right is not None:
+            return func(left, right, **kwargs)
+        elif left is not None or right is not None:
+            msg = ""
+            raise ValueError(msg)
+        else:
+            return partial(func, **kwargs)
+
+    _add_messages.__doc__ = func.__doc__
+    return cast(Callable[[Messages, Messages], Messages], _add_messages)
+
+
+@_add_messages_wrapper
+def add_messages(
+    left: Messages,
+    right: Messages,
+    *,
+    content_format: Optional[Literal["openai"]] = None,
+) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
     By default, this ensures the state is "append-only", unless the
@@ -100,6 +135,15 @@ def add_messages(left: Messages, right: Messages) -> Messages:
 
             merged.append(m)
     merged = [m for m in merged if m.id not in ids_to_remove]
+
+    if content_format == "openai":
+        merged = _format_messages_content(merged)
+    elif content_format:
+        msg = f"Unrecognized {content_format=}. Expected one of 'openai', None."
+        raise ValueError(msg)
+    else:
+        pass
+
     return merged
 
 
@@ -156,3 +200,7 @@ class MessageGraph(StateGraph):
 
 class MessagesState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
+
+
+def _format_messages_content(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    return convert_to_messages(convert_to_openai_messages(messages))

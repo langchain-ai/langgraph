@@ -8,9 +8,11 @@ from langchain_core.messages import (
     HumanMessage,
     RemoveMessage,
     SystemMessage,
+    ToolMessage,
 )
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import TypedDict
 
 from langgraph.graph import add_messages
 from langgraph.graph.message import MessagesState
@@ -178,3 +180,102 @@ def test_messages_state(state_schema):
             _AnyIdHumanMessage(content="foo"),
         ]
     }
+
+
+def test_messages_state_format_openai():
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages(content_format="openai")]
+
+    def foo(state):
+        messages = [
+            HumanMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": "Here's an image:",
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": "1234",
+                        },
+                    },
+                ]
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "tool_use",
+                        "name": "foo",
+                        "input": {"bar": "baz"},
+                        "id": "1",
+                    }
+                ]
+            ),
+            HumanMessage(
+                content=[
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "1",
+                        "is_error": False,
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": "1234",
+                                },
+                            },
+                        ],
+                    }
+                ]
+            ),
+        ]
+        return {"messages": messages}
+
+    expected = [
+        HumanMessage(content="meow"),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "Here's an image:"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,1234"},
+                },
+            ],
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "foo",
+                    "type": "tool_calls",
+                    "args": {"bar": "baz"},
+                    "id": "1",
+                }
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,1234"},
+                }
+            ],
+            tool_call_id="1",
+        ),
+    ]
+
+    graph = StateGraph(State)
+    graph.add_edge(START, "foo")
+    graph.add_edge("foo", END)
+    graph.add_node(foo)
+
+    app = graph.compile()
+
+    result = app.invoke({"messages": [("user", "meow")]})
+    assert result == {"messages": expected}
