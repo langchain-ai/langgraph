@@ -191,7 +191,7 @@ def test_messages_state(state_schema):
 )
 def test_messages_state_format_openai():
     class State(TypedDict):
-        messages: Annotated[list[AnyMessage], add_messages(content_format="openai")]
+        messages: Annotated[list[AnyMessage], add_messages(format="langchain-openai")]
 
     def foo(state):
         messages = [
