@@ -852,12 +852,27 @@ export class RunsClient extends BaseClient {
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
-    return this.fetch<ThreadState["values"]>(endpoint, {
+    const response = await this.fetch<ThreadState["values"]>(endpoint, {
       method: "POST",
       json,
       timeoutMs: null,
       signal: payload?.signal,
     });
+    const raiseError =
+      payload?.raiseError !== undefined ? payload.raiseError : true;
+    if (
+      raiseError &&
+      "__error__" in response &&
+      typeof response.__error__ === "object" &&
+      response.__error__ &&
+      "error" in response.__error__ &&
+      "message" in response.__error__
+    ) {
+      throw new Error(
+        `${response.__error__?.error}: ${response.__error__?.message}`,
+      );
+    }
+    return response;
   }
 
   /**
