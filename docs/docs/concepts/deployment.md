@@ -45,7 +45,7 @@ LangGraph supports [multiple different streaming modes](streaming.md). When depl
 
 As your LLM application gets more complicated and starts taking longer to run, you may no longer want to stream back results. This is because these runs may take a while to finish and it may not make sense to hold open a connection for all that time.
 
-As a result, you may also want to consider exposing an endpoint to run your LangGraph as a background run. When doing this, you will need to expose an endpoint that you can poll to check if your run is finished, or what its status is.
+As a result, you may also want to run your LangGraph in the background. When doing this, you will need to expose an endpoint to start the background run and another one that you can poll to check the status of the run (e.g. if the run is finished).
 
 ## Long runs
 
@@ -67,12 +67,12 @@ We call this ["double texting"](double_texting.md) and you will need to think ab
 
 Many applications require some level of persistence. An example of this is persistent conversation history, where you can have a conversation one day, and then come back later and resume that conversation.
 
-LangGraph has built in support for this with [checkpointers](persistence.md#checkpoints). When deploying your LangGraph application, you therefor need to also deploy a production-grade checkpointer along side it.
+LangGraph has built in support for this with [checkpointers](persistence.md#checkpoints). When deploying your LangGraph application, you therefore need to also deploy a production-grade checkpointer along side it.
 
 
 ## Human-in-the-loop
 
-Long running agents can mess up. A common UX paradigm to overcome this is to add more [human-in-the-loop](human_in_the_loop.md) features to your application.
+Agents can make mistakes. A common UX paradigm to overcome this is to add more [human-in-the-loop](human_in_the_loop.md) features to your application.
 
 These will all be powered by [checkpointers](persistence.md#checkpoints). Assuming you have already deployed one (see [above](#checkpointers)) you additionally need to expose the correct endpoints to allow your application to access the current state and the state history, and to update the state.
 
@@ -81,4 +81,4 @@ These will all be powered by [checkpointers](persistence.md#checkpoints). Assumi
 
 In addition to thread-level persistence (covered above by [checkpointers](#checkpointers)) you may need to deploy some storage to support cross-thread memory.
 
-LangGraph has built in support for this with [stores](persistence.md#memory-store). When deploying your LangGraph application, you therefor need to also deploy a production-grade store alongside it.
+LangGraph has built in support for this with [stores](persistence.md#memory-store). When deploying your LangGraph application, you therefore need to also deploy a production-grade store alongside it.
