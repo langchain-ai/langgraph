@@ -1,4 +1,6 @@
+import asyncio
 import json
+import os
 import pathlib
 import sys
 import langgraph_cli
@@ -29,8 +31,6 @@ def test(
             "--rm",
             "-p",
             f"{port}:8000",
-            "-e",
-            "REDIS_URI=redis://langgraph-redis:6379",
         ]
         if isinstance(config_json["env"], str):
             args.extend(
@@ -70,8 +70,11 @@ def test(
                 ]
             )
 
+        _task = None
+
         def on_stdout(line: str):
-            if "GET /ok" in line:
+            nonlocal _task
+            if "GET /ok" in line or "Uvicorn running on" in line:
                 set("")
                 sys.stdout.write(
                     f"""Ready!
@@ -79,17 +82,27 @@ def test(
 """
                 )
                 sys.stdout.flush()
+                _task.cancel()
                 return True
+            return False
 
-        runner.run(
-            subp_exec(
-                "docker",
-                *args,
-                tag,
-                verbose=verbose,
-                on_stdout=on_stdout,
+        async def subp_exec_task(*args, **kwargs):
+            nonlocal _task
+            _task = asyncio.create_task(subp_exec(*args, **kwargs))
+            await _task
+
+        try:
+            runner.run(
+                subp_exec_task(
+                    "docker",
+                    *args,
+                    tag,
+                    verbose=verbose,
+                    on_stdout=on_stdout,
+                )
             )
-        )
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":
