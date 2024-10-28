@@ -2273,7 +2273,7 @@ def get_sync_client(
     client = httpx.Client(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
+        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
         headers=get_headers(api_key, headers),
     )
     return SyncLangGraphClient(client)
