@@ -39,7 +39,7 @@ For more complicated agent deployments (whether using LangGraph or not), you wil
 
 [Streaming](streaming.md) is a key part of LLM applications. It is usually necessary to stream back both tokens and intermediate steps of longer running agents. This is because LLM applications can take a while to run end-to-end, and so streaming helps show the user that something is happening.
 
-LangGraph support [multiple different streaming modes](streaming.md). When deploying, you will want to make sure that you expose the relevant endpoints.
+LangGraph supports [multiple different streaming modes](streaming.md). When deploying, you will want to make sure that you expose the relevant endpoints.
 
 ## Background runs
 
