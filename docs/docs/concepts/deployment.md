@@ -22,14 +22,14 @@ from your_agent_package import graph
 
 app = FastAPI()
 
-@app.get("/")
+@app.get("/foo")
 async def root():
-    return graph.invoke({...})
+    return await graph.ainvoke({...})
 ```
 
 For simple applications, this is sufficient and is not that different from deploying Python applications in general, and so we will not go into this in too much detail here.
 
-For more complicated LangGraph deployments, you will run into some issues. The rest of this guide will discuss those issues.
+For more complicated agent deployments (whether using LangGraph or not), you will run into some issues. The rest of this guide will discuss those issues.
 
 > 📘 LangGraph Platform
 >
