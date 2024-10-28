@@ -75,7 +75,7 @@
           "Assistants"
         ],
         "summary": "Search Assistants",
-        "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants (omit `metadata` and `template_id`). The API specification does not specify how the search is implemented.",
+        "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants. The API specification does not specify how the search is implemented.",
         "operationId": "search_assistants_assistants_search_post",
         "requestBody": {
           "content": {
@@ -652,7 +652,7 @@
           "Threads"
         ],
         "summary": "Search Threads",
-        "description": "Search for threads.\n\nThis endpoint also functions as the endpoint to list all threads (omit `metadata`, `values`, and `status`). The API specification does not specify how the search is implemented.",
+        "description": "Search for threads.\n\nThis endpoint also functions as the endpoint to list all threads.",
         "operationId": "search_threads_threads_search_post",
         "requestBody": {
           "content": {
