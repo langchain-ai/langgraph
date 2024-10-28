@@ -4,12 +4,36 @@
     "title": "LangGraph",
     "version": "0.1.0"
   },
+  "tags": [
+    {
+      "name": "Assistants",
+      "description": "An assistant is a configured instance of a graph."
+    },
+    {
+      "name": "Threads",
+      "description": "A thread contains the accumulated outputs of a group of runs. The outputs are persisted to a thread's state."
+    },
+    {
+      "name": "Runs",
+      "description": "A run is an invocation of an assistant. The output of a run is persisted to a thread's state."
+    },
+    {
+      "name": "Runs (Stateless)",
+      "description": "A run is an invocation of an assistant. The output of a stateless run is not persisted to any thread state by default."
+    },
+    {
+      "name": "Store",
+      "description": "Store is an API for managing persistent key-value store (long-term memory) that is available from any thread."
+    }
+  ],
   "paths": {
     "/assistants": {
       "post": {
-        "tags": ["assistants/create"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Create Assistant",
-        "description": "Create an assistant.",
+        "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `PATCH /assistants/{assistant_id}/` endpoint.",
         "operationId": "create_assistant_assistants_post",
         "requestBody": {
           "content": {
@@ -23,7 +47,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -47,9 +71,11 @@
     },
     "/assistants/search": {
       "post": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Search Assistants",
-        "description": "List assistants.",
+        "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants (omit `metadata` and `template_id`). The API specification does not specify how the search is implemented.",
         "operationId": "search_assistants_assistants_search_post",
         "requestBody": {
           "content": {
@@ -63,7 +89,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -91,7 +117,9 @@
     },
     "/assistants/{assistant_id}": {
       "get": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Get Assistant",
         "description": "Get an assistant by ID.",
         "operationId": "get_assistant_assistants__assistant_id__get",
@@ -102,7 +130,7 @@
             "schema": {
               "type": "string",
               "format": "uuid",
-              "title": "Assistant Id",
+              "title": "Assistant ID",
               "description": "The ID of the assistant."
             },
             "name": "assistant_id",
@@ -111,7 +139,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -133,9 +161,11 @@
         }
       },
       "delete": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Delete Assistant",
-        "description": "Delete an assistant by ID.",
+        "description": "Delete an assistant by ID.\n\nAll versions of the assistant will be deleted as well.",
         "operationId": "delete_assistant_assistants__assistant_id__delete",
         "parameters": [
           {
@@ -144,7 +174,7 @@
             "schema": {
               "type": "string",
               "format": "uuid",
-              "title": "Assistant Id",
+              "title": "Assistant ID",
               "description": "The ID of the assistant."
             },
             "name": "assistant_id",
@@ -153,7 +183,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -173,7 +203,9 @@
         }
       },
       "patch": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Patch Assistant",
         "description": "Update an assistant.",
         "operationId": "patch_assistant_assistants__assistant_id__patch",
@@ -184,7 +216,7 @@
             "schema": {
               "type": "string",
               "format": "uuid",
-              "title": "Assistant Id",
+              "title": "Assistant ID",
               "description": "The ID of the assistant."
             },
             "name": "assistant_id",
@@ -203,7 +235,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -227,7 +259,9 @@
     },
     "/assistants/{assistant_id}/graph": {
       "get": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Get Assistant Graph",
         "description": "Get an assistant by ID.",
         "operationId": "get_assistant_graph_assistants__assistant_id__graph_get",
@@ -238,7 +272,7 @@
             "schema": {
               "type": "string",
               "format": "uuid",
-              "title": "Assistant Id",
+              "title": "Assistant ID",
               "description": "The ID of the assistant."
             },
             "name": "assistant_id",
@@ -248,7 +282,14 @@
             "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.",
             "required": false,
             "schema": {
-              "oneOf": [{ "type": "boolean" }, { "type": "integer" }],
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
               "title": "Xray",
               "default": false,
               "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included."
@@ -259,7 +300,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -290,7 +331,9 @@
     },
     "/assistants/{assistant_id}/subgraphs": {
       "get": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Get Assistant Subgraphs",
         "description": "Get an assistant's subgraphs.",
         "operationId": "get_assistant_subgraphs_assistants__assistant_id__subgraphs_get",
@@ -320,7 +363,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -344,7 +387,9 @@
     },
     "/assistants/{assistant_id}/subgraphs/{namespace}": {
       "get": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Get Assistant Subgraphs by Namespace",
         "description": "Get an assistant's subgraphs filtered by namespace.",
         "operationId": "get_assistant_subgraphs_assistants__assistant_id__subgraphs__namespace__get",
@@ -384,7 +429,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -408,7 +453,9 @@
     },
     "/assistants/{assistant_id}/schemas": {
       "get": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Get Assistant Schemas",
         "description": "Get an assistant by ID.",
         "operationId": "get_assistant_schemas_assistants__assistant_id__schemas_get",
@@ -428,7 +475,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -452,7 +499,9 @@
     },
     "/assistants/{assistant_id}/versions": {
       "post": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Get Assistant Versions",
         "description": "Get all versions of an assistant.",
         "operationId": "get_assistant_versions_assistants__assistant_id__versions_get",
@@ -472,7 +521,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -500,7 +549,9 @@
     },
     "/assistants/{assistant_id}/change_version": {
       "post": {
-        "tags": ["assistants/manage"],
+        "tags": [
+          "Assistants"
+        ],
         "summary": "Change Assistant Version",
         "description": "Change the version of an assistant.",
         "operationId": "change_assistant_version__assistant_id__change_version__version_post",
@@ -531,7 +582,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -555,7 +606,9 @@
     },
     "/threads": {
       "post": {
-        "tags": ["threads/create"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Create Thread",
         "description": "Create a thread.",
         "operationId": "create_thread_threads_post",
@@ -571,7 +624,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -595,9 +648,11 @@
     },
     "/threads/search": {
       "post": {
-        "tags": ["threads/manage"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Search Threads",
-        "description": "List threads.",
+        "description": "Search for threads.\n\nThis endpoint also functions as the endpoint to list all threads (omit `metadata`, `values`, and `status`). The API specification does not specify how the search is implemented.",
         "operationId": "search_threads_threads_search_post",
         "requestBody": {
           "content": {
@@ -611,7 +666,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -639,9 +694,11 @@
     },
     "/threads/{thread_id}/state": {
       "get": {
-        "tags": ["threads/state"],
-        "summary": "Get Latest Thread State",
-        "description": "Get state for a thread.",
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Get Thread State",
+        "description": "Get state for a thread.\n\nThe latest state of the thread (i.e. latest checkpoint) is returned.",
         "operationId": "get_latest_thread_state_threads__thread_id__state_get",
         "parameters": [
           {
@@ -659,7 +716,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -681,7 +738,9 @@
         }
       },
       "post": {
-        "tags": ["threads/state"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Update Thread State",
         "description": "Add state to a thread.",
         "operationId": "update_thread_state_threads__thread_id__state_post",
@@ -711,7 +770,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -735,7 +794,9 @@
     },
     "/threads/{thread_id}/state/checkpoint": {
       "post": {
-        "tags": ["threads/state"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Get Thread State At Checkpoint",
         "description": "Get state for a thread at a specific checkpoint.",
         "operationId": "post_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
@@ -751,7 +812,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -775,7 +836,9 @@
     },
     "/threads/{thread_id}/history": {
       "get": {
-        "tags": ["threads/state"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Get Thread History",
         "description": "Get all past states for a thread.",
         "operationId": "get_thread_history_threads__thread_id__history_get",
@@ -814,7 +877,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -840,7 +903,9 @@
         }
       },
       "post": {
-        "tags": ["threads/state"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Get Thread History Post",
         "description": "Get all past states for a thread.",
         "operationId": "get_thread_history_post_threads__thread_id__history_post",
@@ -870,7 +935,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -898,7 +963,9 @@
     },
     "/threads/{thread_id}": {
       "get": {
-        "tags": ["threads/manage"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Get Thread",
         "description": "Get a thread by ID.",
         "operationId": "get_thread_threads__thread_id__get",
@@ -918,7 +985,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -940,7 +1007,9 @@
         }
       },
       "delete": {
-        "tags": ["threads/manage"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Delete Thread",
         "description": "Delete a thread by ID.",
         "operationId": "delete_thread_threads__thread_id__delete",
@@ -960,7 +1029,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -980,7 +1049,9 @@
         }
       },
       "patch": {
-        "tags": ["threads/manage"],
+        "tags": [
+          "Threads"
+        ],
         "summary": "Patch Thread",
         "description": "Update a thread.",
         "operationId": "patch_thread_threads__thread_id__patch",
@@ -1010,7 +1081,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1034,7 +1105,9 @@
     },
     "/threads/{thread_id}/runs": {
       "get": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "List Runs",
         "description": "List runs for a thread.",
         "operationId": "list_runs_http_threads__thread_id__runs_get",
@@ -1074,7 +1147,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1099,9 +1172,11 @@
         }
       },
       "post": {
-        "tags": ["runs/create"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Create Background Run",
-        "description": "Create a run, return immediately.",
+        "description": "Create a run in existing thread. Don't wait for the final output. Return immediately.",
         "operationId": "create_run_threads__thread_id__runs_post",
         "parameters": [
           {
@@ -1129,7 +1204,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1153,7 +1228,9 @@
     },
     "/threads/{thread_id}/runs/crons": {
       "post": {
-        "tags": ["runs/create"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Create Thread Cron",
         "description": "Create a cron to schedule runs on a thread.",
         "operationId": "create_thread_cron_threads__thread_id__runs_crons_post",
@@ -1183,7 +1260,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1207,9 +1284,11 @@
     },
     "/threads/{thread_id}/runs/stream": {
       "post": {
-        "tags": ["runs/create"],
-        "summary": "Create Streaming Run",
-        "description": "Create a run, stream the output.",
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Create Run, Stream Output",
+        "description": "Create a run in existing thread. Stream the output.",
         "operationId": "stream_run_threads__thread_id__runs_stream_post",
         "parameters": [
           {
@@ -1237,7 +1316,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1259,9 +1338,11 @@
     },
     "/threads/{thread_id}/runs/wait": {
       "post": {
-        "tags": ["runs/create"],
-        "summary": "Create Run and Get Output",
-        "description": "Create a run, return the final output.",
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Create Run, Wait for Output",
+        "description": "Create a run in existing thread. Wait for the final output and then return it.",
         "operationId": "wait_run_threads__thread_id__runs_wait_post",
         "parameters": [
           {
@@ -1289,7 +1370,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1311,7 +1392,9 @@
     },
     "/threads/{thread_id}/runs/{run_id}": {
       "get": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Get Run",
         "description": "Get a run by ID.",
         "operationId": "get_run_http_threads__thread_id__runs__run_id__get",
@@ -1343,7 +1426,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1365,7 +1448,9 @@
         }
       },
       "delete": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Delete Run",
         "description": "Delete a run by ID.",
         "operationId": "delete_run_threads__thread_id__runs__run_id__delete",
@@ -1397,7 +1482,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1419,7 +1504,9 @@
     },
     "/threads/{thread_id}/runs/{run_id}/join": {
       "get": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Join Run",
         "description": "Wait for a run to finish.",
         "operationId": "join_run_http_threads__thread_id__runs__run_id__join_get",
@@ -1451,7 +1538,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1473,7 +1560,9 @@
     },
     "/threads/{thread_id}/runs/{run_id}/stream": {
       "get": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Join Run Stream",
         "description": "Join a run stream. This endpoint streams output in real-time from a run similar to the /threads/__THREAD_ID__/runs/stream endpoint. Only output produced after this endpoint is called will be streamed.",
         "operationId": "stream_run_http_threads__thread_id__runs__run_id__join_get",
@@ -1505,7 +1594,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1527,7 +1616,9 @@
     },
     "/threads/{thread_id}/runs/{run_id}/cancel": {
       "post": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Cancel Run",
         "operationId": "cancel_run_http_threads__thread_id__runs__run_id__cancel_post",
         "parameters": [
@@ -1568,7 +1659,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1590,7 +1681,9 @@
     },
     "/runs/crons": {
       "post": {
-        "tags": ["runs/create"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Create Cron",
         "description": "Create a cron to schedule runs on new threads.",
         "operationId": "create_cron_runs_crons_post",
@@ -1606,7 +1699,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1630,7 +1723,9 @@
     },
     "/runs/crons/search": {
       "post": {
-        "tags": ["crons/search"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Search Crons",
         "description": "Search all active crons",
         "operationId": "search_crons_runs_crons_post",
@@ -1646,7 +1741,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1674,8 +1769,10 @@
     },
     "/runs/stream": {
       "post": {
-        "tags": ["runs/create"],
-        "summary": "Stream Run in new Thread",
+        "tags": [
+          "Runs (Stateless)"
+        ],
+        "summary": "Create Run, Stream Output",
         "description": "Create a run in a new thread, stream the output.",
         "operationId": "stream_run_stateless_runs_stream_post",
         "requestBody": {
@@ -1690,7 +1787,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1712,9 +1809,11 @@
     },
     "/runs/wait": {
       "post": {
-        "tags": ["runs/create"],
-        "summary": "Create Run in new Thread and Get Output",
-        "description": "Create a run in a new thread, return the final output.",
+        "tags": [
+          "Runs (Stateless)"
+        ],
+        "summary": "Create Run, Wait for Output",
+        "description": "Create a run in a new thread. Wait for the final output and then return it.",
         "operationId": "wait_run_stateless_runs_wait_post",
         "requestBody": {
           "content": {
@@ -1728,7 +1827,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1750,9 +1849,11 @@
     },
     "/runs": {
       "post": {
-        "tags": ["runs/create"],
-        "summary": "Create Background Run in new Thread",
-        "description": "Create a run in a new thread, return immediately.",
+        "tags": [
+          "Runs (Stateless)"
+        ],
+        "summary": "Create Background Run",
+        "description": "Create a run in a new thread. Don't wait for the final output. Return immediately.",
         "operationId": "run_stateless_runs_post",
         "requestBody": {
           "content": {
@@ -1766,7 +1867,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1788,7 +1889,9 @@
     },
     "/runs/batch": {
       "post": {
-        "tags": ["runs/create"],
+        "tags": [
+          "Runs (Stateless)"
+        ],
         "summary": "Create Run Batch",
         "description": "Create a batch of runs in new threads, return immediately.",
         "operationId": "run_batch_stateless_runs_post",
@@ -1804,7 +1907,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1826,7 +1929,9 @@
     },
     "/runs/crons/{cron_id}": {
       "delete": {
-        "tags": ["runs/manage"],
+        "tags": [
+          "Runs"
+        ],
         "summary": "Delete Cron",
         "description": "Delete a cron by ID.",
         "operationId": "delete_cron_runs_crons__cron_id__delete",
@@ -1844,7 +1949,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {}
@@ -1864,62 +1969,75 @@
         }
       }
     },
-
     "/store/items": {
       "put": {
-        "tags": ["store/manage"],
+        "tags": [
+          "Store"
+        ],
         "summary": "Store or update an item.",
         "operationId": "put_item",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StorePutRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/StorePutRequest"
+              }
             }
           }
         },
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Success"
           },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
         }
       },
       "delete": {
-        "tags": ["store/manage"],
+        "tags": [
+          "Store"
+        ],
         "summary": "Delete an item.",
         "operationId": "delete_item",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StoreDeleteRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/StoreDeleteRequest"
+              }
             }
           }
         },
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Success"
           },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
         }
       },
       "get": {
-        "tags": ["store/manage"],
+        "tags": [
+          "Store"
+        ],
         "summary": "Retrieve a single item.",
         "operationId": "get_item",
         "parameters": [
@@ -1945,10 +2063,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Item" }
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
               }
             }
           },
@@ -1956,7 +2076,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1965,23 +2087,29 @@
     },
     "/store/items/search": {
       "post": {
-        "tags": ["store/manage"],
+        "tags": [
+          "Store"
+        ],
         "summary": "Search for items within a namespace prefix.",
         "operationId": "search_items",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StoreSearchRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/StoreSearchRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SearchItemsResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/SearchItemsResponse"
+                }
               }
             }
           },
@@ -1989,7 +2117,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1998,7 +2128,9 @@
     },
     "/store/namespaces": {
       "post": {
-        "tags": ["store/manage"],
+        "tags": [
+          "Store"
+        ],
         "summary": "List namespaces with optional match conditions.",
         "operationId": "list_namespaces",
         "requestBody": {
@@ -2013,7 +2145,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -2026,7 +2158,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2127,7 +2261,9 @@
           }
         },
         "type": "object",
-        "required": ["graph_id"],
+        "required": [
+          "graph_id"
+        ],
         "title": "AssistantCreate",
         "description": "Payload for creating an assistant."
       },
@@ -2301,7 +2437,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["*"]
+                "enum": [
+                  "*"
+                ]
               },
               {
                 "items": {
@@ -2316,7 +2454,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["*"]
+                "enum": [
+                  "*"
+                ]
               },
               {
                 "items": {
@@ -2329,13 +2469,21 @@
           },
           "multitask_strategy": {
             "type": "string",
-            "enum": ["reject", "rollback", "interrupt", "enqueue"],
+            "enum": [
+              "reject",
+              "rollback",
+              "interrupt",
+              "enqueue"
+            ],
             "title": "Multitask Strategy",
             "default": "reject"
           }
         },
         "type": "object",
-        "required": ["assistant_id", "schedule"],
+        "required": [
+          "assistant_id",
+          "schedule"
+        ],
         "title": "CronCreate",
         "description": "Payload for creating a cron."
       },
@@ -2396,7 +2544,11 @@
           }
         },
         "type": "object",
-        "required": ["graph_id", "state_schema", "config_schema"],
+        "required": [
+          "graph_id",
+          "state_schema",
+          "config_schema"
+        ],
         "title": "GraphSchema"
       },
       "GraphSchemaNoId": {
@@ -2419,7 +2571,12 @@
           }
         },
         "type": "object",
-        "required": ["input_schema", "output_schema", "state_schema", "config_schema"],
+        "required": [
+          "input_schema",
+          "output_schema",
+          "state_schema",
+          "config_schema"
+        ],
         "title": "GraphSchemaNoId"
       },
       "Subgraphs": {
@@ -2472,7 +2629,13 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "error", "success", "timeout", "interrupted"],
+            "enum": [
+              "pending",
+              "error",
+              "success",
+              "timeout",
+              "interrupted"
+            ],
             "title": "Status"
           },
           "metadata": {
@@ -2485,7 +2648,12 @@
           },
           "multitask_strategy": {
             "type": "string",
-            "enum": ["reject", "rollback", "interrupt", "enqueue"],
+            "enum": [
+              "reject",
+              "rollback",
+              "interrupt",
+              "enqueue"
+            ],
             "title": "Multitask Strategy"
           }
         },
@@ -2576,7 +2744,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["*"]
+                "enum": [
+                  "*"
+                ]
               },
               {
                 "items": {
@@ -2591,7 +2761,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["*"]
+                "enum": [
+                  "*"
+                ]
               },
               {
                 "items": {
@@ -2631,11 +2803,16 @@
               }
             ],
             "title": "Stream Mode",
-            "default": ["values"]
+            "default": [
+              "values"
+            ]
           },
           "on_disconnect": {
             "type": "string",
-            "enum": ["cancel", "continue"],
+            "enum": [
+              "cancel",
+              "continue"
+            ],
             "title": "On Disconnect",
             "default": "cancel"
           },
@@ -2648,7 +2825,12 @@
           },
           "multitask_strategy": {
             "type": "string",
-            "enum": ["reject", "rollback", "interrupt", "enqueue"],
+            "enum": [
+              "reject",
+              "rollback",
+              "interrupt",
+              "enqueue"
+            ],
             "title": "Multitask Strategy",
             "default": "reject"
           },
@@ -2659,7 +2841,9 @@
           }
         },
         "type": "object",
-        "required": ["assistant_id"],
+        "required": [
+          "assistant_id"
+        ],
         "title": "RunCreateStateful",
         "description": "Payload for creating a run."
       },
@@ -2741,7 +2925,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["*"]
+                "enum": [
+                  "*"
+                ]
               },
               {
                 "items": {
@@ -2756,7 +2942,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["*"]
+                "enum": [
+                  "*"
+                ]
               },
               {
                 "items": {
@@ -2796,7 +2984,9 @@
               }
             ],
             "title": "Stream Mode",
-            "default": ["values"]
+            "default": [
+              "values"
+            ]
           },
           "feedback_keys": {
             "items": {
@@ -2807,13 +2997,19 @@
           },
           "on_completion": {
             "type": "string",
-            "enum": ["delete", "keep"],
+            "enum": [
+              "delete",
+              "keep"
+            ],
             "title": "On Completion",
             "default": "delete"
           },
           "on_disconnect": {
             "type": "string",
-            "enum": ["cancel", "continue"],
+            "enum": [
+              "cancel",
+              "continue"
+            ],
             "title": "On Disconnect",
             "default": "cancel"
           },
@@ -2824,7 +3020,9 @@
           }
         },
         "type": "object",
-        "required": ["assistant_id"],
+        "required": [
+          "assistant_id"
+        ],
         "title": "RunCreateStateless",
         "description": "Payload for creating a streaming run."
       },
@@ -2928,7 +3126,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["idle", "busy", "interrupted", "error"],
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted",
+              "error"
+            ],
             "title": "Status",
             "description": "Filter by thread status."
           },
@@ -2975,7 +3178,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["idle", "busy", "interrupted", "error"],
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted",
+              "error"
+            ],
             "title": "Status"
           },
           "values": {
@@ -3036,7 +3244,9 @@
             "description": "Include subgraph states."
           }
         },
-        "required": ["checkpoint"],
+        "required": [
+          "checkpoint"
+        ],
         "type": "object",
         "title": "ThreadStateCheckpointRequest",
         "description": "Payload for getting the state of a thread at a checkpoint."
@@ -3092,7 +3302,10 @@
                   "$ref": "#/components/schemas/ThreadState"
                 }
               },
-              "required": ["id", "name"]
+              "required": [
+                "id",
+                "name"
+              ]
             },
             "type": "array",
             "title": "Tasks"
@@ -3115,7 +3328,13 @@
           }
         },
         "type": "object",
-        "required": ["values", "next", "checkpoint", "metadata", "created_at"],
+        "required": [
+          "values",
+          "next",
+          "checkpoint",
+          "metadata",
+          "created_at"
+        ],
         "title": "ThreadState"
       },
       "ThreadStateSearch": {
@@ -3199,40 +3418,70 @@
       },
       "StorePutRequest": {
         "type": "object",
-        "required": ["namespace", "key", "value"],
+        "required": [
+          "namespace",
+          "key",
+          "value"
+        ],
         "properties": {
           "namespace": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "key": { "type": "string" },
-          "value": { "type": "object" }
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "object"
+          }
         }
       },
       "StoreDeleteRequest": {
         "type": "object",
-        "required": ["key"],
+        "required": [
+          "key"
+        ],
         "properties": {
           "namespace": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "key": { "type": "string" }
+          "key": {
+            "type": "string"
+          }
         }
       },
       "StoreSearchRequest": {
         "type": "object",
         "properties": {
           "namespace_prefix": {
-            "type": ["array", "null"],
-            "items": { "type": "string" }
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           },
           "filter": {
-            "type": ["object", "null"],
+            "type": [
+              "object",
+              "null"
+            ],
             "additionalProperties": true
           },
-          "limit": { "type": "integer", "default": 10 },
-          "offset": { "type": "integer", "default": 0 }
+          "limit": {
+            "type": "integer",
+            "default": 10
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
+          }
         }
       },
       "StoreListNamespacesRequest": {
@@ -3240,27 +3489,51 @@
         "properties": {
           "prefix": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "suffix": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "max_depth": { "type": "integer" },
-          "limit": { "type": "integer", "default": 100 },
-          "offset": { "type": "integer", "default": 0 }
+          "max_depth": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 100
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
+          }
         }
       },
       "Item": {
         "type": "object",
-        "required": ["namespace", "key", "value", "created_at", "updated_at"],
+        "required": [
+          "namespace",
+          "key",
+          "value",
+          "created_at",
+          "updated_at"
+        ],
         "properties": {
           "namespace": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "key": { "type": "string" },
-          "value": { "type": "object" },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "object"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -3273,11 +3546,15 @@
       },
       "SearchItemsResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/Item" }
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
           }
         }
       },
@@ -3285,14 +3562,20 @@
         "type": "array",
         "items": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       },
       "ErrorResponse": {
         "type": "object",
         "properties": {
-          "error": { "type": "string" },
-          "message": { "type": "string" }
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
         }
       }
     },
@@ -3301,7 +3584,9 @@
         "description": "Successful retrieval of an item.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Item" }
+            "schema": {
+              "$ref": "#/components/schemas/Item"
+            }
           }
         }
       },
@@ -3317,7 +3602,9 @@
         "description": "Successful search operation.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/SearchItemsResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/SearchItemsResponse"
+            }
           }
         }
       },
@@ -3325,7 +3612,9 @@
         "description": "Successful retrieval of namespaces.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ListNamespaceResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ListNamespaceResponse"
+            }
           }
         }
       },
@@ -3333,7 +3622,9 @@
         "description": "An error occurred.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
           }
         }
       },
@@ -3363,7 +3654,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       }
     }
