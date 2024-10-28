@@ -2,7 +2,7 @@
 
 LangGraph Platform is an opinionated way to deploy and manage your LangGraph application.
 
-See [this section](#overview) for an overview of how LangGraph Platform actually deploys your agent.
+The [overview](#overview) section explains how the LangGraph Paltform deploys your agent.
 
 LangGraph Platform was built to tackle [the issues](deployment.md) we saw users running into when trying to deploy LangGraph applications themselves. See [this section](#features) for an overview of the features present in LangGraph Platform and what issues they solve.
 
