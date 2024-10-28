@@ -352,7 +352,9 @@ def build(
             raise click.UsageError("Docker not installed") from None
         with open(config) as f:
             config_json = langgraph_cli.config.validate_config(json.load(f))
-        _build(runner, set, config, config_json, base_image, pull, tag, docker_build_args)
+        _build(
+            runner, set, config, config_json, base_image, pull, tag, docker_build_args
+        )
 
 
 @OPT_CONFIG
