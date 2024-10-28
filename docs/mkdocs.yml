@@ -79,6 +79,8 @@ plugins:
               filters:
                 - "!^_"
 nav:
+  # Setting the names of the nav items explicitly due to mkdocs
+  # how-reload being a bit buggy with the names of the tabs.
   - Home: "index.md"
   - Tutorials: "tutorials/index.md"
   - Concepts: "concepts/index.md"
