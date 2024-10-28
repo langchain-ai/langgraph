@@ -85,7 +85,7 @@ All you need in order to use the free version of LangGraph Platform is a [LangSm
 
 You need to add this as an environment variable when running LangGraph Platform. It should be provided as `LANGSMITH_API_KEY=...`.
 
-LangGraph Platform will provide a one-time check when starting up to ensure that it is a valid LangSmith key.
+LangGraph Platform will do a one-time check when starting up to ensure that it is a valid LangSmith key.
 
 The free version of LangGraph Platform does not have access to some features that the other versions have, namely LangGraph Studio and Assistants.
 
