@@ -26,6 +26,7 @@ theme:
     - navigation.instant.progress
     - navigation.prune
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.top
     - navigation.tracking
     - search.highlight
@@ -79,128 +80,11 @@ plugins:
                 - "!^_"
 nav:
   - "index.md"
-  - Tutorials:
-      - "tutorials/index.md"
-      - Quick Start: tutorials/introduction.ipynb
-      - Chatbots:
-          - Customer Support: tutorials/customer-support/customer-support.ipynb
-          - Prompt Generation from User Requirements: tutorials/chatbots/information-gather-prompting.ipynb
-          - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
-      - RAG:
-          - Adaptive RAG: tutorials/rag/langgraph_adaptive_rag.ipynb
-          - Adaptive RAG using local LLMs: tutorials/rag/langgraph_adaptive_rag_local.ipynb
-          - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
-          - Corrective RAG (CRAG): tutorials/rag/langgraph_crag.ipynb
-          - Corrective RAG (CRAG) using local LLMs: tutorials/rag/langgraph_crag_local.ipynb
-          - Self-RAG: tutorials/rag/langgraph_self_rag.ipynb
-          - Self-RAG using local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
-          - SQL Agent: tutorials/sql-agent.ipynb
-      - Agent Architectures:
-          - Multi-Agent Systems:
-              - Network: tutorials/multi_agent/multi-agent-collaboration.ipynb
-              - Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
-              - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
-          - Planning Agents:
-              - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
-              - Reasoning without Observation: tutorials/rewoo/rewoo.ipynb
-              - LLMCompiler: tutorials/llm-compiler/LLMCompiler.ipynb
-          - Reflection & Critique:
-              - Basic Reflection: tutorials/reflection/reflection.ipynb
-              - Reflexion: tutorials/reflexion/reflexion.ipynb
-              - Language Agent Tree Search: tutorials/lats/lats.ipynb
-              - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
-      - Evaluation & Analysis:
-          - Chatbot Evaluation via Simulation:
-              - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
-              - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
-      - Experimental:
-          - Web Research (STORM): tutorials/storm/storm.ipynb
-          - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
-          - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
-          - Competitive Programming: tutorials/usaco/usaco.ipynb
-          - Extract structured output: tutorials/extraction/retries.ipynb
-
-  - "How-to Guides":
-      - "how-tos/index.md"
-      - Controllability:
-          - Create branches for parallel execution: how-tos/branching.ipynb
-          - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
-          - Control graph recursion limit: how-tos/recursion-limit.ipynb
-      - Persistence:
-          - Add thread-level persistence: how-tos/persistence.ipynb
-          - Add thread-level persistence to subgraphs: how-tos/subgraph-persistence.ipynb
-          - Add cross-thread persistence: how-tos/cross-thread-persistence.ipynb
-          - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
-          - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
-          - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
-      - Memory:
-          - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
-          - Delete messages: how-tos/memory/delete-messages.ipynb
-          - Add summary of the conversation history: how-tos/memory/add-summary-conversation-history.ipynb
-      - Human-in-the-loop:
-          - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
-          - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
-          - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
-          - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
-          - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
-          - Review tool calls: how-tos/human_in_the_loop/review-tool-calls.ipynb
-      - Streaming:
-          - Stream full state: how-tos/stream-values.ipynb
-          - Stream state updates: how-tos/stream-updates.ipynb
-          - Stream LLM tokens: how-tos/streaming-tokens.ipynb
-          - Stream LLM tokens without LangChain models: how-tos/streaming-tokens-without-langchain.ipynb
-          - Stream custom data: how-tos/streaming-content.ipynb
-          - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
-          - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
-          - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
-          - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
-          - Stream from subgraphs: how-tos/streaming-subgraphs.ipynb
-          - Disable streaming for models that don't support it: how-tos/disable-streaming.ipynb
-      - Tool calling:
-          - Call tools using ToolNode: how-tos/tool-calling.ipynb
-          - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
-          - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
-          - Pass config to tools: how-tos/pass-config-to-tools.ipynb
-          - Handle many tools: how-tos/many-tools.ipynb
-      - Subgraphs:
-          - Add and use subgraphs: how-tos/subgraph.ipynb
-          - View and update state in subgraphs: how-tos/subgraphs-manage-state.ipynb
-          - Transform inputs and outputs of a subgraph: how-tos/subgraph-transform-state.ipynb
-      - State Management:
-          - Use Pydantic model as state: how-tos/state-model.ipynb
-          - Have a separate input and output schema: how-tos/input_output_schema.ipynb
-          - Pass private state between nodes inside the graph: how-tos/pass_private_state.ipynb
-      - Other:
-          - Run graph asynchronously: how-tos/async.ipynb
-          - Visualize your graph: how-tos/visualization.ipynb
-          - Add runtime configuration: how-tos/configuration.ipynb
-          - Add node retries: how-tos/node-retries.ipynb
-          - Return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
-          - Pass custom LangSmith run ID for graph runs: how-tos/run-id-langsmith.ipynb
-          - Return state before hitting recursion limit: how-tos/return-when-recursion-limit-hits.ipynb
-          - Error reference:
-              - "troubleshooting/errors/index.md"
-              - GRAPH_RECURSION_LIMIT: "troubleshooting/errors/GRAPH_RECURSION_LIMIT.md"
-              - INVALID_CONCURRENT_GRAPH_UPDATE: "troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md"
-              - INVALID_GRAPH_NODE_RETURN_VALUE: "troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md"
-              - MULTIPLE_SUBGRAPHS: "troubleshooting/errors/MULTIPLE_SUBGRAPHS.md"
-      - Prebuilt ReAct Agent:
-          - Create a ReAct agent: how-tos/create-react-agent.ipynb
-          - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
-          - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
-          - Add Human-in-the-loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
-          - Create prebuilt ReAct agent from scratch: how-tos/react-agent-from-scratch.ipynb
-  - "Conceptual Guides":
-      - Why LangGraph?: concepts/high_level.md
-      - LangGraph Glossary: concepts/low_level.md
-      - Common Agentic Patterns: concepts/agentic_concepts.md
-      - Human-in-the-Loop: concepts/human_in_the_loop.md
-      - Memory: concepts/memory.md
-      - Multi-Agent Systems: concepts/multi_agent.md
-      - Persistence: concepts/persistence.md
-      - Streaming: concepts/streaming.md
-      - FAQ: concepts/faq.md
+  - "tutorials/index.md"
+  - "concepts/index.md"
+  - "how-tos/index.md"
   - Reference:
+      - "reference/index.md"
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
@@ -351,7 +235,14 @@ extra:
           note: >-
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
 validation:
-  omitted_files: warn
+  # https://www.mkdocs.org/user-guide/configuration/
+  # We're `ignoring` nav.omitted_files because we are going to rely
+  # on files being properly links to from the index pages of:
+  # - tutorials
+  # - concepts
+  # - how-tos
+  # - reference
+  omitted_files: ignore
   absolute_links: warn
   unrecognized_links: warn
   # TODO: figure out how to enable 'warn' for this
