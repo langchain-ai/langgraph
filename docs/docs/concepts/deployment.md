@@ -49,7 +49,7 @@ As a result, you may also want to consider exposing an endpoint to run your Lang
 
 ## Long runs
 
-In addition to adding endpoints for [background runs](#background-runs), you also need to make sure your infrastructure can support long lasting runs. Some web infrastructure is optimized for syncronous, shorter interactions, and may break if asked to execute long running jobs.
+In addition to adding endpoints for [background runs](#background-runs), you also need to make sure your infrastructure can support long-lasting runs. Some web infrastructure is optimized for synchronous, shorter interactions, and may break if asked to execute long running jobs.
 
 ## Burstiness
 
