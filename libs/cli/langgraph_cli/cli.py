@@ -342,20 +342,17 @@ def _build(
 @log_command
 def build(
     config: pathlib.Path,
-    build_args: Sequence[str],
+    docker_build_args: Sequence[str],
     base_image: Optional[str],
     pull: bool,
     tag: str,
 ):
     with Runner() as runner, Progress(message="Pulling...") as set:
-        # check docker available
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
-        # open config
         with open(config) as f:
             config_json = langgraph_cli.config.validate_config(json.load(f))
-        # build
-        _build(runner, set, config, config_json, base_image, pull, tag, build_args)
+        _build(runner, set, config, config_json, base_image, pull, tag, docker_build_args)
 
 
 @OPT_CONFIG
