@@ -87,7 +87,7 @@ You need to add this as an environment variable when running LangGraph Platform.
 
 LangGraph Platform will provide a one-time check when starting up to ensure that it is a valid LangSmith key.
 
-The free version of LangGraph Platform does not have access to some features that they other versions have, namely LangGraph Studio and Assistants.
+The free version of LangGraph Platform does not have access to some features that the other versions have, namely LangGraph Studio and Assistants.
 
 
 ### Cloud
