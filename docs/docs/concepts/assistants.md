@@ -5,7 +5,7 @@ When building agents, it is fairly common to make rapid changes that *do not* al
 * Assistants give developers a quick and easy way to modify and version graph version for experimentation.
 * Assistants can be modified via LangGraph Studio, offering a no-code way to configure agents  (e.g., for business users). 
 
-Assistants builds off the concept of ["configuration"](low_level.md#configuration). 
+Assistants build off the concept of ["configuration"](low_level.md#configuration). 
 "Configuration" is an option that is available in the open source LangGraph library, but assistants are only present in [LangGraph Platform](langgraph_platform.md).
 This is because Assistants are tightly coupled to your deployed graph, and so we can only make them available when we are also deploying the graphs.
 
