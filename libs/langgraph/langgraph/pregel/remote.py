@@ -46,14 +46,14 @@ class RemoteException(Exception):
 
 
 class RemoteGraph(PregelProtocol):
-    """The RemoteGraph class is a client implementation for calling remote
-    APIs that implement the Open Agent API Specification.
+    """The `RemoteGraph` class is a client implementation for calling remote
+    APIs that implement the LangGraph Server API specification.
 
-    For example, the RemoteGraph class can be used to call LangGraph Cloud
-    APIs.
+    For example, the `RemoteGraph` class can be used to call APIs from deployments
+    on LangGraph Cloud.
 
-    RemoteGraph behaves the same way as a Graph and can be used directly as
-    a node in another Graph.
+    `RemoteGraph` behaves the same way as a `Graph` and can be used directly as
+    a node in another `Graph`.
     """
 
     name: str
@@ -79,11 +79,11 @@ class RemoteGraph(PregelProtocol):
         Args:
             name: The name of the graph.
             url: The URL of the remote API.
-            api_key: The API key to use for authentication. If not provided, it will be read from the environment (LANGGRAPH_API_KEY, LANGSMITH_API_KEY, or LANGCHAIN_API_KEY).
+            api_key: The API key to use for authentication. If not provided, it will be read from the environment (`LANGGRAPH_API_KEY`, `LANGSMITH_API_KEY`, or `LANGCHAIN_API_KEY`).
             headers: Additional headers to include in the requests.
-            client: A LangGraphClient instance to use instead of creating a default client.
-            sync_client: A SyncLangGraphClient instance to use instead of creating a default client.
-            config: An optional RunnableConfig instance with additional configuration.
+            client: A `LangGraphClient` instance to use instead of creating a default client.
+            sync_client: A `SyncLangGraphClient` instance to use instead of creating a default client.
+            config: An optional `RunnableConfig` instance with additional configuration.
         """
         self.name = name
         self.config = config
@@ -143,7 +143,7 @@ class RemoteGraph(PregelProtocol):
     ) -> DrawableGraph:
         """Get graph by graph name.
 
-        This method calls GET /assistants/{assistant_id}/graph.
+        This method calls `GET /assistants/{assistant_id}/graph`.
 
         Args:
             config: This parameter is not used.
@@ -152,7 +152,7 @@ class RemoteGraph(PregelProtocol):
                 equal to the value will be included.
 
         Returns:
-            DrawableGraph: The graph information for the assistant in JSON format.
+            The graph information for the assistant in JSON format.
         """
         sync_client = self._validate_sync_client()
         graph = sync_client.assistants.get_graph(
@@ -172,7 +172,7 @@ class RemoteGraph(PregelProtocol):
     ) -> DrawableGraph:
         """Get graph by graph name.
 
-        This method calls GET /assistants/{assistant_id}/graph.
+        This method calls `GET /assistants/{assistant_id}/graph`.
 
         Args:
             config: This parameter is not used.
@@ -181,7 +181,7 @@ class RemoteGraph(PregelProtocol):
                 equal to the value will be included.
 
         Returns:
-            DrawableGraph: The graph information for the assistant in JSON format.
+            The graph information for the assistant in JSON format.
         """
         client = self._validate_client()
         graph = await client.assistants.get_graph(
@@ -316,17 +316,17 @@ class RemoteGraph(PregelProtocol):
     ) -> StateSnapshot:
         """Get the state of a thread.
 
-        This method calls POST /threads/{thread_id}/state/checkpoint if a
-        checkpoint is specified in the config or GET /threads/{thread_id}/state
+        This method calls `POST /threads/{thread_id}/state/checkpoint` if a
+        checkpoint is specified in the config or `GET /threads/{thread_id}/state`
         if no checkpoint is specified.
 
         Args:
-            config: A RunnableConfig that includes `thread_id` in the
+            config: A `RunnableConfig` that includes `thread_id` in the
                 `configurable` field.
             subgraphs: Include subgraphs in the state.
 
         Returns:
-            StateSnapshot: The latest state of the thread.
+            The latest state of the thread.
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
@@ -343,17 +343,17 @@ class RemoteGraph(PregelProtocol):
     ) -> StateSnapshot:
         """Get the state of a thread.
 
-        This method calls POST /threads/{thread_id}/state/checkpoint if a
-        checkpoint is specified in the config or GET /threads/{thread_id}/state
+        This method calls `POST /threads/{thread_id}/state/checkpoint` if a
+        checkpoint is specified in the config or `GET /threads/{thread_id}/state`
         if no checkpoint is specified.
 
         Args:
-            config: A RunnableConfig that includes `thread_id` in the
+            config: A `RunnableConfig` that includes `thread_id` in the
                 `configurable` field.
             subgraphs: Include subgraphs in the state.
 
         Returns:
-            StateSnapshot: The latest state of the thread.
+            The latest state of the thread.
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
@@ -375,17 +375,17 @@ class RemoteGraph(PregelProtocol):
     ) -> Iterator[StateSnapshot]:
         """Get the state history of a thread.
 
-        This method calls POST /threads/{thread_id}/history.
+        This method calls `POST /threads/{thread_id}/history`.
 
         Args:
-            config: A RunnableConfig that includes `thread_id` in the
+            config: A `RunnableConfig` that includes `thread_id` in the
                 `configurable` field.
             filter: Metadata to filter on.
-            before: A RunnableConfig that includes checkpoint metadata.
+            before: A `RunnableConfig` that includes checkpoint metadata.
             limit: Max number of states to return.
 
         Returns:
-            Iterator[StateSnapshot]: States of the thread.
+            States of the thread.
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
@@ -410,17 +410,17 @@ class RemoteGraph(PregelProtocol):
     ) -> AsyncIterator[StateSnapshot]:
         """Get the state history of a thread.
 
-        This method calls POST /threads/{thread_id}/history.
+        This method calls `POST /threads/{thread_id}/history`.
 
         Args:
-            config: A RunnableConfig that includes `thread_id` in the
+            config: A `RunnableConfig` that includes `thread_id` in the
                 `configurable` field.
             filter: Metadata to filter on.
-            before: A RunnableConfig that includes checkpoint metadata.
+            before: A `RunnableConfig` that includes checkpoint metadata.
             limit: Max number of states to return.
 
         Returns:
-            Iterator[StateSnapshot]: States of the thread.
+            States of the thread.
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
@@ -443,16 +443,16 @@ class RemoteGraph(PregelProtocol):
     ) -> RunnableConfig:
         """Update the state of a thread.
 
-        This method calls POST /threads/{thread_id}/state.
+        This method calls `POST /threads/{thread_id}/state`.
 
         Args:
-            config: A RunnableConfig that includes `thread_id` in the
+            config: A `RunnableConfig` that includes `thread_id` in the
                 `configurable` field.
             values: Values to update to the state.
             as_node: Update the state as if this node had just executed.
 
         Returns:
-            RunnableConfig: RunnableConfig for the updated thread.
+            `RunnableConfig` for the updated thread.
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
@@ -473,16 +473,16 @@ class RemoteGraph(PregelProtocol):
     ) -> RunnableConfig:
         """Update the state of a thread.
 
-        This method calls POST /threads/{thread_id}/state.
+        This method calls `POST /threads/{thread_id}/state`.
 
         Args:
-            config: A RunnableConfig that includes `thread_id` in the
+            config: A `RunnableConfig` that includes `thread_id` in the
                 `configurable` field.
             values: Values to update to the state.
             as_node: Update the state as if this node had just executed.
 
         Returns:
-            RunnableConfig: RunnableConfig for the updated thread.
+            `RunnableConfig` for the updated thread.
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
@@ -538,20 +538,20 @@ class RemoteGraph(PregelProtocol):
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Create a run and stream the results.
 
-        This method calls POST /threads/{thread_id}/runs/stream if a `thread_id`
+        This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
         is speciffed in the `configurable` field of the config or
-        POST /runs/stream otherwise.
+        `POST /runs/stream` otherwise.
 
         Args:
             input: Input to the graph.
-            config: A RunnableConfig for graph invocation.
+            config: A `RunnableConfig` for graph invocation.
             stream_mode: Stream mode(s) to use.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
 
         Yields:
-            Iterator[Union[dict[str, Any], Any]]: The output of the graph.
+            The output of the graph.
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
@@ -603,20 +603,20 @@ class RemoteGraph(PregelProtocol):
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         """Create a run and stream the results.
 
-        This method calls POST /threads/{thread_id}/runs/stream if a `thread_id`
+        This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
         is speciffed in the `configurable` field of the config or
-        POST /runs/stream otherwise.
+        `POST /runs/stream` otherwise.
 
         Args:
             input: Input to the graph.
-            config: A RunnableConfig for graph invocation.
+            config: A `RunnableConfig` for graph invocation.
             stream_mode: Stream mode(s) to use.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
 
         Yields:
-            Iterator[Union[dict[str, Any], Any]]: The output of the graph.
+            The output of the graph.
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
@@ -682,18 +682,18 @@ class RemoteGraph(PregelProtocol):
     ) -> Union[dict[str, Any], Any]:
         """Create a run, wait until it finishes and return the final state.
 
-        This method calls POST /threads/{thread_id}/runs/wait if a `thread_id`
+        This method calls `POST /threads/{thread_id}/runs/wait` if a `thread_id`
         is speciffed in the `configurable` field of the config or
-        POST /runs/wait otherwise.
+        `POST /runs/wait` otherwise.
 
         Args:
             input: Input to the graph.
-            config: A RunnableConfig for graph invocation.
+            config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
 
         Returns:
-            Union[dict[str, Any], Any]: The output of the graph.
+            The output of the graph.
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
@@ -719,18 +719,18 @@ class RemoteGraph(PregelProtocol):
     ) -> Union[dict[str, Any], Any]:
         """Create a run, wait until it finishes and return the final state.
 
-        This method calls POST /threads/{thread_id}/runs/wait if a `thread_id`
+        This method calls `POST /threads/{thread_id}/runs/wait` if a `thread_id`
         is speciffed in the `configurable` field of the config or
-        POST /runs/wait otherwise.
+        `POST /runs/wait` otherwise.
 
         Args:
             input: Input to the graph.
-            config: A RunnableConfig for graph invocation.
+            config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
 
         Returns:
-            Union[dict[str, Any], Any]: The output of the graph.
+            The output of the graph.
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
