@@ -46,6 +46,14 @@ class RemoteException(Exception):
 
 
 class RemoteGraph(PregelProtocol):
+    """The RemoteGraph class is a client implementation for calling remote
+    APIs that implement the Open Agent API Specification.
+
+    For example, the RemoteGraph class can be used to call LangGraph Cloud
+    APIs.
+
+    RemoteGraph can be used directly as a node in Graph.
+    """
     name: str
 
     def __init__(
