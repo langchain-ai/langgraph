@@ -32,24 +32,23 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 
 ## LangGraph Platform 
 
+LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework. It provides four deployment options to fit a range of needs: a free tier, a self-hosted version, a cloud SaaS, and a Bring Your Own Cloud (BYOC) option. You can explore these options in detail in the [deployment options guide](./deployment_options.md).
+
 !!! tip
 
     * LangGraph is an MIT-licensed open-source library, which we are committed to maintaining and growing for the community.
     * You can always deploy LangGraph applications on your own infrastructure using the open-source LangGraph project without using LangGraph Platform.
-
-LangGraph Platform is an opinionated deployment solution for deploying agentic applications to production.
 
 **High Level**
 
 - [Why LangGraph Platform?](./langgraph_platform.md): The LangGraph platform is an opinionated way to deploy and manage LangGraph applications. This guide provides an overview of the key features and concepts behind LangGraph Platform.
 - [Deployment Options](./deployment_options.md): LangGraph Platform offers several deployment options, including free, self-hosted, bring your own cloud, and [LangGraph Cloud](./langgraph_cloud.md). This guide provides a comparison of the different deployment options.
  
-**Ecosystem**
+**Components**
 
-The LangGraph Platform ecosystem consists of several components that work together to enable the deployment and management of LangGraph applications:
+The LangGraph Platform comprises several components that work together to support the deployment and management of LangGraph applications:
 
-- [LangGraph Server](./langgraph_server.md): LangGraph Server is the
-- [LangGraph Cloud](./langgraph_cloud.md): LangGraph Cloud is an optional managed hosting service for the LangGraph Server.
+- [LangGraph Server](./langgraph_server.md): The server defines an opinionated API for interacting with agentic applications. It includes endpoints for interacting with `assistants`, `threads`, `memory`, and more.
 - [LangGraph Studio](./langgraph_studio.md): LangGraph Studio is a specialized IDE that can connect to a LangGraph Server to enable visualization, interaction, and debugging of the application locally.
 - [LangGraph CLI](./langgraph_cli.md): LangGraph CLI is a command-line interface that helps to interact with a local LangGraph
 - [Python/JS SDK](./sdk.md): The Python/JS SDK provides a programmatic way to interact with deployed LangGraph Applications.
@@ -58,7 +57,7 @@ The LangGraph Platform ecosystem consists of several components that work togeth
 **LangGraph Server**
 
 - [Application Structure](./application_structure.md): A LangGraph application consists of one or more graphs, a LangGraph API Configuration file (`langgraph.json`), a file that specifies dependencies, and environment variables.
-- [LangGraph Server's API](./api_server.md): The LangGraph Platform's Assistants API consists of a few core data models: Graphs, Assistants, Threads, Runs, and Cron Jobs.
+- [LangGraph Server's API](./api_server.md): The LangGraph Server API is an opinionated API for interacting with agentic applications that includes endpoints for interacting with `assistants`, `threads, 
 - [Assistants](./assistants.md): Assistants are a way to save and manage different configurations of your LangGraph applications.
 - [Web-hooks](./web_hooks.md): Web-hooks allow your running LangGraph application to send data to external services on specific events.
 - [Cron Jobs](./cron_jobs.md): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.

@@ -2,16 +2,47 @@
 
 ## Overview
 
-LangGraph Platform is an opinionated framework for building agent-based applications an API server tailored for interacting with assistants, with features such as streaming, [human-in-the-loop](./human_in_the_loop.md) interactions, [persistence](./persistence), cron jobs, web hooks, and more. It includes built-in queuing and persistence layers, an integrated IDE (LangGraph Studio, to streamline development.
+LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework. 
 
-Deploying applications with LangGraph shortens the time-to-market for developers. 
 
-The LangGraph Cloud API exposes functionality of your LangGraph application through Assistants. An assistant abstracts the cognitive architecture of your graph. Invoke an assistant by calling the pre-built API endpoints.
+LangGraph Platform provides an opinionated solution to 
 
-LangGraph Cloud is seamlessly integrated with LangSmith and is accessible from within the LangSmith UI.
 
-LangGraph Cloud applications can be tested and debugged using the LangGraph Studio Desktop.
+It provides four deployment options to fit a range of needs: a free tier, a self-hosted version, a cloud SaaS, and a Bring Your Own Cloud (BYOC) option. You can explore these options in detail in the [deployment options guide](./deployment_options.md).
 
+
+## Key Features
+
+The LangGraph platform incorporates best practices for agent deployment so you can focus on building your agent logic.
+
+* **Streaming endpoints**: Endpoints that expose [multiple different streaming modes](streaming.md). We've made these work even for long-running agents that may go minutes between steam event.
+*  **Background runs**:  We've exposed endpoints for running your graph in the background.
+   This includes endpoints for polling for the status of a run.
+* **Support for long runs**: In addition to adding endpoints for background runs, we've also designed our endpoints and infrastructure to support long-running agents.
+* **Task queue**: We've added a task queue to make sure we don't drop any requests if they arrive in a bursty nature.
+* **Horizontally scalable infrastructure**: LangGraph Platform is designed to be horizontally scalable, allowing you to scale up and down your usage as needed.
+*  **Double texting support**: Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. We call this ["double texting"](double_texting.md) and have added four different ways to handle this.
+* **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](persistence.md#checkpoints) optimized for LangGraph applications.
+* **Human-in-the-loop endpoints**: We've exposed all endpoints needed to support [human-in-the-loop](human_in_the_loop.md) features.
+* **Memory**: In addition to thread-level persistence (covered above by checkpointers), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
+
+
+## Deployment Options
+
+LangGraph Platform offers several deployment options:
+
+LangGraph Platform offers several deployment options
+
+## Overview
+
+LangGraph Platform provides an opinionated way to deploy your agent.
+
+It provides additional [features](#features) and [concepts](#data-models) compared to the open source.
+It is designed to work seamlessly with your agent regardless of how it is defined, what tools it uses, or any dependencies.
+
+With LangGraph Platform, you define your environment with a simple configuration file and it generates a Docker image with our API server built in.
+
+## Why use LangGraph Platform?
 
 ## What is it?
 
@@ -24,33 +55,6 @@ LangGraph Platform was built to tackle [the issues](deployment.md) we saw users 
 LangGraph Platform has its own concepts, features, and API related to [deployment](deployment.md) of agents. See [this section](#data-models) for an overview of the underlying data models for LangGraph Platform.
 
 There are multiple ways to deploy LangGraph Platform, including a free option. See [this section](#deployment-options) for an overview and comparison of the different deployment options. 
-
-## Overview
-
-LangGraph Platform provides an opinionated way to deploy your agent.
-
-It provides additional [features](#features) and [concepts](#data-models) compared to the open source.
-It is designed to work seamlessly with your agent regardless of how it is defined, what tools it uses, or any dependencies.
-
-With LangGraph Platform, you define your environment with a simple configuration file and it generates a Docker image with our API server built in.
-
-## Features
-
-Deploying agents in production can be [challenging](deployment.md).
-We built LangGraph Platform to incorporate best practices for agent deployment so you can focus on building your agent logic.
-
-With LangGraph Platform you get:
-
-*   **Streaming endpoints**: Endpoints that expose [multiple different streaming modes](streaming.md). We've made these work even for long running agents that may go minutes between steam event.
-*  **Background runs**:  We've exposed endpoints for running your graph in the background.
-This includes endpoints for polling for the status of a run.
-* **Support for long runs**: In addition to adding endpoints for background runs, we've also designed our endpoints and infrastructure to support long running agents.
-* **Task queue**: We've added a task queue to make sure we don't drop any requests if they arrive in a bursty nature.
-* **Horizontally scalable infrastructure**: LangGraph Platform is designed to be horizontally scalable, allowing you to scale up and down your usage as needed.
-*  **Double texting support**: Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. We call this ["double texting"](double_texting.md) and have added four different ways to handle this.
-* **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](persistence.md#checkpoints) optimized for LangGraph applications.
-* **Human-in-the-loop endpoints**: We've exposed all endpoints needed to support [human-in-the-loop](human_in_the_loop.md) features.
-* **Memory**: In addition to thread-level persistence (covered above by checkpointers), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
 
 
 ### Graphs

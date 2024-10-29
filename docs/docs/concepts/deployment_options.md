@@ -6,7 +6,7 @@
 
 ## Overview
 
-There are several deployment options for LangGraph Platform.
+There are several deployment options for LangGraph Platform:
 
 |                                | Free | Self Hosted | Bring Your Own Cloud | Cloud |
 |--------------------------------|------|-------------|----------------------|-------|
@@ -43,6 +43,8 @@ This license key gives you access to all LangGraph Platform features, like LangG
 
 This is a paid offering. Please contact sales@langchain.dev for pricing.
 
+Please see the [Self Hosted Deployment](../how-tos/deployment/self_hosted.md) guide for more information on how to set up the Self Hosted version of LangGraph Platform.
+
 ### Bring your own cloud
 
 This combines the best of both worlds for Cloud and Self Hosted.
@@ -51,7 +53,3 @@ We manage the infrastructure, so you don't have to, but the infrastructure all r
 This is currently only available on AWS.
 
 This is a paid offering. Please contact sales@langchain.dev for pricing.
-
-## Cloud Deployment
-
-This section describes the high-level concepts of the cloud deployment of LangGraph Platform.

@@ -1,5 +1,9 @@
 # Assistants
 
+!!! info "Prerequisites"
+
+    - [LangGraph Server](./langgraph_server.md)
+
 When building agents, it is fairly common to make rapid changes that *do not* alter the graph logic. For example, simply changing prompts or the LLM selection can have significant impacts on the behavior of the agents. Assistants offer an easy way to make and save these types of changes to agent configuration. This can have at least two use-cases:
 
 * Assistants give developers a quick and easy way to modify and version graph version for experimentation.
@@ -24,3 +28,10 @@ Once you've created an assistant, you can save and version it to track changes t
 For examples: let's imagine you have a general writing agent. You have created a general graph architecture that works well for writing. However - there are different types of writing, for examples blogs vs tweets. In order to get the best performance on each use case, you need to make some minor changes to the models and prompts used. In this setup, you could create an assistant for each use case - one for blog writing and one for tweeting. These would share the same graph structure, but they may use different models and different prompts. Read [this how-to](../cloud/how-tos/assistant_versioning.md) to learn how you can use assistant versioning through both the [Studio](../cloud/how-tos/index.md/#langgraph-studio) and the SDK.
 
 ![assistant versions](img/assistants.png)
+
+
+## Resources
+
+For more information on assistants, see the following resources:
+
+- [LangServe API Reference](../reference/api/api_ref.html#tag/assistantscreate)
