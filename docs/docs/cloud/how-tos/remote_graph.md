@@ -1,8 +1,8 @@
 # How to interact with the deployment using RemoteGraph
 
-`RemoteGraph` is an interface that allows you to interact with your LangGraph Platform deployment as if it were a regular `CompiledGraph` instance. This guide shows you how you can initialize a `RemoteGraph` and interact with it.
+`RemoteGraph` is an interface that allows you to interact with your LangGraph Platform deployment as if it were a regular, locally-defined LangGraph graph (e.g. a `CompiledGraph`). This guide shows you how you can initialize a `RemoteGraph` and interact with it.
 
-## Setup
+## Initializing the graph
 
 When initializing a `RemoteGraph`, you must always specify:
 
@@ -121,6 +121,15 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     ```
 
 ## Using as a subgraph
+
+!!! Note
+
+    When streaming the outputs from a parent graph with a `RemoteGraph` subgraph node, streaming from the nodes in the subgraph is not supported at the moment. Only the final output from the subgraph will be streamed. This means that you can only use `stream_mode=values|updates|debug` when streaming from the parent graph.
+
+!!! Note
+
+    If you need to use a `checkpointer` with a graph that has a `RemoteGraph` subgraph node, make sure to use UUIDs as thread IDs.
+
 
 Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it can be also used as a subgraph in another graph. For example:
 
