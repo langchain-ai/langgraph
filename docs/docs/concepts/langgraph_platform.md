@@ -4,12 +4,7 @@
 
 LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework. 
 
-
-LangGraph Platform provides an opinionated solution to 
-
-
 It provides four deployment options to fit a range of needs: a free tier, a self-hosted version, a cloud SaaS, and a Bring Your Own Cloud (BYOC) option. You can explore these options in detail in the [deployment options guide](./deployment_options.md).
-
 
 ## Key Features
 
@@ -25,13 +20,6 @@ The LangGraph platform incorporates best practices for agent deployment so you c
 * **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](persistence.md#checkpoints) optimized for LangGraph applications.
 * **Human-in-the-loop endpoints**: We've exposed all endpoints needed to support [human-in-the-loop](human_in_the_loop.md) features.
 * **Memory**: In addition to thread-level persistence (covered above by checkpointers), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
-
-
-## Deployment Options
-
-LangGraph Platform offers several deployment options:
-
-LangGraph Platform offers several deployment options
 
 ## Overview
 
