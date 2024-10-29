@@ -119,7 +119,16 @@ These guides show how to use the prebuilt ReAct agent:
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 
-## LangGraph Deploy
+## LangGraph Platform
+
+This section includes how-to guides for LangGraph Platform.
+
+LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework. It provides four deployment options to fit a range of needs: a free tier, a self-hosted version, a cloud SaaS, and a Bring Your Own Cloud (BYOC) option. You can explore these options in detail in the [deployment options guide](../concepts/deployment_options.md).
+
+!!! tip
+
+    * LangGraph is an MIT-licensed open-source library, which we are committed to maintaining and growing for the community.
+    * You can always deploy LangGraph applications on your own infrastructure using the open-source LangGraph project without using LangGraph Platform.
 
 ### Application Structure
 
@@ -137,6 +146,7 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 - [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 - [How to deploy to a self-hosted environment](./deployment/self_hosted.md)
+- [How to interact with the deployment using RemoteGraph](../cloud/how-tos/remote_graph.md)
 
 ### Assistants
 
