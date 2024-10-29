@@ -52,7 +52,8 @@ class RemoteGraph(PregelProtocol):
     For example, the RemoteGraph class can be used to call LangGraph Cloud
     APIs.
 
-    RemoteGraph can be used directly as a node in Graph.
+    RemoteGraph behaves the same way as a Graph and can be used directly as
+    a node in another Graph.
     """
     name: str
 
@@ -72,6 +73,15 @@ class RemoteGraph(PregelProtocol):
 
         If `client` or `sync_client` are provided, they will be used instead of the default clients.
         See `LangGraphClient` and `SyncLangGraphClient` for details on the default clients.
+
+        Args:
+            name: The name of the graph.
+            url: The URL of the remote API.
+            api_key: The API key to use for authentication.
+            headers: Additional headers to include in the requests.
+            client: A LangGraphClient instance to use instead of creating a default client.
+            sync_client: A SyncLangGraphClient instance to use instead of creating a default client.
+            config: An optional RunnableConfig instance with additional configuration.
         """
         self.name = name
         self.config = config
@@ -129,6 +139,7 @@ class RemoteGraph(PregelProtocol):
         *,
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
+        """Method to call GET /assistants/{assistant_id}/graph."""
         sync_client = self._validate_sync_client()
         graph = sync_client.assistants.get_graph(
             assistant_id=self.name,
@@ -145,6 +156,7 @@ class RemoteGraph(PregelProtocol):
         *,
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
+        """Async method to call GET /assistants/{assistant_id}/graph."""
         client = self._validate_client()
         graph = await client.assistants.get_graph(
             assistant_id=self.name,
@@ -276,6 +288,10 @@ class RemoteGraph(PregelProtocol):
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
+        """Method to call POST /threads/{thread_id}/state/checkpoint or
+        GET /threads/{thread_id}/state/{checkpoint_id} or
+        GET /threads/{thread_id}/state.
+        """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
 
@@ -289,6 +305,10 @@ class RemoteGraph(PregelProtocol):
     async def aget_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
+        """Async method to call POST /threads/{thread_id}/state/checkpoint or
+        GET /threads/{thread_id}/state/{checkpoint_id} or
+        GET /threads/{thread_id}/state.
+        """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
 
@@ -307,6 +327,7 @@ class RemoteGraph(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
+        """Method to call POST /threads/{thread_id}/history."""
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
 
@@ -328,6 +349,7 @@ class RemoteGraph(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
+        """Async method to call POST /threads/{thread_id}/history."""
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
 
@@ -347,6 +369,7 @@ class RemoteGraph(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        """Method to call POST /threads/{thread_id}/state."""
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
 
@@ -364,6 +387,7 @@ class RemoteGraph(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        """Async method to call POST /threads/{thread_id}/state."""
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
 
@@ -416,6 +440,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
+        """Method to call POST /threads/{thread_id}/runs/stream or
+        POST /runs/stream.
+        """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
@@ -464,6 +491,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        """Async method to call POST /threads/{thread_id}/runs/stream or
+        POST /runs/stream.
+        """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
@@ -526,6 +556,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
+        """Method to call POST /threads/{thread_id}/runs/wait or
+        POST /runs/wait.
+        """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
@@ -548,6 +581,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
+        """Async method to call POST /threads/{thread_id}/runs/wait or
+        POST /runs/wait.
+        """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
