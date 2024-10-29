@@ -55,6 +55,7 @@ class RemoteGraph(PregelProtocol):
     RemoteGraph behaves the same way as a Graph and can be used directly as
     a node in another Graph.
     """
+
     name: str
 
     def __init__(
@@ -140,7 +141,7 @@ class RemoteGraph(PregelProtocol):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         """Method to call GET /assistants/{assistant_id}/graph.
-        
+
         Args:
             config: This parameter is not used.
             xray: Include graph representation of subgraphs. If an integer
@@ -167,7 +168,7 @@ class RemoteGraph(PregelProtocol):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         """Async method to call GET /assistants/{assistant_id}/graph.
-        
+
         Args:
             config: This parameter is not used.
             xray: Include graph representation of subgraphs. If an integer
@@ -364,7 +365,7 @@ class RemoteGraph(PregelProtocol):
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
         """Method to call POST /threads/{thread_id}/history.
-        
+
         Args:
             config: A RunnableConfig that includes `thread_id` in the
                 `configurable` field.
@@ -397,7 +398,7 @@ class RemoteGraph(PregelProtocol):
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Async method to call POST /threads/{thread_id}/history.
-        
+
         Args:
             config: A RunnableConfig that includes `thread_id` in the
                 `configurable` field.
@@ -428,14 +429,14 @@ class RemoteGraph(PregelProtocol):
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
         """Method to call POST /threads/{thread_id}/state.
-        
+
         Args:
             config: A RunnableConfig that includes `thread_id` in the
                 `configurable` field.
             values: Values to update to the state.
             as_node: Update the state as if this node had just executed.
 
-        Returns:        
+        Returns:
             RunnableConfig: RunnableConfig for the updated thread.
         """
         sync_client = self._validate_sync_client()
@@ -456,14 +457,14 @@ class RemoteGraph(PregelProtocol):
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
         """Async method to call POST /threads/{thread_id}/state.
-        
+
         Args:
             config: A RunnableConfig that includes `thread_id` in the
                 `configurable` field.
             values: Values to update to the state.
             as_node: Update the state as if this node had just executed.
 
-        Returns:        
+        Returns:
             RunnableConfig: RunnableConfig for the updated thread.
         """
         client = self._validate_client()
