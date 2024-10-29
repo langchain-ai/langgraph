@@ -22,6 +22,7 @@ LangGraph Cloud gives you best in class observability, testing, and hosting serv
 Learn how to deploy your app to LangGraph Cloud in these how to guides:
 
 - [How to deploy to LangGraph cloud](../deployment/cloud.md)
+- [How to interact with the deployment using RemoteGraph](./remote_graph.md)
 
 
 ## Streaming
