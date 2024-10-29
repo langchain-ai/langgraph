@@ -52,7 +52,7 @@ The LangGraph Platform comprises several components that work together to suppor
 - [LangGraph Studio](./langgraph_studio.md): LangGraph Studio is a specialized IDE that can connect to a LangGraph Server to enable visualization, interaction, and debugging of the application locally.
 - [LangGraph CLI](./langgraph_cli.md): LangGraph CLI is a command-line interface that helps to interact with a local LangGraph
 - [Python/JS SDK](./sdk.md): The Python/JS SDK provides a programmatic way to interact with deployed LangGraph Applications.
-- [Remote Graph](./remote_graph.md): A RemoteGraph allows you to interact with any deployed LangGraph application as though it were running locally.
+- [Remote Graph](../cloud/how-tos/remote_graph.md): A RemoteGraph allows you to interact with any deployed LangGraph application as though it were running locally.
 
 **LangGraph Server**
 
