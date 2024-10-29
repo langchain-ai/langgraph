@@ -130,4 +130,9 @@ export interface CronsCreatePayload extends RunsCreatePayload {
   schedule: string;
 }
 
-export type RunsWaitPayload = RunsStreamPayload;
+export interface RunsWaitPayload extends RunsStreamPayload {
+  /**
+   * Raise errors returned by the run. Default is `true`.
+   */
+  raiseError?: boolean;
+}

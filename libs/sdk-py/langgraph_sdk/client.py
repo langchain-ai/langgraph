@@ -159,7 +159,7 @@ def get_client(
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
+        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
         headers=get_headers(api_key, headers),
     )
     return LangGraphClient(client)
@@ -1515,6 +1515,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        raise_error: bool = True,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -1533,6 +1534,7 @@ class RunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        raise_error: bool = True,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
@@ -1553,6 +1555,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        raise_error: bool = True,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1645,9 +1648,19 @@ class RunsClient:
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
-        return await self.http.post(
+        response = await self.http.post(
             endpoint, json={k: v for k, v in payload.items() if v is not None}
         )
+        if (
+            raise_error
+            and isinstance(response, dict)
+            and "__error__" in response
+            and isinstance(response["__error__"], dict)
+        ):
+            raise Exception(
+                f"{response['__error__'].get('error')}: {response['__error__'].get('message')}"
+            )
+        return response
 
     async def list(
         self, thread_id: str, *, limit: int = 10, offset: int = 0
@@ -2260,7 +2273,7 @@ def get_sync_client(
     client = httpx.Client(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
+        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
         headers=get_headers(api_key, headers),
     )
     return SyncLangGraphClient(client)
