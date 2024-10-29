@@ -706,7 +706,10 @@ class AssistantsClient:
         """List all versions of an assistant.
 
         Args:
-            assistant_id: The assistant ID to delete.
+            assistant_id: The assistant ID to get versions for.
+            metadata: Metadata to filter versions by. Exact match filter for each KV pair.
+            limit: The maximum number of versions to return.
+            offset: The number of versions to skip.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -2803,7 +2806,10 @@ class SyncAssistantsClient:
         """List all versions of an assistant.
 
         Args:
-            assistant_id: The assistant ID to delete.
+            assistant_id: The assistant ID to get versions for.
+            metadata: Metadata to filter versions by. Exact match filter for each KV pair.
+            limit: The maximum number of versions to return.
+            offset: The number of versions to skip.
 
         Returns:
             list[Assistant]: A list of assistants.
