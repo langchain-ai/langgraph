@@ -139,6 +139,7 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
     builder = StateGraph(MessagesState)
     # add remote graph directly as a node
     builder.add_node("child", remote_graph)
+    builder.add_edge(START, "child")
     graph = builder.compile()
 
     # invoke the parent graph
