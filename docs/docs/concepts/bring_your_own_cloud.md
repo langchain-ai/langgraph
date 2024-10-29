@@ -1,5 +1,10 @@
 # Bring Your Own Cloud (BYOC)
 
+!!! note Prerequisites
+
+    - [LangGraph Platform](./langgraph_platform.md)
+    - [Deployment Options](./deployment_options.md)
+
 ## Architecture
 
 Split control plane (hosted by us) and data plane (hosted by you, managed by us).
@@ -12,8 +17,7 @@ Split control plane (hosted by us) and data plane (hosted by you, managed by us)
 
 LangChain has no direct access to the resources created in your cloud account, and can only interact with them via AWS APIs. Your data never leaves your cloud account / VPC at rest or in transit.
 
-
-
+![Architecture](img/byoc_architecture.png)
 
 ## Requirements
 
