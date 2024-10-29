@@ -73,12 +73,13 @@ class RemoteGraph(PregelProtocol):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
         If `client` or `sync_client` are provided, they will be used instead of the default clients.
-        See `LangGraphClient` and `SyncLangGraphClient` for details on the default clients.
+        See `LangGraphClient` and `SyncLangGraphClient` for details on the default clients. At least
+        one of `url`, `client`, or `sync_client` must be provided.
 
         Args:
             name: The name of the graph.
             url: The URL of the remote API.
-            api_key: The API key to use for authentication.
+            api_key: The API key to use for authentication. If not provided, it will be read from the environment (LANGGRAPH_API_KEY, LANGSMITH_API_KEY, or LANGCHAIN_API_KEY).
             headers: Additional headers to include in the requests.
             client: A LangGraphClient instance to use instead of creating a default client.
             sync_client: A SyncLangGraphClient instance to use instead of creating a default client.
@@ -140,7 +141,9 @@ class RemoteGraph(PregelProtocol):
         *,
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
-        """Method to call GET /assistants/{assistant_id}/graph.
+        """Get graph by graph name.
+        
+        This method calls GET /assistants/{assistant_id}/graph.
 
         Args:
             config: This parameter is not used.
@@ -167,7 +170,9 @@ class RemoteGraph(PregelProtocol):
         *,
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
-        """Async method to call GET /assistants/{assistant_id}/graph.
+        """Get graph by graph name.
+        
+        This method calls GET /assistants/{assistant_id}/graph.
 
         Args:
             config: This parameter is not used.
@@ -309,9 +314,11 @@ class RemoteGraph(PregelProtocol):
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
-        """Method to call POST /threads/{thread_id}/state/checkpoint or
-        GET /threads/{thread_id}/state/{checkpoint_id} or
-        GET /threads/{thread_id}/state.
+        """Get the state of a thread.
+        
+        This method calls POST /threads/{thread_id}/state/checkpoint if a
+        checkpoint is specified in the config or GET /threads/{thread_id}/state
+        if no checkpoint is specified.
 
         Args:
             config: A RunnableConfig that includes `thread_id` in the
@@ -334,9 +341,11 @@ class RemoteGraph(PregelProtocol):
     async def aget_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
-        """Async method to call POST /threads/{thread_id}/state/checkpoint or
-        GET /threads/{thread_id}/state/{checkpoint_id} or
-        GET /threads/{thread_id}/state.
+        """Get the state of a thread.
+        
+        This method calls POST /threads/{thread_id}/state/checkpoint if a
+        checkpoint is specified in the config or GET /threads/{thread_id}/state
+        if no checkpoint is specified.
 
         Args:
             config: A RunnableConfig that includes `thread_id` in the
@@ -364,7 +373,9 @@ class RemoteGraph(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
-        """Method to call POST /threads/{thread_id}/history.
+        """Get the state history of a thread.
+        
+        This method calls POST /threads/{thread_id}/history.
 
         Args:
             config: A RunnableConfig that includes `thread_id` in the
@@ -397,7 +408,9 @@ class RemoteGraph(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
-        """Async method to call POST /threads/{thread_id}/history.
+        """Get the state history of a thread.
+        
+        This method calls POST /threads/{thread_id}/history.
 
         Args:
             config: A RunnableConfig that includes `thread_id` in the
@@ -428,7 +441,9 @@ class RemoteGraph(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        """Method to call POST /threads/{thread_id}/state.
+        """Update the state of a thread.
+        
+        This method calls POST /threads/{thread_id}/state.
 
         Args:
             config: A RunnableConfig that includes `thread_id` in the
@@ -456,7 +471,9 @@ class RemoteGraph(PregelProtocol):
         values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        """Async method to call POST /threads/{thread_id}/state.
+        """Update the state of a thread.
+        
+        This method calls POST /threads/{thread_id}/state.
 
         Args:
             config: A RunnableConfig that includes `thread_id` in the
@@ -519,8 +536,11 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
-        """Method to call POST /threads/{thread_id}/runs/stream or
-        POST /runs/stream.
+        """Create a run and stream the results.
+        
+        This method calls POST /threads/{thread_id}/runs/stream if a `thread_id`
+        is speciffed in the `configurable` field of the config or
+        POST /runs/stream otherwise.
 
         Args:
             input: Input to the graph.
@@ -581,8 +601,11 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        """Async method to call POST /threads/{thread_id}/runs/stream or
-        POST /runs/stream.
+        """Create a run and stream the results.
+        
+        This method calls POST /threads/{thread_id}/runs/stream if a `thread_id`
+        is speciffed in the `configurable` field of the config or
+        POST /runs/stream otherwise.
 
         Args:
             input: Input to the graph.
@@ -657,8 +680,11 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
-        """Method to call POST /threads/{thread_id}/runs/wait or
-        POST /runs/wait.
+        """Create a run, wait until it finishes and return the final state.
+        
+        This method calls POST /threads/{thread_id}/runs/wait if a `thread_id`
+        is speciffed in the `configurable` field of the config or
+        POST /runs/wait otherwise.
 
         Args:
             input: Input to the graph.
@@ -691,8 +717,11 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
     ) -> Union[dict[str, Any], Any]:
-        """Async method to call POST /threads/{thread_id}/runs/wait or
-        POST /runs/wait.
+        """Create a run, wait until it finishes and return the final state.
+        
+        This method calls POST /threads/{thread_id}/runs/wait if a `thread_id`
+        is speciffed in the `configurable` field of the config or
+        POST /runs/wait otherwise.
 
         Args:
             input: Input to the graph.
