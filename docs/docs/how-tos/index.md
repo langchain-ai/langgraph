@@ -121,15 +121,15 @@ These guides show how to use the prebuilt ReAct agent:
 
 ## LangGraph Deploy
 
-### Application Setup
+### Application Structure
 
-LangGraph Cloud gives you best in class observability, testing, and hosting services. Learn how to setup your app for deployment to LangGraph Cloud in these how-to guides
+Learn how to set up your app for deployment to LangGraph Platform:
 
-- [How to set up app for deployment (requirements.txt)](../deployment/setup.md)
-- [How to set up app for deployment (pyproject.toml)](../deployment/setup_pyproject.md)
-- [How to set up app for deployment (JavaScript)](../deployment/setup_javascript.md)
-- [How to customize Dockerfile](../deployment/custom_docker.md)
-- [How to test locally](../deployment/test_locally.md)
+- [How to set up app for deployment (requirements.txt)](../cloud/deployment/setup.md)
+- [How to set up app for deployment (pyproject.toml)](../cloud/deployment/setup_pyproject.md)
+- [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
+- [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
+- [How to test locally](../cloud/deployment/test_locally.md)
  
 ### Deployment
 

@@ -7,6 +7,12 @@
 
 ## Overview
 
+A LangGraph application consists of one or more graphs, a LangGraph API Configuration file (`langgraph.json`), a file that specifies dependencies, and an optional .env file that specifies environment variables.
+
+This guide shows a typical structure for a LangGraph application and shows how the required information to deploy a LangGraph application using the LangGraph Platform is specified.
+
+## Key Concepts
+
 To deploy using the LangGraph Platform, the following information should be provided:
 
 1. A [LangGraph API Configuration file](#configuration-file) (`langgraph.json`) that specifies the dependencies, graphs, environment variables to use for the application.
@@ -148,21 +154,15 @@ Use the `graphs` key in the [LangGraph configuration file](#configuration-file) 
 
 You can specify one or more graphs in the configuration file. Each graph is identified by a name (which should be unique) and a path for either: (1) the compiled graph or (2) a function that makes a graph is defined.
 
-### Examples
-
-=== "Python"
-
-    - `./your_package/your_file.py:agent`, where `agent` is an instance of `langgraph.graph.state.CompiledStateGraph`.
-    - `./your_package/your_file.py:make_agent`, where `make_agent` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and creates an instance of `langgraph.graph.state.StateGraph` / `langgraph.graph.state.CompiledStateGraph`.
-
-=== "JavaScript"
-
-    - `./your_package/your_file.js:agent`, where `agent` is a function that creates a graph.
-    - `./your_package/your_file.js:make_agent`, where `make_agent` is a function that takes a config object and creates a graph.
-
-
 ## Environment Variables
 
 If you're working with a deployed LangGraph application locally, you can configure environment variables in the `env` key of the [LangGraph configuration file](#configuration-file).
 
 For a production deployment, you will typically want to configure the environment variables in the deployment environment.
+
+
+## Related
+
+Please see the following resources for more information:
+
+- How-to guides for [Application Structure](../how-tos/#application-structure).
