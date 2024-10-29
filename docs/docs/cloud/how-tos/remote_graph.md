@@ -144,7 +144,7 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
 
     # invoke the parent graph
     result = graph.invoke({
-        "messages": [{"role": "user", "content": "what's the weather in sf"}], config=config
+        "messages": [{"role": "user", "content": "what's the weather in sf"}]
     })
     print(result)
     ```
