@@ -45,13 +45,13 @@ Here are some common issues that arise in complex deployments, which LangGraph P
 
 - **[Streaming Support](streaming.md)**: As agents grow more sophisticated, they often benefit from streaming both token outputs and intermediate states back to the user. Without this, users are left waiting for potentially long operations with no feedback. LangGraph Platform provides [multiple streaming modes](streaming.md) optimized for various application needs.
 
-- **[Background Runs](#background-runs)**: For agents that take longer to process, holding open a user connection can be impractical. LangGraph Platform supports background runs with endpoints for polling status updates, which helps manage these longer processes smoothly.
+- **Background Runs**: For agents that take longer to process (e.g., hours), maintaining an open connection can be impractical. The LangGraph Platform supports launching agent runs in the background and provides both polling endpoints and webhooks to monitor run status effectively.
+ 
+- **Support for long runs**: Vanilla server setups often encounter timeouts or disruptions when handling requests that take a long time to complete. LangGraph Server’s API provides robust support for these tasks by sending regular heartbeat signals, preventing unexpected connection closures during prolonged processes.
 
-- **[Long-Running Job Support](#long-runs)**: Standard web infrastructure may struggle with prolonged agent operations, leading to timeouts or other disruptions. LangGraph Platform is optimized to support and reliably run long-lasting jobs without performance issues.
+- **Handling Burstiness**: Certain applications, especially those with real-time user interaction, may experience "bursty" request loads where numerous requests hit the server simultaneously. LangGraph Platform includes a task queue, ensuring requests are handled consistently without loss, even under heavy loads.
 
-- **[Handling Burstiness](#burstiness)**: Certain applications, especially those with real-time user interaction, may experience "bursty" request loads where numerous requests hit the server simultaneously. LangGraph Platform includes a task queue, ensuring requests are handled consistently without loss, even under heavy loads.
-
-- **[Double Texting Prevention](double_texting.md)**: In user-driven applications, it’s common for users to send multiple messages rapidly. This “double texting” can disrupt agent flows if not handled properly. LangGraph Platform offers built-in strategies to address and manage such interactions.
+- **[Double Texting](double_texting.md)**: In user-driven applications, it’s common for users to send multiple messages rapidly. This “double texting” can disrupt agent flows if not handled properly. LangGraph Platform offers built-in strategies to address and manage such interactions.
 
 - **[Checkpointers and Memory Management](persistence.md#checkpoints)**: For agents needing persistence (e.g., conversation memory), deploying a robust storage solution can be complex. LangGraph Platform includes optimized [checkpointers](persistence.md#checkpoints) and a [memory store](persistence.md#memory-store), managing state across sessions without the need for custom solutions.
 
