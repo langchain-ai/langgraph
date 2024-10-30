@@ -34,4 +34,4 @@ For example, let's imagine you have a general writing agent. You have created a 
 
 For more information on assistants, see the following resources:
 
-- [LangServe API Reference](../reference/api/api_ref.html#tag/assistantscreate)
+- [Assistants how-to guides](../../how-tos/#assistants)

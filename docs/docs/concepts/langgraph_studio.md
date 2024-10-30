@@ -3,6 +3,7 @@
 !!! info "Prerequisites"
 
     - [LangGraph Platform](./langgraph_platform.md)
+    - [LangGraph Server](./langgraph_server.md)
 
 LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications.
 
@@ -106,3 +107,10 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
     else:
         return "node_c"
 ```
+
+
+## Related
+
+For more information please see the following:
+
+*  [LangGraph Studio how-to guides](../../how-tos/#langgraph-studio)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework. 
+LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source [LangGraph framework](./high_level.md).
 
 The LangGraph Platform consists of several components that work together to support the development, deployment, debugging, and monitoring of LangGraph applications:
 
