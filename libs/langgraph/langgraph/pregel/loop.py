@@ -116,7 +116,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     def __call__(value: StreamChunk) -> None:
         for stream in streams:
             if value[1] in stream.modes:
-                stream(value)  # type: ignore
+                stream(value)
 
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
@@ -587,7 +587,7 @@ class PregelLoop(LoopProtocol):
         if mode not in self.stream.modes:
             return
         for v in values(*args, **kwargs):
-            self.stream((self.checkpoint_ns, mode, v))  # type: ignore
+            self.stream((self.checkpoint_ns, mode, v))
 
     def _output_writes(
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False

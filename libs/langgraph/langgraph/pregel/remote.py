@@ -507,7 +507,7 @@ class RemoteGraph(PregelProtocol):
         'updates' mode is added to the list of stream modes so that interrupts
         can be detected in the remote graph.
         """
-        updated_stream_modes: list[StreamMode] = []
+        updated_stream_modes: list[StreamModeSDK] = []
         req_updates = False
         req_single = True
         # coerce to list, or add default stream mode
@@ -519,6 +519,10 @@ class RemoteGraph(PregelProtocol):
                 updated_stream_modes.extend(stream_mode)
         else:
             updated_stream_modes.append(default)
+        # map "messages" to "messages-tuple"
+        if "messages" in updated_stream_modes:
+            updated_stream_modes.remove("messages")
+            updated_stream_modes.append("messages-tuple")
         # add 'updates' mode if not present
         if "updates" in updated_stream_modes:
             req_updates = True
@@ -557,8 +561,10 @@ class RemoteGraph(PregelProtocol):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
-        stream: Optional[StreamProtocol] = config.get(CONF, {}).get(CONFIG_KEY_STREAM)
-        stream_modes_ext: list[StreamMode] = (
+        stream: Optional[StreamProtocol] = (
+            (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
+        )
+        stream_modes_ext: list[StreamModeSDK] = (
             [*stream_modes, *stream.modes] if stream else stream_modes
         )
 
@@ -635,8 +641,10 @@ class RemoteGraph(PregelProtocol):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
-        stream: Optional[StreamProtocol] = config.get(CONF, {}).get(CONFIG_KEY_STREAM)
-        stream_modes_ext: list[StreamMode] = (
+        stream: Optional[StreamProtocol] = (
+            (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
+        )
+        stream_modes_ext: list[StreamModeSDK] = (
             [*stream_modes, *stream.modes] if stream else stream_modes
         )
 
