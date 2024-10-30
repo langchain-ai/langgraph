@@ -7,7 +7,6 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
-    Self,
     Sequence,
     Type,
     Union,
@@ -15,6 +14,7 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
