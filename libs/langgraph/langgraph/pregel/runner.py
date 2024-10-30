@@ -14,7 +14,7 @@ from typing import (
     cast,
 )
 
-from langgraph.constants import ERROR, INTERRUPT, NO_WRITES
+from langgraph.constants import ERROR, INTERRUPT, NO_WRITES, TAG_HIDDEN
 from langgraph.errors import GraphDelegate, GraphInterrupt
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
@@ -32,10 +32,12 @@ class PregelRunner:
         submit: Submit,
         put_writes: Callable[[str, Sequence[tuple[str, Any]]], None],
         use_astream: bool = False,
+        node_finished: Optional[Callable[[str], None]] = None,
     ) -> None:
         self.submit = submit
         self.put_writes = put_writes
         self.use_astream = use_astream
+        self.node_finished = node_finished
 
     def tick(
         self,
@@ -209,6 +211,10 @@ class PregelRunner:
                 # save error to checkpointer
                 self.put_writes(task.id, [(ERROR, exception)])
         else:
+            if self.node_finished and (
+                task.config is None or TAG_HIDDEN not in task.config.get("tags", [])
+            ):
+                self.node_finished(task.name)
             if not task.writes:
                 # add no writes marker
                 task.writes.append((NO_WRITES, None))
