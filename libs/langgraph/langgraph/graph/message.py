@@ -35,7 +35,10 @@ def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Mess
         if left is not None and right is not None:
             return func(left, right, **kwargs)
         elif left is not None or right is not None:
-            msg = ""
+            msg = (
+                f"Must specify non-null arguments for both 'left' and 'right'. Only "
+                f"received: '{'left' if left else 'right'}'."
+            )
             raise ValueError(msg)
         else:
             return partial(func, **kwargs)
@@ -198,7 +201,7 @@ def add_messages(
     if format == "langchain-openai":
         merged = _format_messages(merged)
     elif format:
-        msg = f"Unrecognized {format=}. Expected one of 'openai', None."
+        msg = f"Unrecognized {format=}. Expected one of 'langchain-openai', None."
         raise ValueError(msg)
     else:
         pass
