@@ -8,11 +8,17 @@ Testing locally ensures that there are no errors or conflicts with Python depend
 
 Install the proper packages:
 
-```shell
-pip install langgraph-cli
-```
 
-Ensure you have an API key, which you can create from the LangSmith UI (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
+=== "pip" 
+    ```bash
+    pip install -U langgraph-cli
+    ```
+=== "Homebrew" (macOS only)
+    ```bash
+    brew install langgraph-cli
+    ```
+
+Ensure you have an API key, which you can create from the [LangSmith UI](https://smith.langchain.com) (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
 
 ```python
 LANGCHAIN_API_KEY = *********
@@ -20,7 +26,7 @@ LANGCHAIN_API_KEY = *********
 
 ## Start the API server
 
-Once you have downloaded the CLI, you can run the following command to start the API server for local testing:
+Once you have installed the CLI, you can run the following command to start the API server for local testing:
 
 ```shell
 langgraph up
