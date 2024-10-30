@@ -39,4 +39,4 @@ The `langgraph dockerfile` command generates a [Dockerfile](https://docs.docker.
 
 ## Related
 
-- [LangGraph CLI API Reference](../cloud/reference/cli/)
+- [LangGraph CLI API Reference](../../cloud/reference/cli/)
