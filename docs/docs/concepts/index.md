@@ -43,7 +43,8 @@ LangGraph Platform is a commercial solution for deploying agentic applications i
 
 - [Why LangGraph Platform?](./langgraph_platform.md): The LangGraph platform is an opinionated way to deploy and manage LangGraph applications. This guide provides an overview of the key features and concepts behind LangGraph Platform.
 - [Deployment Options](./deployment_options.md): LangGraph Platform offers several deployment options, including free, self-hosted, [bring your own cloud (BYOC)](./bring_your_own_cloud.md), and [LangGraph Cloud](./langgraph_cloud.md). This guide provides a comparison of the different deployment options.
- 
+- [Template Applications](./template_applications.md): Reference applications designed to help you get started quickly when building with LangGraph.
+
 **Components**
 
 The LangGraph Platform comprises several components that work together to support the deployment and management of LangGraph applications:
