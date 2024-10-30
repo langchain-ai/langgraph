@@ -6,17 +6,17 @@ The LangGraph command line interface includes commands to build and run a LangGr
 
 1. Ensure that Docker is installed (e.g. `docker --version`).
 2. Install the `langgraph-cli` package:
+ 
+    === "pip"
+        ```bash    
+        pip install langgraph-cli
+        ```
 
-=== "pip"
-    ```bash    
-    pip install langgraph-cli
-    ```
-
-=== "Homebrew" (MacOS only)
-    ```bash
+    === "Homebrew (MacOS only)"
+        ```bash
         brew install langgraph-cli
-    ```
-
+        ```
+ 
 3. Run the command `langgraph --help` to confirm that the CLI is installed.
 
 [](){#langgraph.json}
@@ -26,7 +26,7 @@ The LangGraph command line interface includes commands to build and run a LangGr
 The LangGraph CLI requires a JSON configuration file with the following keys:
 
 | Key                | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `dependencies`     | **Required**. Array of dependencies for LangGraph Cloud API server. Dependencies can be one of the following: (1) `"."`, which will look for local Python packages, (2) `pyproject.toml`, `setup.py` or `requirements.txt` in the app directory `"./local_package"`, or (3) a package name.                                                                                                                                                                                                                                                  |
 | `graphs`           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and creates an instance of `langgraph.graph.state.StateGraph` / `langgraph.graph.state.CompiledStateGraph`.</li></ul> |
 | `env`              | Path to `.env` file or a mapping from environment variable to its value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -91,7 +91,7 @@ langgraph build [OPTIONS]
 **Options**
 
 | Option               | Default          | Description                                                                                                                  |
-| -------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+|----------------------|------------------|------------------------------------------------------------------------------------------------------------------------------|
 | `--platform TEXT`    |                  | Target platform(s) to build the Docker image for. Example: `langgraph build --platform linux/amd64,linux/arm64`              |
 | `-t, --tag TEXT`     |                  | **Required**. Tag for the Docker image. Example: `langgraph build -t my-image`                                               |
 | `--pull / --no-pull` | `--pull`         | Build with latest remote Docker image. Use `--no-pull` for running the LangGraph Cloud API server with locally built images. |
@@ -111,7 +111,7 @@ langgraph up [OPTIONS]
 **Options**
 
 | Option                       | Default                   | Description                                                                                                           |
-| ---------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+|------------------------------|---------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | `--wait`                     |                           | Wait for services to start before returning. Implies --detach                                                         |
 | `--postgres-uri TEXT`        | Local database            | Postgres URI to use for the database.                                                                                 |
 | `--watch`                    |                           | Restart on file changes                                                                                               |
@@ -138,19 +138,19 @@ langgraph dockerfile [OPTIONS] SAVE_PATH
 **Options**
 
 | Option              | Default          | Description                                                                                                     |
-| ------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
+|---------------------|------------------|-----------------------------------------------------------------------------------------------------------------|
 | `-c, --config FILE` | `langgraph.json` | Path to the [configuration file](#configuration-file) declaring dependencies, graphs and environment variables. |
 | `--help`            |                  | Show this message and exit.                                                                                     |
 
 Example:
 
 ```bash
-langgraph dockerfile -c langgraph.json DOCKERFILE
+langgraph dockerfile -c langgraph.json Dockerfile
 ```
 
 Would generate something like the following:
 
-```text DOCKERFILE
+```text
 FROM langchain/langgraph-api:3.11
 
 ADD ./pipconf.txt /pipconfig.txt
