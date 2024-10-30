@@ -21,7 +21,7 @@ jobs:
           - "latest"
         include:
           - python-version: "3.11"
-            core-version: ">=0.2.39,<0.3.0"
+            core-version: ">=0.2.42,<0.3.0"
 
     defaults:
       run:
