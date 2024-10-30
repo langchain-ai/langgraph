@@ -603,7 +603,7 @@ class AssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
-            metadata: Metadata to add to assistant.
+            metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
 
         Returns:
@@ -842,7 +842,7 @@ class ThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add/update to thread.
+            metadata: Metadata to merge with existing thread metadata.
 
         Returns:
             Thread: The created thread.
@@ -888,10 +888,10 @@ class ThreadsClient:
         """Search for threads.
 
         Args:
-            metadata: Thread metadata to search for.
-            values: Thread values to search for.
-            status: Status to search for.
-                Must be one of 'idle', 'busy', or 'interrupted'.
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+                Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
 
@@ -954,7 +954,7 @@ class ThreadsClient:
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
-            subgraphs: Include subgraphs in the state.
+            subgraphs: Include subgraphs states.
 
         Returns:
             ThreadState: the thread of the state.
@@ -1071,7 +1071,7 @@ class ThreadsClient:
 
         Args:
             thread_id: The ID of the thread to update.
-            values: The values to update to the state.
+            values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
 
@@ -1122,11 +1122,11 @@ class ThreadsClient:
         """Get the state history of a thread.
 
         Args:
-            thread_id: The ID of the thread to get the state of.
-            checkpoint: Get history for this subgraph. If empty defaults to root.
-            limit: The maximum number of results to return.
-            before: Get history before this checkpoint.
-            metadata: Filter checkpoints by metadata.
+            thread_id: The ID of the thread to get the state history for.
+            checkpoint: Return states for this subgraph. If empty defaults to root.
+            limit: The maximum number of states to return.
+            before: Return states before this checkpoint.
+            metadata: Filter states by metadata key-value pairs.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -2703,7 +2703,7 @@ class SyncAssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
-            metadata: Metadata to add to assistant.
+            metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
 
         Returns:
@@ -2939,7 +2939,7 @@ class SyncThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add/update to thread.
+            metadata: Metadata to merge with existing thread metadata.
 
         Returns:
             Thread: The created thread.
@@ -2983,10 +2983,10 @@ class SyncThreadsClient:
         """Search for threads.
 
         Args:
-            metadata: Thread metadata to search for.
-            values: Thread values to search for.
-            status: Status to search for.
-                Must be one of 'idle', 'busy', or 'interrupted'.
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+                Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
 
@@ -3049,7 +3049,7 @@ class SyncThreadsClient:
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
-            subgraphs: Include subgraphs in the state.
+            subgraphs: Include subgraphs states.
 
         Returns:
             ThreadState: the thread of the state.
@@ -3166,7 +3166,7 @@ class SyncThreadsClient:
 
         Args:
             thread_id: The ID of the thread to update.
-            values: The values to update to the state.
+            values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
 
@@ -3217,11 +3217,11 @@ class SyncThreadsClient:
         """Get the state history of a thread.
 
         Args:
-            thread_id: The ID of the thread to get the state of.
-            checkpoint: Get history for this subgraph. If empty defaults to root.
-            limit: The maximum number of results to return.
-            before: Get history before this checkpoint.
-            metadata: Filter checkpoints by metadata.
+            thread_id: The ID of the thread to get the state history for.
+            checkpoint: Return states for this subgraph. If empty defaults to root.
+            limit: The maximum number of states to return.
+            before: Return states before this checkpoint.
+            metadata: Filter states by metadata key-value pairs.
 
         Returns:
             list[ThreadState]: the state history of the thread.
