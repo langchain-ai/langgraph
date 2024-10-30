@@ -13,7 +13,7 @@ Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through 
 Learn the basics of LangGraph through a comprehensive quick start in which you will build an agent from scratch.
 
 - [Quick Start](introduction.ipynb): In this tutorial, you will build a support chatbot using LangGraph.
-- [LangGraph Platform Quick Start](../cloud/quick_start.md): In this tutorial, you will learn how to deploy a tool-calling chatbot agent to LangGraph Platform.
+- [LangGraph Cloud Quick Start](../cloud/quick_start.md): In this tutorial, you will build and deploy an agent to LangGraph Cloud.
 
 ## Use cases
 
