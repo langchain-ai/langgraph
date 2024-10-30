@@ -134,6 +134,7 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     if "tools" not in model.kwargs:
         return True
 
+    # Gemini stype tool which are created in Gapic style
     bound_tools = model.kwargs["tools"] if "chat-google" not in model._llm_type else model.kwargs["tools"][0]["function_declarations"]
     if len(tools) != len(bound_tools):
         raise ValueError(
