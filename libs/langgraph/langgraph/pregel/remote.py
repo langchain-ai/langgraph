@@ -593,8 +593,6 @@ class RemoteGraph(PregelProtocol):
                 ns = caller_ns + ns
             if stream is not None and chunk.event in stream.modes:
                 stream((ns, mode, chunk.data))
-            if chunk.event not in stream_modes:
-                continue
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
                     raise GraphInterrupt(chunk.data[INTERRUPT])
@@ -602,6 +600,8 @@ class RemoteGraph(PregelProtocol):
                     continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
+            if chunk.event.split("|", 1)[0] not in stream_modes:
+                continue
             if subgraphs:
                 if "|" in chunk.event:
                     mode, ns_ = chunk.event.split("|", 1)
@@ -675,8 +675,6 @@ class RemoteGraph(PregelProtocol):
                 ns = caller_ns + ns
             if stream is not None and chunk.event in stream.modes:
                 stream((ns, mode, chunk.data))
-            if chunk.event not in stream_modes:
-                continue
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
                     raise GraphInterrupt(chunk.data[INTERRUPT])
@@ -684,6 +682,8 @@ class RemoteGraph(PregelProtocol):
                     continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
+            if chunk.event.split("|", 1)[0] not in stream_modes:
+                continue
             if subgraphs:
                 if req_single:
                     yield ns, chunk.data
