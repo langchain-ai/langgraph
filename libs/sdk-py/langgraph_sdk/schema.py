@@ -25,7 +25,9 @@ Represents the status of a thread:
 - "error": An exception occurred during task processing.
 """
 
-StreamMode = Literal["values", "messages", "updates", "events", "debug", "custom"]
+StreamMode = Literal[
+    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+]
 """
 Defines the mode of streaming:
 - "values": Stream only the values.
