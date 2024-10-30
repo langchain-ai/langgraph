@@ -85,10 +85,9 @@ The LangGraph Cloud API provides several endpoints for creating and managing thr
 
 ### Runs
 
-A run is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a thread.
+A run is an invocation of an [assistant](#assistants). Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a [thread](#threads).
 
 The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../reference/api/api_ref.html#tag/runscreate) for more details.
-
 
 ### Store
 
@@ -103,7 +102,7 @@ There are many situations in which it is useful to run an assistant on a schedul
 For example, say that you're building an assistant that runs daily and sends an email summary
 of the day's news. You could use a cron job to run the assistant every day at 8:00 PM.
 
-LangGraph Cloud supports cron jobs, which run on a user-defined schedule. The user specifies a schedule, an assistant, and some input. After that, on the specified schedule, LangGraph Cloud will:
+LangGraph Cloud supports cron jobs, which run on a user-defined schedule. The user specifies a schedule, an assistant, and some input. After that, on the specified schedule, the server will:
 
 - Create a new thread with the specified assistant
 - Send the specified input to that thread
