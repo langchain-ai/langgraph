@@ -695,19 +695,18 @@ class RemoteGraph(PregelProtocol):
         Returns:
             The output of the graph.
         """
-        sync_client = self._validate_sync_client()
-        merged_config = merge_configs(self.config, config)
-        sanitized_config = self._sanitize_config(merged_config)
-
-        return sync_client.runs.wait(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
-            input=input,
-            config=sanitized_config,
+        for chunk in self.stream(
+            input,
+            config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            if_not_exists="create",
-        )
+            stream_mode="values",
+        ):
+            pass
+        try:
+            return chunk
+        except UnboundLocalError:
+            return None
 
     async def ainvoke(
         self,
@@ -732,16 +731,15 @@ class RemoteGraph(PregelProtocol):
         Returns:
             The output of the graph.
         """
-        client = self._validate_client()
-        merged_config = merge_configs(self.config, config)
-        sanitized_config = self._sanitize_config(merged_config)
-
-        return await client.runs.wait(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
-            input=input,
-            config=sanitized_config,
+        async for chunk in self.astream(
+            input,
+            config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            if_not_exists="create",
-        )
+            stream_mode="values",
+        ):
+            pass
+        try:
+            return chunk
+        except UnboundLocalError:
+            return None

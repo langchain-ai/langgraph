@@ -650,9 +650,13 @@ async def test_astream():
 def test_invoke():
     # set up test
     mock_sync_client = MagicMock()
-    mock_sync_client.runs.wait.return_value = {
-        "values": {"messages": [{"type": "human", "content": "world"}]}
-    }
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(
+            event="values", data={"messages": [{"type": "human", "content": "world"}]}
+        ),
+    ]
 
     # call method / assertions
     remote_pregel = RemoteGraph(
@@ -665,16 +669,22 @@ def test_invoke():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
+    assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
 @pytest.mark.anyio
 async def test_ainvoke():
     # set up test
-    mock_async_client = AsyncMock()
-    mock_async_client.runs.wait.return_value = {
-        "values": {"messages": [{"type": "human", "content": "world"}]}
-    }
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(
+            event="values", data={"messages": [{"type": "human", "content": "world"}]}
+        ),
+    ]
+    mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
     remote_pregel = RemoteGraph(
@@ -687,7 +697,7 @@ async def test_ainvoke():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
+    assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
 @pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")
