@@ -164,7 +164,7 @@ See the [API reference](../reference/api/api_ref.html#tag/runscreate/POST/thread
 
 Streaming modes `values`, `updates`, and `debug` are very similar to modes available in the LangGraph library - for a deeper conceptual explanation of those, you can see the [previous section](#streaming-graph-outputs-stream-and-astream).
 
-Streaming mode `events` is the same as using `.astream_events` in the LangGraph library - for a deeper conceptual explanation of this, you can see the LangGraph library documentation [here](low_level.md#streaming).
+Streaming mode `events` is the same as using `.astream_events` in the LangGraph library - for a deeper conceptual explanation of this, you can see the [previous section](#streaming-graph-outputs-stream-and-astream).
 
 ### `stream_mode="messages"`
 
@@ -199,18 +199,16 @@ async for event in client.runs.stream(
 ```
 ```shell
 metadata
+messages/metadata
+messages/partial
+...
+messages/partial
+messages/metadata
 messages/complete
 messages/metadata
 messages/partial
 ...
 messages/partial
-messages/complete
-messages/complete
-messages/metadata
-messages/partial
-...
-messages/partial
-messages/complete
 end
 ```
 
@@ -218,13 +216,6 @@ We first get some `metadata` - this is metadata about the run.
 
 ```python
 StreamPart(event='metadata', data={'run_id': '1ef657cf-ae55-6f65-97d4-f4ed1dbdabc6'})
-```
-
-We then get a `messages/complete` event - this a fully formed message getting emitted. In this case,
-this was the just the input message we sent in. 
-
-```python
-StreamPart(event='messages/complete', data=[{'content': 'hi!', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': '833c09a3-bb19-46c9-81d9-1e5954ec5f92', 'example': False}])
 ```
 
 We then get a `messages/metadata` - this is letting us know that a new message is starting and provides additional information about the LLM as well as the node where the LLM is invoked.
@@ -239,13 +230,13 @@ We then get a BUNCH of `messages/partial` events - these are the individual toke
 StreamPart(event='messages/partial', data=[{'content': '', 'additional_kwargs': {'tool_calls': [{'index': 0, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'function': {'arguments': '', 'name': 'tavily_search_results_json'}, 'type': 'function'}]}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-985c0f14-9f43-40d4-a505-4637fc58e333', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [{'name': 'tavily_search_results_json', 'args': '', 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'error': None}], 'usage_metadata': None}])
 ```
 
-After that, we get a `messages/complete` event - this is the AIMessage finishing. It's now a complete tool call:
+The last `messages/partial` event for a given message will contained all of the tokens streamed for that message. In our case, it is now a complete tool call:
 
 ```python
-StreamPart(event='messages/complete', data=[{'content': '', 'additional_kwargs': {'tool_calls': [{'index': 0, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'function': {'arguments': '{"query":"current weather in San Francisco"}', 'name': 'tavily_search_results_json'}, 'type': 'function'}]}, 'response_metadata': {'finish_reason': 'tool_calls', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-985c0f14-9f43-40d4-a505-4637fc58e333', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'current weather in San Francisco'}, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs'}], 'invalid_tool_calls': [], 'usage_metadata': None}])
+StreamPart(event='messages/partial', data=[{'content': '', 'additional_kwargs': {'tool_calls': [{'index': 0, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'function': {'arguments': '{"query":"current weather in San Francisco"}', 'name': 'tavily_search_results_json'}, 'type': 'function'}]}, 'response_metadata': {'finish_reason': 'tool_calls', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-985c0f14-9f43-40d4-a505-4637fc58e333', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'current weather in San Francisco'}, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs'}], 'invalid_tool_calls': [], 'usage_metadata': None}])
 ```
 
-After that, we get ANOTHER `messages/complete` event. This is a tool message - our agent has called a tool, gotten a response, and now inserting it into the state in the form of a tool message.
+After that, we get another `messages/metadata`, now followed by a `messages/complete` event. This event is emitted for a tool message - our agent has called a tool, gotten a response, and now inserting it into the state in the form of a tool message.
 
 ```python
 StreamPart(event='messages/complete', data=[{'content': '[{"url": "https://www.weatherapi.com/", "content": "{\'location\': {\'name\': \'San Francisco\', \'region\': \'California\', \'country\': \'United States of America\', \'lat\': 37.78, \'lon\': -122.42, \'tz_id\': \'America/Los_Angeles\', \'localtime_epoch\': 1724877689, \'localtime\': \'2024-08-28 13:41\'}, \'current\': {\'last_updated_epoch\': 1724877000, \'last_updated\': \'2024-08-28 13:30\', \'temp_c\': 23.3, \'temp_f\': 73.9, \'is_day\': 1, \'condition\': {\'text\': \'Partly cloudy\', \'icon\': \'//cdn.weatherapi.com/weather/64x64/day/116.png\', \'code\': 1003}, \'wind_mph\': 15.0, \'wind_kph\': 24.1, \'wind_degree\': 310, \'wind_dir\': \'NW\', \'pressure_mb\': 1014.0, \'pressure_in\': 29.93, \'precip_mm\': 0.0, \'precip_in\': 0.0, \'humidity\': 57, \'cloud\': 25, \'feelslike_c\': 25.0, \'feelslike_f\': 77.1, \'windchill_c\': 20.9, \'windchill_f\': 69.6, \'heatindex_c\': 23.3, \'heatindex_f\': 74.0, \'dewpoint_c\': 12.9, \'dewpoint_f\': 55.2, \'vis_km\': 16.0, \'vis_miles\': 9.0, \'uv\': 6.0, \'gust_mph\': 19.5, \'gust_kph\': 31.3}}"}]', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'tavily_search_results_json', 'id': '0112eba5-7660-4375-9f24-c7a1d6777b97', 'tool_call_id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs'}])
