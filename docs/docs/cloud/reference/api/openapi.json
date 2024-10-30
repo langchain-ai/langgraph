@@ -33,7 +33,7 @@
           "Assistants"
         ],
         "summary": "Create Assistant",
-        "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `PATCH /assistants/{assistant_id}/` endpoint.",
+        "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `POST /assistants/{assistant_id}/latest` endpoint.",
         "operationId": "create_assistant_assistants_post",
         "requestBody": {
           "content": {
@@ -85,7 +85,7 @@
           "Assistants"
         ],
         "summary": "Search Assistants",
-        "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants. The API specification does not specify how the search is implemented.",
+        "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants.",
         "operationId": "search_assistants_assistants_search_post",
         "requestBody": {
           "content": {
@@ -1047,7 +1047,7 @@
           "Threads"
         ],
         "summary": "Copy Thread",
-        "description": "Create a new thread with a copy of the state from an existing thread.",
+        "description": "Create a new thread with a copy of the state and checkpoints from an existing thread.",
         "operationId": "copy_thread_post_threads__thread_id__copy_post",
         "parameters": [
           {
@@ -1352,7 +1352,7 @@
           "Runs"
         ],
         "summary": "Create Background Run",
-        "description": "Create a run in existing thread. Don't wait for the final output. Return immediately.",
+        "description": "Create a run in existing thread, return the run ID immediately. Don't wait for the final run output.",
         "operationId": "create_run_threads__thread_id__runs_post",
         "parameters": [
           {
@@ -2199,7 +2199,7 @@
           "Runs (Stateless)"
         ],
         "summary": "Create Background Run",
-        "description": "Create a run in a new thread. Don't wait for the final output. Return immediately.",
+        "description": "Create a run in a new thread, return the run ID immediately. Don't wait for the final run output.",
         "operationId": "run_stateless_runs_post",
         "requestBody": {
           "content": {
@@ -2581,11 +2581,13 @@
           "assistant_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Assistant Id"
+            "title": "Assistant Id",
+            "description": "The ID of the assistant."
           },
           "graph_id": {
             "type": "string",
-            "title": "Graph Id"
+            "title": "Graph Id",
+            "description": "The ID of the graph."
           },
           "config": {
             "properties": {
@@ -2606,29 +2608,35 @@
               }
             },
             "type": "object",
-            "title": "Config"
+            "title": "Config",
+            "description": "The assistant config."
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "The time the assistant was created."
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "The last time the assistant was updated."
           },
           "metadata": {
             "type": "object",
-            "title": "Metadata"
+            "title": "Metadata",
+            "description": "The assistant metadata."
           },
           "version": {
             "type": "integer",
-            "title": "Version"
+            "title": "Version",
+            "description": "The version of the assistant"
           },
           "name": {
             "type": "string",
-            "title": "Assistant Name"
+            "title": "Assistant Name",
+            "description": "The name of the assistant"
           }
         },
         "type": "object",
@@ -2648,22 +2656,37 @@
             "type": "string",
             "format": "uuid",
             "title": "Assistant Id",
-            "description": "The ID of the assistant. If not provided, an ID is generated."
+            "description": "The ID of the assistant. If not provided, a random UUID will be generated."
           },
           "graph_id": {
             "type": "string",
             "title": "Graph Id",
-            "description": "The graph to use."
+            "description": "The ID of the graph the assistant should use. The graph ID is normally set in your langgraph.json configuration."
           },
           "config": {
             "type": "object",
             "title": "Config",
-            "description": "The assistant config."
+            "description": "Configuration to use for the graph. Useful when graph is configurable and you want to create different assistants based on different configurations."
           },
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata for the assistant."
+            "description": "Metadata to add to assistant."
+          },
+          "if_exists": {
+            "type": "string",
+            "enum": [
+              "raise",
+              "do_nothing"
+            ],
+            "title": "If Exists",
+            "description": "How to handle duplicate creation. Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).",
+            "default": "raise"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The name of the assistant. Defaults to 'Untitled'."
           }
         },
         "type": "object",
@@ -2678,12 +2701,12 @@
           "graph_id": {
             "type": "string",
             "title": "Graph Id",
-            "description": "The graph to use."
+            "description": "The ID of the graph the assistant should use. The graph ID is normally set in your langgraph.json configuration. If not provided, assistant will keep pointing to same graph."
           },
           "config": {
             "type": "object",
             "title": "Config",
-            "description": "The assistant config."
+            "description": "Configuration to use for the graph. Useful when graph is configurable and you want to update the assistant's configuration."
           },
           "metadata": {
             "type": "object",
@@ -2692,8 +2715,8 @@
           },
           "name": {
             "type": "string",
-            "title": "Assistant Name",
-            "description": "The assistant name."
+            "title": "Name",
+            "description": "The new name for the assistant. If not provided, assistant will keep its current name."
           }
         },
         "type": "object",
@@ -2738,35 +2761,42 @@
           "cron_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Cron Id"
+            "title": "Cron Id",
+            "description": "The ID of the cron."
           },
           "thread_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Thread Id"
+            "title": "Thread Id",
+            "description": "The ID of the thread."
           },
           "end_time": {
             "type": "string",
             "format": "date-time",
-            "title": "End Time"
+            "title": "End Time",
+            "description": "The end date to stop running the cron."
           },
           "schedule": {
             "type": "string",
-            "title": "Schedule"
+            "title": "Schedule",
+            "description": "The schedule to run, cron format."
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "The time the cron was created."
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "The last time the cron was updated."
           },
           "payload": {
             "type": "object",
-            "title": "Payload"
+            "title": "Payload",
+            "description": "The run payload to use for creating new run."
           }
         },
         "type": "object",
@@ -2779,18 +2809,20 @@
           "updated_at",
           "payload"
         ],
-        "title": "Cron"
+        "title": "Cron",
+        "description": "Represents a scheduled task."
       },
       "CronCreate": {
         "properties": {
+          "schedule": {
+            "type": "string",
+            "title": "Schedule",
+            "description": "The cron schedule to execute this job on."
+          },
           "assistant_id": {
             "type": "string",
             "format": "uuid",
             "title": "Assistant Id"
-          },
-          "checkpoint_id": {
-            "type": "string",
-            "title": "Checkpoint Id"
           },
           "input": {
             "anyOf": [
@@ -2804,12 +2836,13 @@
                 "type": "object"
               }
             ],
-            "title": "Input"
+            "title": "Input",
+            "description": "The input to the graph."
           },
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata for the run."
+            "description": "Metadata to assign to the cron job runs."
           },
           "config": {
             "properties": {
@@ -2830,14 +2863,16 @@
               }
             },
             "type": "object",
-            "title": "Config"
+            "title": "Config",
+            "description": "The configuration for the assistant."
           },
           "webhook": {
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
             "format": "uri",
-            "title": "Webhook"
+            "title": "Webhook",
+            "description": "Webhook to call after LangGraph API call is done."
           },
           "interrupt_before": {
             "anyOf": [
@@ -2854,7 +2889,8 @@
                 "type": "array"
               }
             ],
-            "title": "Interrupt Before"
+            "title": "Interrupt Before",
+            "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
@@ -2871,7 +2907,8 @@
                 "type": "array"
               }
             ],
-            "title": "Interrupt After"
+            "title": "Interrupt After",
+            "description": "Nodes to interrupt immediately after they get executed."
           },
           "multitask_strategy": {
             "type": "string",
@@ -2882,6 +2919,7 @@
               "enqueue"
             ],
             "title": "Multitask Strategy",
+            "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
             "default": "reject"
           }
         },
@@ -2891,24 +2929,26 @@
           "schedule"
         ],
         "title": "CronCreate",
-        "description": "Payload for creating a cron."
+        "description": "Payload for creating a cron job."
       },
       "CronSearch": {
         "properties": {
           "assistant_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Assistant Id"
+            "title": "Assistant Id",
+            "description": "The assistant ID or graph name to search for."
           },
           "thread_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Thread Id"
+            "title": "Thread Id",
+            "description": "The thread ID to search for."
           },
           "limit": {
             "type": "integer",
             "title": "Limit",
-            "description": "Maximum number to return.",
+            "description": "The maximum number of results to return.",
             "default": 10,
             "minimum": 1,
             "maximum": 1000
@@ -2916,7 +2956,7 @@
           "offset": {
             "type": "integer",
             "title": "Offset",
-            "description": "Offset to start from.",
+            "description": "The number of results to skip.",
             "default": 0,
             "minimum": 0
           }
@@ -2930,23 +2970,28 @@
         "properties": {
           "graph_id": {
             "type": "string",
-            "title": "Graph Id"
+            "title": "Graph Id",
+            "description": "The ID of the graph."
           },
           "input_schema": {
             "type": "object",
-            "title": "Input Schema"
+            "title": "Input Schema",
+            "description": "The schema for the graph input. Missing if unable to generate JSON schema from graph."
           },
           "output_schema": {
             "type": "object",
-            "title": "Input Schema"
+            "title": "Output Schema",
+            "description": "The schema for the graph output. Missing if unable to generate JSON schema from graph."
           },
           "state_schema": {
             "type": "object",
-            "title": "State Schema"
+            "title": "State Schema",
+            "description": "The schema for the graph state. Missing if unable to generate JSON schema from graph."
           },
           "config_schema": {
             "type": "object",
-            "title": "Config Schema"
+            "title": "Config Schema",
+            "description": "The schema for the graph config. Missing if unable to generate JSON schema from graph."
           }
         },
         "type": "object",
@@ -2955,25 +3000,30 @@
           "state_schema",
           "config_schema"
         ],
-        "title": "GraphSchema"
+        "title": "GraphSchema",
+        "description": "Defines the structure and properties of a graph."
       },
       "GraphSchemaNoId": {
         "properties": {
           "input_schema": {
             "type": "object",
-            "title": "Input Schema"
+            "title": "Input Schema",
+            "description": "The schema for the graph input. Missing if unable to generate JSON schema from graph."
           },
           "output_schema": {
             "type": "object",
-            "title": "Input Schema"
+            "title": "Output Schema",
+            "description": "The schema for the graph output. Missing if unable to generate JSON schema from graph."
           },
           "state_schema": {
             "type": "object",
-            "title": "State Schema"
+            "title": "State Schema",
+            "description": "The schema for the graph state. Missing if unable to generate JSON schema from graph."
           },
           "config_schema": {
             "type": "object",
-            "title": "Config Schema"
+            "title": "Config Schema",
+            "description": "The schema for the graph config. Missing if unable to generate JSON schema from graph."
           }
         },
         "type": "object",
@@ -2983,7 +3033,8 @@
           "state_schema",
           "config_schema"
         ],
-        "title": "GraphSchemaNoId"
+        "title": "GraphSchemaNoId",
+        "description": "Defines the structure and properties of a graph without an ID."
       },
       "Subgraphs": {
         "type": "object",
@@ -2993,45 +3044,37 @@
         "title": "Subgraphs",
         "description": "Map of graph name to graph schema metadata (`input_schema`, `output_schema`, `state_schema`, `config_schema`)."
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
       "Run": {
         "properties": {
           "run_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Run Id"
+            "title": "Run Id",
+            "description": "The ID of the run."
           },
           "thread_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Thread Id"
+            "title": "Thread Id",
+            "description": "The ID of the thread."
           },
           "assistant_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Assistant Id"
+            "title": "Assistant Id",
+            "description": "The assistant that was used for this run."
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "The time the run was created."
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "The last time the run was updated."
           },
           "status": {
             "type": "string",
@@ -3042,11 +3085,13 @@
               "timeout",
               "interrupted"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "The status of the run. One of 'pending', 'error', 'success', 'timeout', 'interrupted'."
           },
           "metadata": {
             "type": "object",
-            "title": "Metadata"
+            "title": "Metadata",
+            "description": "The run metadata."
           },
           "kwargs": {
             "type": "object",
@@ -3060,7 +3105,8 @@
               "interrupt",
               "enqueue"
             ],
-            "title": "Multitask Strategy"
+            "title": "Multitask Strategy",
+            "description": "Strategy to handle concurrent runs on the same thread."
           }
         },
         "type": "object",
@@ -3090,11 +3136,14 @@
                 "type": "string",
                 "title": "Graph Id"
               }
-            ]
+            ],
+            "description": "The assistant ID or graph name to run. If using graph name, will default to first assistant created from that graph."
           },
-          "checkpoint_id": {
-            "type": "string",
-            "title": "Checkpoint Id"
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint",
+            "description": "The checkpoint to resume from.",
+            "$ref": "#/components/schemas/CheckpointConfig"
           },
           "input": {
             "anyOf": [
@@ -3111,12 +3160,13 @@
                 "type": "null"
               }
             ],
-            "title": "Input"
+            "title": "Input",
+            "description": "The input to the graph."
           },
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata for the run."
+            "description": "Metadata to assign to the run."
           },
           "config": {
             "properties": {
@@ -3137,14 +3187,16 @@
               }
             },
             "type": "object",
-            "title": "Config"
+            "title": "Config",
+            "description": "The configuration for the assistant."
           },
           "webhook": {
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
             "format": "uri",
-            "title": "Webhook"
+            "title": "Webhook",
+            "description": "Webhook to call after LangGraph API call is done."
           },
           "interrupt_before": {
             "anyOf": [
@@ -3161,7 +3213,8 @@
                 "type": "array"
               }
             ],
-            "title": "Interrupt Before"
+            "title": "Interrupt Before",
+            "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
@@ -3178,7 +3231,8 @@
                 "type": "array"
               }
             ],
-            "title": "Interrupt After"
+            "title": "Interrupt After",
+            "description": "Nodes to interrupt immediately after they get executed."
           },
           "stream_mode": {
             "anyOf": [
@@ -3209,9 +3263,16 @@
               }
             ],
             "title": "Stream Mode",
+            "description": "The stream mode(s) to use.",
             "default": [
               "values"
             ]
+          },
+          "stream_subgraphs": {
+            "type": "boolean",
+            "title": "Stream Subgraphs",
+            "description": "Whether to stream output from subgraphs.",
+            "default": false
           },
           "on_disconnect": {
             "type": "string",
@@ -3220,6 +3281,7 @@
               "continue"
             ],
             "title": "On Disconnect",
+            "description": "The disconnect mode to use. Must be one of 'cancel' or 'continue'.",
             "default": "cancel"
           },
           "feedback_keys": {
@@ -3227,7 +3289,8 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Feedback Keys"
+            "title": "Feedback Keys",
+            "description": "Feedback keys to assign to run."
           },
           "multitask_strategy": {
             "type": "string",
@@ -3238,12 +3301,23 @@
               "enqueue"
             ],
             "title": "Multitask Strategy",
+            "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
+            "default": "reject"
+          },
+          "if_not_exists": {
+            "type": "string",
+            "enum": [
+              "create",
+              "reject"
+            ],
+            "title": "If Not Exists",
+            "description": "How to handle missing thread. Must be either 'reject' (raise error if missing), or 'create' (create new thread).",
             "default": "reject"
           },
           "after_seconds": {
             "type": "integer",
             "title": "After Seconds",
-            "description": "Number of seconds to wait before starting the run."
+            "description": "The number of seconds to wait before starting the run. Use to schedule future runs."
           }
         },
         "type": "object",
@@ -3275,7 +3349,8 @@
                 "type": "string",
                 "title": "Graph Id"
               }
-            ]
+            ],
+            "description": "The assistant ID or graph name to run. If using graph name, will default to first assistant created from that graph."
           },
           "input": {
             "anyOf": [
@@ -3292,12 +3367,13 @@
                 "type": "null"
               }
             ],
-            "title": "Input"
+            "title": "Input",
+            "description": "The input to the graph."
           },
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata for the run."
+            "description": "Metadata to assign to the run."
           },
           "config": {
             "properties": {
@@ -3318,14 +3394,16 @@
               }
             },
             "type": "object",
-            "title": "Config"
+            "title": "Config",
+            "description": "The configuration for the assistant."
           },
           "webhook": {
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
             "format": "uri",
-            "title": "Webhook"
+            "title": "Webhook",
+            "description": "Webhook to call after LangGraph API call is done."
           },
           "interrupt_before": {
             "anyOf": [
@@ -3342,7 +3420,8 @@
                 "type": "array"
               }
             ],
-            "title": "Interrupt Before"
+            "title": "Interrupt Before",
+            "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
@@ -3359,7 +3438,8 @@
                 "type": "array"
               }
             ],
-            "title": "Interrupt After"
+            "title": "Interrupt After",
+            "description": "Nodes to interrupt immediately after they get executed."
           },
           "stream_mode": {
             "anyOf": [
@@ -3390,6 +3470,7 @@
               }
             ],
             "title": "Stream Mode",
+            "description": "The stream mode(s) to use.",
             "default": [
               "values"
             ]
@@ -3399,7 +3480,14 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Feedback Keys"
+            "title": "Feedback Keys",
+            "description": "Feedback keys to assign to run."
+          },
+          "stream_subgraphs": {
+            "type": "boolean",
+            "title": "Stream Subgraphs",
+            "description": "Whether to stream output from subgraphs.",
+            "default": false
           },
           "on_completion": {
             "type": "string",
@@ -3408,6 +3496,7 @@
               "keep"
             ],
             "title": "On Completion",
+            "description": "Whether to delete or keep the thread created for a stateless run. Must be one of 'delete' or 'keep'.",
             "default": "delete"
           },
           "on_disconnect": {
@@ -3417,12 +3506,13 @@
               "continue"
             ],
             "title": "On Disconnect",
+            "description": "The disconnect mode to use. Must be one of 'cancel' or 'continue'.",
             "default": "cancel"
           },
           "after_seconds": {
             "type": "integer",
             "title": "After Seconds",
-            "description": "Number of seconds to wait before starting the run."
+            "description": "The number of seconds to wait before starting the run. Use to schedule future runs."
           }
         },
         "type": "object",
@@ -3430,51 +3520,24 @@
           "assistant_id"
         ],
         "title": "RunCreateStateless",
-        "description": "Payload for creating a streaming run."
-      },
-      "SearchRequest": {
-        "properties": {
-          "metadata": {
-            "type": "object",
-            "title": "Metadata",
-            "description": "Metadata to search for."
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit",
-            "description": "Maximum number to return.",
-            "default": 10,
-            "minimum": 1,
-            "maximum": 1000
-          },
-          "offset": {
-            "type": "integer",
-            "title": "Offset",
-            "description": "Offset to start from.",
-            "default": 0,
-            "minimum": 0
-          }
-        },
-        "type": "object",
-        "title": "SearchRequest",
-        "description": "Payload for listing runs."
+        "description": "Payload for creating a run."
       },
       "AssistantSearchRequest": {
         "properties": {
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata to search for."
+            "description": "Metadata to filter by. Exact match filter for each KV pair."
           },
           "graph_id": {
             "type": "string",
             "title": "Graph Id",
-            "description": "Filter by graph ID."
+            "description": "The ID of the graph to filter by. The graph ID is normally set in your langgraph.json configuration."
           },
           "limit": {
             "type": "integer",
             "title": "Limit",
-            "description": "Maximum number to return.",
+            "description": "The maximum number of results to return.",
             "default": 10,
             "minimum": 1,
             "maximum": 1000
@@ -3482,13 +3545,13 @@
           "offset": {
             "type": "integer",
             "title": "Offset",
-            "description": "Offset to start from.",
+            "description": "The number of results to skip.",
             "default": 0,
             "minimum": 0
           }
         },
         "type": "object",
-        "title": "SearchRequest",
+        "title": "AssistantSearchRequest",
         "description": "Payload for listing assistants."
       },
       "AssistantVersionsSearchRequest": {
@@ -3496,12 +3559,12 @@
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata to search for."
+            "description": "Metadata to filter versions by. Exact match filter for each KV pair."
           },
           "limit": {
             "type": "integer",
             "title": "Limit",
-            "description": "Maximum number to return.",
+            "description": "The maximum number of versions to return.",
             "default": 10,
             "minimum": 1,
             "maximum": 1000
@@ -3509,7 +3572,7 @@
           "offset": {
             "type": "integer",
             "title": "Offset",
-            "description": "Offset to start from.",
+            "description": "The number of versions to skip.",
             "default": 0,
             "minimum": 0
           }
@@ -3523,7 +3586,7 @@
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata to filter on."
+            "description": "Thread metadata to filter on."
           },
           "values": {
             "type": "object",
@@ -3539,7 +3602,7 @@
               "error"
             ],
             "title": "Status",
-            "description": "Filter by thread status."
+            "description": "Thread status to filter on."
           },
           "limit": {
             "type": "integer",
@@ -3558,7 +3621,7 @@
           }
         },
         "type": "object",
-        "title": "SearchRequest",
+        "title": "ThreadSearchRequest",
         "description": "Payload for listing threads."
       },
       "Thread": {
@@ -3566,21 +3629,25 @@
           "thread_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Thread Id"
+            "title": "Thread Id",
+            "description": "The ID of the thread."
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "The time the thread was created."
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "The last time the thread was updated."
           },
           "metadata": {
             "type": "object",
-            "title": "Metadata"
+            "title": "Metadata",
+            "description": "The thread metadata."
           },
           "status": {
             "type": "string",
@@ -3590,11 +3657,13 @@
               "interrupted",
               "error"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "The status of the thread."
           },
           "values": {
             "type": "object",
-            "title": "Values"
+            "title": "Values",
+            "description": "The current state of the thread."
           }
         },
         "type": "object",
@@ -3613,12 +3682,22 @@
             "type": "string",
             "format": "uuid",
             "title": "Thread Id",
-            "description": "The ID of the thread. If not provided, an ID is generated."
+            "description": "The ID of the thread. If not provided, a random UUID will be generated."
           },
           "metadata": {
             "type": "object",
             "title": "Metadata",
-            "description": "Metadata for the thread."
+            "description": "Metadata to add to thread."
+          },
+          "if_exists": {
+            "type": "string",
+            "enum": [
+              "raise",
+              "do_nothing"
+            ],
+            "title": "If Exists",
+            "description": "How to handle duplicate creation. Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).",
+            "default": "raise"
           }
         },
         "type": "object",
@@ -3640,7 +3719,7 @@
       "ThreadStateCheckpointRequest": {
         "properties": {
           "checkpoint": {
-            "type": "object",
+            "$ref": "#/components/schemas/CheckpointConfig",
             "title": "Checkpoint",
             "description": "The checkpoint to get the state for."
           },
@@ -3701,7 +3780,7 @@
                   "items": {}
                 },
                 "checkpoint": {
-                  "type": "object",
+                  "$ref": "#/components/schemas/CheckpointConfig",
                   "title": "Checkpoint"
                 },
                 "state": {
@@ -3717,7 +3796,7 @@
             "title": "Tasks"
           },
           "checkpoint": {
-            "type": "object",
+            "$ref": "#/components/schemas/CheckpointConfig",
             "title": "Checkpoint"
           },
           "metadata": {
@@ -3755,15 +3834,8 @@
           },
           "before": {
             "title": "Before",
-            "description": "Return states before this checkpoint ID.",
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object"
-              }
-            ]
+            "description": "Return states before this checkpoint.",
+            "$ref": "#/components/schemas/CheckpointConfig"
           },
           "metadata": {
             "type": "object",
@@ -3771,7 +3843,7 @@
             "description": "Filter states by metadata key-value pairs."
           },
           "checkpoint": {
-            "type": "object",
+            "$ref": "#/components/schemas/CheckpointConfig",
             "title": "Checkpoint",
             "description": "Return states for this subgraph."
           }
@@ -3796,20 +3868,23 @@
                 "type": "null"
               }
             ],
-            "title": "Values"
+            "title": "Values",
+            "description": "The values to update the state with."
           },
           "checkpoint": {
-            "type": "object",
-            "title": "Checkpoint"
+            "$ref": "#/components/schemas/CheckpointConfig",
+            "title": "Checkpoint",
+            "description": "The checkpoint to update the state of."
           },
           "as_node": {
             "type": "string",
-            "title": "As Node"
+            "title": "As Node",
+            "description": "Update the state as if this node had just executed."
           }
         },
         "type": "object",
         "title": "ThreadStateUpdate",
-        "description": "Payload for adding state to a thread."
+        "description": "Payload for updating the state of a thread."
       },
       "ThreadStateUpdateResponse": {
         "properties": {
@@ -3821,6 +3896,29 @@
         "type": "object",
         "title": "ThreadStateUpdateResponse",
         "description": "Response for adding state to a thread."
+      },
+      "CheckpointConfig": {
+        "type": "object",
+        "title": "CheckpointConfig",
+        "description": "Checkpoint config.",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "description": "Unique identifier for the thread associated with this checkpoint."
+          },
+          "checkpoint_ns": {
+            "type": "string",
+            "description": "Namespace for the checkpoint, used for organization and retrieval."
+          },
+          "checkpoint_id": {
+            "type": "string",
+            "description": "Optional unique identifier for the checkpoint itself."
+          },
+          "checkpoint_map": {
+            "type": "object",
+            "description": "Optional dictionary containing checkpoint-specific data."
+          }
+        }
       },
       "StorePutRequest": {
         "type": "object",
@@ -3834,15 +3932,23 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "title": "Namespace",
+            "description": "A list of strings representing the namespace path."
           },
           "key": {
-            "type": "string"
+            "type": "string",
+            "title": "Key",
+            "description": "The unique identifier for the item within the namespace."
           },
           "value": {
-            "type": "object"
+            "type": "object",
+            "title": "Value",
+            "description": "A dictionary containing the item's data."
           }
-        }
+        },
+        "title": "StorePutRequest",
+        "description": "Request to store or update an item."
       },
       "StoreDeleteRequest": {
         "type": "object",
@@ -3854,12 +3960,18 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "title": "Namespace",
+            "description": "A list of strings representing the namespace path."
           },
           "key": {
-            "type": "string"
+            "type": "string",
+            "title": "Key",
+            "description": "The unique identifier for the item."
           }
-        }
+        },
+        "title": "StoreDeleteRequest",
+        "description": "Request to delete an item."
       },
       "StoreSearchRequest": {
         "type": "object",
@@ -3871,24 +3983,34 @@
             ],
             "items": {
               "type": "string"
-            }
+            },
+            "title": "Namespace Prefix",
+            "description": "List of strings representing the namespace prefix."
           },
           "filter": {
             "type": [
               "object",
               "null"
             ],
-            "additionalProperties": true
+            "additionalProperties": true,
+            "title": "Filter",
+            "description": "Optional dictionary of key-value pairs to filter results."
           },
           "limit": {
             "type": "integer",
-            "default": 10
+            "default": 10,
+            "title": "Limit",
+            "description": "Maximum number of items to return (default is 10)."
           },
           "offset": {
             "type": "integer",
-            "default": 0
+            "default": 0,
+            "title": "Offset",
+            "description": "Number of items to skip before returning results (default is 0)."
           }
-        }
+        },
+        "title": "StoreSearchRequest",
+        "description": "Request to search for items within a namespace prefix."
       },
       "StoreListNamespacesRequest": {
         "type": "object",
@@ -3897,24 +4019,34 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "title": "Prefix",
+            "description": "Optional list of strings representing the prefix to filter namespaces."
           },
           "suffix": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "title": "Suffix",
+            "description": "Optional list of strings representing the suffix to filter namespaces."
           },
           "max_depth": {
-            "type": "integer"
+            "type": "integer",
+            "title": "Max Depth",
+            "description": "Optional integer specifying the maximum depth of namespaces to return."
           },
           "limit": {
             "type": "integer",
-            "default": 100
+            "default": 100,
+            "title": "Limit",
+            "description": "Maximum number of namespaces to return (default is 100)."
           },
           "offset": {
             "type": "integer",
-            "default": 0
+            "default": 0,
+            "title": "Offset",
+            "description": "Number of namespaces to skip before returning results (default is 0)."
           }
         }
       },
@@ -3932,23 +4064,29 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The namespace of the item. A namespace is analogous to a document's directory."
           },
           "key": {
-            "type": "string"
+            "type": "string",
+            "description": "The unique identifier of the item within its namespace. In general, keys needn't be globally unique."
           },
           "value": {
-            "type": "object"
+            "type": "object",
+            "description": "The value stored in the item. This is the document itself."
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "The timestamp when the item was created."
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "The timestamp when the item was last updated."
           }
-        }
+        },
+        "description": "Represents a single document or data entry in the graph's Store. Items are used to store cross-thread memories."
       },
       "SearchItemsResponse": {
         "type": "object",
