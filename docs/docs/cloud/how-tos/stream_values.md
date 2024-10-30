@@ -133,24 +133,44 @@ Now we can stream by values, which streams the full state of the graph after eac
 Output:
 
     Receiving new event of type: metadata...
-    {'run_id': 'f08791ce-0a3d-44e0-836c-ff62cd2e2786'}
-    
-    
+    {"run_id": "f08791ce-0a3d-44e0-836c-ff62cd2e2786"}
+
+    Receiving new event of type: values...
+    {
+      "messages": [
+        {
+          "role": "human",
+          "content": "what's the weather in la"
+        }
+      ]
+    }
     
     Receiving new event of type: values...
-    {'messages': [{'role': 'human', 'content': 'what's the weather in la'}]}
-    
-    
-    
-    Receiving new event of type: values...
-    {'messages': [{'content': 'what's the weather in la', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'faa15565-8823-4aa1-87af-e21b40526fae', 'example': False}, {'content': [{'id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g', 'input': {'query': 'weather in los angeles'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-3fe1db7a-6b8d-4d83-ba07-8657190ad811', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'weather in los angeles'}, 'id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g'}], 'invalid_tool_calls': []}]}
-    
-    
-    
-    Receiving new event of type: values...
-    {'messages': [{'content': 'what's the weather in la', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'faa15565-8823-4aa1-87af-e21b40526fae', 'example': False}, {'content': [{'id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g', 'input': {'query': 'weather in los angeles'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-3fe1db7a-6b8d-4d83-ba07-8657190ad811', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'weather in los angeles'}, 'id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g'}], 'invalid_tool_calls': []}, {'content': '[{"url": "https://www.weatherapi.com/", "content": "{\'location\': {\'name\': \'Los Angeles\', \'region\': \'California\', \'country\': \'United States of America\', \'lat\': 34.05, \'lon\': -118.24, \'tz_id\': \'America/Los_Angeles\', \'localtime_epoch\': 1716310320, \'localtime\': \'2024-05-21 9:52\'}, \'current\': {\'last_updated_epoch\': 1716309900, \'last_updated\': \'2024-05-21 09:45\', \'temp_c\': 16.7, \'temp_f\': 62.1, \'is_day\': 1, \'condition\': {\'text\': \'Overcast\', \'icon\': \'//cdn.weatherapi.com/weather/64x64/day/122.png\', \'code\': 1009}, \'wind_mph\': 8.1, \'wind_kph\': 13.0, \'wind_degree\': 250, \'wind_dir\': \'WSW\', \'pressure_mb\': 1015.0, \'pressure_in\': 29.97, \'precip_mm\': 0.0, \'precip_in\': 0.0, \'humidity\': 65, \'cloud\': 100, \'feelslike_c\': 16.7, \'feelslike_f\': 62.1, \'vis_km\': 16.0, \'vis_miles\': 9.0, \'uv\': 5.0, \'gust_mph\': 12.5, \'gust_kph\': 20.2}}"}]', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'tavily_search_results_json', 'id': '0d5dab31-5ff8-4ae2-a560-bc4bcba7c9d7', 'tool_call_id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g'}]}
-    
-    
+    {
+      "messages": [
+        {
+          "content": "what's the weather in la",
+          "type": "human",
+          ...
+        },
+        {
+          "content": "",
+          "type": "ai",
+          "tool_calls": [
+            {
+              "name": "tavily_search_results_json",
+              "args": {
+                "query": "weather in los angeles"
+              },
+              "id": "toolu_01E5mSaZWm5rWJnCqmt63v4g"
+            }
+          ]
+        }
+      ]
+    }
+
+    ...
+
     
     Receiving new event of type: values...
     {'messages': [{'content': 'what's the weather in la', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'faa15565-8823-4aa1-87af-e21b40526fae', 'example': False}, {'content': [{'id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g', 'input': {'query': 'weather in los angeles'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-3fe1db7a-6b8d-4d83-ba07-8657190ad811', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'weather in los angeles'}, 'id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g'}], 'invalid_tool_calls': []}, {'content': '[{"url": "https://www.weatherapi.com/", "content": "{\'location\': {\'name\': \'Los Angeles\', \'region\': \'California\', \'country\': \'United States of America\', \'lat\': 34.05, \'lon\': -118.24, \'tz_id\': \'America/Los_Angeles\', \'localtime_epoch\': 1716310320, \'localtime\': \'2024-05-21 9:52\'}, \'current\': {\'last_updated_epoch\': 1716309900, \'last_updated\': \'2024-05-21 09:45\', \'temp_c\': 16.7, \'temp_f\': 62.1, \'is_day\': 1, \'condition\': {\'text\': \'Overcast\', \'icon\': \'//cdn.weatherapi.com/weather/64x64/day/122.png\', \'code\': 1009}, \'wind_mph\': 8.1, \'wind_kph\': 13.0, \'wind_degree\': 250, \'wind_dir\': \'WSW\', \'pressure_mb\': 1015.0, \'pressure_in\': 29.97, \'precip_mm\': 0.0, \'precip_in\': 0.0, \'humidity\': 65, \'cloud\': 100, \'feelslike_c\': 16.7, \'feelslike_f\': 62.1, \'vis_km\': 16.0, \'vis_miles\': 9.0, \'uv\': 5.0, \'gust_mph\': 12.5, \'gust_kph\': 20.2}}"}]', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'tavily_search_results_json', 'id': '0d5dab31-5ff8-4ae2-a560-bc4bcba7c9d7', 'tool_call_id': 'toolu_01E5mSaZWm5rWJnCqmt63v4g'}, {'content': 'Based on the weather API results, the current weather in Los Angeles is overcast with a temperature of around 62°F (17°C). There are light winds from the west-southwest around 8-13 mph. The humidity is 65% and visibility is good at 9 miles. Overall, mild spring weather conditions in LA.', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-4d6d4c23-5aad-4042-b0d9-19407a9e08e3', 'example': False, 'tool_calls': [], 'invalid_tool_calls': []}]}
