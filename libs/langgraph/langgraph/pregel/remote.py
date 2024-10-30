@@ -31,11 +31,16 @@ from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import INTERRUPT
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_STREAM,
+    INTERRUPT,
+)
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Interrupt
+from langgraph.types import Interrupt, StreamProtocol
 from langgraph.utils.config import merge_configs
 
 
@@ -507,7 +512,7 @@ class RemoteGraph(PregelProtocol):
         'updates' mode is added to the list of stream modes so that interrupts
         can be detected in the remote graph.
         """
-        updated_stream_modes: list[StreamMode] = []
+        updated_stream_modes: list[StreamModeSDK] = []
         req_updates = False
         req_single = True
         # coerce to list, or add default stream mode
@@ -519,6 +524,10 @@ class RemoteGraph(PregelProtocol):
                 updated_stream_modes.extend(stream_mode)
         else:
             updated_stream_modes.append(default)
+        # map "messages" to "messages-tuple"
+        if "messages" in updated_stream_modes:
+            updated_stream_modes.remove("messages")
+            updated_stream_modes.append("messages-tuple")
         # add 'updates' mode if not present
         if "updates" in updated_stream_modes:
             req_updates = True
@@ -557,18 +566,33 @@ class RemoteGraph(PregelProtocol):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
+        stream: Optional[StreamProtocol] = (
+            (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
+        )
+        stream_modes_ext: list[StreamModeSDK] = (
+            [*stream_modes, *stream.modes] if stream else stream_modes
+        )
 
         for chunk in sync_client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_modes,
+            stream_mode=stream_modes_ext,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            stream_subgraphs=subgraphs,
+            stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
         ):
+            if "|" in chunk.event:
+                mode, ns_ = chunk.event.split("|", 1)
+                ns = tuple(ns_.split("|"))
+            else:
+                mode, ns = chunk.event, ()
+            if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
+                ns = caller_ns + ns
+            if stream is not None and chunk.event in stream.modes:
+                stream((ns, mode, chunk.data))
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
                     raise GraphInterrupt(chunk.data[INTERRUPT])
@@ -576,6 +600,8 @@ class RemoteGraph(PregelProtocol):
                     continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
+            if chunk.event.split("|", 1)[0] not in stream_modes:
+                continue
             if subgraphs:
                 if "|" in chunk.event:
                     mode, ns_ = chunk.event.split("|", 1)
@@ -622,18 +648,33 @@ class RemoteGraph(PregelProtocol):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
+        stream: Optional[StreamProtocol] = (
+            (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
+        )
+        stream_modes_ext: list[StreamModeSDK] = (
+            [*stream_modes, *stream.modes] if stream else stream_modes
+        )
 
         async for chunk in client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_modes,
+            stream_mode=stream_modes_ext,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            stream_subgraphs=subgraphs,
+            stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
         ):
+            if "|" in chunk.event:
+                mode, ns_ = chunk.event.split("|", 1)
+                ns = tuple(ns_.split("|"))
+            else:
+                mode, ns = chunk.event, ()
+            if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
+                ns = caller_ns + ns
+            if stream is not None and chunk.event in stream.modes:
+                stream((ns, mode, chunk.data))
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
                     raise GraphInterrupt(chunk.data[INTERRUPT])
@@ -641,12 +682,9 @@ class RemoteGraph(PregelProtocol):
                     continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
+            if chunk.event.split("|", 1)[0] not in stream_modes:
+                continue
             if subgraphs:
-                if "|" in chunk.event:
-                    mode, ns_ = chunk.event.split("|", 1)
-                    ns = tuple(ns_.split("|"))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:
@@ -695,19 +733,18 @@ class RemoteGraph(PregelProtocol):
         Returns:
             The output of the graph.
         """
-        sync_client = self._validate_sync_client()
-        merged_config = merge_configs(self.config, config)
-        sanitized_config = self._sanitize_config(merged_config)
-
-        return sync_client.runs.wait(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
-            input=input,
-            config=sanitized_config,
+        for chunk in self.stream(
+            input,
+            config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            if_not_exists="create",
-        )
+            stream_mode="values",
+        ):
+            pass
+        try:
+            return chunk
+        except UnboundLocalError:
+            return None
 
     async def ainvoke(
         self,
@@ -732,16 +769,15 @@ class RemoteGraph(PregelProtocol):
         Returns:
             The output of the graph.
         """
-        client = self._validate_client()
-        merged_config = merge_configs(self.config, config)
-        sanitized_config = self._sanitize_config(merged_config)
-
-        return await client.runs.wait(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
-            input=input,
-            config=sanitized_config,
+        async for chunk in self.astream(
+            input,
+            config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            if_not_exists="create",
-        )
+            stream_mode="values",
+        ):
+            pass
+        try:
+            return chunk
+        except UnboundLocalError:
+            return None

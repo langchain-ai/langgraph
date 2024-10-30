@@ -65,6 +65,8 @@ CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
 # holds the current checkpoint_id, if any
 CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
+CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
+# callback to be called when a node is finished
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
