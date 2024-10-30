@@ -86,6 +86,7 @@ nav:
   - Reference:
       - "reference/index.md"
       - Graphs: reference/graphs.md
+      - RemoteGraph: reference/remote_graph.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
       - Prebuilt Components: reference/prebuilt.md
