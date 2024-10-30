@@ -95,6 +95,11 @@ interface RunsInvokePayload {
    * Use to schedule future runs.
    */
   afterSeconds?: number;
+
+  /**
+   * Behavior if the specified run doesn't exist. Defaults to "reject".
+   */
+  ifNotExists?: "create" | "reject";
 }
 
 export interface RunsStreamPayload extends RunsInvokePayload {
