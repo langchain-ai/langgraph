@@ -53,7 +53,11 @@ When running this server, you need to pass three environment variables:
 ### Using Docker
 
 ```shell
-docker run  -e REDIS_URI="foo" -e DATABASE_URI="bar" -e LANGSMITH_API_KEY="baz" my-image
+docker run \
+    -e REDIS_URI="foo" \
+    -e DATABASE_URI="bar" \
+    -e LANGSMITH_API_KEY="baz" \
+    my-image
 ```
 
 If you want to run this quickly without setting up a separate Redis and Postgres instance, you can use this docker compose file.
