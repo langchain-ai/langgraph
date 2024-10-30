@@ -49,7 +49,7 @@ LangGraph Platform is a commercial solution for deploying agentic applications i
 
 The LangGraph Platform comprises several components that work together to support the deployment and management of LangGraph applications:
 
-- [LangGraph Server](./langgraph_server.md): The server defines an opinionated API for interacting with agentic applications. It includes endpoints for interacting with `assistants`, `threads`, `memory`, and more.
+- [LangGraph Server](./langgraph_server.md): The LangGraph Server is designed to support a wide range of agentic application use cases, from background processing to real-time interactions. 
 - [LangGraph Studio](./langgraph_studio.md): LangGraph Studio is a specialized IDE that can connect to a LangGraph Server to enable visualization, interaction, and debugging of the application locally.
 - [LangGraph CLI](./langgraph_cli.md): LangGraph CLI is a command-line interface that helps to interact with a local LangGraph
 - [Python/JS SDK](./sdk.md): The Python/JS SDK provides a programmatic way to interact with deployed LangGraph Applications.

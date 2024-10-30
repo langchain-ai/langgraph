@@ -160,9 +160,8 @@ If you're working with a deployed LangGraph application locally, you can configu
 
 For a production deployment, you will typically want to configure the environment variables in the deployment environment.
 
-
 ## Related
 
 Please see the following resources for more information:
 
-- How-to guides for [Application Structure](../how-tos/#application-structure).
+- How-to guides for [Application Structure](../../how-tos/#application-structure).

@@ -1,5 +1,8 @@
 # Double Texting
 
+!!! info "Prerequisites"
+    - [LangGraph Server](./langgraph_server.md)
+
 Many times users might interact with your graph in unintended ways. 
 For instance, a user may send one message and before the graph has finished running send a second message. 
 More generally, users may invoke the graph a second time before the first run has finished.
