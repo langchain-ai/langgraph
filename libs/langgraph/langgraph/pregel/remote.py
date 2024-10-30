@@ -31,11 +31,11 @@ from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import INTERRUPT
+from langgraph.constants import CONF, CONFIG_KEY_STREAM, INTERRUPT
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Interrupt
+from langgraph.types import Interrupt, StreamProtocol
 from langgraph.utils.config import merge_configs
 
 
@@ -557,18 +557,31 @@ class RemoteGraph(PregelProtocol):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
+        stream: Optional[StreamProtocol] = config.get(CONF, {}).get(CONFIG_KEY_STREAM)
+        stream_modes_ext: list[StreamMode] = (
+            [*stream_modes, *stream.modes] if stream else stream_modes
+        )
 
         for chunk in sync_client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_modes,
+            stream_mode=stream_modes_ext,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            stream_subgraphs=subgraphs,
+            stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
         ):
+            if "|" in chunk.event:
+                mode, ns_ = chunk.event.split("|", 1)
+                ns = tuple(ns_.split("|"))
+            else:
+                mode, ns = chunk.event, ()
+            if stream is not None and chunk.event in stream.modes:
+                stream((ns, mode, chunk.data))
+            if chunk.event not in stream_modes:
+                continue
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
                     raise GraphInterrupt(chunk.data[INTERRUPT])
@@ -622,18 +635,31 @@ class RemoteGraph(PregelProtocol):
         merged_config = merge_configs(self.config, config)
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, req_updates, req_single = self._get_stream_modes(stream_mode)
+        stream: Optional[StreamProtocol] = config.get(CONF, {}).get(CONFIG_KEY_STREAM)
+        stream_modes_ext: list[StreamMode] = (
+            [*stream_modes, *stream.modes] if stream else stream_modes
+        )
 
         async for chunk in client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
             config=sanitized_config,
-            stream_mode=stream_modes,
+            stream_mode=stream_modes_ext,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs,
             if_not_exists="create",
         ):
+            if "|" in chunk.event:
+                mode, ns_ = chunk.event.split("|", 1)
+                ns = tuple(ns_.split("|"))
+            else:
+                mode, ns = chunk.event, ()
+            if stream is not None and chunk.event in stream.modes:
+                stream((ns, mode, chunk.data))
+            if chunk.event not in stream_modes:
+                continue
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
                     raise GraphInterrupt(chunk.data[INTERRUPT])
@@ -642,11 +668,6 @@ class RemoteGraph(PregelProtocol):
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             if subgraphs:
-                if "|" in chunk.event:
-                    mode, ns_ = chunk.event.split("|", 1)
-                    ns = tuple(ns_.split("|"))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:
