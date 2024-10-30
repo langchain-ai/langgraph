@@ -663,7 +663,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode=stream_modes_ext,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            stream_subgraphs=subgraphs,
+            stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
         ):
             if "|" in chunk.event:
