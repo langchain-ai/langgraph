@@ -10,7 +10,7 @@ This tutorial will use:
 - [Tavily for the search engine](https://app.tavily.com/)
 - [LangSmith for deployment](https://smith.langchain.com/)
 
-## Define and configure your application
+## Create and configure your app
 
 First, let's set create all of the necessary files for our LangGraph application.
 
