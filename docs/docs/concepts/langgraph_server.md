@@ -21,15 +21,50 @@ The LangGraph platform incorporates best practices for agent deployment, so you 
 * **Webhooks**: Allows your application to send real-time notifications and data updates to external systems, making it easy to integrate with third-party services and trigger actions based on specific events.
 * **Monitoring**: LangGraph Server integrates seamlessly with the [LangSmith](https://docs.smith.langchain.com/) monitoring platform, providing real-time insights into your application's performance and health.
 
-## Graphs
+## What are you deploying?
 
-In order to use LangGraph Platform, you need to specify the graph(s) you want to deploy.
-You can specify multiple graphs to deploy at the same time.
-You do not need to specify [checkpointers](persistence.md#checkpoints) or [memory stores](persistence.md#memory-store) when compiling your graphs - LangGraph platform will add those in automatically.
+When you deploy a LangGraph Server, you are deploying one or more [graphs](#graphs), a database for [persistence](persistence.md), and a task queue.
 
-Please see [application structure](./application_structure.md) for more information on how to structure your LangGraph application for deployment.
+### Graphs
 
-## Assistants
+When you deploy a graph with LangGraph Server, you are deploying a "blueprint" for an [Assistant](assistants.md). 
+
+An [Assistant](assistants.md) is a graph paired with specific configuration settings. You can create multiple assistants per graph, each with unique settings to accommodate different use cases
+that can be served by the same graph.
+
+Upon deployment, LangGraph Server will automatically create a default assistant for each graph using the graph's default configuration settings.
+
+You can interact with assistants through the [LangGraph Server API](#langgraph-server-api).
+
+:::note
+We often think of a graph as implementing an [agent](agentic_concepts.md), but a graph does not necessarily need to implement an agent. For example, a graph could implement a simple
+chatbot that only supports back-and-forth conversation, without the ability to influence any application control flow. In reality, as applications get more complex, a graph will often implement a more complex flow that may use [multiple agents](./multi_agent.md) working in tandem.
+:::
+
+
+### Persistence & Task Queue
+
+The LangGraph Server leverages a database for [persistence](persistence.md) and a task queue.
+
+Currently, only [Postgres](https://www.postgresql.org/) is supported as a database for LangGraph Server and [Redis](https://redis.io/) for the task queue.
+
+If you're deploying using LangGraph Cloud, these components are managed for you. If you're deploying LangGraph Server on your own infrastructure, you'll need to set up and manage these components yourself.
+
+Please review the [deployment options](./deployment_options.md) guide for more information on how these components are set up and managed.
+
+## Application Structure
+
+To deploy a LangGraph Server application, you need to specify the graph(s) you want to deploy, as well as any relevant configuration settings, such as dependencies and environment variables.
+
+Read the [application structure](./application_structure.md) guide to learn how to structure your LangGraph application for deployment.
+
+## LangGraph Server API
+
+The LangGraph Server API allows you to crate and manage [assistants](assistants.md), [threads](#threads), [runs](#runs), [cron jobs](#cron-jobs), and more.
+
+The [LangGraph Cloud API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.
+
+### Assistants
 
 An [Assistant](assistants.md) refers to a [graph](#graphs) plus specific [configuration](low_level.md#configuration) settings for that graph.
 
@@ -37,7 +72,7 @@ You can think of an assistant as a saved configuration of an [agent](agentic_con
 
 When building agents, it is fairly common to make rapid changes that *do not* alter the graph logic. For example, simply changing prompts or the LLM selection can have significant impacts on the behavior of the agents. Assistants offer an easy way to make and save these types of changes to agent configuration.
 
-## Threads
+### Threads
 
 A thread contains the accumulated state of a sequence of runs. If a run is executed on a thread, then the [state](low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
 
@@ -49,7 +84,7 @@ For more on threads and checkpoints, see this section of the [LangGraph conceptu
 
 The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../reference/api/api_ref.html#tag/threadscreate) for more details.
 
-## Runs
+### Runs
 
 A run is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a thread.
 
@@ -61,16 +96,6 @@ LangGraph Server includes a built-in persistence layer that supports [thread-lev
 
 ## Task Queue
 
-The LangGraph
-
-## API
-
-The LangGraph Platform API consists of a few core data models: [Graphs](#graphs), [Assistants](#assistants), [Threads](#threads), [Runs](#runs), and [Cron Jobs](#cron-jobs).
-
-
-## API Specification
-
-You can find the full API specification [here](../cloud/reference/api/api_ref.html).
 
 ## Cron Jobs
 
@@ -91,6 +116,6 @@ The LangGraph Cloud API provides several endpoints for creating and managing cro
 
 ## Related
 
-* Read the conceptual guide about [application structure](./application_structure.md) to learn how to structure your LangGraph application for deployment.
+* The [application structure](./application_structure.md) guide explains how to structure your LangGraph application for deployment.
 * [How-to guides for the LangGraph Platform](../how-tos/index.md) 
-* [LangServer API Reference](../cloud/reference/api/api_ref.html)
+* The [LangGraph Cloud API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.
