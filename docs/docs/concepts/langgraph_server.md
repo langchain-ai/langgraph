@@ -9,10 +9,10 @@ LangGraph Server offers an API for creating and managing agent-based application
 The LangGraph platform incorporates best practices for agent deployment, so you can focus on building your agent logic.
 
 * **Streaming endpoints**: Endpoints that expose [multiple different streaming modes](streaming.md). We've made these work even for long-running agents that may go minutes between consecutive stream events.
-* **Background runs**:  We've exposed endpoints for running your graph in the background. This includes endpoints for polling for the status of a run.
-* **Support for long runs**: In addition to adding endpoints for background runs, we've also designed our endpoints and infrastructure to support long-running agents.
+* **Background runs**: The LangGraph Server supports launching assistants in the background with endpoints for polling the status of the assistant's run and webhooks to monitor run status effectively.
+- **Support for long runs**: Our blocking endpoints for running assistants send regular heartbeat signals, preventing unexpected connection closures when handling requests that take a long time to complete.
 * **Task queue**: We've added a task queue to make sure we don't drop any requests if they arrive in a bursty nature.
-* **Horizontally scalable infrastructure**: LangGraph Platform is designed to be horizontally scalable, allowing you to scale up and down your usage as needed.
+* **Horizontally scalable infrastructure**: LangGraph Server is designed to be horizontally scalable, allowing you to scale up and down your usage as needed.
 * **Double texting support**: Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. We call this ["double texting"](double_texting.md) and have added four different ways to handle this.
 * **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](persistence.md#checkpoints) optimized for LangGraph applications.
 * **Human-in-the-loop endpoints**: We've exposed all endpoints needed to support [human-in-the-loop](human_in_the_loop.md) features.
