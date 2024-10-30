@@ -266,9 +266,7 @@ class MessagesState(TypedDict):
 
 def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
     try:
-        from langchain_core.messages import (  # type: ignore[attr-defined]
-            convert_to_openai_messages,
-        )
+        from langchain_core.messages import convert_to_openai_messages
     except ImportError:
         msg = (
             "Must have langchain-core>=0.3.11 installed to use automatic message "
