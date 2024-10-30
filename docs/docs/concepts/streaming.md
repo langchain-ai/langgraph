@@ -177,6 +177,7 @@ All events emitted have two attributes:
 
 !!! note
     Streaming mode `messages` is different from the one in the LangGraph library:
+
     - LangGraph Server streams event objects with messages in the `data` field, while LangGraph library streams tuples (`AIMessageChunk`, metadata).
     - In LangGraph Server, metadata is streamed only once per message (`messages/metadata`), before the individual tokens are streamed (`messages/partial`), while in LangGraph library it's streamed with every `AIMessageChunk` (for each LLM token).
     - LangGraph Server also streams additional events (`metadata`, `messages/complete`, see below for more details).
