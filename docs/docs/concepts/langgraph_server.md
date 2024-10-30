@@ -10,7 +10,7 @@ LangGraph Server offers an API for creating and managing agent-based application
 
 ## Key Features
 
-The LangGraph platform incorporates best practices for agent deployment, so you can focus on building your agent logic.
+The LangGraph Platform incorporates best practices for agent deployment, so you can focus on building your agent logic.
 
 * **Streaming endpoints**: Endpoints that expose [multiple different streaming modes](streaming.md). We've made these work even for long-running agents that may go minutes between consecutive stream events.
 * **Background runs**: The LangGraph Server supports launching assistants in the background with endpoints for polling the status of the assistant's run and webhooks to monitor run status effectively.
