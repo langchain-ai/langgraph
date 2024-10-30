@@ -162,7 +162,7 @@ To test the LangGraph app before deploying it using LangGraph Platform, you can 
 
 ###  Using LangGraph Studio (Recommended)
 
-![LangGraph Studio Desktop](./img/quick_start_studio.png)
+![LangGraph Studio Desktop](./deployment/img/quick_start_studio.png)
 
 You can test your app locally with [LangGraph Studio](../concepts/langgraph_studio.md). LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications.
 
@@ -230,7 +230,7 @@ First, you'll need to turn the `my-app` directory into a GitHub repo and [push i
 
 Once you have created your GitHub repository with a Python file containing your compiled graph as well as a `langgraph.json` with the configuration, you can head over to [LangSmith](https://smith.langchain.com/) and click on the graph icon (`LangGraph Cloud`) on the bottom of the left navbar. This will open the LangGraph deployments page. On this page, click the `+ New Deployment` button in the top right corner.
 
-![Langsmith Workflow](./img/cloud_deployment.png)
+![Langsmith Workflow](./deployment/img/cloud_deployment.png)
 
 **_If you have not deployed to LangGraph Platform before:_** there will be a button that shows up saying `Import from GitHub`. You’ll need to follow that flow to connect LangGraph Cloud to GitHub.
 
