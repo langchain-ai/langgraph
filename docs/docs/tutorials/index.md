@@ -12,7 +12,7 @@ Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through 
 
 Learn the basics of LangGraph through a comprehensive quick start in which you will build an agent from scratch.
 
-- [Quick Start](introduction.ipynb)
+- [Quick Start](introduction.ipynb): In this tutorial, you will build a support chatbot using LangGraph.
 
 ## Use cases
 
