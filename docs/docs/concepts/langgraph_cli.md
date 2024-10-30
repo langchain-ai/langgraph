@@ -1,7 +1,8 @@
 # LangGraph CLI
 
 !!! info "Prerequisites"
-    - [LangGraph Platform](./langgraph_server.md)
+    - [LangGraph Platform](./langgraph_platform.md)
+    - [LangGraph Server](./langgraph_server.md)
 
 The LangGraph CLI is a multi-platform command-line tool for building and running the [LangGraph API server](./langgraph_server.md) locally. This offers an alternative to the [LangGraph Studio desktop app](./langgraph_studio.md) for developing and testing agents across all major operating systems (Linux, Windows, MacOS). The resulting server includes all API endpoints for your graph's runs, threads, assistants, etc. as well as the other services required to run your agent, including a managed database for checkpointing and storage.
 
