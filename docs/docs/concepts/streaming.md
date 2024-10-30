@@ -13,6 +13,19 @@ There are several different modes you can specify when calling these methods (e.
 - [`"messages"`](../how-tos/streaming-tokens.ipynb): This streams LLM tokens and metadata for the graph node where LLM is invoked.
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
+You can also specify multiple streaming modes at the same time by passing them as a list. When you do this, the streamed outputs will be tuples `(stream_mode, data)`. For example:
+
+```python
+graph.stream(..., stream_mode=["updates", "messages"])
+```
+
+```
+...
+('messages', (AIMessageChunk(content='Hi'), {'langgraph_step': 3, 'langgraph_node': 'agent', ...}))
+...
+('updates', {'agent': {'messages': [AIMessage(content="Hi, how can I help you?")]}})
+```
+
 The below visualization shows the difference between the `values` and `updates` modes:
 
 ![values vs updates](../static/values_vs_updates.png)
