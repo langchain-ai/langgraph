@@ -35,7 +35,7 @@ If the application is structured correctly, you can build a docker image with th
 To build the docker image, you first need to install the CLI:
 
 ```shell
-pip install langgraph-cli
+pip install -U langgraph-cli
 ```
 
 You can then use:
