@@ -1,7 +1,6 @@
 # LangGraph Server
 
 !!! info "Prerequisites"
-
     - [LangGraph Platform](./langgraph_platform.md)
     - [LangGraph Glossary](low_level.md)
 
