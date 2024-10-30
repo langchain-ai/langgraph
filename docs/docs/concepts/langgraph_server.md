@@ -1,12 +1,14 @@
 # LangGraph Server
 
-The LangGraph Platform API consists of a few core data models: [Graphs](#graphs), [Assistants](#assistants), [Threads](#threads), [Runs](#runs), and [Cron Jobs](#cron-jobs).
+## Overview
+
+LangGraph Server offers an API for creating and managing agent-based applications. It is built on the concept of [assistants](assistants.md), which are agents configured for specific tasks, and includes built-in [persistence](persistence.md#memory-store) and a **task queue**. This versatile API supports a wide range of agentic application use cases, from background processing to real-time interactions.
 
 ## Key Features
 
 The LangGraph platform incorporates best practices for agent deployment, so you can focus on building your agent logic.
 
-* **Streaming endpoints**: Endpoints that expose [multiple different streaming modes](streaming.md). We've made these work even for long-running agents that may go minutes between steam event.
+* **Streaming endpoints**: Endpoints that expose [multiple different streaming modes](streaming.md). We've made these work even for long-running agents that may go minutes between consecutive stream events.
 * **Background runs**:  We've exposed endpoints for running your graph in the background. This includes endpoints for polling for the status of a run.
 * **Support for long runs**: In addition to adding endpoints for background runs, we've also designed our endpoints and infrastructure to support long-running agents.
 * **Task queue**: We've added a task queue to make sure we don't drop any requests if they arrive in a bursty nature.
@@ -37,7 +39,7 @@ When building agents, it is fairly common to make rapid changes that *do not* al
 
 ## Threads
 
-A thread contains the accumulated state of a sequence of runs. If a run is executed on a thread, then the [state](low_level.md#state) of the underlying graph of the assistant will be persisted to the thread. 
+A thread contains the accumulated state of a sequence of runs. If a run is executed on a thread, then the [state](low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
 
 A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
 
@@ -52,6 +54,23 @@ The LangGraph Cloud API provides several endpoints for creating and managing thr
 A run is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a thread.
 
 The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../reference/api/api_ref.html#tag/runscreate) for more details.
+
+## Persistence Layer
+
+LangGraph Server includes a built-in persistence layer that supports [thread-level persistence](low_level.md#persistence). This layer is implemented through [checkpointers](persistence.md#checkpoints) and [memory stores](persistence.md#memory-store).
+
+## Task Queue
+
+The LangGraph
+
+## API
+
+The LangGraph Platform API consists of a few core data models: [Graphs](#graphs), [Assistants](#assistants), [Threads](#threads), [Runs](#runs), and [Cron Jobs](#cron-jobs).
+
+
+## API Specification
+
+You can find the full API specification [here](../cloud/reference/api/api_ref.html).
 
 ## Cron Jobs
 
@@ -74,3 +93,4 @@ The LangGraph Cloud API provides several endpoints for creating and managing cro
 
 * Read the conceptual guide about [application structure](./application_structure.md) to learn how to structure your LangGraph application for deployment.
 * [How-to guides for the LangGraph Platform](../how-tos/index.md) 
+* [LangServer API Reference](../cloud/reference/api/api_ref.html)
