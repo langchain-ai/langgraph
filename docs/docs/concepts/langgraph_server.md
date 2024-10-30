@@ -36,19 +36,18 @@ Upon deployment, LangGraph Server will automatically create a default assistant 
 
 You can interact with assistants through the [LangGraph Server API](#langgraph-server-api).
 
-:::note
-We often think of a graph as implementing an [agent](agentic_concepts.md), but a graph does not necessarily need to implement an agent. For example, a graph could implement a simple
-chatbot that only supports back-and-forth conversation, without the ability to influence any application control flow. In reality, as applications get more complex, a graph will often implement a more complex flow that may use [multiple agents](./multi_agent.md) working in tandem.
-:::
+!!! note
 
+    We often think of a graph as implementing an [agent](agentic_concepts.md), but a graph does not necessarily need to implement an agent. For example, a graph could implement a simple
+    chatbot that only supports back-and-forth conversation, without the ability to influence any application control flow. In reality, as applications get more complex, a graph will often implement a more complex flow that may use [multiple agents](./multi_agent.md) working in tandem.
 
-### Persistence & Task Queue
+### Persistence and Task Queue
 
 The LangGraph Server leverages a database for [persistence](persistence.md) and a task queue.
 
-Currently, only [Postgres](https://www.postgresql.org/) is supported as a database for LangGraph Server and [Redis](https://redis.io/) for the task queue.
+Currently, only [Postgres](https://www.postgresql.org/) is supported as a database for LangGraph Server and [Redis](https://redis.io/) as the task queue.
 
-If you're deploying using LangGraph Cloud, these components are managed for you. If you're deploying LangGraph Server on your own infrastructure, you'll need to set up and manage these components yourself.
+If you're deploying using [LangGraph Cloud](./langgraph_cloud.md), these components are managed for you. If you're deploying LangGraph Server on your own infrastructure, you'll need to set up and manage these components yourself.
 
 Please review the [deployment options](./deployment_options.md) guide for more information on how these components are set up and managed.
 
@@ -74,11 +73,11 @@ When building agents, it is fairly common to make rapid changes that *do not* al
 
 ### Threads
 
-A thread contains the accumulated state of a sequence of runs. If a run is executed on a thread, then the [state](low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
+A thread contains the accumulated state of a sequence of [runs](#runs). If a run is executed on a thread, then the [state](low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
 
 A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
 
-The state of a thread at a particular point in time is called a `checkpoint`.
+The state of a thread at a particular point in time is called a [checkpoint](persistence#checkpoints). Checkpoints can be used to restore the state of a thread at a later time.
 
 For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](low_level.md#persistence).
 
@@ -90,14 +89,14 @@ A run is an invocation of an assistant. Each run may have its own input, configu
 
 The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../reference/api/api_ref.html#tag/runscreate) for more details.
 
-## Persistence Layer
 
-LangGraph Server includes a built-in persistence layer that supports [thread-level persistence](low_level.md#persistence). This layer is implemented through [checkpointers](persistence.md#checkpoints) and [memory stores](persistence.md#memory-store).
+### Store
 
-## Task Queue
+Store is an API for managing persistent [key-value store](./persistence.md#memory-store) that is available from any [thread](#threads).
 
+Stores are useful for implementing [memory](./memory.md) in your LangGraph application.
 
-## Cron Jobs
+### Cron Jobs
 
 There are many situations in which it is useful to run an assistant on a schedule. 
 
@@ -113,7 +112,6 @@ Note that this sends the same input to the thread every time. See the [how-to gu
 
 The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/crons) for more details.
 
-
 ### Webhooks
 
 Webhooks enable event-driven communication from your LangGraph Cloud application to external services. For example, you may want to issue an update to a separate service once an API call to LangGraph Cloud has finished running.
@@ -122,9 +120,8 @@ Many LangGraph Cloud endpoints accept a `webhook` parameter. If this parameter i
 
 See the corresponding [how-to guide](../cloud/how-tos/webhooks.md) for more detail.
 
-
 ## Related
 
-* The [application structure](./application_structure.md) guide explains how to structure your LangGraph application for deployment.
-* [How-to guides for the LangGraph Platform](../how-tos/index.md) 
+* LangGraph [Application Structure](./application_structure.md) guide explains how to structure your LangGraph application for deployment.
+* [How-to guides for the LangGraph Platform](../how-tos/index.md).
 * The [LangGraph Cloud API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.

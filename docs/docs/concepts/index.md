@@ -58,8 +58,7 @@ The LangGraph Platform comprises several components that work together to suppor
 **LangGraph Server**
 
 - [Application Structure](./application_structure.md): A LangGraph application consists of one or more graphs, a LangGraph API Configuration file (`langgraph.json`), a file that specifies dependencies, and environment variables.
-- [LangGraph Server's API](./api_server.md): The LangGraph Server API is an opinionated API for interacting with agentic applications that includes endpoints for interacting with `assistants`, `threads, 
 - [Assistants](./assistants.md): Assistants are a way to save and manage different configurations of your LangGraph applications.
-- [Web-hooks](./web_hooks.md): Web-hooks allow your running LangGraph application to send data to external services on specific events.
-- [Cron Jobs](./cron_jobs.md): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.
+- [Web-hooks](./langgraph_server.md#webhooks): Webhooks allow your running LangGraph application to send data to external services on specific events.
+- [Cron Jobs](./langgraph_server.md#cron-jobs): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.
 - [Double Texting](./double_texting.md): Double texting is a common issue in LLM applications where users may send multiple messages before the graph has finished running. This guide explains how to handle double texting with LangGraph Deploy.
