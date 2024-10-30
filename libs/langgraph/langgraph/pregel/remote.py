@@ -31,7 +31,12 @@ from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import CONF, CONFIG_KEY_STREAM, INTERRUPT
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_STREAM,
+    INTERRUPT,
+)
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
@@ -584,6 +589,8 @@ class RemoteGraph(PregelProtocol):
                 ns = tuple(ns_.split("|"))
             else:
                 mode, ns = chunk.event, ()
+            if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
+                ns = caller_ns + ns
             if stream is not None and chunk.event in stream.modes:
                 stream((ns, mode, chunk.data))
             if chunk.event not in stream_modes:
@@ -664,6 +671,8 @@ class RemoteGraph(PregelProtocol):
                 ns = tuple(ns_.split("|"))
             else:
                 mode, ns = chunk.event, ()
+            if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
+                ns = caller_ns + ns
             if stream is not None and chunk.event in stream.modes:
                 stream((ns, mode, chunk.data))
             if chunk.event not in stream_modes:
