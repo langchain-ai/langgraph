@@ -1,6 +1,6 @@
 # Quick Start
 
-In this tutorial you will build and deploy a simple chatbot agent that can look things up on the internet. You will be using [LangGraph Cloud](../concepts/langgraph_cloud.md), [LangGraph Studio](../concepts/langgraph_studio.md) to visualize and test it out, and [LangGraph SDK](../reference/sdk/python_sdk_ref/) to interact with the deployed agent.
+In this tutorial you will build and deploy a simple chatbot agent that can look things up on the internet. You will be using [LangGraph Cloud](../concepts/langgraph_cloud.md), [LangGraph Studio](../concepts/langgraph_studio.md) to visualize and test it out, and [LangGraph SDK](./reference/sdk/python_sdk_ref.md) to interact with the deployed agent.
 
 If you want to learn how to build an agent like this from scratch, take a look at the [LangGraph Quick Start tutorial](../tutorials/introduction.ipynb).
 
@@ -305,7 +305,7 @@ On the deployment page for your application,, you should see a button in the top
 
 ### Using LangGraph SDK
 
-You can also interact with your deployed LangGraph application programmatically, using [LangGraph SDK](../reference/sdk/python_sdk_ref/).
+You can also interact with your deployed LangGraph application programmatically, using [LangGraph SDK](./reference/sdk/python_sdk_ref.md).
 
 First, make sure you have the SDK installed:
 
