@@ -214,7 +214,7 @@ class RemoteGraph(PregelProtocol):
                     interrupts=tuple(interrupts),
                     state=self._create_state_snapshot(task["state"])
                     if task["state"]
-                    else {"configurable": task["checkpoint"]}
+                    else cast(RunnableConfig, {"configurable": task["checkpoint"]})
                     if task["checkpoint"]
                     else None,
                     result=task.get("result"),

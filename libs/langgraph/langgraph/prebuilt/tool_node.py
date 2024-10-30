@@ -201,7 +201,7 @@ class ToolNode(RunnableCallable):
         self.messages_key = messages_key
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
-                tool_ = cast(BaseTool, create_tool(tool_))
+                tool_ = create_tool(tool_)
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
