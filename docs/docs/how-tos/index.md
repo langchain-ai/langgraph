@@ -7,7 +7,7 @@ description: How to accomplish common tasks in LangGraph
 
 # How-to Guides
 
-Here you’ll find answers to “How do I...?” types of questions. These guides are **goal-oriented** and concrete; they're meant to help you complete a specific task. For conceptual explanations see the [Conceptual guide](../concepts). For end-to-end walk-throughs see [Tutorials](../tutorials). For comprehensive descriptions of every class and function see the [API Reference](../reference).
+Here you’ll find answers to “How do I...?” types of questions. These guides are **goal-oriented** and concrete; they're meant to help you complete a specific task. For conceptual explanations see the [Conceptual guide](../concepts/index.md). For end-to-end walk-throughs see [Tutorials](../tutorials/index.md). For comprehensive descriptions of every class and function see the [API Reference](../reference/index.md).
 
 ## LangGraph
 
