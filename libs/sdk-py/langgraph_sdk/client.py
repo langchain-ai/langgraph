@@ -34,6 +34,7 @@ from langgraph_sdk.schema import (
     All,
     Assistant,
     AssistantVersion,
+    CancelAction,
     Checkpoint,
     Config,
     Cron,
@@ -1712,13 +1713,15 @@ class RunsClient:
 
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
-    async def cancel(self, thread_id: str, run_id: str, *, wait: bool = False) -> None:
+    async def cancel(self, thread_id: str, run_id: str, *, wait: bool = False, action: CancelAction = "interrupt") -> None:
         """Get a run.
 
         Args:
             thread_id: The thread ID to cancel.
             run_id: The run ID to cancek.
             wait: Whether to wait until run has completed.
+            action: Action to take when cancelling the run. Possible values
+                are `interrupt` or `rollback`. Default is `interrupt`.
 
         Returns:
             None
@@ -1728,12 +1731,13 @@ class RunsClient:
             await client.runs.cancel(
                 thread_id="thread_id_to_cancel",
                 run_id="run_id_to_cancel",
-                wait=True
+                wait=True,
+                action="interrupt"
             )
 
         """  # noqa: E501
         return await self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}",
+            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
         )
 
@@ -3792,13 +3796,15 @@ class SyncRunsClient:
 
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
-    def cancel(self, thread_id: str, run_id: str, *, wait: bool = False) -> None:
+    def cancel(self, thread_id: str, run_id: str, *, wait: bool = False, action: CancelAction = "interrupt") -> None:
         """Get a run.
 
         Args:
             thread_id: The thread ID to cancel.
             run_id: The run ID to cancek.
             wait: Whether to wait until run has completed.
+            action: Action to take when cancelling the run. Possible values
+                are `interrupt` or `rollback`. Default is `interrupt`.
 
         Returns:
             None
@@ -3808,12 +3814,13 @@ class SyncRunsClient:
             client.runs.cancel(
                 thread_id="thread_id_to_cancel",
                 run_id="run_id_to_cancel",
-                wait=True
+                wait=True,
+                action="interrupt"
             )
 
         """  # noqa: E501
         return self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}",
+            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
         )
 

@@ -78,6 +78,12 @@ Specifies behavior if the thread doesn't exist:
 - "reject": Reject the operation if the thread doesn't exist.
 """
 
+CancelAction = Literal["interrupt", "rollback"]
+"""
+Action to take when cancelling the run.
+- "interrupt": Simply cancel the run.
+- "rollback": Cancel the run. Then delete the run and associated checkpoints.
+"""
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
