@@ -12,7 +12,7 @@ The LangGraph Platform consists of several components that work together to supp
 - [Python/JS SDK](./sdk.md): The Python/JS SDK provides a programmatic way to interact with deployed LangGraph Applications.
 - [Remote Graph](../cloud/how-tos/remote_graph.md): A RemoteGraph allows you to interact with any deployed LangGraph application as though it were running locally.
 
-The LangGraph Platform offers several deployment options. These include Lite Self-Hosted, Cloud SaaS, Enterprise Bring Your Own Cloud (BYOC), Enterprise Self-hosted, and Enterprise Cloud. You can explore these options in detail in the [deployment options guide](./deployment_options.md).
+The LangGraph Platform offers a few different deployment options described in the [deployment options guide](./deployment_options.md).
 
 ## Why Use LangGraph Platform?
 
