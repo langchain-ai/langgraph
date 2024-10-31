@@ -176,11 +176,11 @@ Now that we have set everything up on our local file system, we are ready to tes
 
 ## Test the app locally
 
-To test the LangGraph app before deploying it using LangGraph Cloud, you can use [LangGraph Studio](../concepts/langgraph_studio.md) or start the [LangGraph server](../concepts/langgraph_server.md) locally.
+To test the LangGraph app before deploying it using LangGraph Cloud, you can start the [LangGraph server](../concepts/langgraph_server.md) locally or use [LangGraph Studio](../concepts/langgraph_studio.md).
 
 ## Using local server
 
-You can also test your app by running [LangGraph server](../concepts/langgraph_server.md) locally. This is useful to make sure you have configured our [CLI configuration file][langgraph.json] correctly and can interact with your graph.
+You can test your app by running [LangGraph server](../concepts/langgraph_server.md) locally. This is useful to make sure you have configured our [CLI configuration file][langgraph.json] correctly and can interact with your graph.
 
 To run the server locally, you need to first install the LangGraph CLI:
 
@@ -248,6 +248,7 @@ data: {
       }
     ]
   }
+}
 ```
 
 You can see that our agent responds with the up-to-date search results!
@@ -450,6 +451,7 @@ data: {
       }
     ]
   }
+}
 ```
 
 ## Next steps
