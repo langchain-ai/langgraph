@@ -16,7 +16,7 @@
 
 LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
 
-[LangGraph Platform](https://langchain-ai.github.io/langgraph/) is infrastructure for deploying LangGraph agents. It is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework. The LangGraph Platform consists of several components that work together to support the development, deployment, debugging, and monitoring of LangGraph applications: LangGraph Server (APIs), LangGraph SDKs (clients for the APIs), LangGraph CLI (command line tool for building the server), LangGraph Studio (UI/debugger),
+[LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform) is infrastructure for deploying LangGraph agents. It is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework. The LangGraph Platform consists of several components that work together to support the development, deployment, debugging, and monitoring of LangGraph applications: [LangGraph Server](https://langchain-ai.github.io/langgraph/concepts/langgraph_server) (APIs), [LangGraph SDKs](https://langchain-ai.github.io/langgraph/concepts/sdk) (clients for the APIs), [LangGraph CLI](https://langchain-ai.github.io/langgraph/concepts/langgraph_cli) (command line tool for building the server), [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio) (UI/debugger),
 
 To learn more about LangGraph, check out our first LangChain Academy course, *Introduction to LangGraph*, available for free [here](https://academy.langchain.com/courses/intro-to-langgraph).
 
@@ -31,6 +31,13 @@ To learn more about LangGraph, check out our first LangChain Academy course, *In
 ### LangGraph Platform
 
 LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework.
+Here are some common issues that arise in complex deployments, which LangGraph Platform addresses:
+
+- **Streaming support**: LangGraph Server provides [multiple streaming modes](https://langchain-ai.github.io/langgraph/concepts/streaming) optimized for various application needs
+- **Background runs**: Runs agents asynchronously in the background
+- **Support for long running agents**: Infrastructure that can handle long running processes
+- **[Double texting](https://langchain-ai.github.io/langgraph/concepts/double_texting)**: Handle the case where you get two messages from the user before the agent can respond
+- **Handle burstiness**: Task queue for ensuring requests are handled consistently without loss, even under heavy loads
 
 ## Installation
 
