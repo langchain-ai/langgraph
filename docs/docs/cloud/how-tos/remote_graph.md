@@ -160,7 +160,7 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     print(thread_state)
     ```
 
-=== "Javascript"
+=== "JavaScript"
 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
@@ -218,7 +218,7 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
     print(result)
     ```
 
-=== "Javascript"
+=== "JavaScript"
 
     ```js
     import { MessagesAnnotation, StateGraph, START } from "@langchain/langgraph";
