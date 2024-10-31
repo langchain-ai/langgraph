@@ -90,7 +90,6 @@ nav:
       - "reference/index.md"
       - Library:
         - Graphs: reference/graphs.md
-        - RemoteGraph: reference/remote_graph.md
         - Checkpointing: reference/checkpoints.md
         - Storage: reference/store.md
         - Prebuilt Components: reference/prebuilt.md
@@ -100,9 +99,10 @@ nav:
         - Constants: reference/constants.md
       - LangGraph Platform:
         - Server API: "cloud/reference/api/api_ref.md"
+        - CLI: "cloud/reference/cli.md"
         - SDK (Python): "cloud/reference/sdk/python_sdk_ref.md"
         - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
-        - CLI: "cloud/reference/cli.md"
+        - RemoteGraph: reference/remote_graph.md
         - Environment Variables: "cloud/reference/env_var.md"
 
 markdown_extensions:
