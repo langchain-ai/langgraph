@@ -13,7 +13,7 @@ Install the proper packages:
     ```bash
     pip install -U langgraph-cli
     ```
-=== "Homebrew" (macOS only)
+=== "Homebrew (macOS only)"
     ```bash
     brew install langgraph-cli
     ```
