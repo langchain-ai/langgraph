@@ -14,7 +14,7 @@ With the self-hosted deployment option, you are responsible for managing the inf
 You will need to do the following:
 
 1. Deploy Redis and Postgres instances on your own infrastructure.
-2. Build a docker image with the [LangGraph Sever](../concepts/langgraph_server.md) using the [LangGraph CLI](../concepts/langgraph_cli.md).
+2. Build a docker image with the [LangGraph Server](../concepts/langgraph_server.md) using the [LangGraph CLI](../concepts/langgraph_cli.md).
 3. Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
 ## Environment Variables
