@@ -63,7 +63,7 @@ Read the [application structure](./application_structure.md) guide to learn how 
 
 ## LangGraph Server API
 
-The LangGraph Server API allows you to crate and manage [assistants](assistants.md), [threads](#threads), [runs](#runs), [cron jobs](#cron-jobs), and more.
+The LangGraph Server API allows you to create and manage [assistants](assistants.md), [threads](#threads), [runs](#runs), [cron jobs](#cron-jobs), and more.
 
 The [LangGraph Cloud API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.
 
