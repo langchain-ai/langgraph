@@ -34,6 +34,7 @@ from langchain_core.runnables.config import (
 from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
+from langchain_core.tools.base import get_all_basemodel_annotations
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphInterrupt
@@ -200,7 +201,7 @@ class ToolNode(RunnableCallable):
         self.messages_key = messages_key
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
-                tool_ = cast(BaseTool, create_tool(tool_))
+                tool_ = create_tool(tool_)
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
@@ -659,7 +660,7 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
 
-    for name, type_ in full_schema.__annotations__.items():
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
         injections = [
             type_arg
             for type_arg in get_args(type_)
@@ -683,7 +684,7 @@ def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
 
 def _get_store_arg(tool: BaseTool) -> Optional[str]:
     full_schema = tool.get_input_schema()
-    for name, type_ in full_schema.__annotations__.items():
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
         injections = [
             type_arg
             for type_arg in get_args(type_)
