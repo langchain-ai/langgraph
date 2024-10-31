@@ -6,7 +6,7 @@
   },
   "tags": [
     {
-      "name": "Assistants (Enterprise-only)",
+      "name": "Assistants",
       "description": "An assistant is a configured instance of a graph."
     },
     {
@@ -34,7 +34,7 @@
     "/assistants": {
       "post": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Create Assistant",
         "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `POST /assistants/{assistant_id}/latest` endpoint.",
@@ -86,7 +86,7 @@
     "/assistants/search": {
       "post": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Search Assistants",
         "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants.",
@@ -132,7 +132,7 @@
     "/assistants/{assistant_id}": {
       "get": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Get Assistant",
         "description": "Get an assistant by ID.",
@@ -176,7 +176,7 @@
       },
       "delete": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Delete Assistant",
         "description": "Delete an assistant by ID.\n\nAll versions of the assistant will be deleted as well.",
@@ -228,7 +228,7 @@
       },
       "patch": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Patch Assistant",
         "description": "Update an assistant.",
@@ -294,7 +294,7 @@
     "/assistants/{assistant_id}/graph": {
       "get": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Get Assistant Graph",
         "description": "Get an assistant by ID.",
@@ -376,7 +376,7 @@
     "/assistants/{assistant_id}/subgraphs": {
       "get": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Get Assistant Subgraphs",
         "description": "Get an assistant's subgraphs.",
@@ -442,7 +442,7 @@
     "/assistants/{assistant_id}/subgraphs/{namespace}": {
       "get": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Get Assistant Subgraphs by Namespace",
         "description": "Get an assistant's subgraphs filtered by namespace.",
@@ -508,7 +508,7 @@
     "/assistants/{assistant_id}/schemas": {
       "get": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Get Assistant Schemas",
         "description": "Get an assistant by ID.",
@@ -564,7 +564,7 @@
     "/assistants/{assistant_id}/versions": {
       "post": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Get Assistant Versions",
         "description": "Get all versions of an assistant.",
@@ -614,7 +614,7 @@
     "/assistants/{assistant_id}/latest": {
       "post": {
         "tags": [
-          "Assistants (Enterprise-only)"
+          "Assistants"
         ],
         "summary": "Set Latest Assistant Version",
         "description": "Set the latest version for an assistant.",

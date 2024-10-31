@@ -9,7 +9,7 @@
 
 There are 3 main options for deploying with the LangGraph Platform:
 
-1. **[Self-Hosted](#self-hosted)**: Available for **Developer** and **Enterprise** plans.
+1. **[Self-Hosted](#self-hosted)**: Available for **a free trial** and **Enterprise** plan.
 
 2. **[Cloud SaaS](#cloud-saas)**: Available for **Plus** and **Enterprise** plans.
 
@@ -23,7 +23,7 @@ The guide below will explain the differences between the deployment options.
 
 !!! important
 
-    The Self-Hosted version if only available for **Developer** and **Enterprise** plans.
+    The Self-Hosted version is only available for **a free trial** and **Enterprise** plan.
 
 With a Self-Hosted deployment, you are responsible for managing the infrastructure, including setting up and maintaining required databases and Redis instances.
 
