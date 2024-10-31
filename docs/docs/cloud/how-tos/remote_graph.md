@@ -36,6 +36,16 @@ Additionally, you have to provide one of the following:
     remote_graph = RemoteGraph(graph_name, url=url)
     ```
 
+=== "JavaScript"
+
+    ```js
+    import { RemoteGraph } from "@langchain/langgraph/remote";
+
+    const url = <DEPLOYMENT_URL>;
+    const graphName = "agent";
+    const remoteGraph = new RemoteGraph({ graphId: graphName, url });
+    ```
+
 ### Using clients
 
 === "Python"
@@ -49,6 +59,17 @@ Additionally, you have to provide one of the following:
     client = get_client(url=url)
     sync_client = get_sync_client(url=url)
     remote_graph = RemoteGraph(graph_name, client=client, sync_client=sync_client)
+    ```
+
+=== "JavaScript"
+
+    ```js
+    import { Client } from "@langchain/langgraph-sdk";
+    import { RemoteGraph } from "@langchain/langgraph/remote";
+
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    const graphName = "agent";
+    const remoteGraph = new RemoteGraph({ graphId: graphName, client });
     ```
 
 ## Invoking the graph
@@ -74,6 +95,21 @@ Since `RemoteGraph` is a `Runnable` that implements the same methods as `Compile
         "messages": [("user", "what's the weather in la?")]
     }):
         print(chunk)
+    ```
+
+=== "JavaScript"
+
+    ```js
+    // invoke the graph
+    const result = await remoteGraph.invoke({
+        messages: [{role: "user", content: "what's the weather in sf"}]
+    })
+
+    // stream outputs from the graph
+    for await (const chunk of await remoteGraph.stream({
+        messages: [{role: "user", content: "what's the weather in la"}]
+    })):
+        console.log(chunk)
     ```
 
 ### Synchronously
@@ -124,11 +160,31 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     print(thread_state)
     ```
 
+=== "Javascript"
+
+    ```js
+    import { Client } from "@langchain/langgraph-sdk";
+    const url = <DEPLOYMENT_URL>;
+    const graphName = "agent";
+    const client = new Client({ apiUrl: url });
+    const remoteGraph = new RemoteGraph({ graphId: graphName, url });
+
+    // create a thread (or use an existing thread instead)
+    const thread = await client.threads.create();
+
+    // invoke the graph with the thread config
+    const config = { configurable: { thread_id: thread["thread_id"] }};
+    const result = await remoteGraph.invoke({
+      messages: [{ role: "user", content: "what's the weather in sf" }],
+      config
+    });
+
+    // verify that the state was persisted to the thread
+    const threadState = await remoteGraph.getState(config);
+    console.log(threadState);
+    ```
+
 ## Using as a subgraph
-
-!!! Note
-
-    When streaming the outputs from a parent graph with a `RemoteGraph` subgraph node, streaming from the nodes in the subgraph is not supported at the moment. Only the final output from the subgraph will be streamed. This means that you can only use `stream_mode=values|updates|debug` when streaming from the parent graph.
 
 !!! Note
 
@@ -160,4 +216,28 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
         "messages": [{"role": "user", "content": "what's the weather in sf"}]
     })
     print(result)
+    ```
+
+=== "Javascript"
+
+    ```js
+    import { MessagesAnnotation, StateGraph, START } from "@langchain/langgraph";
+    import { RemoteGraph } from "@langchain/langgraph-sdk";
+
+    const url = <DEPLOYMENT_URL>;
+    const graphName = "agent";
+    const remoteGraph = new RemoteGraph(graphName, { url });
+
+    // define parent graph
+    const graph = new StateGraph(MessagesAnnotation);
+      // add remote graph directly as a node
+      .addNode("child", remoteGraph);
+      .addEdge("START", "child");
+      .compile()
+
+    // invoke the parent graph
+    const result = await graph.invoke({
+      messages: [{ role: "user", content: "what's the weather in sf" }]
+    });
+    console.log(result);
     ```
