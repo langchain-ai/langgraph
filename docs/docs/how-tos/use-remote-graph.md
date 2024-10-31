@@ -92,7 +92,7 @@ Since `RemoteGraph` is a `Runnable` that implements the same methods as `Compile
 
     # stream outputs from the graph
     async for chunk in remote_graph.astream({
-        "messages": [("user", "what's the weather in la?")]
+        "messages": [{"role": "user", "content": "what's the weather in la"}]
     }):
         print(chunk)
     ```
@@ -128,7 +128,7 @@ Since `RemoteGraph` is a `Runnable` that implements the same methods as `Compile
 
     # stream outputs from the graph
     for chunk in remote_graph.stream({
-        "messages": [("user", "what's the weather in la?")]
+        "messages": [{"role": "user", "content": "what's the weather in la"}]
     }):
         print(chunk)
     ```
@@ -152,8 +152,8 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     # invoke the graph with the thread config
     config = {"configurable": {"thread_id": thread["thread_id"]}}
     result = remote_graph.invoke({
-        "messages": [{"role": "user", "content": "what's the weather in sf"}], config=config
-    })
+        "messages": [{"role": "user", "content": "what's the weather in sf"}]
+    }, config=config)
 
     # verify that the state was persisted to the thread
     thread_state = remote_graph.get_state(config)
@@ -176,8 +176,7 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     const config = { configurable: { thread_id: thread["thread_id"] }};
     const result = await remoteGraph.invoke({
       messages: [{ role: "user", content: "what's the weather in sf" }],
-      config
-    });
+    }, config);
 
     // verify that the state was persisted to the thread
     const threadState = await remoteGraph.getState(config);
@@ -231,7 +230,7 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
     // define parent graph and add remote graph directly as a node
     const graph = new StateGraph(MessagesAnnotation)
       .addNode("child", remoteGraph)
-      .addEdge("START", "child")
+      .addEdge(START, "child")
       .compile()
 
     // invoke the parent graph
