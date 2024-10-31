@@ -51,6 +51,6 @@ The Python SDK provides both synchronous (`get_sync_client`) and asynchronous (`
 
 ## Related
 
-- [LangGraph CLI API Reference](../../cloud/reference/cli/)
-- [Python SDK Reference](../cloud/reference/sdk/python_sdk_ref/)
-- [JS/TS SDK Reference](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)
+- [LangGraph CLI API Reference](../cloud/reference/cli.md)
+- [Python SDK Reference](../cloud/reference/sdk/python_sdk_ref.md)
+- [JS/TS SDK Reference](../cloud/reference/sdk/js_ts_sdk_ref.md)

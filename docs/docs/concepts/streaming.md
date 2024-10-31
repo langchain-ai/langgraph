@@ -160,7 +160,7 @@ Streaming is critical for making LLM applications feel responsive to end users. 
 
 You can also specify multiple streaming modes at the same time. See the [how-to guide](../cloud/how-tos/stream_multiple.md) for configuring multiple streaming modes at the same time.
 
-See the [API reference](../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/stream) for how to create streaming runs.
+See the [API reference](../cloud/reference/api/api_ref.html#tag/threads-runs/POST/threads/{thread_id}/runs/stream) for how to create streaming runs.
 
 Streaming modes `values`, `updates`, and `debug` are very similar to modes available in the LangGraph library - for a deeper conceptual explanation of those, you can see the [previous section](#streaming-graph-outputs-stream-and-astream).
 
