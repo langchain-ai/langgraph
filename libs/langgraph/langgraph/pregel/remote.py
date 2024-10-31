@@ -541,6 +541,10 @@ class RemoteGraph(PregelProtocol):
         # add 'updates' mode if not present
         if "updates" not in updated_stream_modes:
             updated_stream_modes.append("updates")
+
+        # remove 'events', as it's not supported in Pregel
+        if "events" in updated_stream_modes:
+            updated_stream_modes.remove("events")
         return (updated_stream_modes, requested_stream_modes, req_single, stream)
 
     def stream(
