@@ -6,20 +6,24 @@
   },
   "tags": [
     {
-      "name": "Assistants",
+      "name": "Assistants (Enterprise-only)",
       "description": "An assistant is a configured instance of a graph."
     },
     {
       "name": "Threads",
-      "description": "A thread contains the accumulated outputs of a group of runs. The outputs are persisted to a thread's state."
+      "description": "A thread contains the accumulated outputs of a group of runs."
     },
     {
-      "name": "Runs",
-      "description": "A run is an invocation of an assistant. The output of a run is persisted to a thread's state."
+      "name": "Thread Runs",
+      "description": "A run is an invocation of a graph / assistant on a thread. It updates the state of the thread."
     },
     {
-      "name": "Runs (Stateless)",
-      "description": "A run is an invocation of an assistant. The output of a stateless run is not persisted to any thread state by default."
+      "name": "Stateless Runs",
+      "description": "A run is an invocation of a graph / assistant, with no state or memory persistence."
+    },
+    {
+      "name": "Crons (Enterprise-only)",
+      "description": "A cron is a periodic run that recurs on a given schedule. The repeats can be isolated, or share state in a thread"
     },
     {
       "name": "Store",
@@ -30,7 +34,7 @@
     "/assistants": {
       "post": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Create Assistant",
         "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `POST /assistants/{assistant_id}/latest` endpoint.",
@@ -82,7 +86,7 @@
     "/assistants/search": {
       "post": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Search Assistants",
         "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants.",
@@ -128,7 +132,7 @@
     "/assistants/{assistant_id}": {
       "get": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Get Assistant",
         "description": "Get an assistant by ID.",
@@ -172,7 +176,7 @@
       },
       "delete": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Delete Assistant",
         "description": "Delete an assistant by ID.\n\nAll versions of the assistant will be deleted as well.",
@@ -224,7 +228,7 @@
       },
       "patch": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Patch Assistant",
         "description": "Update an assistant.",
@@ -290,7 +294,7 @@
     "/assistants/{assistant_id}/graph": {
       "get": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Get Assistant Graph",
         "description": "Get an assistant by ID.",
@@ -372,7 +376,7 @@
     "/assistants/{assistant_id}/subgraphs": {
       "get": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Get Assistant Subgraphs",
         "description": "Get an assistant's subgraphs.",
@@ -438,7 +442,7 @@
     "/assistants/{assistant_id}/subgraphs/{namespace}": {
       "get": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Get Assistant Subgraphs by Namespace",
         "description": "Get an assistant's subgraphs filtered by namespace.",
@@ -504,7 +508,7 @@
     "/assistants/{assistant_id}/schemas": {
       "get": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Get Assistant Schemas",
         "description": "Get an assistant by ID.",
@@ -560,7 +564,7 @@
     "/assistants/{assistant_id}/versions": {
       "post": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Get Assistant Versions",
         "description": "Get all versions of an assistant.",
@@ -610,7 +614,7 @@
     "/assistants/{assistant_id}/latest": {
       "post": {
         "tags": [
-          "Assistants"
+          "Assistants (Enterprise-only)"
         ],
         "summary": "Set Latest Assistant Version",
         "description": "Set the latest version for an assistant.",
@@ -1272,7 +1276,7 @@
     "/threads/{thread_id}/runs": {
       "get": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "List Runs",
         "description": "List runs for a thread.",
@@ -1349,7 +1353,7 @@
       },
       "post": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Create Background Run",
         "description": "Create a run in existing thread, return the run ID immediately. Don't wait for the final run output.",
@@ -1425,7 +1429,7 @@
     "/threads/{thread_id}/runs/crons": {
       "post": {
         "tags": [
-          "Runs"
+          "Crons (Enterprise-only)"
         ],
         "summary": "Create Thread Cron",
         "description": "Create a cron to schedule runs on a thread.",
@@ -1491,7 +1495,7 @@
     "/threads/{thread_id}/runs/stream": {
       "post": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Create Run, Stream Output",
         "description": "Create a run in existing thread. Stream the output.",
@@ -1565,7 +1569,7 @@
     "/threads/{thread_id}/runs/wait": {
       "post": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Create Run, Wait for Output",
         "description": "Create a run in existing thread. Wait for the final output and then return it.",
@@ -1639,7 +1643,7 @@
     "/threads/{thread_id}/runs/{run_id}": {
       "get": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Get Run",
         "description": "Get a run by ID.",
@@ -1705,7 +1709,7 @@
       },
       "delete": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Delete Run",
         "description": "Delete a run by ID.",
@@ -1771,7 +1775,7 @@
     "/threads/{thread_id}/runs/{run_id}/join": {
       "get": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Join Run",
         "description": "Wait for a run to finish.",
@@ -1837,7 +1841,7 @@
     "/threads/{thread_id}/runs/{run_id}/stream": {
       "get": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Join Run Stream",
         "description": "Join a run stream. This endpoint streams output in real-time from a run similar to the /threads/__THREAD_ID__/runs/stream endpoint. Only output produced after this endpoint is called will be streamed.",
@@ -1903,7 +1907,7 @@
     "/threads/{thread_id}/runs/{run_id}/cancel": {
       "post": {
         "tags": [
-          "Runs"
+          "Thread Runs"
         ],
         "summary": "Cancel Run",
         "operationId": "cancel_run_http_threads__thread_id__runs__run_id__cancel_post",
@@ -1940,6 +1944,21 @@
               "default": false
             },
             "name": "wait",
+            "in": "query"
+          },
+          {
+            "description": "Action to take when cancelling the run. Possible values are `interrupt` or `rollback`. `interrupt` will simply cancel the run. `rollback` will cancel the run and delete the run and associated checkpoints afterwards.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "interrupt",
+                "rollback"
+              ],
+              "title": "Action",
+              "default": "interrupt"
+            },
+            "name": "action",
             "in": "query"
           }
         ],
@@ -1978,7 +1997,7 @@
     "/runs/crons": {
       "post": {
         "tags": [
-          "Runs"
+          "Crons (Enterprise-only)"
         ],
         "summary": "Create Cron",
         "description": "Create a cron to schedule runs on new threads.",
@@ -2030,7 +2049,7 @@
     "/runs/crons/search": {
       "post": {
         "tags": [
-          "Runs"
+          "Crons (Enterprise-only)"
         ],
         "summary": "Search Crons",
         "description": "Search all active crons",
@@ -2076,7 +2095,7 @@
     "/runs/stream": {
       "post": {
         "tags": [
-          "Runs (Stateless)"
+          "Stateless Runs"
         ],
         "summary": "Create Run, Stream Output",
         "description": "Create a run in a new thread, stream the output.",
@@ -2136,7 +2155,7 @@
     "/runs/wait": {
       "post": {
         "tags": [
-          "Runs (Stateless)"
+          "Stateless Runs"
         ],
         "summary": "Create Run, Wait for Output",
         "description": "Create a run in a new thread. Wait for the final output and then return it.",
@@ -2196,7 +2215,7 @@
     "/runs": {
       "post": {
         "tags": [
-          "Runs (Stateless)"
+          "Stateless Runs"
         ],
         "summary": "Create Background Run",
         "description": "Create a run in a new thread, return the run ID immediately. Don't wait for the final run output.",
@@ -2256,7 +2275,7 @@
     "/runs/batch": {
       "post": {
         "tags": [
-          "Runs (Stateless)"
+          "Stateless Runs"
         ],
         "summary": "Create Run Batch",
         "description": "Create a batch of runs in new threads, return immediately.",
@@ -2316,7 +2335,7 @@
     "/runs/crons/{cron_id}": {
       "delete": {
         "tags": [
-          "Runs"
+          "Crons (Enterprise-only)"
         ],
         "summary": "Delete Cron",
         "description": "Delete a cron by ID.",
@@ -3242,6 +3261,7 @@
                   "enum": [
                     "values",
                     "messages",
+                    "messages-tuple",
                     "updates",
                     "events",
                     "debug",
@@ -3255,6 +3275,7 @@
                 "enum": [
                   "values",
                   "messages",
+                  "messages-tuple",
                   "updates",
                   "events",
                   "debug",
@@ -3449,6 +3470,7 @@
                   "enum": [
                     "values",
                     "messages",
+                    "messages-tuple",
                     "updates",
                     "events",
                     "debug",
@@ -3462,6 +3484,7 @@
                 "enum": [
                   "values",
                   "messages",
+                  "messages-tuple",
                   "updates",
                   "events",
                   "debug",
