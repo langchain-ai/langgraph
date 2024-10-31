@@ -25,10 +25,9 @@ The guide below will explain the differences between the deployment options.
 
     The Self-Hosted version if only available for **Developer** and **Enterprise** plans.
 
-With a Self-Hosted deployment, you are responsible for managing the infrastructure, including setting up and maintaining necessary databases, Redis instances.
+With a Self-Hosted deployment, you are responsible for managing the infrastructure, including setting up and maintaining required databases and Redis instances.
 
-You will build a docker image with the [LangGraph CLI](./langgraph_cli.md), which
-you can then deploy on your own infrastructure.
+You’ll build a Docker image using the [LangGraph CLI](./langgraph_cli.md), which can then be deployed on your own infrastructure.
 
 For more information, please see:
 
