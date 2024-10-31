@@ -16,7 +16,7 @@ You will need to do the following:
 1. Deploy Redis and Postgres instances on your own infrastructure.
 2. Build a docker image with the LangGraph Deploy server using the LangGraph CLI.
 3. Deploy a web server that will run the docker image and pass in the necessary environment variables.
- 
+
 ## Environment Variables
 
 You will eventually need to pass in the following environment variables to the LangGraph Deploy server:
@@ -99,7 +99,7 @@ services:
             retries: 5
             interval: 5s
     langgraph-api:
-        image: {IMAGE_NAME}
+        image: ${IMAGE_NAME}
         ports:
             - "8123:8000"
         depends_on:
@@ -107,9 +107,11 @@ services:
                 condition: service_healthy
             langgraph-postgres:
                 condition: service_healthy
+        env_file:
+            - .env
         environment:
             REDIS_URI: redis://langgraph-redis:6379
-            LANGSMITH_API_KEY: {LANGSMITH_API_KEY}
+            LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
             POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable
 ```
 
