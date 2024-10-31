@@ -36,6 +36,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STREAM,
     INTERRUPT,
+    NS_SEP,
 )
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
@@ -584,12 +585,13 @@ class RemoteGraph(PregelProtocol):
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
         ):
-            if "|" in chunk.event:
-                mode, ns_ = chunk.event.split("|", 1)
-                ns = tuple(ns_.split("|"))
+            if NS_SEP in chunk.event:
+                mode, ns_ = chunk.event.split(NS_SEP, 1)
+                ns = tuple(ns_.split(NS_SEP))
             else:
                 mode, ns = chunk.event, ()
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
+                caller_ns = tuple(caller_ns.split(NS_SEP))
                 ns = caller_ns + ns
             if stream is not None and chunk.event in stream.modes:
                 stream((ns, mode, chunk.data))
@@ -600,12 +602,12 @@ class RemoteGraph(PregelProtocol):
                     continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
-            if chunk.event.split("|", 1)[0] not in stream_modes:
+            if chunk.event.split(NS_SEP, 1)[0] not in stream_modes:
                 continue
             if subgraphs:
-                if "|" in chunk.event:
-                    mode, ns_ = chunk.event.split("|", 1)
-                    ns = tuple(ns_.split("|"))
+                if NS_SEP in chunk.event:
+                    mode, ns_ = chunk.event.split(NS_SEP, 1)
+                    ns = tuple(ns_.split(NS_SEP))
                 else:
                     mode, ns = chunk.event, ()
                 if req_single:
@@ -666,12 +668,13 @@ class RemoteGraph(PregelProtocol):
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
         ):
-            if "|" in chunk.event:
-                mode, ns_ = chunk.event.split("|", 1)
-                ns = tuple(ns_.split("|"))
+            if NS_SEP in chunk.event:
+                mode, ns_ = chunk.event.split(NS_SEP, 1)
+                ns = tuple(ns_.split(NS_SEP))
             else:
                 mode, ns = chunk.event, ()
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
+                caller_ns = tuple(caller_ns.split(NS_SEP))
                 ns = caller_ns + ns
             if stream is not None and chunk.event in stream.modes:
                 stream((ns, mode, chunk.data))
@@ -682,7 +685,7 @@ class RemoteGraph(PregelProtocol):
                     continue
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
-            if chunk.event.split("|", 1)[0] not in stream_modes:
+            if chunk.event.split(NS_SEP, 1)[0] not in stream_modes:
                 continue
             if subgraphs:
                 if req_single:
