@@ -7,49 +7,68 @@
 
 ## Overview
 
-There are several deployment options for LangGraph Platform.
+There are 3 main options for deploying with the LangGraph Platform:
 
-## Lite Self-Hosted
+1. **[Self-Hosted](#self-hosted)**: Available for **Developer** and **Enterprise** plans.
 
-All you need in order to use this version of LangGraph Platform is a [LangSmith](https://smith.langchain.com/) API key.
+2. **[Cloud SaaS](#cloud-saas)**: Available for **Plus** and **Enterprise** plans.
 
-You need to add this as an environment variable when running LangGraph Platform. It should be provided as `LANGSMITH_API_KEY=...`.
+3. **[Bring Your Own Cloud](#bring-your-own-cloud)**: Available only for **Enterprise** plans and **only on AWS**.
 
-LangGraph Platform will provide a one-time check when starting up the server to ensure that it is a valid LangSmith key.
+Please see the [LangGraph Platform Pricing](https://www.langchain.com/langgraph-platform-pricing) for more information on the different plans.
 
-The Lite Self-Hosted version of LangGraph Platform does not have access to some features that the other versions have.
+The guide below will explain the differences between the deployment options.
 
-## LangGraph Cloud SaaS
+## Self-Hosted
 
-The [LangGraph Cloud SaaS](./langgraph_cloud.md) version of LangGraph Platform is hosted as part of [LangSmith](https://smith.langchain.com/).
+!!! important
 
-This deployment option provides a seamless integration with GitHub to easily deploy your code from there.
-It also integrates seamlessly with LangSmith for observability and testing.
+    The Self-Hosted version if only available for **Developer** and **Enterprise** plans.
 
-While in beta, the Cloud version of LangGraph Platform is available to all users of LangSmith on the [Plus or Enterprise plans](https://docs.smith.langchain.com/administration/pricing).
+With a Self-Hosted deployment, you are responsible for managing the infrastructure, including setting up and maintaining necessary databases, Redis instances.
 
-## Enterprise Self Hosted
+You will build a docker image with the [LangGraph CLI](./langgraph_cli.md), which
+you can then deploy on your own infrastructure.
 
-The Self Hosted version of LangGraph Platform can be set up in the same way as the free version.
-The only difference is that rather than specifying a LangSmith API key, you pass in a license key.
+For more information, please see:
 
-This license key gives you access to all LangGraph Platform features, like LangGraph Studio and Assistants.
+* [Self-Hosted Deployment how-to guide](../how-tos/deployment/self_hosted.md)
 
-This is a paid offering. Please contact sales@langchain.dev for pricing.
+## Cloud SaaS
 
-Please see the [Self Hosted Deployment](../how-tos/deployment/self_hosted.md) guide for more information on how to set up the Self Hosted version of LangGraph Platform.
+!!! important
 
-## Bring your own cloud
+    The Cloud SaaS version of LangGraph Platform is only available for **Plus** and **Enterprise** plans.
 
-This combines the best of both worlds for Cloud and Self Hosted.
-We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud.
 
-This is currently only available on AWS.
+The [Cloud SaaS](./langgraph_cloud.md) version of LangGraph Platform is hosted as part of [LangSmith](https://smith.langchain.com/).
 
-This is a paid offering. Please contact sales@langchain.dev for pricing.
+The Cloud SaaS version of LangGraph Platform provides a simple way to deploy and manage your LangGraph applications.
+
+This deployment option provides an integration with GitHub, allowing you to deploy code from any of your repositories on GitHub.
+
+For more information, please see:
+
+* [Cloud SaaS Conceptual Guide](./langgraph_cloud.md)
+* [How to deploy to Cloud SaaS](../cloud/deployment/cloud.md)
+
+
+## Bring Your Own Cloud
+
+!!! important
+
+    The Bring Your Own Cloud version of LangGraph Platform is only available for **Enterprise** plans.
+
+
+This combines the best of both worlds for Cloud and Self-Hosted. We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud. This is currently only available on AWS.
+
+For more information please see:
+
+* [Bring Your Own Cloud Conceptual Guide](./bring_your_own_cloud.md)
 
 ## Related
 
 For more information please see:
 
-*  [Deployment how-to guides](../../how-tos/#deployment)
+* [LangGraph Platform Pricing](https://www.langchain.com/langgraph-platform-pricing)
+* [Deployment how-to guides](../../how-tos/#deployment)

@@ -1,4 +1,4 @@
-# LangGraph Cloud
+# Cloud SaaS
 
 !!! info "Prerequisites"
     - [LangGraph Platform](./langgraph_platform.md)
@@ -6,7 +6,7 @@
 
 ## Overview
 
-LangGraph Cloud is a managed service that provides a scalable and secure environment for deploying LangGraph APIs. It is designed to work seamlessly with your LangGraph API regardless of how it is defined, what tools it uses, or any dependencies. LangGraph Cloud provides a simple way to deploy and manage your LangGraph API in the cloud.
+LangGraph's Cloud SaaS is a managed service that provides a scalable and secure environment for deploying LangGraph APIs. It is designed to work seamlessly with your LangGraph API regardless of how it is defined, what tools it uses, or any dependencies. Cloud SaaS provides a simple way to deploy and manage your LangGraph API in the cloud.
 
 ## Deployment
 
@@ -27,9 +27,9 @@ Infrastructure for [deployments](#deployment) and [revisions](#revision) are pro
 ## Architecture
 
 !!! warning "Subject to Change"
-The LangGraph Cloud deployment architecture may change in the future.
+The Cloud SaaS deployment architecture may change in the future.
 
-A high-level diagram of a LangGraph Cloud deployment.
+A high-level diagram of a Cloud SaaS deployment.
 
 ![diagram](img/langgraph_cloud_architecture.png)
 

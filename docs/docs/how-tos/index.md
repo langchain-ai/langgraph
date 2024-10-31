@@ -123,7 +123,9 @@ These guides show how to use the prebuilt ReAct agent:
 
 This section includes how-to guides for LangGraph Platform.
 
-LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework. It provides four deployment options to fit a range of needs: a free tier, a self-hosted version, a cloud SaaS, and a Bring Your Own Cloud (BYOC) option. You can explore these options in detail in the [deployment options guide](../concepts/deployment_options.md).
+LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework. 
+
+The LangGraph Platform offers a few different deployment options described in the [deployment options guide](../concepts/deployment_options.md).
 
 !!! tip
 
