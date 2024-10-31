@@ -113,7 +113,7 @@ LangGraph Cloud supports cron jobs, which run on a user-defined schedule. The us
 
 Note that this sends the same input to the thread every time. See the [how-to guide](../cloud/how-tos/cron_jobs.md) for creating cron jobs.
 
-The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/crons) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../cloud/reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/crons) for more details.
 
 ### Webhooks
 

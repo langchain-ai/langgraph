@@ -25,8 +25,8 @@ You can install the packages using the appropriate package manager for your lang
 
 You can find the API reference for the SDKs here:
 
-- [Python SDK Reference](../cloud/reference/sdk/python_sdk_ref/)
-- [JS/TS SDK Reference](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)
+- [Python SDK Reference](../cloud/reference/sdk/python_sdk_ref.md)
+- [JS/TS SDK Reference](../cloud/reference/sdk/js_ts_sdk_ref.md)
 
 ## Python Sync vs. Async
 
