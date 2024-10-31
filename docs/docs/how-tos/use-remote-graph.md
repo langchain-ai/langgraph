@@ -222,7 +222,7 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
 
     ```js
     import { MessagesAnnotation, StateGraph, START } from "@langchain/langgraph";
-    import { RemoteGraph } from "@langchain/langgraph-sdk";
+    import { RemoteGraph } from "@langchain/langgraph/remote";
 
     const url = <DEPLOYMENT_URL>;
     const graphName = "agent";
