@@ -38,10 +38,10 @@ Additionally, you have to provide one of the following:
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { RemoteGraph } from "@langchain/langgraph/remote";
 
-    const url = <DEPLOYMENT_URL>;
+    const url = `<DEPLOYMENT_URL>`;
     const graphName = "agent";
     const remoteGraph = new RemoteGraph({ graphId: graphName, url });
     ```
@@ -63,11 +63,11 @@ Additionally, you have to provide one of the following:
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { Client } from "@langchain/langgraph-sdk";
     import { RemoteGraph } from "@langchain/langgraph/remote";
 
-    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    const client = new Client({ apiUrl: `<DEPLOYMENT_URL>` });
     const graphName = "agent";
     const remoteGraph = new RemoteGraph({ graphId: graphName, client });
     ```
@@ -92,14 +92,14 @@ Since `RemoteGraph` is a `Runnable` that implements the same methods as `Compile
 
     # stream outputs from the graph
     async for chunk in remote_graph.astream({
-        "messages": [("user", "what's the weather in la?")]
+        "messages": [{"role": "user", "content": "what's the weather in la"}]
     }):
         print(chunk)
     ```
 
 === "JavaScript"
 
-    ```js
+    ```ts
     // invoke the graph
     const result = await remoteGraph.invoke({
         messages: [{role: "user", content: "what's the weather in sf"}]
@@ -128,7 +128,7 @@ Since `RemoteGraph` is a `Runnable` that implements the same methods as `Compile
 
     # stream outputs from the graph
     for chunk in remote_graph.stream({
-        "messages": [("user", "what's the weather in la?")]
+        "messages": [{"role": "user", "content": "what's the weather in la"}]
     }):
         print(chunk)
     ```
@@ -152,8 +152,8 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     # invoke the graph with the thread config
     config = {"configurable": {"thread_id": thread["thread_id"]}}
     result = remote_graph.invoke({
-        "messages": [{"role": "user", "content": "what's the weather in sf"}], config=config
-    })
+        "messages": [{"role": "user", "content": "what's the weather in sf"}]
+    }, config=config)
 
     # verify that the state was persisted to the thread
     thread_state = remote_graph.get_state(config)
@@ -162,9 +162,11 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { Client } from "@langchain/langgraph-sdk";
-    const url = <DEPLOYMENT_URL>;
+    import { RemoteGraph } from "@langchain/langgraph/remote";
+
+    const url = `<DEPLOYMENT_URL>`;
     const graphName = "agent";
     const client = new Client({ apiUrl: url });
     const remoteGraph = new RemoteGraph({ graphId: graphName, url });
@@ -173,11 +175,10 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     const thread = await client.threads.create();
 
     // invoke the graph with the thread config
-    const config = { configurable: { thread_id: thread["thread_id"] }};
+    const config = { configurable: { thread_id: thread.thread_id }};
     const result = await remoteGraph.invoke({
       messages: [{ role: "user", content: "what's the weather in sf" }],
-      config
-    });
+    }, config);
 
     // verify that the state was persisted to the thread
     const threadState = await remoteGraph.getState(config);
@@ -220,18 +221,18 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { MessagesAnnotation, StateGraph, START } from "@langchain/langgraph";
-    import { RemoteGraph } from "@langchain/langgraph-sdk";
+    import { RemoteGraph } from "@langchain/langgraph/remote";
 
-    const url = <DEPLOYMENT_URL>;
+    const url = `<DEPLOYMENT_URL>`;
     const graphName = "agent";
     const remoteGraph = new RemoteGraph({ graphId: graphName, url });
 
     // define parent graph and add remote graph directly as a node
     const graph = new StateGraph(MessagesAnnotation)
       .addNode("child", remoteGraph)
-      .addEdge("START", "child")
+      .addEdge(START, "child")
       .compile()
 
     // invoke the parent graph
