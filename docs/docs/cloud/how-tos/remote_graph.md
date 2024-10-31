@@ -226,13 +226,12 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
 
     const url = <DEPLOYMENT_URL>;
     const graphName = "agent";
-    const remoteGraph = new RemoteGraph(graphName, { url });
+    const remoteGraph = new RemoteGraph({ graphId: graphName, url });
 
-    // define parent graph
-    const graph = new StateGraph(MessagesAnnotation);
-      // add remote graph directly as a node
-      .addNode("child", remoteGraph);
-      .addEdge("START", "child");
+    // define parent graph and add remote graph directly as a node
+    const graph = new StateGraph(MessagesAnnotation)
+      .addNode("child", remoteGraph)
+      .addEdge("START", "child")
       .compile()
 
     // invoke the parent graph
