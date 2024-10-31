@@ -90,9 +90,9 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 ### State Management
 
-- [Use Pydantic model as state](state-model.ipynb)
-- [Have a separate input and output schema](input_output_schema.ipynb)
-- [Pass private state between nodes inside the graph](pass_private_state.ipynb)
+- [How to use Pydantic model as state](state-model.ipynb)
+- [How to define input/output schema for your graph](input_output_schema.ipynb)
+- [How to pass private state between nodes inside the graph](pass_private_state.ipynb)
 
 ### Other
 
@@ -141,7 +141,8 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
- 
+- [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+
 ### Deployment
 
 LangGraph applications can be deployed using LangGraph Cloud, which provides a range of services to help you deploy, manage, and scale your applications.
