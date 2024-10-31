@@ -4,6 +4,7 @@ import typing
 import warnings
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
+from types import FunctionType
 from typing import (
     Any,
     Callable,
@@ -348,7 +349,11 @@ class StateGraph(Graph):
             ):
                 if input is None:
                     first_parameter_name = next(
-                        iter(inspect.signature(action).parameters.keys())
+                        iter(
+                            inspect.signature(
+                                cast(FunctionType, action)
+                            ).parameters.keys()
+                        )
                     )
                     if input_hint := hints.get(first_parameter_name):
                         if isinstance(input_hint, type) and get_type_hints(input_hint):
