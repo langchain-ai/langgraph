@@ -230,7 +230,7 @@ We then get a BUNCH of `messages/partial` events - these are the individual toke
 StreamPart(event='messages/partial', data=[{'content': '', 'additional_kwargs': {'tool_calls': [{'index': 0, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'function': {'arguments': '', 'name': 'tavily_search_results_json'}, 'type': 'function'}]}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-985c0f14-9f43-40d4-a505-4637fc58e333', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [{'name': 'tavily_search_results_json', 'args': '', 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'error': None}], 'usage_metadata': None}])
 ```
 
-The last `messages/partial` event for a given message will contained all of the tokens streamed for that message. In our case, it is now a complete tool call:
+The last `messages/partial` event for a given message will contain all of the tokens streamed for that message. In our case, it is now a complete tool call:
 
 ```python
 StreamPart(event='messages/partial', data=[{'content': '', 'additional_kwargs': {'tool_calls': [{'index': 0, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs', 'function': {'arguments': '{"query":"current weather in San Francisco"}', 'name': 'tavily_search_results_json'}, 'type': 'function'}]}, 'response_metadata': {'finish_reason': 'tool_calls', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-985c0f14-9f43-40d4-a505-4637fc58e333', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'current weather in San Francisco'}, 'id': 'call_w8Hr8dHGuZCPgRfd5FqRBArs'}], 'invalid_tool_calls': [], 'usage_metadata': None}])
