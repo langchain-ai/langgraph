@@ -18,9 +18,9 @@ The LangGraph Platform incorporates best practices for agent deployment, so you 
 * **Task queue**: We've added a task queue to make sure we don't drop any requests if they arrive in a bursty nature.
 * **Horizontally scalable infrastructure**: LangGraph Server is designed to be horizontally scalable, allowing you to scale up and down your usage as needed.
 * **Double texting support**: Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. We call this ["double texting"](double_texting.md) and have added four different ways to handle this.
-* **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](persistence.md#checkpoints) optimized for LangGraph applications.
+* **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](./persistence.md#checkpoints) optimized for LangGraph applications.
 * **Human-in-the-loop endpoints**: We've exposed all endpoints needed to support [human-in-the-loop](human_in_the_loop.md) features.
-* **Memory**: In addition to thread-level persistence (covered above by [checkpointers](persistence.md#checkpoints)), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
+* **Memory**: In addition to thread-level persistence (covered above by [checkpointers]l(./persistence.md#checkpoints)), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
 * **Cron jobs**: Built-in support for scheduling tasks, enabling you to automate regular actions like data clean-up or batch processing within your applications.
 * **Webhooks**: Allows your application to send real-time notifications and data updates to external systems, making it easy to integrate with third-party services and trigger actions based on specific events.
 * **Monitoring**: LangGraph Server integrates seamlessly with the [LangSmith](https://docs.smith.langchain.com/) monitoring platform, providing real-time insights into your application's performance and health.
@@ -81,17 +81,17 @@ A thread contains the accumulated state of a sequence of [runs](#runs). If a run
 
 A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
 
-The state of a thread at a particular point in time is called a [checkpoint](persistence#checkpoints). Checkpoints can be used to restore the state of a thread at a later time.
+The state of a thread at a particular point in time is called a [checkpoint](persistence.md#checkpoints). Checkpoints can be used to restore the state of a thread at a later time.
 
 For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](low_level.md#persistence).
 
-The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../reference/api/api_ref.html#tag/threadscreate) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../cloud/reference/api/api_ref.html#tag/threads) for more details.
 
 ### Runs
 
 A run is an invocation of an [assistant](#assistants). Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a [thread](#threads).
 
-The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../reference/api/api_ref.html#tag/runscreate) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../cloud/reference/api/api_ref.html#tag/thread-runs/) for more details.
 
 ### Store
 
