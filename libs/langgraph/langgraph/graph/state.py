@@ -342,7 +342,7 @@ class StateGraph(Graph):
 
         ends = EMPTY_SEQ
         try:
-            if isfunction(action) and (
+            if (isfunction(action) or ismethod(getattr(action, "__call__", None))) and (
                 hints := get_type_hints(getattr(action, "__call__"))
                 or get_type_hints(action)
             ):
