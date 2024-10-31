@@ -6,11 +6,10 @@ from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Unio
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
-RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
+RunStatus = Literal["pending", "error", "success", "timeout", "interrupted"]
 """
 Represents the status of a run:
 - "pending": The run is waiting to start.
-- "running": The run is currently in progress.
 - "error": The run encountered an error and stopped.
 - "success": The run completed successfully.
 - "timeout": The run exceeded its time limit.
@@ -26,7 +25,9 @@ Represents the status of a thread:
 - "error": An exception occurred during task processing.
 """
 
-StreamMode = Literal["values", "messages", "updates", "events", "debug", "custom"]
+StreamMode = Literal[
+    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+]
 """
 Defines the mode of streaming:
 - "values": Stream only the values.
@@ -120,7 +121,7 @@ class GraphSchema(TypedDict):
     graph_id: str
     """The ID of the graph."""
     input_schema: Optional[dict]
-    """The schema for the graph state.
+    """The schema for the graph input.
     Missing if unable to generate JSON schema from graph."""
     output_schema: Optional[dict]
     """The schema for the graph output.

@@ -10,9 +10,11 @@ from typing import (
     Sequence,
     Type,
     Union,
+    cast,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
@@ -227,14 +229,14 @@ class StreamProtocol:
 
     modes: set[StreamMode]
 
-    __call__: Callable[[StreamChunk], None]
+    __call__: Callable[[Self, StreamChunk], None]
 
     def __init__(
         self,
         __call__: Callable[[StreamChunk], None],
         modes: set[StreamMode],
     ) -> None:
-        self.__call__ = __call__
+        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
         self.modes = modes
 
 

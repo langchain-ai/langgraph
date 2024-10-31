@@ -160,6 +160,7 @@ export class CronsClient extends BaseClient {
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
+      if_not_exists: payload?.ifNotExists,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
       method: "POST",
@@ -187,6 +188,7 @@ export class CronsClient extends BaseClient {
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
+      if_not_exists: payload?.ifNotExists,
     };
     return this.fetch<Run>(`/runs/crons`, {
       method: "POST",
@@ -698,6 +700,7 @@ export class RunsClient extends BaseClient {
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
+      if_not_exists: payload?.ifNotExists,
     };
 
     const endpoint =
@@ -779,6 +782,7 @@ export class RunsClient extends BaseClient {
       checkpoint_id: payload?.checkpointId,
       multitask_strategy: payload?.multitaskStrategy,
       after_seconds: payload?.afterSeconds,
+      if_not_exists: payload?.ifNotExists,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
@@ -849,15 +853,31 @@ export class RunsClient extends BaseClient {
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
+      if_not_exists: payload?.ifNotExists,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
-    return this.fetch<ThreadState["values"]>(endpoint, {
+    const response = await this.fetch<ThreadState["values"]>(endpoint, {
       method: "POST",
       json,
       timeoutMs: null,
       signal: payload?.signal,
     });
+    const raiseError =
+      payload?.raiseError !== undefined ? payload.raiseError : true;
+    if (
+      raiseError &&
+      "__error__" in response &&
+      typeof response.__error__ === "object" &&
+      response.__error__ &&
+      "error" in response.__error__ &&
+      "message" in response.__error__
+    ) {
+      throw new Error(
+        `${response.__error__?.error}: ${response.__error__?.message}`,
+      );
+    }
+    return response;
   }
 
   /**
