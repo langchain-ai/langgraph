@@ -1,8 +1,8 @@
 # How to interact with the deployment using RemoteGraph
 
 !!! info "Prerequisites"
-    - [LangGraph Platform](./langgraph_platform.md)
-    - [LangGraph Server](./langgraph_server.md)
+    - [LangGraph Platform](../concepts/langgraph_platform.md)
+    - [LangGraph Server](../concepts/langgraph_server.md)
 
 `RemoteGraph` is an interface that allows you to interact with your LangGraph Platform deployment as if it were a regular, locally-defined LangGraph graph (e.g. a `CompiledGraph`). This guide shows you how you can initialize a `RemoteGraph` and interact with it.
 
