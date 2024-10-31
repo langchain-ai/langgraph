@@ -38,10 +38,10 @@ Additionally, you have to provide one of the following:
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { RemoteGraph } from "@langchain/langgraph/remote";
 
-    const url = <DEPLOYMENT_URL>;
+    const url = `<DEPLOYMENT_URL>`;
     const graphName = "agent";
     const remoteGraph = new RemoteGraph({ graphId: graphName, url });
     ```
@@ -63,11 +63,11 @@ Additionally, you have to provide one of the following:
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { Client } from "@langchain/langgraph-sdk";
     import { RemoteGraph } from "@langchain/langgraph/remote";
 
-    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    const client = new Client({ apiUrl: `<DEPLOYMENT_URL>` });
     const graphName = "agent";
     const remoteGraph = new RemoteGraph({ graphId: graphName, client });
     ```
@@ -99,7 +99,7 @@ Since `RemoteGraph` is a `Runnable` that implements the same methods as `Compile
 
 === "JavaScript"
 
-    ```js
+    ```ts
     // invoke the graph
     const result = await remoteGraph.invoke({
         messages: [{role: "user", content: "what's the weather in sf"}]
@@ -162,9 +162,11 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { Client } from "@langchain/langgraph-sdk";
-    const url = <DEPLOYMENT_URL>;
+    import { RemoteGraph } from "@langchain/langgraph/remote";
+
+    const url = `<DEPLOYMENT_URL>`;
     const graphName = "agent";
     const client = new Client({ apiUrl: url });
     const remoteGraph = new RemoteGraph({ graphId: graphName, url });
@@ -173,7 +175,7 @@ By default, the graph runs (i.e. `.invoke()` or `.stream()` invocations) are sta
     const thread = await client.threads.create();
 
     // invoke the graph with the thread config
-    const config = { configurable: { thread_id: thread["thread_id"] }};
+    const config = { configurable: { thread_id: thread.thread_id }};
     const result = await remoteGraph.invoke({
       messages: [{ role: "user", content: "what's the weather in sf" }],
       config
@@ -220,11 +222,11 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
 
 === "JavaScript"
 
-    ```js
+    ```ts
     import { MessagesAnnotation, StateGraph, START } from "@langchain/langgraph";
-    import { RemoteGraph } from "@langchain/langgraph-sdk";
+    import { RemoteGraph } from "@langchain/langgraph/remote";
 
-    const url = <DEPLOYMENT_URL>;
+    const url = `<DEPLOYMENT_URL>`;
     const graphName = "agent";
     const remoteGraph = new RemoteGraph({ graphId: graphName, url });
 
