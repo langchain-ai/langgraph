@@ -45,7 +45,8 @@ The LangGraph Platform offers a few different deployment options described in th
 **High Level**
 
 - [Why LangGraph Platform?](./langgraph_platform.md): The LangGraph platform is an opinionated way to deploy and manage LangGraph applications. This guide provides an overview of the key features and concepts behind LangGraph Platform.
-- [Deployment Options](./deployment_options.md): LangGraph Platform offers three deployment options: self-hosted, [bring your own cloud (BYOC)](./bring_your_own_cloud.md), and [Cloud SaaS](./langgraph_cloud.md). This guide explains the differences between these options, and which Plans they are available on.
+- [Deployment Options](./deployment_options.md): LangGraph Platform offers four deployment options: [Self-Hosted Lite](./self_hosted.md#self-hosted-lite), [Self-Hosted Enterprise](./self_hosted.md#self-hosted-enterprise), [bring your own cloud (BYOC)](./bring_your_own_cloud.md), and [Cloud SaaS](./langgraph_cloud.md). This guide explains the differences between these options, and which Plans they are available on.
+- [Plans](./plans.md): LangGraph Platforms offer three different plans: Developer, Plus, Enterprise. This guide explains the differences between these options, what deployment options are available for each, and how to sign up for each one.
 - [Template Applications](./template_applications.md): Reference applications designed to help you get started quickly when building with LangGraph.
 
 **Components**
@@ -65,3 +66,11 @@ The LangGraph Platform comprises several components that work together to suppor
 - [Web-hooks](./langgraph_server.md#webhooks): Webhooks allow your running LangGraph application to send data to external services on specific events.
 - [Cron Jobs](./langgraph_server.md#cron-jobs): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.
 - [Double Texting](./double_texting.md): Double texting is a common issue in LLM applications where users may send multiple messages before the graph has finished running. This guide explains how to handle double texting with LangGraph Deploy.
+
+**Deployment Options**
+
+
+- [Self-Hosted Lite](./self_hosted.md): A free (up to 1 million nodes executed), limited version of LangGraph Platform that you can run locally or in a self-hosted manner
+- [Cloud SaaS](./langgraph_cloud.md): Hosted as part of LangSmith.
+- [Bring Your Own Cloud](./bring_your_own_cloud.md): We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud.
+- [Self-Hosted Enterprise](./self_hosted.md): Completely managed by you.
