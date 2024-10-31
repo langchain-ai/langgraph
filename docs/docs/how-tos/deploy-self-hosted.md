@@ -54,6 +54,8 @@ When running this server, you need to pass three environment variables:
 
 ```shell
 docker run \
+    --env-file .env \
+    -p 8123:8000 \
     -e REDIS_URI="foo" \
     -e DATABASE_URI="bar" \
     -e LANGSMITH_API_KEY="baz" \
