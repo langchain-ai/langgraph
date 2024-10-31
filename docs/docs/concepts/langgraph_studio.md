@@ -113,4 +113,4 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
 
 For more information please see the following:
 
-*  [LangGraph Studio how-to guides](../../how-tos/#langgraph-studio)
+*  [LangGraph Studio how-to guides](../how-tos/index.md#langgraph-studio)

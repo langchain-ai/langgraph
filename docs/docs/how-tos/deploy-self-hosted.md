@@ -1,9 +1,9 @@
-# Self-hosted deployment
+# How to do a Self-hosted deployment of LangGraph
 
 !!! info "Prerequisites"
 
-    - [Application Structure](../../concepts/application_structure.md)
-    - [Deployment Options](../../concepts/deployment_options.md)
+    - [Application Structure](../concepts/application_structure.md)
+    - [Deployment Options](../concepts/deployment_options.md)
 
 This how-to guide will walk you through how to create a docker image from an existing LangGraph application, so you can deploy it on your own infrastructure.
 
@@ -28,7 +28,7 @@ You will eventually need to pass in the following environment variables to the L
 
 ## Build the Docker Image
 
-Please read the [Application Structure](../../concepts/application_structure.md) guide to understand how to structure your LangGraph application.
+Please read the [Application Structure](../concepts/application_structure.md) guide to understand how to structure your LangGraph application.
 
 If the application is structured correctly, you can build a docker image with the LangGraph Deploy server.
 
