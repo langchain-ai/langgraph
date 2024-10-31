@@ -164,4 +164,4 @@ For a production deployment, you will typically want to configure the environmen
 
 Please see the following resources for more information:
 
-- How-to guides for [Application Structure](../../how-tos/#application-structure).
+- How-to guides for [Application Structure](../how-tos/index.md#application-structure).
