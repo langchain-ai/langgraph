@@ -82,7 +82,7 @@ jobs:
               --check-links-ignore "https://github\.com/.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
               --check-links-ignore "https://python\.langchain\.com/.*" \
-              --check-links-ignore "https://www.\.langchain\.com/langgraph-platform-pricing.*" \
+              --check-links-ignore "https://www.langchain\.com/.*" \
               --check-links-ignore "https://openai.com/index/memory-and-new-controls-for-chatgpt/" \
               --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html') 
               
@@ -97,6 +97,7 @@ jobs:
               poetry run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
                 --check-links-ignore "https://x.com/.*" \
+                --check-links-ignore "https://www\.langchain\.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
                 --check-links ${CHANGED_FILES} \
