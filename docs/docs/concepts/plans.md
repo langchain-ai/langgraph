@@ -12,21 +12,21 @@ There are three different plans for using it.
 
 ## Plan Details
 
-|                                                                   | Developer                  | Plus         | Enterprise                                          |
-|-------------------------------------------------------------------|----------------------------|--------------|-----------------------------------------------------|
-| Deployment Options                                                | Self-Hosted Lite           | Cloud        | Self-Hosted Enterprise, Cloud, Bring-Your-Own-Cloud |
-| Usage Limits                                                      | 1M nodes executed per year | Custom       | Custom                                              |
-| APIs for retrieving and updating state and conversational history | ✅                          | ✅            | ✅                                                   |
-| APIs for retrieving and updating long-term memory                 | ✅                          | ✅            | ✅                                                   |
-| Horizontally scalable task queues and servers                     | ✅                          | ✅            | ✅                                                   |
-| Real-time streaming of outputs and intermediate steps             | ✅                          | ✅            | ✅                                                   |
-| Assistants API (configurable templates for LangGraph apps)        | ✅                          | ✅            | ✅                                                   |
-| Cron scheduling                                                   | --                         | ✅            | ✅                                                   |
-| LangGraph Studio for prototyping                                  | Desktop only               | Coming Soon! | Coming Soon!                                        |
-| Authentication & authorization to call the LangGraph APIs         | --                         | Coming Soon! | Coming Soon!                                        |
-| Smart caching to reduce traffic to LLM API                        | --                         | Coming Soon! | Coming Soon!                                        |
-| Publish/subscribe API for state                                   | --                         | Coming Soon! | Coming Soon!                                        |
-| Scheduling prioritization                                         | --                         | Coming Soon! | Coming Soon!                                        |
+|                                                                  | Developer                                   | Plus                                                  | Enterprise                                          |
+|------------------------------------------------------------------|---------------------------------------------|-------------------------------------------------------|-----------------------------------------------------|
+| Deployment Options                                               | Self-Hosted Lite                            | Cloud                                                 | Self-Hosted Enterprise, Cloud, Bring-Your-Own-Cloud |
+| Usage                                                     | Free, limited to 1M nodes executed per year | Free while in Beta, will be charged per node executed | Custom                                              |
+| APIs for retrieving and updating state and conversational history | ✅                                           | ✅                                                     | ✅                                                   |
+| APIs for retrieving and updating long-term memory                | ✅                                           | ✅                                                     | ✅                                                   |
+| Horizontally scalable task queues and servers                    | ✅                                           | ✅                                                     | ✅                                                   |
+| Real-time streaming of outputs and intermediate steps            | ✅                                           | ✅                                                     | ✅                                                   |
+| Assistants API (configurable templates for LangGraph apps)       | ✅                                           | ✅                                                     | ✅                                                   |
+| Cron scheduling                                                  | --                                          | ✅                                                     | ✅                                                   |
+| LangGraph Studio for prototyping                                 | Desktop only                                | Coming Soon!                                          | Coming Soon!                                        |
+| Authentication & authorization to call the LangGraph APIs        | --                                          | Coming Soon!                                          | Coming Soon!                                        |
+| Smart caching to reduce traffic to LLM API                       | --                                          | Coming Soon!                                          | Coming Soon!                                        |
+| Publish/subscribe API for state                                  | --                                          | Coming Soon!                                          | Coming Soon!                                        |
+| Scheduling prioritization                                        | --                                          | Coming Soon!                                          | Coming Soon!                                        |
 
 Please see the [LangGraph Platform Pricing](https://www.langchain.com/langgraph-platform-pricing) for information on pricing.
 
