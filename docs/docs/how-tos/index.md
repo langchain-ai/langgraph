@@ -141,7 +141,7 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
-- [How to rebuild graph at runtime](../cloud/deployment/rebuild_graph.md)
+- [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
 
 ### Deployment
 
