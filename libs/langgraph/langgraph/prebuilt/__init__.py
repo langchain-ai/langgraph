@@ -1,6 +1,6 @@
 """langgraph.prebuilt exposes a higher-level API for creating and executing agents and tools."""
 
-from langgraph.prebuilt.chain_executor import create_chain_executor
+from langgraph.prebuilt.chain import create_chain
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import (
@@ -13,7 +13,7 @@ from langgraph.prebuilt.tool_validator import ValidationNode
 
 __all__ = [
     "create_react_agent",
-    "create_chain_executor",
+    "create_chain",
     "ToolExecutor",
     "ToolInvocation",
     "ToolNode",

@@ -44,10 +44,11 @@ from langgraph.graph import START, MessagesState, StateGraph, add_messages
 from langgraph.prebuilt import (
     ToolNode,
     ValidationNode,
-    create_chain_executor,
+    create_chain,
     create_react_agent,
     tools_condition,
 )
+from langgraph.prebuilt.chain import _get_step_name
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
@@ -1352,7 +1353,39 @@ def test__get_state_args() -> None:
     assert _get_state_args(foo) == {"a": None, "b": "bar"}
 
 
-def test_chain_executor():
+def test__get_step_name() -> None:
+    # default runnable name
+    assert _get_step_name(RunnableLambda(func=lambda x: x)) == "RunnableLambda"
+    # custom runnable name
+    assert (
+        _get_step_name(RunnableLambda(name="my_runnable", func=lambda x: x))
+        == "my_runnable"
+    )
+
+    # lambda
+    assert _get_step_name(lambda x: x) == "<lambda>"
+
+    # regular function
+    def func(state):
+        return
+
+    assert _get_step_name(func) == "func"
+
+    class MyClass:
+        def __call__(self, state):
+            return
+
+        def class_method(self, state):
+            return
+
+    # callable class
+    assert _get_step_name(MyClass()) == "MyClass"
+
+    # class method
+    assert _get_step_name(MyClass().class_method) == "class_method"
+
+
+def test_chain():
     class State(TypedDict):
         foo: Annotated[list[str], operator.add]
         bar: str
@@ -1365,17 +1398,18 @@ def test_chain_executor():
 
     # test raising if less than 1 steps
     with pytest.raises(ValueError):
-        create_chain_executor(state_schema=State)
+        create_chain(state_schema=State)
 
     # test raising if duplicate step names
     with pytest.raises(ValueError):
-        create_chain_executor(step1, step1, state_schema=State)
+        create_chain(step1, step1, state_schema=State)
 
     with pytest.raises(ValueError):
-        create_chain_executor(("foo", step1), ("foo", step1), state_schema=State)
+        create_chain(("foo", step1), ("foo", step1), state_schema=State)
 
     # test unnamed steps
-    executor = create_chain_executor(step1, step2, state_schema=State)
+    builder = create_chain(step1, step2, state_schema=State)
+    executor = builder.compile()
     result = executor.invoke({"foo": []})
     assert result == {"foo": ["step1", "step2"], "bar": "baz"}
     stream_chunks = list(executor.stream({"foo": []}))
@@ -1385,13 +1419,38 @@ def test_chain_executor():
     ]
 
     # test named steps
-    executor_named_steps = create_chain_executor(
+    builder_named_steps = create_chain(
         ("meow1", step1), ("meow2", step2), state_schema=State
     )
+    executor_named_steps = builder_named_steps.compile()
     result = executor_named_steps.invoke({"foo": []})
     stream_chunks = list(executor_named_steps.stream({"foo": []}))
     assert result == {"foo": ["step1", "step2"], "bar": "baz"}
     assert stream_chunks == [
         {"meow1": {"foo": ["step1"], "bar": "baz"}},
         {"meow2": {"foo": ["step2"]}},
+    ]
+
+    # test input/output schema & functions w/ duplicate names
+    class Input(TypedDict):
+        foo: Annotated[list[str], operator.add]
+
+    class Output(TypedDict):
+        bar: str
+
+    builder_named_steps = create_chain(
+        ("meow1", lambda state: {"foo": ["foo"]}),
+        ("meow2", lambda state: {"bar": state["foo"][0] + "bar"}),
+        state_schema=State,
+        input_schema=Input,
+        output_schema=Output,
+    )
+    executor_named_steps = builder_named_steps.compile()
+    result = executor_named_steps.invoke({"foo": []})
+    stream_chunks = list(executor_named_steps.stream({"foo": []}))
+    # filtered by output schema
+    assert result == {"bar": "foobar"}
+    assert stream_chunks == [
+        {"meow1": {"foo": ["foo"]}},
+        {"meow2": {"bar": "foobar"}},
     ]
