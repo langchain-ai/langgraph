@@ -56,8 +56,11 @@ plugins:
   - autorefs
   - redirects:
       redirect_maps:
-        'cloud/concepts/api.md': 'concepts/index.md#langgraph-platform'
         'cloud/index.md': 'concepts/index.md#langgraph-platform'
+        'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
+        'cloud/concepts/api.md': 'concepts/index.md#langgraph-platform'
+        'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
+        'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
       handlers:
         python:
