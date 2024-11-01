@@ -1,0 +1,45 @@
+{
+  "name": "example-graph",
+  "version": "0.0.1",
+  "description": "A starter template for creating a LangGraph workflow.",
+  "packageManager": "yarn@1.22.22",
+  "main": "my_app/graph.ts",
+  "author": "Your Name",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=\\.test\\.ts$ --testPathIgnorePatterns=\\.int\\.test\\.ts$",
+    "test:int": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=\\.int\\.test\\.ts$",
+    "format": "prettier --write .",
+    "lint": "eslint src",
+    "format:check": "prettier --check .",
+    "lint:langgraph-json": "node scripts/checkLanggraphPaths.js",
+    "lint:all": "yarn lint & yarn lint:langgraph-json & yarn format:check",
+    "test:all": "yarn test && yarn test:int && yarn lint:langgraph"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.2",
+    "@langchain/langgraph": "^0.2.5"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.1.0",
+    "@eslint/js": "^9.9.1",
+    "@tsconfig/recommended": "^1.0.7",
+    "@types/jest": "^29.5.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.8",
+    "@typescript-eslint/parser": "^5.59.8",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.41.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-no-instanceof": "^1.0.1",
+    "eslint-plugin-prettier": "^4.2.1",
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.3"
+  }
+}

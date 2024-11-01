@@ -54,7 +54,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import ERROR, PULL, PUSH
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
@@ -8917,14 +8917,26 @@ def test_doubly_nested_graph_interrupts(
     }
 
     # test stream updates w/ nested interrupt
-    config = {"configurable": {"thread_id": "2"}}
+    nodes: list[str] = []
+    config = {
+        "configurable": {"thread_id": "2", CONFIG_KEY_NODE_FINISHED: nodes.append}
+    }
     assert [*app.stream({"my_key": "my value"}, config)] == [
         {"parent_1": {"my_key": "hi my value"}},
         {"__interrupt__": ()},
     ]
+    assert nodes == ["parent_1", "grandchild_1"]
     assert [*app.stream(None, config)] == [
         {"child": {"my_key": "hi my value here and there"}},
         {"parent_2": {"my_key": "hi my value here and there and back again"}},
+    ]
+    assert nodes == [
+        "parent_1",
+        "grandchild_1",
+        "grandchild_2",
+        "child_1",
+        "child",
+        "parent_2",
     ]
 
     # test stream values w/ nested interrupt

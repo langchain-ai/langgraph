@@ -1,39 +1,76 @@
-# Studio FAQs
+# LangGraph Studio
 
-## Why is my project failing to start?
+!!! info "Prerequisites"
+
+    - [LangGraph Platform](./langgraph_platform.md)
+    - [LangGraph Server](./langgraph_server.md)
+
+LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications.
+
+With visual graphs and the ability to edit state, you can better understand agent workflows and iterate faster. LangGraph Studio integrates with LangSmith allowing you to  collaborate with teammates to debug failure modes.
+
+![](img/lg_studio.png)
+
+## Features
+
+The key features of LangGraph Studio are:
+
+- Visualizes your graph
+- Test your graph by running it from the UI
+- Debug your agent by [modifying its state and rerunning](human_in_the_loop.md)
+- Create and manage [assistants](assistants.md)
+- View and manage [threads](persistence.md#threads)
+- View and manage [long term memory](memory.md)
+- Add node input/outputs to [LangSmith](https://smith.langchain.com/) datasets for testing
+
+## Types
+
+### Desktop app
+
+LangGraph Studio is available as a [desktop app](https://studio.langchain.com/) for MacOS users.
+
+While in Beta, LangGraph Studio is available for free to all [LangSmith](https://smith.langchain.com/) users on any plan tier.
+
+### Cloud studio
+
+If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
+
+## Studio FAQs
+
+### Why is my project failing to start?
 
 There are a few reasons that your project might fail to start, here are some of the most common ones.
 
-### Docker issues
+#### Docker issues (desktop only)
 
-LangGraph Studio requires Docker Desktop version 4.24 or higher. Please make sure you have a version of Docker installed that satisfies that requirement and also make sure you have the Docker Desktop app up and running before trying to use LangGraph Studio. In addition, make sure you have docker-compose updated to version 2.22.0 or higher.
+LangGraph Studio (desktop) requires Docker Desktop version 4.24 or higher. Please make sure you have a version of Docker installed that satisfies that requirement and also make sure you have the Docker Desktop app up and running before trying to use LangGraph Studio. In addition, make sure you have docker-compose updated to version 2.22.0 or higher.
 
-### Configuration or environment issues
+#### Configuration or environment issues
 
 Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables. 
 
-## How does interrupt work?
+### How does interrupt work?
 
 When you select the `Interrupts` dropdown and select a node to interrupt the graph will pause execution before and after (unless the node goes straight to `END`) that node has run. This means that you will be able to both edit the state before the node is ran and the state after the node has ran. This is intended to allow developers more fine-grained control over the behavior of a node and make it easier to observe how the node is behaving. You will not be able to edit the state after the node has ran if the node is the final node in the graph.
 
-## How do I reload the app?
+### How do I reload the app?  (desktop only)
 
 If you would like to reload the app, don't use Command+R as you might normally do. Instead, close and reopen the app for a full refresh.
 
-## How does automatic rebuilding work?
+### How does automatic rebuilding work?  (desktop only)
 
 One of the key features of LangGraph Studio is that it automatically rebuilds your image when you change the source code. This allows for a super fast development and testing cycle which makes it easy to iterate on your graph. There are two different ways that LangGraph rebuilds your image: either by editing the image or completely rebuilding it.
 
-### Rebuilds from source code changes
+#### Rebuilds from source code changes
 
 If you modified the source code only (no configuration or dependency changes!) then the image does not require a full rebuild, and LangGraph Studio will only update the relevant parts. The UI status in the bottom left will switch from `Online` to `Stopping` temporarily while the image gets edited. The logs will be shown as this process is happening, and after the image has been edited the status will change back to `Online` and you will be able to run your graph with the modified code!
 
 
-### Rebuilds from configuration or dependency changes
+#### Rebuilds from configuration or dependency changes
 
 If you edit your graph configuration file (`langgraph.json`) or the dependencies (either `pyproject.toml` or `requirements.txt`) then the entire image will be rebuilt. This will cause the UI to switch away from the graph view and start showing the logs of the new image building process. This can take a minute or two, and once it is done your updated image will be ready to use!
 
-## Why is my graph taking so long to startup?
+### Why is my graph taking so long to startup?  (desktop only)
 
 The LangGraph Studio interacts with a local LangGraph API server. To stay aligned with ongoing updates, the LangGraph API requires regular rebuilding. As a result, you may occasionally experience slight delays when starting up your project.
 
@@ -71,3 +108,9 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
         return "node_c"
 ```
 
+
+## Related
+
+For more information please see the following:
+
+*  [LangGraph Studio how-to guides](../how-tos/index.md#langgraph-studio)

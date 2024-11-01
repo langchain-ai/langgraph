@@ -95,6 +95,11 @@ interface RunsInvokePayload {
    * Use to schedule future runs.
    */
   afterSeconds?: number;
+
+  /**
+   * Behavior if the specified run doesn't exist. Defaults to "reject".
+   */
+  ifNotExists?: "create" | "reject";
 }
 
 export interface RunsStreamPayload extends RunsInvokePayload {
@@ -130,4 +135,9 @@ export interface CronsCreatePayload extends RunsCreatePayload {
   schedule: string;
 }
 
-export type RunsWaitPayload = RunsStreamPayload;
+export interface RunsWaitPayload extends RunsStreamPayload {
+  /**
+   * Raise errors returned by the run. Default is `true`.
+   */
+  raiseError?: boolean;
+}

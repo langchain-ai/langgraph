@@ -30,6 +30,7 @@ import {
   CronsCreatePayload,
   OnConflictBehavior,
 } from "./types.js";
+import { mergeSignals } from "./utils/signals.js";
 
 interface ClientConfig {
   apiUrl?: string;
@@ -56,6 +57,9 @@ class BaseClient {
     });
 
     this.timeoutMs = config?.timeoutMs || 12_000;
+
+    // default limit being capped by Chrome
+    // https://github.com/nodejs/undici/issues/1373
     this.apiUrl = config?.apiUrl || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
     if (config?.apiKey != null) {
@@ -68,6 +72,7 @@ class BaseClient {
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
+      timeoutMs?: number | null;
     },
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
@@ -84,6 +89,16 @@ class BaseClient {
       delete mutatedOptions.json;
     }
 
+    let timeoutSignal: AbortSignal | null = null;
+    if (typeof options?.timeoutMs !== "undefined") {
+      if (options.timeoutMs != null) {
+        timeoutSignal = AbortSignal.timeout(options.timeoutMs);
+      }
+    } else {
+      timeoutSignal = AbortSignal.timeout(this.timeoutMs);
+    }
+
+    mutatedOptions.signal = mergeSignals(timeoutSignal, mutatedOptions.signal);
     const targetUrl = new URL(`${this.apiUrl}${path}`);
 
     if (mutatedOptions.params) {
@@ -108,6 +123,8 @@ class BaseClient {
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
+      timeoutMs?: number | null;
+      signal?: AbortSignal;
     },
   ): Promise<T> {
     const response = await this.asyncCaller.fetch(
@@ -143,6 +160,7 @@ export class CronsClient extends BaseClient {
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
+      if_not_exists: payload?.ifNotExists,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
       method: "POST",
@@ -170,6 +188,7 @@ export class CronsClient extends BaseClient {
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
+      if_not_exists: payload?.ifNotExists,
     };
     return this.fetch<Run>(`/runs/crons`, {
       method: "POST",
@@ -681,6 +700,7 @@ export class RunsClient extends BaseClient {
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
+      if_not_exists: payload?.ifNotExists,
     };
 
     const endpoint =
@@ -689,6 +709,7 @@ export class RunsClient extends BaseClient {
       ...this.prepareFetchOptions(endpoint, {
         method: "POST",
         json,
+        timeoutMs: null,
         signal: payload?.signal,
       }),
     );
@@ -761,6 +782,7 @@ export class RunsClient extends BaseClient {
       checkpoint_id: payload?.checkpointId,
       multitask_strategy: payload?.multitaskStrategy,
       after_seconds: payload?.afterSeconds,
+      if_not_exists: payload?.ifNotExists,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
@@ -831,14 +853,31 @@ export class RunsClient extends BaseClient {
       on_completion: payload?.onCompletion,
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
+      if_not_exists: payload?.ifNotExists,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
-    return this.fetch<ThreadState["values"]>(endpoint, {
+    const response = await this.fetch<ThreadState["values"]>(endpoint, {
       method: "POST",
       json,
+      timeoutMs: null,
       signal: payload?.signal,
     });
+    const raiseError =
+      payload?.raiseError !== undefined ? payload.raiseError : true;
+    if (
+      raiseError &&
+      "__error__" in response &&
+      typeof response.__error__ === "object" &&
+      response.__error__ &&
+      "error" in response.__error__ &&
+      "message" in response.__error__
+    ) {
+      throw new Error(
+        `${response.__error__?.error}: ${response.__error__?.message}`,
+      );
+    }
+    return response;
   }
 
   /**
@@ -911,8 +950,15 @@ export class RunsClient extends BaseClient {
    * @param runId The ID of the run.
    * @returns
    */
-  async join(threadId: string, runId: string): Promise<void> {
-    return this.fetch<void>(`/threads/${threadId}/runs/${runId}/join`);
+  async join(
+    threadId: string,
+    runId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<void> {
+    return this.fetch<void>(`/threads/${threadId}/runs/${runId}/join`, {
+      timeoutMs: null,
+      signal: options?.signal,
+    });
   }
 
   /**
@@ -933,6 +979,7 @@ export class RunsClient extends BaseClient {
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
         method: "GET",
+        timeoutMs: null,
         signal,
       }),
     );

@@ -159,7 +159,7 @@ def get_client(
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
+        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
         headers=get_headers(api_key, headers),
     )
     return LangGraphClient(client)
@@ -603,7 +603,7 @@ class AssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
-            metadata: Metadata to add to assistant.
+            metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
 
         Returns:
@@ -706,7 +706,10 @@ class AssistantsClient:
         """List all versions of an assistant.
 
         Args:
-            assistant_id: The assistant ID to delete.
+            assistant_id: The assistant ID to get versions for.
+            metadata: Metadata to filter versions by. Exact match filter for each KV pair.
+            limit: The maximum number of versions to return.
+            offset: The number of versions to skip.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -839,7 +842,7 @@ class ThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add/update to thread.
+            metadata: Metadata to merge with existing thread metadata.
 
         Returns:
             Thread: The created thread.
@@ -885,10 +888,10 @@ class ThreadsClient:
         """Search for threads.
 
         Args:
-            metadata: Thread metadata to search for.
-            values: Thread values to search for.
-            status: Status to search for.
-                Must be one of 'idle', 'busy', or 'interrupted'.
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+                Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
 
@@ -951,7 +954,7 @@ class ThreadsClient:
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
-            subgraphs: Include subgraphs in the state.
+            subgraphs: Include subgraphs states.
 
         Returns:
             ThreadState: the thread of the state.
@@ -1068,7 +1071,7 @@ class ThreadsClient:
 
         Args:
             thread_id: The ID of the thread to update.
-            values: The values to update to the state.
+            values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
 
@@ -1119,11 +1122,11 @@ class ThreadsClient:
         """Get the state history of a thread.
 
         Args:
-            thread_id: The ID of the thread to get the state of.
-            checkpoint: Get history for this subgraph. If empty defaults to root.
-            limit: The maximum number of results to return.
-            before: Get history before this checkpoint.
-            metadata: Filter checkpoints by metadata.
+            thread_id: The ID of the thread to get the state history for.
+            checkpoint: Return states for this subgraph. If empty defaults to root.
+            limit: The maximum number of states to return.
+            before: Return states before this checkpoint.
+            metadata: Filter states by metadata key-value pairs.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -1515,6 +1518,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        raise_error: bool = True,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -1533,6 +1537,7 @@ class RunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        raise_error: bool = True,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
@@ -1553,6 +1558,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        raise_error: bool = True,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1645,9 +1651,19 @@ class RunsClient:
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
-        return await self.http.post(
+        response = await self.http.post(
             endpoint, json={k: v for k, v in payload.items() if v is not None}
         )
+        if (
+            raise_error
+            and isinstance(response, dict)
+            and "__error__" in response
+            and isinstance(response["__error__"], dict)
+        ):
+            raise Exception(
+                f"{response['__error__'].get('error')}: {response['__error__'].get('message')}"
+            )
+        return response
 
     async def list(
         self, thread_id: str, *, limit: int = 10, offset: int = 0
@@ -2260,7 +2276,7 @@ def get_sync_client(
     client = httpx.Client(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
+        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
         headers=get_headers(api_key, headers),
     )
     return SyncLangGraphClient(client)
@@ -2687,7 +2703,7 @@ class SyncAssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
-            metadata: Metadata to add to assistant.
+            metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
 
         Returns:
@@ -2790,7 +2806,10 @@ class SyncAssistantsClient:
         """List all versions of an assistant.
 
         Args:
-            assistant_id: The assistant ID to delete.
+            assistant_id: The assistant ID to get versions for.
+            metadata: Metadata to filter versions by. Exact match filter for each KV pair.
+            limit: The maximum number of versions to return.
+            offset: The number of versions to skip.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -2920,7 +2939,7 @@ class SyncThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add/update to thread.
+            metadata: Metadata to merge with existing thread metadata.
 
         Returns:
             Thread: The created thread.
@@ -2964,10 +2983,10 @@ class SyncThreadsClient:
         """Search for threads.
 
         Args:
-            metadata: Thread metadata to search for.
-            values: Thread values to search for.
-            status: Status to search for.
-                Must be one of 'idle', 'busy', or 'interrupted'.
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+                Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
 
@@ -3030,7 +3049,7 @@ class SyncThreadsClient:
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
-            subgraphs: Include subgraphs in the state.
+            subgraphs: Include subgraphs states.
 
         Returns:
             ThreadState: the thread of the state.
@@ -3147,7 +3166,7 @@ class SyncThreadsClient:
 
         Args:
             thread_id: The ID of the thread to update.
-            values: The values to update to the state.
+            values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
 
@@ -3198,11 +3217,11 @@ class SyncThreadsClient:
         """Get the state history of a thread.
 
         Args:
-            thread_id: The ID of the thread to get the state of.
-            checkpoint: Get history for this subgraph. If empty defaults to root.
-            limit: The maximum number of results to return.
-            before: Get history before this checkpoint.
-            metadata: Filter checkpoints by metadata.
+            thread_id: The ID of the thread to get the state history for.
+            checkpoint: Return states for this subgraph. If empty defaults to root.
+            limit: The maximum number of states to return.
+            before: Return states before this checkpoint.
+            metadata: Filter states by metadata key-value pairs.
 
         Returns:
             list[ThreadState]: the state history of the thread.
