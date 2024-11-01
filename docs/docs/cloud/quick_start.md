@@ -61,7 +61,7 @@ First, let's set create all of the necessary files for our LangGraph application
         from langchain_community.tools.tavily_search import TavilySearchResults
         from langgraph.prebuilt import create_react_agent
 
-        model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+        model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
 
         tools = [TavilySearchResults(max_results=2)]
 
@@ -78,7 +78,7 @@ First, let's set create all of the necessary files for our LangGraph application
         import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
         const model = new ChatAnthropic({
-          model: "claude-3-5-sonnet-20240620",
+          model: "claude-3-5-sonnet-20241022",
         });
 
         const tools = [

@@ -29,7 +29,7 @@ const callModel = async (
    * ```ts
    * import { ChatAnthropic } from "@langchain/anthropic";
    * const model = new ChatAnthropic({
-   *   model: "claude-3-5-sonnet-20240620",
+   *   model: "claude-3-5-sonnet-20241022",
    *   apiKey: process.env.ANTHROPIC_API_KEY,
    * });
    * const res = await model.invoke(state.messages);

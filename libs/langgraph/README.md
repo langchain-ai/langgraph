@@ -91,7 +91,7 @@ tools = [search]
 
 tool_node = ToolNode(tools)
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0).bind_tools(tools)
+model = ChatAnthropic(model="claude-3-5-sonnet-20241022", temperature=0).bind_tools(tools)
 
 # Define the function that determines whether to continue or not
 def should_continue(state: MessagesState) -> Literal["tools", END]:
