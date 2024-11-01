@@ -56,6 +56,7 @@ from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
@@ -1288,6 +1289,7 @@ class Pregel(PregelProtocol):
                 runner = PregelRunner(
                     submit=loop.submit,
                     put_writes=loop.put_writes,
+                    node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -1509,6 +1511,7 @@ class Pregel(PregelProtocol):
                     submit=loop.submit,
                     put_writes=loop.put_writes,
                     use_astream=do_stream is not None,
+                    node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
                 if subgraphs:

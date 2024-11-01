@@ -1,5 +1,8 @@
 # How to stream debug events
 
+!!! info "Prerequisites"
+    * [Streaming](../../concepts/streaming.md)
+
 This guide covers how to stream debug events from your graph (`stream_mode="debug"`). Streaming debug events produces responses containing `type` and `timestamp` keys. Debug events correspond to different steps in the graph's execution, and there are three different types of steps that will get streamed back to you:
 
 - `checkpoint`: These events will get streamed anytime the graph saves its state, which occurs after every super-step. Read more about checkpoints [here](https://langchain-ai.github.io/langgraph/concepts/low_level/#checkpointer)
