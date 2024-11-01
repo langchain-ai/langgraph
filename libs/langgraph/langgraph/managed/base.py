@@ -1,42 +1,35 @@
-import asyncio
 from abc import ABC, abstractmethod
-from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
-    TYPE_CHECKING,
     Any,
-    AsyncGenerator,
-    Generator,
+    AsyncIterator,
     Generic,
+    Iterator,
     NamedTuple,
+    Sequence,
     Type,
     TypeVar,
     Union,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
 
-from langgraph.pregel.types import PregelTaskDescription
-
-if TYPE_CHECKING:
-    from langgraph.pregel import Pregel
+from langgraph.types import LoopProtocol
 
 V = TypeVar("V")
+U = TypeVar("U")
 
 
 class ManagedValue(ABC, Generic[V]):
-    def __init__(self, config: RunnableConfig, graph: "Pregel") -> None:
-        self.config = config
-        self.graph = graph
+    def __init__(self, loop: LoopProtocol) -> None:
+        self.loop = loop
 
     @classmethod
     @contextmanager
-    def enter(
-        cls, config: RunnableConfig, graph: "Pregel", **kwargs: Any
-    ) -> Generator[Self, None, None]:
+    def enter(cls, loop: LoopProtocol, **kwargs: Any) -> Iterator[Self]:
         try:
-            value = cls(config, graph, **kwargs)
+            value = cls(loop, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -48,11 +41,9 @@ class ManagedValue(ABC, Generic[V]):
 
     @classmethod
     @asynccontextmanager
-    async def aenter(
-        cls, config: RunnableConfig, graph: "Pregel", **kwargs: Any
-    ) -> AsyncGenerator[Self, None]:
+    async def aenter(cls, loop: LoopProtocol, **kwargs: Any) -> AsyncIterator[Self]:
         try:
-            value = cls(config, graph, **kwargs)
+            value = cls(loop, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -63,8 +54,15 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int, task: PregelTaskDescription) -> V:
-        ...
+    def __call__(self) -> V: ...
+
+
+class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
+    @abstractmethod
+    def update(self, writes: Sequence[U]) -> None: ...
+
+    @abstractmethod
+    async def aupdate(self, writes: Sequence[U]) -> None: ...
 
 
 class ConfiguredManagedValue(NamedTuple):
@@ -74,8 +72,6 @@ class ConfiguredManagedValue(NamedTuple):
 
 ManagedValueSpec = Union[Type[ManagedValue], ConfiguredManagedValue]
 
-ManagedValueMapping = dict[str, ManagedValue]
-
 
 def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     return (isclass(value) and issubclass(value, ManagedValue)) or isinstance(
@@ -83,48 +79,26 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     )
 
 
-@contextmanager
-def ManagedValuesManager(
-    values: dict[str, ManagedValueSpec],
-    config: RunnableConfig,
-    graph: "Pregel",
-) -> Generator[ManagedValueMapping, None, None]:
-    if values:
-        with ExitStack() as stack:
-            yield {
-                key: stack.enter_context(
-                    value.cls.enter(config, graph, **value.kwargs)
-                    if isinstance(value, ConfiguredManagedValue)
-                    else value.enter(config, graph)
-                )
-                for key, value in values.items()
-            }
-    else:
-        yield {}
+def is_readonly_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
+    return (
+        isclass(value)
+        and issubclass(value, ManagedValue)
+        and not issubclass(value, WritableManagedValue)
+    ) or (
+        isinstance(value, ConfiguredManagedValue)
+        and not issubclass(value.cls, WritableManagedValue)
+    )
 
 
-@asynccontextmanager
-async def AsyncManagedValuesManager(
-    values: dict[str, ManagedValueSpec],
-    config: RunnableConfig,
-    graph: "Pregel",
-) -> AsyncGenerator[ManagedValueMapping, None]:
-    if values:
-        async with AsyncExitStack() as stack:
-            # create enter tasks with reference to spec
-            tasks = {
-                asyncio.create_task(
-                    stack.enter_async_context(
-                        value.cls.aenter(config, graph, **value.kwargs)
-                        if isinstance(value, ConfiguredManagedValue)
-                        else value.aenter(config, graph)
-                    )
-                ): key
-                for key, value in values.items()
-            }
-            # wait for all enter tasks
-            done, _ = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
-            # build mapping from spec to result
-            yield {tasks[task]: task.result() for task in done}
-    else:
-        yield {}
+def is_writable_managed_value(value: Any) -> TypeGuard[Type[WritableManagedValue]]:
+    return (isclass(value) and issubclass(value, WritableManagedValue)) or (
+        isinstance(value, ConfiguredManagedValue)
+        and issubclass(value.cls, WritableManagedValue)
+    )
+
+
+ChannelKeyPlaceholder = object()
+ChannelTypePlaceholder = object()
+
+
+ManagedValueMapping = dict[str, ManagedValue]

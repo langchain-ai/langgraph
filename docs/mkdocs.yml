@@ -26,6 +26,7 @@ theme:
     - navigation.instant.progress
     - navigation.prune
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.top
     - navigation.tracking
     - search.highlight
@@ -61,141 +62,53 @@ plugins:
           options:
             members_order: source
             allow_inspection: true
-            heading_level: 3
+            heading_level: 2
             show_bases: true
+            show_source: true
             summary: true
             inherited_members: true
-            # merge_init_into_class: true
             selection:
               docstring_style: google
             docstring_section_style: list
             show_root_toc_entry: false
-            # show_signature_annotations: true
-            # show_symbol_type_heading: true
+            show_signature_annotations: true
+            show_symbol_type_heading: true
             show_symbol_type_toc: true
             signature_crossrefs: true
-  - mkdocs-jupyter:
-      ignore_h1_titles: true
-      execute: false
-      include_source: True
-      include_requirejs: true
+            options:
+              filters:
+                - "!^_"
 nav:
-  - Home:
-      - "index.md"
-  - Tutorials:
-      - "tutorials/index.md"
-      - Quick Start: tutorials/introduction.ipynb
-      - Chatbots:
-          - Customer Support: tutorials/customer-support/customer-support.ipynb
-          - Prompt Generation from User Requirements: tutorials/chatbots/information-gather-prompting.ipynb
-          - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
-      - RAG:
-          - Adaptive RAG: tutorials/rag/langgraph_adaptive_rag.ipynb
-          - Adaptive RAG using local LLMs: tutorials/rag/langgraph_adaptive_rag_local.ipynb
-          - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
-          - Corrective RAG (CRAG): tutorials/rag/langgraph_crag.ipynb
-          - Corrective RAG (CRAG) using local LLMs: tutorials/rag/langgraph_crag_local.ipynb
-          - Self-RAG: tutorials/rag/langgraph_self_rag.ipynb
-          - Self-RAG using local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
-          - SQL Agent: tutorials/sql-agent.ipynb
-      - Agent Architectures:
-          - Multi-Agent Systems:
-              - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
-              - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
-              - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
-          - Planning Agents:
-              - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
-              - Reasoning without Observation: tutorials/rewoo/rewoo.ipynb
-              - LLMCompiler: tutorials/llm-compiler/LLMCompiler.ipynb
-          - Reflection & Critique:
-              - Basic Reflection: tutorials/reflection/reflection.ipynb
-              - Reflexion: tutorials/reflexion/reflexion.ipynb
-              - Tree of Thoughts: tutorials/tot/tot.ipynb
-              - Language Agent Tree Search: tutorials/lats/lats.ipynb
-              - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
-      - Evaluation & Analysis:
-          - Chatbot Evaluation via Simulation:
-              - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
-              - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
-      - Experimental:
-          - Web Research (STORM): tutorials/storm/storm.ipynb
-          - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
-          - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
-          - Competitive Programming: tutorials/usaco/usaco.ipynb
-          - Extract structured output: tutorials/extraction/retries.ipynb
-
-  - "How-to Guides":
-      - "how-tos/index.md"
-      - Controllability:
-          - Create subgraphs: how-tos/subgraph.ipynb
-          - Create branches for parallel execution: how-tos/branching.ipynb
-          - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
-      - Persistence:
-          - Add persistence ("memory"): how-tos/persistence.ipynb
-          - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
-          - Delete messages: how-tos/memory/delete-messages.ipynb
-          - Add summary of the conversation history: how-tos/memory/add-summary-conversation-history.ipynb
-          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
-          - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
-          - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
-      - Human-in-the-loop:
-          - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
-          - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
-          - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
-          - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
-      - Streaming:
-          - Stream full state: how-tos/stream-values.ipynb
-          - Stream state updates: how-tos/stream-updates.ipynb
-          - Stream LLM tokens: how-tos/streaming-tokens.ipynb
-          - Stream LLM tokens without LangChain models: how-tos/streaming-tokens-without-langchain.ipynb
-          - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
-          - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
-          - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
-          - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
-          - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
-      - Tool calling:
-          - Call tools using ToolNode: how-tos/tool-calling.ipynb
-          - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
-          - Pass graph state to tools: how-tos/pass-run-time-values-to-tools.ipynb
-          - Pass config to tools: how-tos/pass-config-to-tools.ipynb
-      - State Management:
-          - Use Pydantic model as state: how-tos/state-model.ipynb
-          - Use a context object in state: how-tos/state-context-key.ipynb
-          - Have a separate input and output schema: how-tos/input_output_schema.ipynb
-          - Pass private state between nodes inside the graph: how-tos/pass_private_state.ipynb
-      - Other:
-          - Run graph asynchronously: how-tos/async.ipynb
-          - Visualize your graph: how-tos/visualization.ipynb
-          - Add runtime configuration: how-tos/configuration.ipynb
-          - Add node retries: how-tos/node-retries.ipynb
-      - Prebuilt ReAct Agent:
-          - Create a ReAct agent: how-tos/create-react-agent.ipynb
-          - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
-          - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
-          - Add human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
-  - "Conceptual Guides":
-      - "concepts/index.md"
-      - LangGraph for Agentic Applications: concepts/high_level.md
-      - Low Level LangGraph Concepts: concepts/low_level.md
-      - Common Agentic Patterns: concepts/agentic_concepts.md
-      - FAQ: concepts/faq.md
+  - "index.md"
+  - "tutorials/index.md"
+  - "concepts/index.md"
+  - "how-tos/index.md"
   - Reference:
+      - "reference/index.md"
       - Graphs: reference/graphs.md
+      - RemoteGraph: reference/remote_graph.md
       - Checkpointing: reference/checkpoints.md
+      - Storage: reference/store.md
       - Prebuilt Components: reference/prebuilt.md
+      - Channels: reference/channels.md
       - Errors: reference/errors.md
+      - Types: reference/types.md
+      - Constants: reference/constants.md
   - "Cloud (beta)":
       - "cloud/index.md"
       - Tutorials:
           - Quick Start: "cloud/quick_start.md"
-      - How-to Guides: 
+      - How-to Guides:
           - "cloud/how-tos/index.md"
-          - Deployment:
+          - Setup:
               - Setup App: "cloud/deployment/setup.md"
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
+              - Setup App (JavaScript): "cloud/deployment/setup_javascript.md"
+              - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
+              - Customize Dockerfile: "cloud/deployment/custom_docker.md"
               - Test App Locally: "cloud/deployment/test_locally.md"
+          - Deployment:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
-              - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
               - Stream Values: "cloud/how-tos/stream_values.md"
               - Stream Updates: "cloud/how-tos/stream_updates.md"
@@ -208,25 +121,29 @@ nav:
               - Rollback: "cloud/how-tos/rollback_concurrent.md"
               - Reject: "cloud/how-tos/reject_concurrent.md"
               - Enqueue: "cloud/how-tos/enqueue_concurrent.md"
-          - Human-in-the-Loop: 
+          - Human-in-the-Loop:
               - Add Breakpoint: "cloud/how-tos/human_in_the_loop_breakpoint.md"
               - Wait for User Input: "cloud/how-tos/human_in_the_loop_user_input.md"
               - Edit Graph State: "cloud/how-tos/human_in_the_loop_edit_state.md"
               - Replay and Branch from Prior States: "cloud/how-tos/human_in_the_loop_time_travel.md"
+              - Review Tool Calls: "cloud/how-tos/human_in_the_loop_review_tool_calls.md"
           - LangGraph Studio:
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
               - Test Local Deployment: "cloud/how-tos/test_local_deployment.md"
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
           - Different Types of Runs:
-              - Run an Agent in the Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
-              - Run Multiple Agents in Same Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
-              - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
-              - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
+              - Run an Agent in the Background: "cloud/how-tos/background_run.md"
+              - Run Multiple Agents in Same Thread: "cloud/how-tos/same-thread.md"
+              - Create Cron Jobs: "cloud/how-tos/cron_jobs.md"
+              - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
-              - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
-              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
-              - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
+              - Configure Agents: "cloud/how-tos/configuration_cloud.md"
+              - Versioning Assistants: "cloud/how-tos/assistant_versioning.md"
+              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/langgraph_to_langgraph_cloud.ipynb"
+              - Integrate Webhooks: "cloud/how-tos/webhooks.md"
+              - Copy Threads: "cloud/how-tos/copy_threads.md"
+              - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"
@@ -237,6 +154,8 @@ nav:
               - JS/TS: "cloud/reference/sdk/js_ts_sdk_ref.md"
           - CLI: "cloud/reference/cli.md"
           - Environment Variables: "cloud/reference/env_var.md"
+      - FAQ:
+          - Studio: "cloud/faq/studio.md"
 
 markdown_extensions:
   - abbr
@@ -290,9 +209,8 @@ markdown_extensions:
   - markdown_include.include:
       base_path: ./
   - github-callouts
-extra_css:
-  - css/mkdocstrings.css
-
+hooks:
+  - _scripts/notebook_hooks.py
 extra:
   social:
     - icon: fontawesome/brands/js
@@ -318,7 +236,18 @@ extra:
           note: >-
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
 validation:
-  omitted_files: warn
+  # https://www.mkdocs.org/user-guide/configuration/
+  # We're `ignoring` nav.omitted_files because we are going to rely
+  # on files being properly links to from the index pages of:
+  # - tutorials
+  # - concepts
+  # - how-tos
+  # - reference
+  omitted_files: ignore
   absolute_links: warn
   unrecognized_links: warn
-  anchors: warn
+  # TODO: figure out how to enable 'warn' for this
+  # it's only an issue for tutorials/storm/storm.ipynb
+  # because it creates anchors in the generated report
+  # and those anchors are not available in the actual doc
+  anchors: info

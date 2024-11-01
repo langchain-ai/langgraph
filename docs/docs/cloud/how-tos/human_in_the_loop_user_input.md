@@ -14,7 +14,7 @@ Luckily, LangGraph makes it possible to do similar things in a production way. T
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/wait-user-input.ipynb#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/wait-user-input.ipynb#agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input.
 
 ### SDK initialization
 
@@ -24,7 +24,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -34,9 +35,19 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Waiting for user input
@@ -48,7 +59,14 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 === "Python"
 
     ```python
-    input = { 'messages':[{ "role":"user", "content":"Use the search tool to ask the user where they are, then look up the weather there" }] }
+    input = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Use the search tool to ask the user where they are, then look up the weather there",
+            }
+        ]
+    }
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -63,7 +81,14 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 === "Javascript"
 
     ```js
-    const input = { "messages":[{ "role":"human", "content": "Use the search tool to ask the user where they are, then look up the weather there"}] }
+    const input = {
+      messages: [
+        {
+          role: "human",
+          content: "Use the search tool to ask the user where they are, then look up the weather there"
+        }
+      ]
+    };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -71,14 +96,51 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
       {
         input: input,
         streamMode: "updates",
-        interruptBefore: ["ask_human"],
+        interruptBefore: ["ask_human"]
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Use the search tool to ask the user where they are, then look up the weather there\"}]},
+       \"interrupt_before\": [\"ask_human\"],
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
     
 Output:
@@ -108,20 +170,50 @@ Because we are treating this as a tool call, we will need to update the state as
 === "Javascript"
 
     ```js
-    const state = await client.threads.getState(thread['thread_id']);
-    const toolCallId = state['values']['messages'][-1]['tool_calls'][0]['id'];
+    const state = await client.threads.getState(thread["thread_id"]);
+    const toolCallId = state.values.messages[state.values.messages.length - 1].tool_calls[0].id;
 
-    # We now create the tool call with the id and the response we want
-    const toolMessage = [{"tool_call_id": toolCallId, "type": "tool", "content": "san francisco"}];
+    // We now create the tool call with the id and the response we want
+    const toolMessage = [
+      {
+        tool_call_id: toolCallId,
+        type: "tool",
+        content: "san francisco"
+      }
+    ];
 
-    await client.threads.updateState(thread['thread_id'], {values: {"messages": toolMessage}, asNode:"ask_human"})
+    await client.threads.updateState(
+      thread["thread_id"],
+      { values: { messages: toolMessage } },
+      { asNode: "ask_human" }
+    );
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request GET \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+     | jq -r '.values.messages[-1].tool_calls[0].id' \
+     | sh -c '
+         TOOL_CALL_ID="$1"
+         
+         # Construct the JSON payload
+         JSON_PAYLOAD=$(printf "{\"messages\": [{\"tool_call_id\": \"%s\", \"type\": \"tool\", \"content\": \"san francisco\"}], \"as_node\": \"ask_human\"}" "$TOOL_CALL_ID")
+         
+         # Send the updated state
+         curl --request POST \
+              --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+              --header "Content-Type: application/json" \
+              --data "${JSON_PAYLOAD}"
+     ' _ 
     ```
 
 Output:
 
-    {'configurable': {'thread_id': '10d0ee61-db47-48fc-a58c-109a1e68cd73',
-      'thread_ts': '1ef32729-3cc3-6647-8002-14dcb621b46e'}}
-
+    {'configurable': {'thread_id': 'a9f322ae-4ed1-41ec-942b-38cb3d342c3a',
+    'checkpoint_ns': '',
+    'checkpoint_id': '1ef58e97-a623-63dd-8002-39a9a9b20be3'}}
 
 
 ### Invoking after receiving human input
@@ -133,7 +225,7 @@ We can now tell the agent to continue. We can just pass in None as the input to 
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant_id, # graph_id
+        assistant_id,
         input=None,
         stream_mode="updates",
     ):
@@ -148,14 +240,49 @@ We can now tell the agent to continue. We can just pass in None as the input to 
       assistantId,
       {
         input: null,
-        streamMode: "updates",
+        streamMode: "updates"
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \                                                                             
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }"| \ 
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

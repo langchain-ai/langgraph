@@ -14,12 +14,12 @@ from langchain_core.messages import (
 )
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.runnables import chain as as_runnable
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.graph import END, StateGraph
+from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 fast_llm = ChatOpenAI(model="gpt-3.5-turbo")
@@ -339,7 +339,7 @@ async def gen_answer(
     # We could be more precise about handling max token length if we wanted to here
     dumped = json.dumps(all_query_results)[:max_str_len]
     ai_message: AIMessage = queries["raw"]
-    tool_call = queries["raw"].additional_kwargs["tool_calls"][0]
+    tool_call = queries["raw"].tool_calls[0]
     tool_id = tool_call["id"]
     tool_message = ToolMessage(tool_call_id=tool_id, content=dumped)
     swapped_state["messages"].extend([ai_message, tool_message])

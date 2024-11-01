@@ -1,7 +1,8 @@
 import json
 import pathlib
+import shutil
 import sys
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import click
 import click.exceptions
@@ -224,7 +225,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
         def on_stdout(line: str):
             if "unpacking to docker.io" in line:
                 set("Starting...")
-            elif "GET /ok" in line:
+            elif "Application startup complete" in line:
                 debugger_origin = (
                     f"http://localhost:{debugger_port}"
                     if debugger_port
@@ -260,119 +261,21 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
         )
 
 
-@OPT_PULL
-@OPT_PORT
-@OPT_CONFIG
-@OPT_VERBOSE
-@cli.command(
-    help="Start langgraph test server. This command enables you to confirm your graph will work inside the langgraph API server, before using LangGraph Cloud."
-)
-@log_command
-def test(
-    config: pathlib.Path,
-    port: int,
-    pull: bool,
-    # stop_when_ready: bool,
-    verbose: bool,
-):
-    with Runner() as runner, Progress(message="Pulling...") as set:
-        # check docker available
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        # open config
-        with open(config) as f:
-            config_json = langgraph_cli.config.validate_config(json.load(f))
-        # build
-        base_image = "langchain/langgraph-trial"
-        tag = f"langgraph-test-{config.parent.name}"
-        _build(
-            runner,
-            set,
-            config,
-            config_json,
-            None,
-            base_image,
-            pull,
-            tag,
-        )
-        # run
-        set("Running...")
-        args = [
-            "run",
-            "--rm",
-            "-p",
-            f"{port}:8000",
-        ]
-        if isinstance(config_json["env"], str):
-            args.extend(
-                [
-                    "--env-file",
-                    str(config.parent / config_json["env"]),
-                ]
-            )
-        else:
-            for k, v in config_json["env"].items():
-                args.extend(
-                    [
-                        "-e",
-                        f"{k}={v}",
-                    ]
-                )
-        if capabilities.healthcheck_start_interval:
-            args.extend(
-                [
-                    "--health-interval",
-                    "5s",
-                    "--health-retries",
-                    "1",
-                    "--health-start-period",
-                    "10s",
-                    "--health-start-interval",
-                    "1s",
-                ]
-            )
-        else:
-            args.extend(
-                [
-                    "--health-interval",
-                    "5s",
-                    "--health-retries",
-                    "2",
-                ]
-            )
-
-        def on_stdout(line: str):
-            if "GET /ok" in line:
-                set("")
-                sys.stdout.write(
-                    f"""Ready!
-- API: http://localhost:{port}
-"""
-                )
-                sys.stdout.flush()
-                return True
-
-        runner.run(
-            subp_exec(
-                "docker",
-                *args,
-                tag,
-                verbose=verbose,
-                on_stdout=on_stdout,
-            )
-        )
-
-
 def _build(
     runner,
     set: Callable[[str], None],
     config: pathlib.Path,
     config_json: dict,
-    platform: Optional[str],
     base_image: Optional[str],
     pull: bool,
     tag: str,
+    passthrough: Sequence[str] = (),
 ):
-    base_image = base_image or "langchain/langgraph-api"
+    base_image = base_image or (
+        "langchain/langgraphjs-api"
+        if config_json.get("node_version")
+        else "langchain/langgraph-api"
+    )
 
     # pull latest images
     if pull:
@@ -380,7 +283,9 @@ def _build(
             subp_exec(
                 "docker",
                 "pull",
-                f"{base_image}:{config_json['python_version']}",
+                f"{base_image}:{config_json['node_version']}"
+                if config_json.get("node_version")
+                else f"{base_image}:{config_json['python_version']}",
                 verbose=True,
             )
         )
@@ -392,14 +297,18 @@ def _build(
         "-t",
         tag,
     ]
-    if platform:
-        args.extend(["--platform", platform])
     # apply config
     stdin = langgraph_cli.config.config_to_docker(config, config_json, base_image)
     # run docker build
     runner.run(
         subp_exec(
-            "docker", "build", *args, str(config.parent), input=stdin, verbose=True
+            "docker",
+            "build",
+            *args,
+            *passthrough,
+            str(config.parent),
+            input=stdin,
+            verbose=True,
         )
     )
 
@@ -420,36 +329,32 @@ def _build(
     required=True,
 )
 @click.option(
-    "--platform",
-    help="""Target platform(s) to build the docker image for.
-
-    \b
-    Example:
-        langgraph build --platform linux/amd64,linux/arm64
-    \b
-    """,
-)
-@click.option(
     "--base-image",
     hidden=True,
 )
-@cli.command(help="Build langgraph API server docker image")
+@click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+@cli.command(
+    help="Build langgraph API server docker image",
+    context_settings=dict(
+        ignore_unknown_options=True,
+    ),
+)
 @log_command
 def build(
     config: pathlib.Path,
-    platform: Optional[str],
+    docker_build_args: Sequence[str],
     base_image: Optional[str],
     pull: bool,
     tag: str,
 ):
     with Runner() as runner, Progress(message="Pulling...") as set:
-        # check docker available
-        langgraph_cli.docker.check_capabilities(runner)
-        # open config
+        if shutil.which("docker") is None:
+            raise click.UsageError("Docker not installed") from None
         with open(config) as f:
             config_json = langgraph_cli.config.validate_config(json.load(f))
-        # build
-        _build(runner, set, config, config_json, platform, base_image, pull, tag)
+        _build(
+            runner, set, config, config_json, base_image, pull, tag, docker_build_args
+        )
 
 
 @OPT_CONFIG
@@ -462,7 +367,11 @@ def dockerfile(save_path: pathlib.Path, config: pathlib.Path):
     with open(save_path, "w") as f:
         f.write(
             langgraph_cli.config.config_to_docker(
-                config, config_json, "langchain/langgraph-api"
+                config,
+                config_json,
+                "langchain/langgraphjs-api"
+                if config_json.get("node_version")
+                else "langchain/langgraph-api",
             )
         )
 
@@ -500,7 +409,9 @@ def prepare_args_and_stdin(
         config_path,
         config,
         watch=watch,
-        base_image="langchain/langgraph-api",
+        base_image="langchain/langgraphjs-api"
+        if config.get("node_version")
+        else "langchain/langgraph-api",
     )
     return args, stdin
 
@@ -527,7 +438,9 @@ def prepare(
             subp_exec(
                 "docker",
                 "pull",
-                f"langchain/langgraph-api:{config['python_version']}",
+                f"langchain/langgraphjs-api:{config['node_version']}"
+                if config.get("node_version")
+                else f"langchain/langgraph-api:{config['python_version']}",
                 verbose=verbose,
             )
         )

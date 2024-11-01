@@ -1,85 +1,112 @@
-from typing import Any
+import sys
+from types import MappingProxyType
+from typing import Any, Literal, Mapping, cast
 
-INPUT = "__input__"
-CONFIG_KEY_SEND = "__pregel_send"
-CONFIG_KEY_READ = "__pregel_read"
-CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
-CONFIG_KEY_RESUMING = "__pregel_resuming"
-INTERRUPT = "__interrupt__"
-TASKS = "__pregel_tasks"
+from langgraph.types import Interrupt, Send  # noqa: F401
+
+# Interrupt, Send re-exported for backwards compatibility
+
+
+# --- Empty read-only containers ---
+EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
+EMPTY_SEQ: tuple[str, ...] = tuple()
+
+# --- Public constants ---
+TAG_NOSTREAM = sys.intern("langsmith:nostream")
+"""Tag to disable streaming for a chat model."""
+TAG_HIDDEN = sys.intern("langsmith:hidden")
+"""Tag to hide a node/edge from certain tracing/streaming environments."""
+START = sys.intern("__start__")
+"""The first (maybe virtual) node in graph-style Pregel."""
+END = sys.intern("__end__")
+"""The last (maybe virtual) node in graph-style Pregel."""
+
+# --- Reserved write keys ---
+INPUT = sys.intern("__input__")
+# for values passed as input to the graph
+INTERRUPT = sys.intern("__interrupt__")
+# for dynamic interrupts raised by nodes
+ERROR = sys.intern("__error__")
+# for errors raised by nodes
+NO_WRITES = sys.intern("__no_writes__")
+# marker to signal node didn't write anything
+SCHEDULED = sys.intern("__scheduled__")
+# marker to signal node was scheduled (in distributed mode)
+TASKS = sys.intern("__pregel_tasks")
+# for Send objects returned by nodes/edges, corresponds to PUSH below
+
+# --- Reserved config.configurable keys ---
+CONFIG_KEY_SEND = sys.intern("__pregel_send")
+# holds the `write` function that accepts writes to state/edges/reserved keys
+CONFIG_KEY_READ = sys.intern("__pregel_read")
+# holds the `read` function that returns a copy of the current state
+CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
+# holds a `BaseCheckpointSaver` passed from parent graph to child graphs
+CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
+# holds a `StreamProtocol` passed from parent graph to child graphs
+CONFIG_KEY_STREAM_WRITER = sys.intern("__pregel_stream_writer")
+# holds a `StreamWriter` for stream_mode=custom
+CONFIG_KEY_STORE = sys.intern("__pregel_store")
+# holds a `BaseStore` made available to managed values
+CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
+# holds a boolean indicating if subgraphs should resume from a previous checkpoint
+CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
+# holds the task ID for the current task
+CONFIG_KEY_DEDUPE_TASKS = sys.intern("__pregel_dedupe_tasks")
+# holds a boolean indicating if tasks should be deduplicated (for distributed mode)
+CONFIG_KEY_ENSURE_LATEST = sys.intern("__pregel_ensure_latest")
+# holds a boolean indicating whether to assert the requested checkpoint is the latest
+# (for distributed mode)
+CONFIG_KEY_DELEGATE = sys.intern("__pregel_delegate")
+# holds a boolean indicating whether to delegate subgraphs (for distributed mode)
+CONFIG_KEY_CHECKPOINT_MAP = sys.intern("checkpoint_map")
+# holds a mapping of checkpoint_ns -> checkpoint_id for parent graphs
+CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
+# holds the current checkpoint_id, if any
+CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
+# holds the current checkpoint_ns, "" for root graph
+
+# --- Other constants ---
+PUSH = sys.intern("__pregel_push")
+# denotes push-style tasks, ie. those created by Send objects
+PULL = sys.intern("__pregel_pull")
+# denotes pull-style tasks, ie. those triggered by edges
+NS_SEP = sys.intern("|")
+# for checkpoint_ns, separates each level (ie. graph|subgraph|subsubgraph)
+NS_END = sys.intern(":")
+# for checkpoint_ns, for each level, separates the namespace from the task_id
+CONF = cast(Literal["configurable"], sys.intern("configurable"))
+# key for the configurable dict in RunnableConfig
+
 RESERVED = {
+    TAG_HIDDEN,
+    # reserved write keys
+    INPUT,
     INTERRUPT,
+    ERROR,
+    NO_WRITES,
+    SCHEDULED,
     TASKS,
+    # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_WRITER,
+    CONFIG_KEY_STORE,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_RESUMING,
-    INPUT,
+    CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_DEDUPE_TASKS,
+    CONFIG_KEY_ENSURE_LATEST,
+    CONFIG_KEY_DELEGATE,
+    CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_NS,
+    # other constants
+    PUSH,
+    PULL,
+    NS_SEP,
+    NS_END,
+    CONF,
 }
-TAG_HIDDEN = "langsmith:hidden"
-
-START = "__start__"
-END = "__end__"
-
-
-class Send:
-    """A message or packet to send to a specific node in the graph.
-
-    The `Send` class is used within a `StateGraph`'s conditional edges to dynamically
-    route states to different nodes based on certain conditions. This enables
-    creating "map-reduce" like workflows, where a node can be invoked multiple times
-    in parallel on different states, and the results can be aggregated back into the
-    main graph's state.
-
-    Attributes:
-        node (str): The name of the target node to send the message to.
-        arg (Any): The state or message to send to the target node.
-
-    Examples:
-        >>> from typing import Annotated
-        >>> import operator
-        >>> class OverallState(TypedDict):
-        ...     subjects: list[str]
-        ...     jokes: Annotated[list[str], operator.add]
-        ...
-        >>> from langgraph.constants import Send
-        >>> from langgraph.graph import END, START
-        >>> def continue_to_jokes(state: OverallState):
-        ...     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
-        ...
-        >>> from langgraph.graph import StateGraph
-        >>> builder = StateGraph(OverallState)
-        >>> builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
-        >>> builder.add_conditional_edges(START, continue_to_jokes)
-        >>> builder.add_edge("generate_joke", END)
-        >>> graph = builder.compile()
-        >>> graph.invoke({"subjects": ["cats", "dogs"]})
-        {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
-    """
-
-    node: str
-    arg: Any
-
-    def __init__(self, /, node: str, arg: Any) -> None:
-        """
-        Initialize a new instance of the Send class.
-
-        Args:
-            node (str): The name of the target node to send the message to.
-            arg (Any): The state or message to send to the target node.
-        """
-        self.node = node
-        self.arg = arg
-
-    def __hash__(self) -> int:
-        return hash((self.node, self.arg))
-
-    def __repr__(self) -> str:
-        return f"Send(node={self.node!r}, arg={self.arg!r})"
-
-    def __eq__(self, value: object) -> bool:
-        return (
-            isinstance(value, Send)
-            and self.node == value.node
-            and self.arg == value.arg
-        )

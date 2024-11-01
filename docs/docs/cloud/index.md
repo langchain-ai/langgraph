@@ -6,13 +6,14 @@
     - We are actively contributing improvements back to LangGraph informed by our work on LangGraph Cloud.
     - You can always deploy LangGraph applications on your own infrastructure using the open-source LangGraph project.
 
-!!! danger "Important"
-    LangGraph Cloud is a closed source, paid product in an invite-only stage. We are currently focused on providing high bandwidth support to make our select early customers successful. If you are interested in applying for access, please fill out [this form](https://www.langchain.com/langgraph-cloud-beta).
-
 !!! warning "Under Construction"
     LangGraph Cloud documentation is under construction. Contents may change until general availability.
 
-![GIF](./how-tos/img/studio_input.gif)
+
+<video controls preload="auto" allowfullscreen="true" poster="how-tos/img/studio_forks_poster.png">
+    <source src="how-tos/img/studio_forks.mp4" type="video/mp4">
+</video>
+
 
 ## Overview
 
@@ -21,6 +22,8 @@ LangGraph Cloud is a managed service for deploying and hosting LangGraph applica
 The LangGraph Cloud API exposes functionality of your LangGraph application through [Assistants](./concepts/api.md#assistants). An assistant abstracts the cognitive architecture of your graph. Invoke an assistant by calling the pre-built [API endpoints](./reference/api/api_ref.md).
 
 LangGraph Cloud is seamlessly integrated with [LangSmith](https://www.langchain.com/langsmith) and is accessible from within the LangSmith UI.
+
+LangGraph Cloud applications can be tested and debugged using the [LangGraph Studio Desktop](https://github.com/langchain-ai/langgraph-studio). 
 
 ## Key Features
 

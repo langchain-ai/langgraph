@@ -13,7 +13,7 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
 | Key | Description |
 | --- | ----------- |
 | `dependencies` | **Required**. Array of dependencies for LangGraph Cloud API server. Dependencies can be one of the following: (1) `"."`, which will look for local Python packages, (2) `pyproject.toml`, `setup.py` or `requirements.txt` in the app directory `"./local_package"`, or (3) a package name. |
-| `graphs` | **Required**. Mapping from graph ID to path where the compiled graph is defined. Example: `./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.graph.CompiledGraph`. |
+| `graphs` | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and creates an instance of `langgraph.graph.state.StateGraph` / `langgraph.graph.state.CompiledStateGraph`.</li></ul> |
 | `env` | Path to `.env` file or a mapping from environment variable to its value. |
 | `python_version` | `3.11` or `3.12`. Defaults to `3.11`. |
 | `pip_config_file`| Path to `pip` config file. |
@@ -49,7 +49,7 @@ Example:
         "."
     ],
     "graphs": {
-        "my_graph_id": "./your_package/your_file.py:variable"
+        "my_graph_id": "./your_package/your_file.py:make_graph"
     },
     "env": {
         "OPENAI_API_KEY": "secret-key"

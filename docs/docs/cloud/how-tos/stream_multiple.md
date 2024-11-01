@@ -2,6 +2,8 @@
 
 This guide covers how to configure multiple streaming modes at the same time.
 
+## Setup
+
 First let's set up our client and thread:
 
 === "Python"
@@ -9,7 +11,9 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -20,19 +24,36 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
+    ```
 
 Output:
 
-    {'thread_id': 'bfc68029-1f7b-400f-beab-6f9032a52da4',
-     'created_at': '2024-06-24T21:30:07.980789+00:00',
-     'updated_at': '2024-06-24T21:30:07.980789+00:00',
-     'metadata': {}}
+    {
+        'thread_id': 'bfc68029-1f7b-400f-beab-6f9032a52da4',
+        'created_at': '2024-06-24T21:30:07.980789+00:00',
+        'updated_at': '2024-06-24T21:30:07.980789+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
+    }
+
+## Stream graph with multiple modes
 
 When configuring multiple streaming modes for a run, responses for each respective mode will be produced. In the following example, note that a `list` of modes (`messages`, `events`, `debug`) is passed to the `stream_mode` parameter and the response contains `events`, `debug`, `messages/complete`, `messages/metadata`, and `messages/partial` event types.
 
@@ -43,7 +64,7 @@ When configuring multiple streaming modes for a run, responses for each respecti
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "What's the weather in SF?",
             }
         ]
@@ -52,7 +73,7 @@ When configuring multiple streaming modes for a run, responses for each respecti
     # stream events with multiple streaming modes
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         stream_mode=["messages", "events", "debug"],
     ):
@@ -66,28 +87,65 @@ When configuring multiple streaming modes for a run, responses for each respecti
     ```js
     // create input
     const input = {
-      "messages": [
+      messages: [
         {
-          "role": "human",
-          "content": "What's the weather in SF?",
+          role: "human",
+          content: "What's the weather in SF?",
         }
       ]
-    }
+    };
 
     // stream events with multiple streaming modes
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: ["messages", "events", "debug"]
       }
     );
     for await (const chunk of streamResponse) {
-      console.log(f"Receiving new event of type: {chunk.event}...")
-      console.log(chunk.data)
-      console.log("\n\n")
+      console.log(`Receiving new event of type: ${chunk.event}...`);
+      console.log(chunk.data);
+      console.log("\n\n");
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in SF?\"}]},
+       \"stream_mode\": [
+         \"messages\",
+         \"events\",
+         \"debug\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -434,7 +492,6 @@ Output:
     
     Receiving new event of type: end...
     None
-    
     
     
 

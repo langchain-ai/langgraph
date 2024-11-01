@@ -1,57 +1,27 @@
-# Conceptual Guides
+---
+hide:
+  - navigation
+title: Concepts
+description: Conceptual Guide for LangGraph
+---
 
-In this guide we will explore the concepts behind build agentic and multi-agent systems with LangGraph. We assume you have already learned the basic covered in the [introduction tutorial](../tutorials/introduction.ipynb) and want to deepen your understanding of LangGraph's underlying design and inner workings.
+# Conceptual Guide
 
-There are three main parts to this concept guide. First, we'll discuss at a very high level what it means to be agentic. Next, we'll look at lower-level concepts in LangGraph that are core for understanding how to build your own agentic systems. Finally, we'll discuss common agentic patterns and how you can achieve those with LangGraph. These will be mostly conceptual guides - for more technical, hands-on guides see our [how-to guides](../how-tos/index.md)
+This guide provides explanations of the key concepts behind the LangGraph framework and AI applications more broadly.
 
+We recommend that you go through at least the [Quick Start](../tutorials/introduction.ipynb) before diving into the conceptual guide. This will provide practical context that will make it easier to understand the concepts discussed here.
 
-LangGraph for Agentic Applications
+The conceptual guide does not cover step-by-step instructions or specific implementation examples — those are found in the [Tutorials](../tutorials/index.md) and [How-to guides](../how-tos/index.md). 
+For detailed reference material, please see the [API reference](../reference/index.md).
 
-- [What does it mean to be agentic?](high_level.md#what-does-it-mean-to-be-agentic)
-- [Why LangGraph](high_level.md#why-langgraph)
-- [Deployment](high_level.md#deployment)
+## Concepts
 
-Low Level Concepts
-
-- [Graphs](low_level.md#graphs)
-    - [StateGraph](low_level.md#stategraph)
-    - [MessageGraph](low_level.md#messagegraph)
-    - [Compiling Your Graph](low_level.md#compiling-your-graph)
-- [State](low_level.md#state)
-    - [Schema](low_level.md#schema)
-    - [Reducers](low_level.md#reducers)
-    - [MessageState](low_level.md#messagestate)
-- [Nodes](low_level.md#nodes)
-    - [`START` node](low_level.md#start-node)
-    - [`END` node](low_level.md#end-node)
-- [Edges](low_level.md#edges)
-    - [Normal Edges](low_level.md#normal-edges)
-    - [Conditional Edges](low_level.md#conditional-edges)
-    - [Entry Point](low_level.md#entry-point)
-    - [Conditional Entry Point](low_level.md#conditional-entry-point)
-- [Send](low_level.md#send)
-- [Checkpointer](low_level.md#checkpointer)
-- [Threads](low_level.md#threads)
-- [Checkpointer states](low_level.md#checkpointer-state)
-    - [Get state](low_level.md#get-state)
-    - [Get state history](low_level.md#get-state-history)
-    - [Update state](low_level.md#update-state)
-- [Configuration](low_level.md#configuration)
-- [Visualization](low_level.md#visualization)
-- [Streaming](low_level.md#streaming)
-
-Common Agentic Patterns
-
-- [Structured output](agentic_concepts.md#structured-output)
-- [Tool calling](agentic_concepts.md#tool-calling)
-- [Memory](agentic_concepts.md#memory)
-- [Human in the loop](agentic_concepts.md#human-in-the-loop)
-    - [Approval](agentic_concepts.md#approval)
-    - [Wait for input](agentic_concepts.md#wait-for-input)
-    - [Edit agent actions](agentic_concepts.md#edit-agent-actions)
-    - [Time travel](agentic_concepts.md#time-travel)
-- [Map-Reduce](agentic_concepts.md#map-reduce)
-- [Multi-agent](agentic_concepts.md#multi-agent)
-- [Planning](agentic_concepts.md#planning)
-- [Reflection](agentic_concepts.md#reflection)
-- [Off-the-shelf ReAct Agent](agentic_concepts.md#react-agent)
+- [Why LangGraph?](high_level.md): A high-level overview of LangGraph and its goals.
+- [LangGraph Glossary](low_level.md): LangGraph workflows are designed as graphs, with nodes representing different components and edges representing the flow of information between them. This guide provides an overview of the key concepts associated with LangGraph graph primitives.
+- [Common Agentic Patterns](agentic_concepts.md): An agent are LLMs that can pick its own control flow to solve more complex problems! Agents are a key building block in many LLM applications. This guide explains the different types of agent architectures and how they can be used to control the flow of an application.
+- [Multi-Agent Systems](multi_agent.md): Complex LLM applications can often be broken down into multiple agents, each responsible for a different part of the application. This guide explains common patterns for building multi-agent systems.
+- [Human-in-the-Loop](human_in_the_loop.md): Explains different ways of integrating human feedback into a LangGraph application.
+- [Persistence](persistence.md): LangGraph has a built-in persistence layer, implemented through checkpointers. This persistence layer helps to support powerful capabilities like human-in-the-loop, memory, time travel, and fault-tolerance.
+- [Memory](memory.md): Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences.  
+- [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs. 
+- [FAQ](faq.md): Frequently asked questions about LangGraph.

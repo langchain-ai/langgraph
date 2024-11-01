@@ -1,4 +1,7 @@
 /docs
+/*.tgz
+/*.tar
+## GENERATED create-entrypoints.js
 /client.cjs
 /client.js
 /client.d.ts
@@ -7,3 +10,4 @@
 /index.js
 /index.d.ts
 /index.d.cts
+## END GENERATED create-entrypoints.js

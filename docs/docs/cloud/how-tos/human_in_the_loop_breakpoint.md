@@ -21,7 +21,8 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -31,9 +32,19 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
-    const assistantId = "agent"
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Adding a breakpoint
@@ -50,7 +61,7 @@ And, now let's compile it with a breakpoint before the tool node:
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]}
+    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     async for chunk in client.runs.stream(
         thread["thread_id"],
         assistant_id,
@@ -65,7 +76,7 @@ And, now let's compile it with a breakpoint before the tool node:
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "what's the weather in sf"}] }
+    const input = { messages: [{ role: "human", content: "what's the weather in sf" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -73,14 +84,51 @@ And, now let's compile it with a breakpoint before the tool node:
       {
         input: input,
         streamMode: "updates",
-        interruptBefore: ["action"],
+        interruptBefore: ["action"]
       }
     );
+
     for await (const chunk of streamResponse) {
       console.log(`Receiving new event of type: ${chunk.event}...`);
       console.log(chunk.data);
       console.log("\n\n");
     }
+    ```
+    
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf\"}]},
+       \"interrupt_before\": [\"action\"],
+       \"stream_mode\": [
+         \"messages\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

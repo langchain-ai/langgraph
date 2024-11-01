@@ -6,7 +6,7 @@ This can be in several ways, but the primary supported way is to add an "interru
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/edit-graph-state.ipynb#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/edit-graph-state.ipynb#agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input.
 
 ### SDK initialization
 
@@ -17,7 +17,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -27,9 +28,19 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Editing state
@@ -57,7 +68,7 @@ Now let's invoke our graph, making sure to interrupt before the `action` node.
 === "Javascript"
 
     ```js
-    const input = {"messages": [{ "role": "human", "content": "search for weather in SF"}] }
+    const input = { messages: [{ role: "human", content: "search for weather in SF" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -68,11 +79,48 @@ Now let's invoke our graph, making sure to interrupt before the `action` node.
         interruptBefore: ["action"],
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"search for weather in SF\"}]},
+       \"interrupt_before\": [\"action\"],
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -110,15 +158,15 @@ Now, let's assume we actually meant to search for the weather in Sidi Frej (anot
 === "Javascript"
 
     ```js
-    // First, lets get the current state
-    const currentState = await client.threads.getState(thread['thread_id']);
+    // First, let's get the current state
+    const currentState = await client.threads.getState(thread["thread_id"]);
 
     // Let's now get the last message in the state
     // This is the one with the tool calls that we want to update
-    let lastMessage = currentState['values']['messages'][-1];
+    let lastMessage = currentState.values.messages.slice(-1)[0];
 
     // Let's now update the args for that tool call
-    lastMessage['tool_calls'][0]['args'] = {'query': 'current weather in Sidi Frej'};
+    lastMessage.tool_calls[0].args = { query: "current weather in Sidi Frej" };
 
     // Let's now call `update_state` to pass in this message in the `messages` key
     // This will get treated as any other update to the state
@@ -126,13 +174,25 @@ Now, let's assume we actually meant to search for the weather in Sidi Frej (anot
     // That reducer function will use the ID of the message to update it
     // It's important that it has the right ID! Otherwise it would get appended
     // as a new message
-    await client.threads.updateState(thread['thread_id'], {values:{"messages": lastMessage}});
+    await client.threads.updateState(thread["thread_id"], { values: { messages: lastMessage } });
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \                                                                                      
+    jq '.values.messages[-1] | (.tool_calls[0].args = {"query": "current weather in Sidi Frej"})' | \
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+      --header 'Content-Type: application/json' \
+      --data @-
     ```
 
 Output:
 
-    {'configurable': {'thread_id': '88d58d3f-4151-47a9-a8e0-e42fdd3527b8',
-      'thread_ts': '1ef3274b-a809-6913-8002-91536ce6554d'}}
+    {'configurable': {'thread_id': '9c8f1a43-9dd8-4017-9271-2c53e57cf66a',
+      'checkpoint_ns': '',
+      'checkpoint_id': '1ef58e7e-3641-649f-8002-8b4305a64858'}}
 
 
 
@@ -164,11 +224,46 @@ Now we can resume our graph run but with the updated state:
         streamMode: "updates",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \                                                                             
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }"| \ 
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

@@ -6,7 +6,7 @@ on:
       working-directory:
         required: true
         type: string
-        default: 'libs/langgraph'
+        default: "libs/langgraph"
 
 env:
   PYTHON_VERSION: "3.11"
@@ -104,7 +104,7 @@ jobs:
             REGEX="^$SHORT_PKG_NAME==\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
           fi
           echo $REGEX
-          PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX | head -1)
+          PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX | head -1 || echo "")
           echo $PREV_TAG
           if [ "$TAG" == "$PREV_TAG" ]; then
             echo "No new version to release"
@@ -137,8 +137,7 @@ jobs:
       - build
       - release-notes
     permissions: write-all
-    uses:
-      ./.github/workflows/_test_release.yml
+    uses: ./.github/workflows/_test_release.yml
     with:
       working-directory: ${{ inputs.working-directory }}
     secrets: inherit
@@ -198,9 +197,15 @@ jobs:
               "$PKG_NAME==$VERSION" \
           )
 
-          # Replace all dashes in the package name with underscores,
-          # since that's how Python imports packages with dashes in the name.
-          IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/_/g)"
+          if [[ "$PKG_NAME" == *checkpoint* ]]; then
+            # since checkpoint packages are namespace packages, import them with . convention
+            # i.e. import langgraph.checkpoint or langgraph.checkpoint.sqlite
+            IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/./g)"
+          else
+            # Replace all dashes in the package name with underscores,
+            # since that's how Python imports packages with dashes in the name.
+            IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/_/g)"
+          fi
 
           poetry run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
 
