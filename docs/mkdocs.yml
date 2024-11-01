@@ -57,6 +57,7 @@ plugins:
   - redirects:
       redirect_maps:
         'cloud/concepts/api.md': 'concepts/index.md#langgraph-platform'
+        'cloud/index.md': 'concepts/index.md#langgraph-platform'
   - mkdocstrings:
       handlers:
         python:
