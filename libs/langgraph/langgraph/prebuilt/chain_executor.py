@@ -21,22 +21,26 @@ def _get_name(step: RunnableLike) -> str:
         raise TypeError(f"Unsupported step type: {step}")
 
 
-def create_sequential_executor(
+def create_chain_executor(
     *steps: Union[RunnableLike, tuple[str, RunnableLike]],
     state_schema: Type[Any],
+    return_compiled: bool = True,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-) -> CompiledStateGraph:
-    """Creates a sequential executor graph that runs a series of provided steps in order.
+) -> Union[CompiledStateGraph, StateGraph]:
+    """Creates a chain executor graph that runs a series of provided steps in order.
 
     Args:
         *steps: A sequence of RunnableLike objects or (name, RunnableLike) tuples.
             If no names are provided, the name will be inferred from the step object (e.g. a runnable or a callable name).
             Each step will be executed in the order provided.
         state_schema: The state schema for the graph.
+        return_compiled: Whether to return the compiled graph or the builder object.
+            If False, all of the arguments except `steps` and `state_schema` will be ignored.
+            Defaults to True (return compiled graph).
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -46,11 +50,12 @@ def create_sequential_executor(
         debug: A flag to enable debug mode.
 
     Returns:
-        A CompiledStateGraph object.
+        A CompiledStateGraph object if `return_compiled` is True, otherwise a StateGraph object.
     """
-    if len(steps) < 2:
-        raise ValueError("Sequential executor requires at least two steps.")
+    if len(steps) < 1:
+        raise ValueError("Sequential executor requires at least one step.")
 
+    node_names = set()
     builder = StateGraph(state_schema)
     previous_name: Optional[str] = None
     for step in steps:
@@ -59,6 +64,10 @@ def create_sequential_executor(
         else:
             name = _get_name(step)
 
+        if name in node_names:
+            raise ValueError(f"Node name {name} already exists.")
+
+        node_names.add(name)
         builder.add_node(name, step)
         if previous_name is None:
             builder.add_edge(START, name)
@@ -68,6 +77,9 @@ def create_sequential_executor(
         previous_name = name
 
     builder.add_edge(cast(str, previous_name), END)
+    if not return_compiled:
+        return builder
+
     return builder.compile(
         checkpointer=checkpointer,
         store=store,

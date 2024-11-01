@@ -44,8 +44,8 @@ from langgraph.graph import START, MessagesState, StateGraph, add_messages
 from langgraph.prebuilt import (
     ToolNode,
     ValidationNode,
+    create_chain_executor,
     create_react_agent,
-    create_sequential_executor,
     tools_condition,
 )
 from langgraph.prebuilt.tool_node import (
@@ -1337,7 +1337,7 @@ async def test_return_direct() -> None:
     ]
 
 
-def test_sequential_executor():
+def test_chain_executor():
     class State(TypedDict):
         foo: Annotated[list[str], operator.add]
         bar: str
@@ -1348,15 +1348,19 @@ def test_sequential_executor():
     def step2(state: State):
         return {"foo": ["step2"]}
 
-    # test raising if less than 2 steps
+    # test raising if less than 1 steps
     with pytest.raises(ValueError):
-        create_sequential_executor(state_schema=State)
+        create_chain_executor(state_schema=State)
+
+    # test raising if duplicate step names
+    with pytest.raises(ValueError):
+        create_chain_executor(step1, step1, state_schema=State)
 
     with pytest.raises(ValueError):
-        create_sequential_executor(step1, state_schema=State)
+        create_chain_executor(("foo", step1), ("foo", step1), state_schema=State)
 
     # test unnamed steps
-    executor = create_sequential_executor(step1, step2, state_schema=State)
+    executor = create_chain_executor(step1, step2, state_schema=State)
     result = executor.invoke({"foo": []})
     assert result == {"foo": ["step1", "step2"], "bar": "baz"}
     stream_chunks = list(executor.stream({"foo": []}))
@@ -1366,7 +1370,7 @@ def test_sequential_executor():
     ]
 
     # test named steps
-    executor_named_steps = create_sequential_executor(
+    executor_named_steps = create_chain_executor(
         ("meow1", step1), ("meow2", step2), state_schema=State
     )
     result = executor_named_steps.invoke({"foo": []})
