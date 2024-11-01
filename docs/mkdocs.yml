@@ -58,7 +58,7 @@ plugins:
       redirect_maps:
         'cloud/index.md': 'concepts/index.md#langgraph-platform'
         'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
-        'cloud/concepts/api.md': 'concepts/index.md#langgraph-platform'
+        'cloud/concepts/api.md': 'concepts/langgraph_server.md'
         'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
         'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
