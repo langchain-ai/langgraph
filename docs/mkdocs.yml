@@ -54,6 +54,9 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
+  - redirects:
+      redirect_maps:
+        'cloud/concepts/api.md': 'concepts/index.md#langgraph-platform'
   - mkdocstrings:
       handlers:
         python:
