@@ -1337,6 +1337,21 @@ async def test_return_direct() -> None:
     ]
 
 
+def test__get_state_args() -> None:
+    class Schema1(BaseModel):
+        a: Annotated[str, InjectedState]
+
+    class Schema2(Schema1):
+        b: Annotated[int, InjectedState("bar")]
+
+    @dec_tool(args_schema=Schema2)
+    def foo(a: str, b: int) -> float:
+        """return"""
+        return 0.0
+
+    assert _get_state_args(foo) == {"a": None, "b": "bar"}
+
+
 def test_chain_executor():
     class State(TypedDict):
         foo: Annotated[list[str], operator.add]
