@@ -135,7 +135,7 @@ class RemoteGraph(PregelProtocol):
             node_id = str(node["id"])
             nodes[node_id] = DrawableNode(
                 id=node_id,
-                name=node.get("name", ""),
+                name=node.get("name", node_id),
                 data=node.get("data", {}),
                 metadata=node.get("metadata"),
             )
