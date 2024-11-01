@@ -538,6 +538,13 @@ class RemoteGraph(PregelProtocol):
         if "messages" in updated_stream_modes:
             updated_stream_modes.remove("messages")
             updated_stream_modes.append("messages-tuple")
+
+        # if requested "messages-tuple",
+        # map to "messages" in requested_stream_modes
+        if "messages-tuple" in requested_stream_modes:
+            requested_stream_modes.remove("messages-tuple")
+            requested_stream_modes.append("messages")
+
         # add 'updates' mode if not present
         if "updates" not in updated_stream_modes:
             updated_stream_modes.append("updates")
