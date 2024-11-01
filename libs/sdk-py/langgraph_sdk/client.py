@@ -1713,7 +1713,14 @@ class RunsClient:
 
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
-    async def cancel(self, thread_id: str, run_id: str, *, wait: bool = False, action: CancelAction = "interrupt") -> None:
+    async def cancel(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        wait: bool = False,
+        action: CancelAction = "interrupt",
+    ) -> None:
         """Get a run.
 
         Args:
@@ -3796,7 +3803,14 @@ class SyncRunsClient:
 
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
-    def cancel(self, thread_id: str, run_id: str, *, wait: bool = False, action: CancelAction = "interrupt") -> None:
+    def cancel(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        wait: bool = False,
+        action: CancelAction = "interrupt",
+    ) -> None:
         """Get a run.
 
         Args:
