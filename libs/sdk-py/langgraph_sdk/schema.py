@@ -6,26 +6,28 @@ from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Unio
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
-RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
+RunStatus = Literal["pending", "error", "success", "timeout", "interrupted"]
 """
 Represents the status of a run:
 - "pending": The run is waiting to start.
-- "running": The run is currently in progress.
 - "error": The run encountered an error and stopped.
 - "success": The run completed successfully.
 - "timeout": The run exceeded its time limit.
 - "interrupted": The run was manually stopped or interrupted.
 """
 
-ThreadStatus = Literal["idle", "busy", "interrupted"]
+ThreadStatus = Literal["idle", "busy", "interrupted", "error"]
 """
 Represents the status of a thread:
 - "idle": The thread is not currently processing any task.
 - "busy": The thread is actively processing a task.
 - "interrupted": The thread's execution was interrupted.
+- "error": An exception occurred during task processing.
 """
 
-StreamMode = Literal["values", "messages", "updates", "events", "debug", "custom"]
+StreamMode = Literal[
+    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+]
 """
 Defines the mode of streaming:
 - "values": Stream only the values.
@@ -68,6 +70,13 @@ Defines action after completion:
 
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
+
+IfNotExists = Literal["create", "reject"]
+"""
+Specifies behavior if the thread doesn't exist:
+- "create": Create a new thread if it doesn't exist.
+- "reject": Reject the operation if the thread doesn't exist.
+"""
 
 
 class Config(TypedDict, total=False):
@@ -112,7 +121,7 @@ class GraphSchema(TypedDict):
     graph_id: str
     """The ID of the graph."""
     input_schema: Optional[dict]
-    """The schema for the graph state.
+    """The schema for the graph input.
     Missing if unable to generate JSON schema from graph."""
     output_schema: Optional[dict]
     """The schema for the graph output.

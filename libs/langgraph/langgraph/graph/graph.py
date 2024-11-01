@@ -514,6 +514,14 @@ class CompiledGraph(Pregel):
                 self.nodes[end].triggers.append(channel_name)
                 cast(list[str], self.nodes[end].channels).append(channel_name)
 
+    async def aget_graph(
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
+    ) -> DrawableGraph:
+        return self.get_graph(config, xray=xray)
+
     def get_graph(
         self,
         config: Optional[RunnableConfig] = None,
