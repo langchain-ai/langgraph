@@ -55,4 +55,4 @@ Once you've built a graph, you often want to test and debug it. [LangGraph Studi
 
 ## Deployment
 
-Once you have confidence in your LangGraph application, many developers want an easy path to deployment. [LangGraph Cloud](../cloud/index.md) is an opinionated, simple way to deploy LangGraph objects from the LangChain team. Of course, you can also use services like [FastAPI](https://fastapi.tiangolo.com/) and call your graph from inside the FastAPI server as you see fit.
+Once you have confidence in your LangGraph application, many developers want an easy path to deployment. [LangGraph Platform](../concepts/index.md#langgraph-platform) offers a range of options for deploying LangGraph graphs.
