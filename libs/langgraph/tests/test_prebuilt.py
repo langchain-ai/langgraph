@@ -46,7 +46,7 @@ from langgraph.prebuilt import (
     create_react_agent,
     tools_condition,
 )
-from langgraph.prebuilt.chat_agent_executor import _validate_messages
+from langgraph.prebuilt.chat_agent_executor import _validate_chat_history
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
@@ -381,17 +381,17 @@ def test_model_with_tools(tool_style: str):
 
 def test__validate_messages():
     # empty input
-    _validate_messages([])
+    _validate_chat_history([])
 
     # single human message
-    _validate_messages(
+    _validate_chat_history(
         [
             HumanMessage(content="What's the weather?"),
         ]
     )
 
     # human + AI
-    _validate_messages(
+    _validate_chat_history(
         [
             HumanMessage(content="What's the weather?"),
             AIMessage(content="The weather is sunny and 75°F."),
@@ -399,7 +399,7 @@ def test__validate_messages():
     )
 
     # Answered tool calls
-    _validate_messages(
+    _validate_chat_history(
         [
             HumanMessage(content="What's the weather?"),
             AIMessage(
@@ -413,7 +413,7 @@ def test__validate_messages():
 
     # Unanswered tool calls
     with pytest.raises(ValueError):
-        _validate_messages(
+        _validate_chat_history(
             [
                 AIMessage(
                     content="I'll check that for you.",
@@ -426,7 +426,7 @@ def test__validate_messages():
         )
 
     with pytest.raises(ValueError):
-        _validate_messages(
+        _validate_chat_history(
             [
                 HumanMessage(content="What's the weather and time?"),
                 AIMessage(
