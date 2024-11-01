@@ -62,7 +62,7 @@ The LangGraph Cloud API offers several features to support complex agent archite
 
 ### Streaming
 
-[Streaming](../../concepts/streaming.md) is critical for making LLM applications feel responsive to end users. When creating a streaming run, the streaming mode determines what data is streamed back to the API client. LangGraph Platform supports five streaming modes: `values`, `updates`, `messages-tuple`, `events`, and `debug`. See these [how-to guides](../../how-tos/index.md#streaming_1) for more details.
+[Streaming](../../concepts/streaming.md) is critical for making LLM applications feel responsive to end users. When creating a streaming run, the streaming mode determines what data is streamed back to the API client. LangGraph Platform supports five streaming modes: `values`, `updates`, `messages-tuple`, `events`, and `debug`. See these [how-to guides](../../how-tos/index.md#streaming_1) and the [API reference](../reference/api/api_ref.html#tag/thread-runs/POST/threads/%7Bthread_id%7D/runs/stream) for more details.
 
 ### Stateless Runs
 

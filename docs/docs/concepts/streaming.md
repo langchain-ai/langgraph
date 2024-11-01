@@ -165,3 +165,8 @@ See the [API reference](../cloud/reference/api/api_ref.html#tag/threads-runs/POS
 Streaming modes `values`, `updates`, `messages-tuple` and `debug` are very similar to modes available in the LangGraph library - for a deeper conceptual explanation of those, you can see the [previous section](#streaming-graph-outputs-stream-and-astream).
 
 Streaming mode `events` is the same as using `.astream_events` in the LangGraph library - for a deeper conceptual explanation of this, you can see the [previous section](#streaming-graph-outputs-stream-and-astream).
+
+All events emitted have two attributes:
+
+- `event`: This is the name of the event
+- `data`: This is data associated with the event
