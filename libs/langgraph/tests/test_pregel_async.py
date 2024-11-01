@@ -1,5 +1,6 @@
 import asyncio
 import operator
+import random
 import re
 import sys
 import uuid
@@ -1922,7 +1923,8 @@ async def test_cond_edge_after_send() -> None:
     assert await graph.ainvoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
-async def test_max_concurrency() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_max_concurrency(checkpointer_name: str) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -1934,27 +1936,33 @@ async def test_max_concurrency() -> None:
             self.currently += 1
             if self.currently > self.max_currently:
                 self.max_currently = self.currently
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(random.random() / 10)
             self.currently -= 1
-            return [self.name]
+            return [state]
+
+    def one(state):
+        return ["1"]
+
+    def three(state):
+        return ["3"]
 
     async def send_to_many(state):
-        return [Send("2", state)] * 100
+        return [Send("2", idx) for idx in range(100)]
 
     async def route_to_three(state) -> Literal["3"]:
         return "3"
 
     node2 = Node("2")
     builder = StateGraph(Annotated[list, operator.add])
-    builder.add_node(Node("1"))
+    builder.add_node("1", one)
     builder.add_node(node2)
-    builder.add_node(Node("3"))
+    builder.add_node("3", three)
     builder.add_edge(START, "1")
     builder.add_conditional_edges("1", send_to_many)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
 
-    assert await graph.ainvoke(["0"]) == ["0", "1", *(["2"] * 100), "3"]
+    assert await graph.ainvoke(["0"]) == ["0", "1", *range(100), "3"]
     assert node2.max_currently == 100
     assert node2.currently == 0
     node2.max_currently = 0
@@ -1962,16 +1970,24 @@ async def test_max_concurrency() -> None:
     assert await graph.ainvoke(["0"], {"max_concurrency": 10}) == [
         "0",
         "1",
-        *(["2"] * 100),
+        *range(100),
         "3",
     ]
     assert node2.max_currently == 10
     assert node2.currently == 0
 
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["2"])
+        thread1 = {"max_concurrency": 10, "configurable": {"thread_id": "1"}}
 
-async def test_max_concurrency_control() -> None:
+        assert await graph.ainvoke(["0"], thread1) == ["0", "1"]
+        assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_max_concurrency_control(checkpointer_name: str) -> None:
     async def node1(state) -> Control[Literal["2"]]:
-        return Control(update_state=["1"], send=[Send("2", state)] * 100)
+        return Control(update_state=["1"], send=[Send("2", idx) for idx in range(100)])
 
     node2_currently = 0
     node2_max_currently = 0
@@ -1984,7 +2000,7 @@ async def test_max_concurrency_control() -> None:
         await asyncio.sleep(0.1)
         node2_currently -= 1
 
-        return Control(update_state=["2"], trigger="3")
+        return Control(update_state=[state], trigger="3")
 
     async def node3(state) -> Literal["3"]:
         return ["3"]
@@ -2013,7 +2029,7 @@ graph TD;
 """
     )
 
-    assert await graph.ainvoke(["0"], debug=True) == ["0", "1", *(["2"] * 100), "3"]
+    assert await graph.ainvoke(["0"], debug=True) == ["0", "1", *range(100), "3"]
     assert node2_max_currently == 100
     assert node2_currently == 0
     node2_max_currently = 0
@@ -2021,11 +2037,18 @@ graph TD;
     assert await graph.ainvoke(["0"], {"max_concurrency": 10}) == [
         "0",
         "1",
-        *(["2"] * 100),
+        *range(100),
         "3",
     ]
     assert node2_max_currently == 10
     assert node2_currently == 0
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["2"])
+        thread1 = {"max_concurrency": 10, "configurable": {"thread_id": "1"}}
+
+        assert await graph.ainvoke(["0"], thread1) == ["0", "1"]
+        assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
