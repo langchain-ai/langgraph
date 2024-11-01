@@ -1,6 +1,7 @@
 import {
   Assistant,
   AssistantGraph,
+  CancelAction,
   Config,
   DefaultValues,
   GraphSchema,
@@ -928,17 +929,20 @@ export class RunsClient extends BaseClient {
    * @param threadId The ID of the thread.
    * @param runId The ID of the run.
    * @param wait Whether to block when canceling
+   * @param action Action to take when cancelling the run. Possible values are `interrupt` or `rollback`. Default is `interrupt`.
    * @returns
    */
   async cancel(
     threadId: string,
     runId: string,
     wait: boolean = false,
+    action: CancelAction = "interrupt",
   ): Promise<void> {
     return this.fetch<void>(`/threads/${threadId}/runs/${runId}/cancel`, {
       method: "POST",
       params: {
         wait: wait ? "1" : "0",
+        action: action,
       },
     });
   }

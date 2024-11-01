@@ -14,6 +14,8 @@ type ThreadStatus = "idle" | "busy" | "interrupted" | "error";
 
 type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 
+export type CancelAction = "interrupt" | "rollback";
+
 export interface Config {
   /**
    * Tags for this call and any sub-calls (eg. a Chain calling an LLM).
