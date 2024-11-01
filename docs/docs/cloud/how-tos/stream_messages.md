@@ -3,9 +3,7 @@
 !!! info "Prerequisites"
     * [Streaming](../../concepts/streaming.md)
 
-This guide covers how to stream messages from your graph. With `stream_mode="messages"`, messages from any chat model invocations inside your graph nodes will be streamed back.
-
-Read more about how the `messages` streaming mode works [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#modemessages)
+This guide covers how to stream messages from your graph. With `stream_mode="messages-tuple"`, messages (i.e. individual LLM tokens) from any chat model invocations inside your graph nodes will be streamed back.
 
 ## Setup
 
@@ -60,7 +58,7 @@ Output:
 
 ## Stream graph in messages mode
 
-Now we can stream by messages, which will return complete messages (at the end of node execution) as well as tokens for any messages generated inside a node:
+Now we can stream LLM tokens for any messages generated inside a node in the form of tuples `(message, metadata)`. Metadata contains additional information that can be useful for filtering the streamed outputs to a specific node or LLM.
 
 === "Python"
 
@@ -73,7 +71,7 @@ Now we can stream by messages, which will return complete messages (at the end o
         assistant_id=assistant_id,
         input=input,
         config=config,
-        stream_mode="messages",
+        stream_mode="messages-tuple",
     ):
         print(f"Receiving new event of type: {chunk.event}...")
         print(chunk.data)
@@ -99,7 +97,7 @@ Now we can stream by messages, which will return complete messages (at the end o
       {
         input,
         config,
-        streamMode: "messages"
+        streamMode: "messages-tuple"
       }
     );
     for await (const chunk of streamResponse) {
@@ -119,7 +117,7 @@ Now we can stream by messages, which will return complete messages (at the end o
        \"assistant_id\": \"agent\",
        \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
        \"stream_mode\": [
-         \"messages\"
+         \"messages-tuple\"
        ]
      }" | \
      sed 's/\r$//' | \
@@ -150,117 +148,101 @@ Output:
     Receiving new event of type: metadata...
     {"run_id": "1ef971e0-9a84-6154-9047-247b4ce89c4d", "attempt": 1}
 
-
-
-    Receiving new event of type: messages/metadata...
-    {
-      "run-700157a5-df1a-4829-9e7c-1e07a1d934f7": {
-        "metadata": {
-          "graph_id": "agent",
-          "langgraph_node": "agent",
-          ...
-        }
-      }
-    }
-
     ...
 
-    Receiving new event of type: messages/partial...
+    Receiving new event of type: messages...
     [
       {
+        "type": "AIMessageChunk",
         "tool_calls": [
           {
             "name": "tavily_search_results_json",
             "args": {
-              "query": "weather"
+              "query": "weat"
             },
-            "id": "toolu_01RJGmVJtTxccoHHixGkGqaC",
-            "type": "tool_call"
-          }
-        ],
-      }
-    ]
-
-
-
-    Receiving new event of type: messages/partial...
-    [
-      {
-        "type": "ai",
-        "tool_calls": [
-          {
-            "name": "tavily_search_results_json",
-            "args": {
-              "query": "weather in "
-            },
-            "id": "toolu_01RJGmVJtTxccoHHixGkGqaC",
+            "id": "toolu_0114XKXdNtHQEa3ozmY1uDdM",
             "type": "tool_call"
           }
         ],
         ...
-      }
-    ]
-
-    ...
-
-    Receiving new event of type: messages/partial...
-    [
+      },
       {
-        "type": "ai",
-        "tool_calls": [
-          {
-            "name": "tavily_search_results_json",
-            "args": {
-              "query": "weather in san francisco"
-            },
-            "id": "toolu_01RJGmVJtTxccoHHixGkGqaC",
-            "type": "tool_call"
-          }
-        ],
+        "graph_id": "agent",
+        "langgraph_node": "agent",
         ...
       }
     ]
 
 
 
-    Receiving new event of type: messages/metadata...
-    {
-      "aa162b98-433d-4e3c-b204-0d41a6694156": {
-        "metadata": {
-          "graph_id": "agent",
-          "langgraph_node": "action",
-          ...
-        }
-      }
-    }
-
-
-
-    Receiving new event of type: messages/complete...
+    Receiving new event of type: messages...
     [
       {
-        "content": "[{\"url\": \"https://www.weatherapi.com/\", \"content\": \"{'location': {'name': 'San Francisco', 'region': 'California', 'country': 'United States of America', 'lat': 37.775, 'lon': -122.4183, 'tz_id': 'America/Los_Angeles', 'localtime_epoch': 1730334046, 'localtime': '2024-10-30 17:20'}, 'current': {'last_updated_epoch': 1730333700, 'last_updated': '2024-10-30 17:15', 'temp_c': 12.3, 'temp_f': 54.2, 'is_day': 1, 'condition': {'text': 'Partly Cloudy', 'icon': '//cdn.weatherapi.com/weather/64x64/day/116.png', 'code': 1003}, 'wind_mph': 9.6, 'wind_kph': 15.5, 'wind_degree': 238, 'wind_dir': 'WSW', 'pressure_mb': 1021.0, 'pressure_in': 30.15, 'precip_mm': 0.0, 'precip_in': 0.0, 'humidity': 93, 'cloud': 57, 'feelslike_c': 11.2, 'feelslike_f': 52.2, 'windchill_c': 11.2, 'windchill_f': 52.2, 'heatindex_c': 12.3, 'heatindex_f': 54.2, 'dewpoint_c': 11.2, 'dewpoint_f': 52.1, 'vis_km': 10.0, 'vis_miles': 6.0, 'uv': 0.5, 'gust_mph': 12.9, 'gust_kph': 20.8}}\"}]",
+        "type": "AIMessageChunk",
+        "tool_calls": [
+          {
+            "name": "tavily_search_results_json",
+            "args": {
+              "query": "her in san "
+            },
+            "id": "toolu_0114XKXdNtHQEa3ozmY1uDdM",
+            "type": "tool_call"
+          }
+        ],
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "agent",
+        ...
+      }
+    ]
+
+    ...
+
+    Receiving new event of type: messages...
+    [
+      {
+        "type": "AIMessageChunk",
+        "tool_calls": [
+          {
+            "name": "tavily_search_results_json",
+            "args": {
+              "query": "francisco"
+            },
+            "id": "toolu_0114XKXdNtHQEa3ozmY1uDdM",
+            "type": "tool_call"
+          }
+        ],
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "agent",
+        ...
+      }
+    ]
+
+    ...
+
+    Receiving new event of type: messages...
+    [
+      {
+        "content": "[{\"url\": \"https://www.weatherapi.com/\", \"content\": \"{'location': {'name': 'San Francisco', 'region': 'California', 'country': 'United States of America', 'lat': 37.775, 'lon': -122.4183, 'tz_id': 'America/Los_Angeles', 'localtime_epoch': 1730475777, 'localtime': '2024-11-01 08:42'}, 'current': {'last_updated_epoch': 1730475000, 'last_updated': '2024-11-01 08:30', 'temp_c': 11.1, 'temp_f': 52.0, 'is_day': 1, 'condition': {'text': 'Partly cloudy', 'icon': '//cdn.weatherapi.com/weather/64x64/day/116.png', 'code': 1003}, 'wind_mph': 2.2, 'wind_kph': 3.6, 'wind_degree': 192, 'wind_dir': 'SSW', 'pressure_mb': 1018.0, 'pressure_in': 30.07, 'precip_mm': 0.0, 'precip_in': 0.0, 'humidity': 89, 'cloud': 75, 'feelslike_c': 11.5, 'feelslike_f': 52.6, 'windchill_c': 10.0, 'windchill_f': 50.1, 'heatindex_c': 10.4, 'heatindex_f': 50.7, 'dewpoint_c': 9.1, 'dewpoint_f': 48.5, 'vis_km': 16.0, 'vis_miles': 9.0, 'uv': 3.0, 'gust_mph': 6.7, 'gust_kph': 10.8}}\"}]",
         "type": "tool",
-        "name": "tavily_search_results_json",
-        "tool_call_id": "toolu_01RJGmVJtTxccoHHixGkGqaC",
+        "tool_call_id": "toolu_0114XKXdNtHQEa3ozmY1uDdM",
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "action",
+        ...
       }
     ]
 
+    ...
 
-    Receiving new event of type: messages/metadata...
-    {
-      "run-f92646d2-6b13-4648-90c7-0280766bfaf2": {
-        "metadata": {
-          "graph_id": "agent",
-          "langgraph_node": "agent",
-          ...
-        }
-      }
-    }
-
-
-
-    Receiving new event of type: messages/partial...
+    Receiving new event of type: messages...
     [
       {
         "content": [
@@ -270,41 +252,80 @@ Output:
             "index": 0
           }
         ],
-        "type": "ai",
+        "type": "AIMessageChunk",
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "agent",
         ...
       }
     ]
 
 
 
-    Receiving new event of type: messages/partial...
+    Receiving new event of type: messages...
     [
       {
         "content": [
           {
-            "text": "\n\nThe search results provide",
+            "text": " results provide",
             "type": "text",
             "index": 0
           }
         ],
-        "type": "ai",
+        "type": "AIMessageChunk",
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "agent",
+        ...
+      }
+    ]
+
+
+
+    Receiving new event of type: messages...
+    [
+      {
+        "content": [
+          {
+            "text": " the current weather conditions",
+            "type": "text",
+            "index": 0
+          }
+        ],
+        "type": "AIMessageChunk",
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "agent",
+        ...
+      }
+    ]
+
+
+
+    Receiving new event of type: messages...
+    [
+      {
+        "content": [
+          {
+            "text": " in San Francisco.",
+            "type": "text",
+            "index": 0
+          }
+        ],
+        "type": "AIMessageChunk",
+        ...
+      },
+      {
+        "graph_id": "agent",
+        "langgraph_node": "agent",
         ...
       }
     ]
 
     ...
-
-    Receiving new event of type: messages/partial...
-    [
-      {
-        "content": [
-          {
-            "text": "\n\nThe search results provide the current weather conditions in San Francisco. According to the data, as of 5:20pm on October 30, 2024, the weather in San Francisco is partly cloudy with a temperature of 54\\u00b0F (12\\u00b0C). The wind is blowing from the west-southwest at around 10 mph (15 km/h). The humidity is high at 93% and visibility is 6 miles (10 km). Overall, it seems to be a cool, partly cloudy day with moderate winds in San Francisco.",
-            "type": "text",
-            "index": 0
-          }
-        ],
-        "type": "ai",
-        ...
-      }
-    ]
