@@ -219,7 +219,7 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
     print(result)
 
     # stream outputs from both the parent graph and subgraph
-    for chunk in graph.invoke({
+    for chunk in graph.stream({
         "messages": [{"role": "user", "content": "what's the weather in sf"}]
     }, subgraphs=True):
         print(chunk)
