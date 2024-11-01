@@ -239,7 +239,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- Debugger: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
+- LangGraph Studio: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
 """
                 )
                 sys.stdout.flush()
