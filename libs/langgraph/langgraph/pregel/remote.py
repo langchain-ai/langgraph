@@ -133,10 +133,20 @@ class RemoteGraph(PregelProtocol):
         nodes = {}
         for node in graph["nodes"]:
             node_id = str(node["id"])
+            node_data = node.get("data", {})
+
+            # Get node name from node_data if available. If not, use node_id.
+            node_name = node.get("name")
+            if node_name is None:
+                if isinstance(node_data, dict):
+                    node_name = node_data.get("name", node_id)
+                else:
+                    node_name = node_id
+
             nodes[node_id] = DrawableNode(
                 id=node_id,
-                name=node.get("name", ""),
-                data=node.get("data", {}),
+                name=node_name,
+                data=node_data,
                 metadata=node.get("metadata"),
             )
         return nodes
