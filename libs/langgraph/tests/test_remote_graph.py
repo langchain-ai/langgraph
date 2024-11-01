@@ -54,7 +54,7 @@ def test_get_graph():
                 "type": "runnable",
                 "data": {
                     "id": ["langgraph", "utils", "RunnableCallable"],
-                    "name": "agent",
+                    "name": "agent_1",
                 },
             },
         ],
@@ -76,8 +76,8 @@ def test_get_graph():
         "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
         "agent": DrawableNode(
             id="agent",
-            name="agent",
-            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            name="agent_1",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent_1"},
             metadata=None,
         ),
     }
@@ -101,7 +101,7 @@ async def test_aget_graph():
                 "type": "runnable",
                 "data": {
                     "id": ["langgraph", "utils", "RunnableCallable"],
-                    "name": "agent",
+                    "name": "agent_1",
                 },
             },
         ],
@@ -123,8 +123,8 @@ async def test_aget_graph():
         "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
         "agent": DrawableNode(
             id="agent",
-            name="agent",
-            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            name="agent_1",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent_1"},
             metadata=None,
         ),
     }
