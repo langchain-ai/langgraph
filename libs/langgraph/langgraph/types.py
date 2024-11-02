@@ -193,12 +193,15 @@ class Send:
         {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
     """
 
-    __slots__ = ("node", "arg")
+    __slots__ = ("node", "arg", "__idx__")
 
     node: str
     arg: Any
+    __idx__: str
 
-    def __init__(self, /, node: str, arg: Any) -> None:
+    def __init__(
+        self, node: str, arg: Any, /, *, __idx__: Optional[int] = None
+    ) -> None:
         """
         Initialize a new instance of the Send class.
 
@@ -208,6 +211,7 @@ class Send:
         """
         self.node = node
         self.arg = arg
+        self.__idx__ = __idx__
 
     def __hash__(self) -> int:
         return hash((self.node, self.arg))

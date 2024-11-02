@@ -399,7 +399,7 @@ def prepare_single_task(
             str(step),
             packet.node,
             PUSH,
-            str(idx),
+            str(packet.__idx__ if packet.__idx__ is not None else idx),
         )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         metadata = {

@@ -399,6 +399,9 @@ class PregelLoop(LoopProtocol):
             for task in self.tasks.values():
                 if task.writes:
                     self._output_writes(task.id, task.writes, cached=True)
+        elif not self.skip_done_tasks:
+            # "not skip_done_tasks" only applies to first tick after resuming
+            self.skip_done_tasks = True
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks.values()):
