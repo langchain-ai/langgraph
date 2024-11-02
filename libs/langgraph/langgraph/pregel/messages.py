@@ -61,12 +61,13 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: Optional[UUID] = None,
         tags: Optional[list[str]] = None,
         metadata: Optional[dict[str, Any]] = None,
+        name: Optional[str] = None,
         **kwargs: Any,
     ) -> Any:
         if metadata and (not tags or TAG_NOSTREAM not in tags):
             self.metadata[run_id] = (
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
+                {"name": name, "tags": tags, **metadata},
             )
 
     def on_llm_new_token(
@@ -112,6 +113,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: Optional[UUID] = None,
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
         **kwargs: Any,
     ) -> Any:
         if (
@@ -121,7 +123,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         ):
             self.metadata[run_id] = (
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
+                {"name": name, "tags": tags, **metadata},
             )
 
     def on_chain_end(
