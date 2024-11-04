@@ -238,6 +238,12 @@ class Control(Generic[N]):
         self.trigger = trigger
         self.send = send
 
+    def __repr__(self):
+        contents = ", ".join(
+            f"{key}={value!r}" for key, value in self.__dict__.items() if value
+        )
+        return f"Control({contents})"
+
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
 
