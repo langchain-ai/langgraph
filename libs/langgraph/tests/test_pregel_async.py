@@ -1,5 +1,6 @@
 import asyncio
 import operator
+import random
 import re
 import sys
 import uuid
@@ -62,7 +63,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import Control, Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -305,12 +306,14 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 0,
                 "writes": None,
+                "thread_id": "1",
             },
             {
                 "parents": {},
                 "source": "input",
                 "step": -1,
                 "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
             },
         ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
@@ -327,7 +330,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
             ),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -486,6 +495,7 @@ async def test_cancel_graph_astream(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 0,
                 "writes": None,
+                "thread_id": "1",
             }
 
 
@@ -562,6 +572,7 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
                 "source": "loop",
                 "step": 1,
                 "writes": {"alittlewhile": {"value": 2}},
+                "thread_id": "2",
             }
 
 
@@ -945,6 +956,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "loop",
                     "step": 6,
                     "writes": {"two": 5},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[1].config,
@@ -967,6 +979,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "loop",
                     "step": 5,
                     "writes": {"one": None},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[2].config,
@@ -989,6 +1002,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "input",
                     "step": 4,
                     "writes": {"input": 3},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[3].config,
@@ -1009,6 +1023,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "loop",
                     "step": 3,
                     "writes": {"one": None},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[4].config,
@@ -1031,6 +1046,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "input",
                     "step": 2,
                     "writes": {"input": 20},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[5].config,
@@ -1051,6 +1067,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "loop",
                     "step": 1,
                     "writes": {"two": 4},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[6].config,
@@ -1073,6 +1090,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "loop",
                     "step": 0,
                     "writes": {"one": None},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[7].config,
@@ -1095,6 +1113,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "source": "input",
                     "step": -1,
                     "writes": {"input": 2},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -1170,6 +1189,7 @@ async def test_fork_always_re_runs_nodes(
                     "source": "loop",
                     "step": 5,
                     "writes": {"add_one": 1},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[1].config,
@@ -1190,6 +1210,7 @@ async def test_fork_always_re_runs_nodes(
                     "source": "loop",
                     "step": 4,
                     "writes": {"add_one": 1},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[2].config,
@@ -1210,6 +1231,7 @@ async def test_fork_always_re_runs_nodes(
                     "source": "loop",
                     "step": 3,
                     "writes": {"add_one": 1},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[3].config,
@@ -1230,6 +1252,7 @@ async def test_fork_always_re_runs_nodes(
                     "source": "loop",
                     "step": 2,
                     "writes": {"add_one": 1},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[4].config,
@@ -1250,6 +1273,7 @@ async def test_fork_always_re_runs_nodes(
                     "source": "loop",
                     "step": 1,
                     "writes": {"add_one": 1},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=history[5].config,
@@ -1265,7 +1289,13 @@ async def test_fork_always_re_runs_nodes(
                         "checkpoint_id": AnyStr(),
                     }
                 },
-                metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
+                    "thread_id": "1",
+                },
                 created_at=AnyStr(),
                 parent_config=history[6].config,
             ),
@@ -1287,6 +1317,7 @@ async def test_fork_always_re_runs_nodes(
                     "source": "input",
                     "step": -1,
                     "writes": {"__start__": 1},
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -1709,6 +1740,7 @@ async def test_pending_writes_resume(
             "source": "loop",
             "step": 0,
             "writes": None,
+            "thread_id": "1",
         }
         # should contain pending write of "one"
         checkpoint = await checkpointer.aget_tuple(thread1)
@@ -1797,6 +1829,7 @@ async def test_pending_writes_resume(
                 "step": 1,
                 "source": "loop",
                 "writes": {"one": {"value": 2}, "two": {"value": 3}},
+                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -1843,7 +1876,13 @@ async def test_pending_writes_resume(
                     "start:two": "__start__",
                 },
             },
-            metadata={"parents": {}, "step": 0, "source": "loop", "writes": None},
+            metadata={
+                "parents": {},
+                "step": 0,
+                "source": "loop",
+                "writes": None,
+                "thread_id": "1",
+            },
             parent_config={
                 "configurable": {
                     "thread_id": "1",
@@ -1885,6 +1924,7 @@ async def test_pending_writes_resume(
                 "step": -1,
                 "source": "input",
                 "writes": {"__start__": {"value": 1}},
+                "thread_id": "1",
             },
             parent_config=None,
             pending_writes=UnsortedSequence(
@@ -1922,7 +1962,8 @@ async def test_cond_edge_after_send() -> None:
     assert await graph.ainvoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
-async def test_max_concurrency() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_max_concurrency(checkpointer_name: str) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -1934,27 +1975,33 @@ async def test_max_concurrency() -> None:
             self.currently += 1
             if self.currently > self.max_currently:
                 self.max_currently = self.currently
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(random.random() / 10)
             self.currently -= 1
-            return [self.name]
+            return [state]
+
+    def one(state):
+        return ["1"]
+
+    def three(state):
+        return ["3"]
 
     async def send_to_many(state):
-        return [Send("2", state)] * 100
+        return [Send("2", idx) for idx in range(100)]
 
     async def route_to_three(state) -> Literal["3"]:
         return "3"
 
     node2 = Node("2")
     builder = StateGraph(Annotated[list, operator.add])
-    builder.add_node(Node("1"))
+    builder.add_node("1", one)
     builder.add_node(node2)
-    builder.add_node(Node("3"))
+    builder.add_node("3", three)
     builder.add_edge(START, "1")
     builder.add_conditional_edges("1", send_to_many)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
 
-    assert await graph.ainvoke(["0"]) == ["0", "1", *(["2"] * 100), "3"]
+    assert await graph.ainvoke(["0"]) == ["0", "1", *range(100), "3"]
     assert node2.max_currently == 100
     assert node2.currently == 0
     node2.max_currently = 0
@@ -1962,11 +2009,85 @@ async def test_max_concurrency() -> None:
     assert await graph.ainvoke(["0"], {"max_concurrency": 10}) == [
         "0",
         "1",
-        *(["2"] * 100),
+        *range(100),
         "3",
     ]
     assert node2.max_currently == 10
     assert node2.currently == 0
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["2"])
+        thread1 = {"max_concurrency": 10, "configurable": {"thread_id": "1"}}
+
+        assert await graph.ainvoke(["0"], thread1) == ["0", "1"]
+        assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_max_concurrency_control(checkpointer_name: str) -> None:
+    async def node1(state) -> Control[Literal["2"]]:
+        return Control(update_state=["1"], send=[Send("2", idx) for idx in range(100)])
+
+    node2_currently = 0
+    node2_max_currently = 0
+
+    async def node2(state) -> Control[Literal["3"]]:
+        nonlocal node2_currently, node2_max_currently
+        node2_currently += 1
+        if node2_currently > node2_max_currently:
+            node2_max_currently = node2_currently
+        await asyncio.sleep(0.1)
+        node2_currently -= 1
+
+        return Control(update_state=[state], trigger="3")
+
+    async def node3(state) -> Literal["3"]:
+        return ["3"]
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node("1", node1)
+    builder.add_node("2", node2)
+    builder.add_node("3", node3)
+    builder.add_edge(START, "1")
+    graph = builder.compile()
+
+    assert (
+        graph.get_graph().draw_mermaid()
+        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	1(1)
+	2(2)
+	3([3]):::last
+	__start__ --> 1;
+	1 -.-> 2;
+	2 -.-> 3;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+"""
+    )
+
+    assert await graph.ainvoke(["0"], debug=True) == ["0", "1", *range(100), "3"]
+    assert node2_max_currently == 100
+    assert node2_currently == 0
+    node2_max_currently = 0
+
+    assert await graph.ainvoke(["0"], {"max_concurrency": 10}) == [
+        "0",
+        "1",
+        *range(100),
+        "3",
+    ]
+    assert node2_max_currently == 10
+    assert node2_currently == 0
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["2"])
+        thread1 = {"max_concurrency": 10, "configurable": {"thread_id": "1"}}
+
+        assert await graph.ainvoke(["0"], thread1) == ["0", "1"]
+        assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -2650,6 +2771,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         }
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -2699,6 +2821,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         "input": "what is weather in sf",
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -2823,6 +2946,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         ),
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -2889,6 +3013,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         }
                     }
                 },
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -2938,6 +3063,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         "input": "what is weather in sf",
                     }
                 },
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3062,6 +3188,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         ),
                     }
                 },
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3128,6 +3255,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         }
                     }
                 },
+                "thread_id": "3",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3548,6 +3676,7 @@ async def test_conditional_graph_state(
                         ),
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3594,6 +3723,7 @@ async def test_conditional_graph_state(
                         )
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3674,6 +3804,7 @@ async def test_conditional_graph_state(
                         )
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3733,6 +3864,7 @@ async def test_conditional_graph_state(
                         ),
                     }
                 },
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3778,6 +3910,7 @@ async def test_conditional_graph_state(
                         )
                     }
                 },
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -3856,6 +3989,7 @@ async def test_conditional_graph_state(
                         )
                     }
                 },
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -4550,6 +4684,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -4603,6 +4738,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -4712,6 +4848,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     },
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -4761,6 +4898,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         "messages": AIMessage(content="answer", id="ai2"),
                     }
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -5021,6 +5159,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                         id="ai1",
                     )
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -5070,6 +5209,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                         id="ai1",
                     )
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -5155,6 +5295,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                         id="ai2",
                     )
                 },
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -5198,6 +5339,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "source": "update",
                 "step": 5,
                 "writes": {"agent": AIMessage(content="answer", id="ai2")},
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -5500,12 +5642,16 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 0,
                 "writes": None,
+                "assistant_id": "a",
+                "thread_id": "1",
             },
             {
                 "parents": {},
                 "source": "input",
                 "step": -1,
                 "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                "assistant_id": "a",
+                "thread_id": "1",
             },
         ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
@@ -5516,7 +5662,14 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
                 "ts"
             ],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "assistant_id": "a",
+                "thread_id": "1",
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -5539,6 +5692,8 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"tool_two_slow": {"my_key": " slow"}},
+                "assistant_id": "a",
+                "thread_id": "1",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
@@ -5559,7 +5714,14 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
                 "ts"
             ],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "assistant_id": "a",
+                "thread_id": "2",
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -5582,6 +5744,8 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"tool_two_fast": {"my_key": " fast"}},
+                "assistant_id": "a",
+                "thread_id": "2",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
@@ -5602,7 +5766,14 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
                 "ts"
             ],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "assistant_id": "b",
+                "thread_id": "3",
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
             ][-1].config,
@@ -5622,6 +5793,8 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "source": "update",
                 "step": 1,
                 "writes": {START: {"my_key": "key"}},
+                "assistant_id": "b",
+                "thread_id": "3",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
@@ -5645,6 +5818,8 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 2,
                 "writes": {"tool_two_fast": {"my_key": " fast"}},
+                "assistant_id": "b",
+                "thread_id": "3",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
@@ -5713,6 +5888,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "input",
                         "step": -1,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                        "thread_id": "10",
                     },
                     "parent_config": None,
                     "next": ["__start__"],
@@ -5751,6 +5927,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 0,
                         "writes": None,
+                        "thread_id": "10",
                     },
                     "parent_config": {
                         "tags": [],
@@ -5822,6 +5999,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
+                        "thread_id": "10",
                     },
                     "parent_config": {
                         "tags": [],
@@ -5893,6 +6071,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 2,
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
+                        "thread_id": "10",
                     },
                     "parent_config": {
                         "tags": [],
@@ -5964,6 +6143,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 3,
                         "writes": {"finish": {"my_key": " finished"}},
+                        "thread_id": "10",
                     },
                     "parent_config": {
                         "tags": [],
@@ -6021,6 +6201,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "input",
                         "step": -1,
                         "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                        "thread_id": "11",
                     },
                     "parent_config": None,
                     "next": ["__start__"],
@@ -6059,6 +6240,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 0,
                         "writes": None,
+                        "thread_id": "11",
                     },
                     "parent_config": {
                         "tags": [],
@@ -6130,6 +6312,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                         "source": "loop",
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
+                        "thread_id": "11",
                     },
                     "parent_config": {
                         "tags": [],
@@ -6167,6 +6350,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
+                "thread_id": "11",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
@@ -6190,6 +6374,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
+                "thread_id": "11",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
@@ -6215,6 +6400,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
+                "thread_id": "12",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
@@ -6238,6 +6424,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
+                "thread_id": "12",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
@@ -6271,6 +6458,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
+                "thread_id": "21",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
@@ -6294,6 +6482,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
+                "thread_id": "21",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
@@ -6319,6 +6508,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
+                "thread_id": "22",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
@@ -6342,6 +6532,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
+                "thread_id": "22",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
@@ -6365,6 +6556,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "update",
                 "step": 0,
                 "writes": {START: {"my_key": "key", "market": "DE"}},
+                "thread_id": "23",
             },
             parent_config=None,
         )
@@ -6387,6 +6579,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
+                "thread_id": "23",
             },
             parent_config=uconfig,
         )
@@ -6408,6 +6601,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "source": "loop",
                 "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
+                "thread_id": "23",
             },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
@@ -6759,6 +6953,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 "source": "loop",
                 "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -7724,6 +7919,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -7750,9 +7946,8 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         tasks=(
                             PregelTask(
                                 AnyStr(),
-                                name="inner_2",
-                                path=(PULL, "inner_2"),
-                                error=None,
+                                "inner_2",
+                                (PULL, "inner_2"),
                             ),
                         ),
                         next=("inner_2",),
@@ -7778,6 +7973,13 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                                 }
                             },
                             "step": 1,
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("inner:"),
+                            "langgraph_node": "inner",
+                            "langgraph_path": [PULL, "inner"],
+                            "langgraph_step": 2,
+                            "langgraph_triggers": ["outer_1"],
+                            "langgraph_checkpoint_ns": AnyStr("inner:"),
                         },
                         created_at=AnyStr(),
                         parent_config={
@@ -7806,6 +8008,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -7847,6 +8050,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
                     "step": 1,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7880,6 +8084,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7913,6 +8118,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "my value"}},
                     "step": -1,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -7932,7 +8138,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
                         "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
                         ),
                     }
                 },
@@ -7946,6 +8152,13 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     },
                     "step": 1,
                     "parents": {"": AnyStr()},
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "langgraph_node": "inner",
+                    "langgraph_path": [PULL, "inner"],
+                    "langgraph_step": 2,
+                    "langgraph_triggers": ["outer_1"],
+                    "langgraph_checkpoint_ns": AnyStr("inner:"),
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7954,13 +8167,11 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
                         "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
                         ),
                     }
                 },
-                tasks=(
-                    PregelTask(id=AnyStr(), name="inner_2", path=(PULL, "inner_2")),
-                ),
+                tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
@@ -7971,7 +8182,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
                         "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
                         ),
                     }
                 },
@@ -7980,6 +8191,13 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "writes": None,
                     "step": 0,
                     "parents": {"": AnyStr()},
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "langgraph_node": "inner",
+                    "langgraph_path": [PULL, "inner"],
+                    "langgraph_step": 2,
+                    "langgraph_triggers": ["outer_1"],
+                    "langgraph_checkpoint_ns": AnyStr("inner:"),
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -7988,15 +8206,15 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
                         "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
                         ),
                     }
                 },
                 tasks=(
                     PregelTask(
-                        id=AnyStr(),
-                        name="inner_1",
-                        path=(PULL, "inner_1"),
+                        AnyStr(),
+                        "inner_1",
+                        (PULL, "inner_1"),
                         result={
                             "my_key": "hi my value here",
                             "my_other_key": "hi my value",
@@ -8013,7 +8231,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         "checkpoint_ns": AnyStr("inner:"),
                         "checkpoint_id": AnyStr(),
                         "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
                         ),
                     }
                 },
@@ -8022,14 +8240,21 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "writes": {"__start__": {"my_key": "hi my value"}},
                     "step": -1,
                     "parents": {"": AnyStr()},
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "langgraph_node": "inner",
+                    "langgraph_path": [PULL, "inner"],
+                    "langgraph_step": 2,
+                    "langgraph_triggers": ["outer_1"],
+                    "langgraph_checkpoint_ns": AnyStr("inner:"),
                 },
                 created_at=AnyStr(),
                 parent_config=None,
                 tasks=(
                     PregelTask(
-                        id=AnyStr(),
-                        name="__start__",
-                        path=(PULL, "__start__"),
+                        AnyStr(),
+                        "__start__",
+                        (PULL, "__start__"),
                         result={"my_key": "hi my value"},
                     ),
                 ),
@@ -8057,6 +8282,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "outer_2": {"my_key": "hi my value here and there and back again"}
                 },
                 "step": 3,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -8090,6 +8316,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     },
                     "step": 3,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8123,6 +8350,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"inner": {"my_key": "hi my value here and there"}},
                     "step": 2,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8162,6 +8390,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
                     "step": 1,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8195,6 +8424,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8228,6 +8458,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"my_key": "my value"}},
                     "step": -1,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -8333,6 +8564,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"parent_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -8367,9 +8599,6 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("child:"),
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
                     }
                 },
                 metadata={
@@ -8377,6 +8606,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "source": "loop",
                     "writes": None,
                     "step": 0,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8384,9 +8614,6 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("child:"),
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
                     }
                 },
             ).tasks[0]
@@ -8426,6 +8653,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"grandchild_1": {"my_key": "hi my value here"}},
                 "step": 1,
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [PULL, AnyStr("child_1")],
+                "langgraph_step": 1,
+                "langgraph_triggers": [AnyStr("start:child_1")],
             },
             created_at=AnyStr(),
             parent_config={
@@ -8498,6 +8732,16 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                             }
                                         },
                                         "step": 1,
+                                        "thread_id": "1",
+                                        "checkpoint_ns": AnyStr("child:"),
+                                        "langgraph_checkpoint_ns": AnyStr("child:"),
+                                        "langgraph_node": "child_1",
+                                        "langgraph_path": [
+                                            PULL,
+                                            AnyStr("child_1"),
+                                        ],
+                                        "langgraph_step": 1,
+                                        "langgraph_triggers": [AnyStr("start:child_1")],
                                     },
                                     created_at=AnyStr(),
                                     parent_config={
@@ -8535,6 +8779,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             "source": "loop",
                             "writes": None,
                             "step": 0,
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("child:"),
+                            "langgraph_node": "child",
+                            "langgraph_path": [PULL, AnyStr("child")],
+                            "langgraph_step": 2,
+                            "langgraph_triggers": [AnyStr("parent_1")],
+                            "langgraph_checkpoint_ns": AnyStr("child:"),
                         },
                         created_at=AnyStr(),
                         parent_config={
@@ -8563,6 +8814,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"parent_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -8610,6 +8862,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     },
                     "step": 3,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8646,6 +8899,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             }
                         },
                         "step": 3,
+                        "thread_id": "1",
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8671,6 +8925,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "loop",
                         "writes": {"child": {"my_key": "hi my value here and there"}},
                         "step": 2,
+                        "thread_id": "1",
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8714,6 +8969,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "loop",
                         "writes": {"parent_1": {"my_key": "hi my value"}},
                         "step": 1,
+                        "thread_id": "1",
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8739,6 +8995,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "loop",
                         "writes": None,
                         "step": 0,
+                        "thread_id": "1",
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -8769,6 +9026,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         "source": "input",
                         "writes": {"my_key": "my value"},
                         "step": -1,
+                        "thread_id": "1",
                     },
                     created_at=AnyStr(),
                     parent_config=None,
@@ -8803,6 +9061,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "writes": {"child_1": {"my_key": "hi my value here and there"}},
                     "step": 1,
                     "parents": {"": AnyStr()},
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child",
+                    "langgraph_path": [PULL, AnyStr("child")],
+                    "langgraph_step": 2,
+                    "langgraph_triggers": [AnyStr("parent_1")],
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8835,6 +9100,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "writes": None,
                     "step": 0,
                     "parents": {"": AnyStr()},
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child",
+                    "langgraph_path": [PULL, AnyStr("child")],
+                    "langgraph_step": 2,
+                    "langgraph_triggers": [AnyStr("parent_1")],
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8880,6 +9152,13 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "writes": {"__start__": {"my_key": "hi my value"}},
                     "step": -1,
                     "parents": {"": AnyStr()},
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child",
+                    "langgraph_path": [PULL, AnyStr("child")],
+                    "langgraph_step": 2,
+                    "langgraph_triggers": [AnyStr("parent_1")],
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -8927,6 +9206,16 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             AnyStr("child:"): AnyStr(),
                         }
                     ),
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child_1",
+                    "langgraph_path": [
+                        PULL,
+                        AnyStr("child_1"),
+                    ],
+                    "langgraph_step": 1,
+                    "langgraph_triggers": [AnyStr("start:child_1")],
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -8972,6 +9261,16 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             AnyStr("child:"): AnyStr(),
                         }
                     ),
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child_1",
+                    "langgraph_path": [
+                        PULL,
+                        AnyStr("child_1"),
+                    ],
+                    "langgraph_step": 1,
+                    "langgraph_triggers": [AnyStr("start:child_1")],
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -9024,6 +9323,16 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             AnyStr("child:"): AnyStr(),
                         }
                     ),
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child_1",
+                    "langgraph_path": [
+                        PULL,
+                        AnyStr("child_1"),
+                    ],
+                    "langgraph_step": 1,
+                    "langgraph_triggers": [AnyStr("start:child_1")],
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -9076,6 +9385,16 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             AnyStr("child:"): AnyStr(),
                         }
                     ),
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "langgraph_checkpoint_ns": AnyStr("child:"),
+                    "langgraph_node": "child_1",
+                    "langgraph_path": [
+                        PULL,
+                        AnyStr("child_1"),
+                    ],
+                    "langgraph_step": 1,
+                    "langgraph_triggers": [AnyStr("start:child_1")],
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -9190,7 +9509,13 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config={
                 "configurable": {
@@ -9237,6 +9562,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     ]
                 },
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9279,6 +9605,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                         ]
                     },
                     "step": 1,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config={
@@ -9325,7 +9652,13 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                         "checkpoint_id": AnyStr(),
                     }
                 },
-                metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "writes": None,
+                    "step": 0,
+                    "thread_id": "1",
+                },
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
@@ -9358,6 +9691,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     "source": "input",
                     "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
                     "step": -1,
+                    "thread_id": "1",
                 },
                 created_at=AnyStr(),
                 parent_config=None,
@@ -9535,6 +9869,7 @@ async def test_weather_subgraph(
                 "writes": {"router_node": {"route": "weather"}},
                 "step": 1,
                 "parents": {},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9626,6 +9961,7 @@ async def test_weather_subgraph(
                 "writes": {"router_node": {"route": "weather"}},
                 "step": 1,
                 "parents": {},
+                "thread_id": "14",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9666,6 +10002,15 @@ async def test_weather_subgraph(
                             "writes": {"model_node": {"city": "San Francisco"}},
                             "step": 1,
                             "parents": {"": AnyStr()},
+                            "thread_id": "14",
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "langgraph_node": "weather_graph",
+                            "langgraph_path": [PULL, "weather_graph"],
+                            "langgraph_step": 2,
+                            "langgraph_triggers": [
+                                "branch:router_node:route_after_prediction:weather_graph"
+                            ],
+                            "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                         },
                         created_at=AnyStr(),
                         parent_config={
@@ -9716,6 +10061,7 @@ async def test_weather_subgraph(
                 "writes": {"router_node": {"route": "weather"}},
                 "step": 1,
                 "parents": {},
+                "thread_id": "14",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9753,8 +10099,8 @@ async def test_weather_subgraph(
                             }
                         },
                         metadata={
-                            "source": "update",
                             "step": 2,
+                            "source": "update",
                             "writes": {
                                 "weather_node": {
                                     "messages": [
@@ -9763,6 +10109,16 @@ async def test_weather_subgraph(
                                 }
                             },
                             "parents": {"": AnyStr()},
+                            "thread_id": "14",
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "langgraph_node": "weather_graph",
+                            "langgraph_path": [PULL, "weather_graph"],
+                            "langgraph_step": 2,
+                            "langgraph_triggers": [
+                                "branch:router_node:route_after_prediction:weather_graph"
+                            ],
+                            "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                         },
                         created_at=AnyStr(),
                         parent_config={

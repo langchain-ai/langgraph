@@ -54,7 +54,7 @@ def test_get_graph():
                 "type": "runnable",
                 "data": {
                     "id": ["langgraph", "utils", "RunnableCallable"],
-                    "name": "agent",
+                    "name": "agent_1",
                 },
             },
         ],
@@ -71,13 +71,15 @@ def test_get_graph():
 
     assert drawable_graph.nodes == {
         "__start__": DrawableNode(
-            id="__start__", name="", data="__start__", metadata=None
+            id="__start__", name="__start__", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(id="__end__", name="", data="__end__", metadata=None),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
-            name="",
-            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            name="agent_1",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent_1"},
             metadata=None,
         ),
     }
@@ -101,7 +103,7 @@ async def test_aget_graph():
                 "type": "runnable",
                 "data": {
                     "id": ["langgraph", "utils", "RunnableCallable"],
-                    "name": "agent",
+                    "name": "agent_1",
                 },
             },
         ],
@@ -118,13 +120,15 @@ async def test_aget_graph():
 
     assert drawable_graph.nodes == {
         "__start__": DrawableNode(
-            id="__start__", name="", data="__start__", metadata=None
+            id="__start__", name="__start__", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(id="__end__", name="", data="__end__", metadata=None),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
-            name="",
-            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            name="agent_1",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent_1"},
             metadata=None,
         ),
     }

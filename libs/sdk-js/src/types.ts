@@ -45,12 +45,12 @@ interface RunsInvokePayload {
   /**
    * Interrupt execution before entering these nodes.
    */
-  interruptBefore?: string[];
+  interruptBefore?: "*" | string[];
 
   /**
    * Interrupt execution after leaving these nodes.
    */
-  interruptAfter?: string[];
+  interruptAfter?: "*" | string[];
 
   /**
    * Strategy to handle concurrent runs on the same thread. Only relevant if

@@ -161,6 +161,7 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
             "step": 1,
+            "thread_id": "123",
         }
         assert saved.pending_writes == []
 
@@ -192,6 +193,7 @@ async def test_no_modifier_async(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
                 "step": 1,
+                "thread_id": "123",
             }
             assert saved.pending_writes == []
 
