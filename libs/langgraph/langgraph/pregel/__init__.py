@@ -511,7 +511,7 @@ class Pregel(PregelProtocol):
             # apply pending writes
             if apply_pending_writes and saved.pending_writes:
                 for tid, *t in saved.pending_writes:
-                    next_tasks[tid].writes.append(t)
+                    next_tasks[tid].writes.append(t)  # type: ignore[arg-type]
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
             # assemble the state snapshot
@@ -609,7 +609,7 @@ class Pregel(PregelProtocol):
             # apply pending writes
             if apply_pending_writes and saved.pending_writes:
                 for tid, *t in saved.pending_writes:
-                    next_tasks[tid].writes.append(t)
+                    next_tasks[tid].writes.append(t)  # type: ignore[arg-type]
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
             # assemble the state snapshot
