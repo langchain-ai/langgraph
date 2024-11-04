@@ -54,6 +54,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_NODE_FINISHED,
@@ -439,6 +440,7 @@ class Pregel(PregelProtocol):
         config: RunnableConfig,
         saved: Optional[CheckpointTuple],
         recurse: Optional[BaseCheckpointSaver] = None,
+        apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
             return StateSnapshot(
@@ -469,7 +471,10 @@ class Pregel(PregelProtocol):
                 managed,
                 saved.config,
                 saved.metadata.get("step", -1) + 1,
-                for_execution=False,
+                for_execution=True,
+                store=self.store,
+                checkpointer=self.checkpointer or None,
+                manager=None,
             )
             # get the subgraphs
             subgraphs = dict(self.get_subgraphs())
@@ -503,6 +508,12 @@ class Pregel(PregelProtocol):
                     task_states[task.id] = subgraphs[task.name].get_state(
                         config, subgraphs=True
                     )
+            # apply pending writes
+            if apply_pending_writes and saved.pending_writes:
+                for tid, *t in saved.pending_writes:
+                    next_tasks[tid].writes.append(t)
+                if tasks := [t for t in next_tasks.values() if t.writes]:
+                    apply_writes(saved.checkpoint, channels, tasks, None)
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
@@ -524,6 +535,7 @@ class Pregel(PregelProtocol):
         config: RunnableConfig,
         saved: Optional[CheckpointTuple],
         recurse: Optional[BaseCheckpointSaver] = None,
+        apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
             return StateSnapshot(
@@ -557,7 +569,10 @@ class Pregel(PregelProtocol):
                 managed,
                 saved.config,
                 saved.metadata.get("step", -1) + 1,
-                for_execution=False,
+                for_execution=True,
+                store=self.store,
+                checkpointer=self.checkpointer or None,
+                manager=None,
             )
             # get the subgraphs
             subgraphs = {n: g async for n, g in self.aget_subgraphs()}
@@ -591,6 +606,12 @@ class Pregel(PregelProtocol):
                     task_states[task.id] = await subgraphs[task.name].aget_state(
                         config, subgraphs=True
                     )
+            # apply pending writes
+            if apply_pending_writes and saved.pending_writes:
+                for tid, *t in saved.pending_writes:
+                    next_tasks[tid].writes.append(t)
+                if tasks := [t for t in next_tasks.values() if t.writes]:
+                    apply_writes(saved.checkpoint, channels, tasks, None)
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
@@ -638,7 +659,10 @@ class Pregel(PregelProtocol):
         config = merge_configs(self.config, config) if self.config else config
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
-            config, saved, recurse=checkpointer if subgraphs else None
+            config,
+            saved,
+            recurse=checkpointer if subgraphs else None,
+            apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
     async def aget_state(
@@ -672,7 +696,10 @@ class Pregel(PregelProtocol):
         config = merge_configs(self.config, config) if self.config else config
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
-            config, saved, recurse=checkpointer if subgraphs else None
+            config,
+            saved,
+            recurse=checkpointer if subgraphs else None,
+            apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
 
     def get_state_history(

@@ -1513,9 +1513,10 @@ def test_pending_writes_resume(
     assert two.calls == 2  # two attempts
 
     # latest checkpoint should be before nodes "one", "two"
+    # but we should have applied the write from "one"
     state = graph.get_state(thread1)
     assert state is not None
-    assert state.values == {"value": 1}
+    assert state.values == {"value": 3}
     assert state.next == ("one", "two")
     assert state.tasks == (
         PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
@@ -1528,6 +1529,10 @@ def test_pending_writes_resume(
         "writes": None,
         "thread_id": "1",
     }
+    # get_state with checkpoint_id should not apply any pending writes
+    state = graph.get_state(state.config)
+    assert state is not None
+    assert state.values == {"value": 1}
     # should contain pending write of "one"
     checkpoint = checkpointer.get_tuple(thread1)
     assert checkpoint is not None

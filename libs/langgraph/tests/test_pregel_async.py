@@ -482,10 +482,11 @@ async def test_cancel_graph_astream(checkpointer_name: str) -> None:
         assert awhile.started is False
 
         # checkpoint with output of "alittlewhile" should not be saved
+        # but we should have applied pending writes
         if checkpointer is not None:
             state = await graph.aget_state(thread1)
             assert state is not None
-            assert state.values == {"value": 1}
+            assert state.values == {"value": 3}  # 1 + 2
             assert state.next == (
                 "aparallelwhile",
                 "alittlewhile",
@@ -1722,9 +1723,10 @@ async def test_pending_writes_resume(
         assert two.calls == 2
 
         # latest checkpoint should be before nodes "one", "two"
+        # but we should have applied pending writes from "one"
         state = await graph.aget_state(thread1)
         assert state is not None
-        assert state.values == {"value": 1}
+        assert state.values == {"value": 3}
         assert state.next == ("one", "two")
         assert state.tasks == (
             PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
@@ -1742,6 +1744,10 @@ async def test_pending_writes_resume(
             "writes": None,
             "thread_id": "1",
         }
+        # get_state with checkpoint_id should not apply any pending writes
+        state = await graph.aget_state(state.config)
+        assert state is not None
+        assert state.values == {"value": 1}
         # should contain pending write of "one"
         checkpoint = await checkpointer.aget_tuple(thread1)
         assert checkpoint is not None
