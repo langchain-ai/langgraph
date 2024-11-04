@@ -2123,6 +2123,8 @@ async def test_max_concurrency(checkpointer_name: str) -> None:
         thread1 = {"max_concurrency": 10, "configurable": {"thread_id": "1"}}
 
         assert await graph.ainvoke(["0"], thread1) == ["0", "1"]
+        state = await graph.aget_state(thread1)
+        assert state.values == ["0", "1"]
         assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
 
 
