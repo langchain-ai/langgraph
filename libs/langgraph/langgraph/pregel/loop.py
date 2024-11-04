@@ -51,7 +51,6 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
-    METADATA,
     NS_SEP,
     SCHEDULED,
     TAG_HIDDEN,
@@ -492,7 +491,7 @@ class PregelLoop(LoopProtocol):
             )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        metadata.update(self.config[METADATA])
+        metadata.update(self.config["metadata"])
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})

@@ -80,8 +80,6 @@ NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
-METADATA = sys.intern("metadata")
-# key for metadata in RunnableConfig
 
 RESERVED = {
     TAG_HIDDEN,
@@ -114,5 +112,4 @@ RESERVED = {
     NS_SEP,
     NS_END,
     CONF,
-    METADATA,
 }

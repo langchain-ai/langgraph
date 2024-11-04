@@ -65,7 +65,6 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
-    METADATA,
     NS_END,
     NS_SEP,
 )
@@ -827,7 +826,7 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
-        checkpoint_metadata = config.get(METADATA, {})
+        checkpoint_metadata = config["metadata"]
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
             checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
@@ -983,7 +982,7 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
-        checkpoint_metadata = config.get(METADATA, {})
+        checkpoint_metadata = config["metadata"]
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
             checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}

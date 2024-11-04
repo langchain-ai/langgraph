@@ -9234,7 +9234,6 @@ def test_nested_graph_state(
                         },
                         "step": 1,
                         "thread_id": "1",
-                        "parents": {"": AnyStr()},
                         "checkpoint_ns": AnyStr("inner:"),
                         "langgraph_node": "inner",
                         "langgraph_path": [PULL, "inner"],

@@ -329,7 +329,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
             ),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None, "thread_id": "1"},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -7886,7 +7892,6 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                             },
                             "step": 1,
                             "thread_id": "1",
-                            "parents": {"": AnyStr()},
                             "checkpoint_ns": AnyStr("inner:"),
                             "langgraph_node": "inner",
                             "langgraph_path": [PULL, "inner"],
