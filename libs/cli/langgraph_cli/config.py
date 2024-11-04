@@ -321,7 +321,10 @@ RUN cd {faux_path} && {install_cmd}
 
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
-WORKDIR {faux_path}"""
+WORKDIR {faux_path}
+
+RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts
+"""
 
 
 def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
