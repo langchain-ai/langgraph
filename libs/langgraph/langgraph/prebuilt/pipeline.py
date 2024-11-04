@@ -1,4 +1,4 @@
-from typing import Any, Optional, Type, Union, cast
+from typing import Any, Optional, Sequence, Type, Union, cast
 
 from langchain_core.runnables.base import Runnable, RunnableLike
 
@@ -14,16 +14,17 @@ def _get_step_name(step: RunnableLike) -> str:
         raise TypeError(f"Unsupported step type: {step}")
 
 
-def create_chain(
-    *steps: Union[RunnableLike, tuple[str, RunnableLike]],
+def create_pipeline(
+    steps: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
+    *,
     state_schema: Type[Any],
     input_schema: Optional[Type[Any]] = None,
     output_schema: Optional[Type[Any]] = None,
 ) -> StateGraph:
-    """Creates a chain graph that runs a series of provided steps in order.
+    """Create a pipeline graph that runs a series of provided steps in order.
 
     Args:
-        *steps: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
+        steps: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
             If no names are provided, the name will be inferred from the step object (e.g. a runnable or a callable name).
             Each step will be executed in the order provided.
         state_schema: The state schema for the graph.
@@ -34,7 +35,7 @@ def create_chain(
         A StateGraph object.
     """
     if len(steps) < 1:
-        raise ValueError("Chain requires at least one step.")
+        raise ValueError("Pipeline requires at least one step.")
 
     node_names = set()
     builder = StateGraph(state_schema, input=input_schema, output=output_schema)

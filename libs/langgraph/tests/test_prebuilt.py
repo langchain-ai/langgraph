@@ -44,12 +44,12 @@ from langgraph.graph import START, MessagesState, StateGraph, add_messages
 from langgraph.prebuilt import (
     ToolNode,
     ValidationNode,
-    create_chain,
+    create_pipeline,
     create_react_agent,
     tools_condition,
 )
-from langgraph.prebuilt.chain import _get_step_name
 from langgraph.prebuilt.chat_agent_executor import _validate_chat_history
+from langgraph.prebuilt.pipeline import _get_step_name
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
@@ -1453,7 +1453,7 @@ def test__get_step_name() -> None:
     assert _get_step_name(MyClass().class_method) == "class_method"
 
 
-def test_chain():
+def test_pipeline():
     class State(TypedDict):
         foo: Annotated[list[str], operator.add]
         bar: str
@@ -1466,17 +1466,17 @@ def test_chain():
 
     # test raising if less than 1 steps
     with pytest.raises(ValueError):
-        create_chain(state_schema=State)
+        create_pipeline([], state_schema=State)
 
     # test raising if duplicate step names
     with pytest.raises(ValueError):
-        create_chain(step1, step1, state_schema=State)
+        create_pipeline([step1, step1], state_schema=State)
 
     with pytest.raises(ValueError):
-        create_chain(("foo", step1), ("foo", step1), state_schema=State)
+        create_pipeline([("foo", step1), ("foo", step1)], state_schema=State)
 
     # test unnamed steps
-    builder = create_chain(step1, step2, state_schema=State)
+    builder = create_pipeline([step1, step2], state_schema=State)
     executor = builder.compile()
     result = executor.invoke({"foo": []})
     assert result == {"foo": ["step1", "step2"], "bar": "baz"}
@@ -1487,8 +1487,8 @@ def test_chain():
     ]
 
     # test named steps
-    builder_named_steps = create_chain(
-        ("meow1", step1), ("meow2", step2), state_schema=State
+    builder_named_steps = create_pipeline(
+        [("meow1", step1), ("meow2", step2)], state_schema=State
     )
     executor_named_steps = builder_named_steps.compile()
     result = executor_named_steps.invoke({"foo": []})
@@ -1506,9 +1506,11 @@ def test_chain():
     class Output(TypedDict):
         bar: str
 
-    builder_named_steps = create_chain(
-        ("meow1", lambda state: {"foo": ["foo"]}),
-        ("meow2", lambda state: {"bar": state["foo"][0] + "bar"}),
+    builder_named_steps = create_pipeline(
+        [
+            ("meow1", lambda state: {"foo": ["foo"]}),
+            ("meow2", lambda state: {"bar": state["foo"][0] + "bar"}),
+        ],
         state_schema=State,
         input_schema=Input,
         output_schema=Output,
