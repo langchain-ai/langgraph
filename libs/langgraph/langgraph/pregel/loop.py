@@ -491,7 +491,8 @@ class PregelLoop(LoopProtocol):
             )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        metadata: CheckpointMetadata = {**self.config["metadata"], **metadata}  # type: ignore
+        for k, v in self.config["metadata"].items():
+            metadata.setdefault(k, v)  # type: ignore
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
