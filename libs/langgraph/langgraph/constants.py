@@ -68,7 +68,6 @@ CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # callback to be called when a node is finished
 
-
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
 # denotes push-style tasks, ie. those created by Send objects
