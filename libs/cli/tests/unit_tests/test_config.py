@@ -250,7 +250,7 @@ def test_config_to_docker_nodejs():
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
-RUN cd /deps/unit_tests && yarn install --frozen-lockfile
+RUN cd /deps/unit_tests && npm i
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
 WORKDIR /deps/unit_tests"""
 
