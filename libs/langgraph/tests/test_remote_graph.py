@@ -73,7 +73,9 @@ def test_get_graph():
         "__start__": DrawableNode(
             id="__start__", name="__start__", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
             name="agent_1",
@@ -120,7 +122,9 @@ async def test_aget_graph():
         "__start__": DrawableNode(
             id="__start__", name="__start__", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(id="__end__", name="__end__", data="__end__", metadata=None),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
             name="agent_1",

@@ -44,6 +44,7 @@ from langgraph.constants import (
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_DELEGATE,
     CONFIG_KEY_ENSURE_LATEST,
+    CONFIG_KEY_METADATA,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -494,7 +495,7 @@ class PregelLoop(LoopProtocol):
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
-        metadata.update(self.config["metadata"])
+        metadata.update(self.config[CONFIG_KEY_METADATA])
         # debug flag
         if self.debug:
             print_step_checkpoint(
