@@ -814,7 +814,7 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
-        config = merge_configs(self.config, config) if self.config else config
+        config = ensure_config(self.config, config)
         saved = checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
@@ -826,14 +826,17 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
+        checkpoint_metadata = config["metadata"]
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
+            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = checkpointer.put(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {},
@@ -922,6 +925,7 @@ class Pregel(PregelProtocol):
                 checkpoint_config,
                 checkpoint,
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
@@ -966,7 +970,7 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
-        config = merge_configs(self.config, config) if self.config else config
+        config = ensure_config(self.config, config)
         saved = await checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
@@ -978,14 +982,17 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
+        checkpoint_metadata = config["metadata"]
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
+            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {},
@@ -1072,6 +1079,7 @@ class Pregel(PregelProtocol):
                 checkpoint_config,
                 checkpoint,
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
