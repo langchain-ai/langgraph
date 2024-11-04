@@ -494,6 +494,7 @@ class PregelLoop(LoopProtocol):
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        metadata.update(self.config["metadata"])
         # debug flag
         if self.debug:
             print_step_checkpoint(
