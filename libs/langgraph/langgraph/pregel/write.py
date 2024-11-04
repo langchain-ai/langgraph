@@ -14,7 +14,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_SEND, TASKS, Send
+from langgraph.constants import CONF, CONFIG_KEY_SEND, PUSH, TASKS, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.utils.runnable import RunnableCallable
 
@@ -112,14 +112,14 @@ class ChannelWrite(RunnableCallable):
         # validate
         for w in writes:
             if isinstance(w, ChannelWriteEntry):
-                if w.channel == TASKS:
+                if w.channel in (TASKS, PUSH):
                     raise InvalidUpdateError(
                         "Cannot write to the reserved channel TASKS"
                     )
                 if w.value is PASSTHROUGH:
                     raise InvalidUpdateError("PASSTHROUGH value must be replaced")
         # split packets and entries
-        sends = [(TASKS, packet) for packet in writes if isinstance(packet, Send)]
+        sends = [(PUSH, packet) for packet in writes if isinstance(packet, Send)]
         entries = [write for write in writes if isinstance(write, ChannelWriteEntry)]
         # process entries into values
         values = [

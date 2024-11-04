@@ -25,6 +25,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    PendingWrite,
     V,
     copy_checkpoint,
 )
@@ -68,7 +69,7 @@ class WritesProtocol(Protocol):
     Implemented by PregelTaskWrites and PregelExecutableTask."""
 
     @property
-    def path(self) -> tuple[Union[str, int], ...]: ...
+    def path(self) -> tuple[Union[str, int, tuple], ...]: ...
 
     @property
     def name(self) -> str: ...
@@ -84,7 +85,7 @@ class PregelTaskWrites(NamedTuple):
     """Simplest implementation of WritesProtocol, for usage with writes that
     don't originate from a runnable task, eg. graph input, update_state, etc."""
 
-    path: tuple[Union[str, int], ...]
+    path: tuple[Union[str, int, tuple], ...]
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
@@ -172,7 +173,7 @@ def local_write(
     """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
     Validates writes and forwards them to `commit` function."""
     for chan, value in writes:
-        if chan == TASKS:
+        if chan == PUSH:
             if not isinstance(value, Send):
                 raise InvalidUpdateError(f"Expected Send, got {value}")
             if value.node not in process_keys:
@@ -194,8 +195,10 @@ def apply_writes(
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
     externally."""
-    # sort tasks on path
-    tasks = sorted(tasks, key=lambda t: t.path)
+    # sort tasks on path, to ensure deterministic order for update application
+    # any path parts after the 3rd are ignored for sorting
+    # (we use them for eg. task ids which aren't good for sorting)
+    tasks = sorted(tasks, key=lambda t: t.path[:3])
 
     # update seen versions
     for task in tasks:
@@ -237,8 +240,10 @@ def apply_writes(
         for chan, val in task.writes:
             if chan == NO_WRITES:
                 pass
-            elif chan == TASKS:
+            elif chan == TASKS:  # TODO: remove branch in 1.0
                 checkpoint["pending_sends"].append(val)
+            elif chan == PUSH:
+                pass
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
             else:
@@ -277,6 +282,7 @@ def apply_writes(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
+    pending_writes: Sequence[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -293,6 +299,7 @@ def prepare_next_tasks(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
+    pending_writes: Sequence[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -308,6 +315,7 @@ def prepare_next_tasks(
 
 def prepare_next_tasks(
     checkpoint: Checkpoint,
+    pending_writes: Sequence[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -322,13 +330,14 @@ def prepare_next_tasks(
     """Prepare the set of tasks that will make up the next Pregel step.
     This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
     by edges)."""
-    tasks: dict[str, Union[PregelTask, PregelExecutableTask]] = {}
-    # Consume pending packets
-    for idx, _ in enumerate(checkpoint["pending_sends"]):
+    tasks: list[Union[PregelTask, PregelExecutableTask]] = []
+    # Consume pending_sends from previous step (legacy version of Send)
+    for idx, _ in enumerate(checkpoint["pending_sends"]):  # TODO: remove branch in 1.0
         if task := prepare_single_task(
             (PUSH, idx),
             None,
             checkpoint=checkpoint,
+            pending_writes=pending_writes,
             processes=processes,
             channels=channels,
             managed=managed,
@@ -339,7 +348,7 @@ def prepare_next_tasks(
             checkpointer=checkpointer,
             manager=manager,
         ):
-            tasks[task.id] = task
+            tasks.append(task)
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name in processes:
@@ -347,6 +356,7 @@ def prepare_next_tasks(
             (PULL, name),
             None,
             checkpoint=checkpoint,
+            pending_writes=pending_writes,
             processes=processes,
             channels=channels,
             managed=managed,
@@ -357,15 +367,74 @@ def prepare_next_tasks(
             checkpointer=checkpointer,
             manager=manager,
         ):
-            tasks[task.id] = task
-    return tasks
+            tasks.append(task)
+    # Consume pending Sends from this step (new version of Send)
+    if any(c == PUSH for _, c, _ in pending_writes):
+        # group writes by task id
+        grouped_by_task = defaultdict(list)
+        for tid, c, _ in pending_writes:
+            grouped_by_task[tid].append(c)
+        # prepare send tasks from grouped writes
+        # 1. start from sends originating from existing tasks
+        tidx = 0
+        while tidx < len(tasks):
+            task = tasks[tidx]
+            if twrites := grouped_by_task.pop(task.id, None):
+                for idx, c in enumerate(twrites):
+                    if c != PUSH:
+                        continue
+                    if next_task := prepare_single_task(
+                        (PUSH, task.path, idx, task.id),
+                        None,
+                        checkpoint=checkpoint,
+                        pending_writes=pending_writes,
+                        processes=processes,
+                        channels=channels,
+                        managed=managed,
+                        config=config,
+                        step=step,
+                        for_execution=for_execution,
+                        store=store,
+                        checkpointer=checkpointer,
+                        manager=manager,
+                    ):
+                        tasks.append(next_task)
+            tidx += 1
+        # key tasks by id
+        task_map = {t.id: t for t in tasks}
+        # 2. create new tasks for remaining sends (eg. from update_state)
+        for tid, writes in grouped_by_task.items():
+            task = task_map.get(tid)
+            for idx, c in enumerate(writes):
+                if c != PUSH:
+                    continue
+                if next_task := prepare_single_task(
+                    (PUSH, task.path if task else (), idx, tid),
+                    None,
+                    checkpoint=checkpoint,
+                    pending_writes=pending_writes,
+                    processes=processes,
+                    channels=channels,
+                    managed=managed,
+                    config=config,
+                    step=step,
+                    for_execution=for_execution,
+                    store=store,
+                    checkpointer=checkpointer,
+                    manager=manager,
+                ):
+                    task_map[next_task.id] = next_task
+    else:
+        task_map = {t.id: t for t in tasks}
+    return task_map
 
 
 def prepare_single_task(
-    task_path: tuple[str, Union[int, str]],
+    task_path: tuple[Union[str, int, tuple], ...],
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
+    pending_writes: Sequence[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -383,31 +452,75 @@ def prepare_single_task(
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
     if task_path[0] == PUSH:
-        idx = int(task_path[1])
-        if idx >= len(checkpoint["pending_sends"]):
-            return
-        packet = checkpoint["pending_sends"][idx]
-        if not isinstance(packet, Send):
-            logger.warning(
-                f"Ignoring invalid packet type {type(packet)} in pending sends"
+        if len(task_path) == 2:  # TODO: remove branch in 1.0
+            # legacy SEND tasks, executed in superstep n+1
+            # (PUSH, idx of pending send)
+            idx = cast(int, task_path[1])
+            if idx >= len(checkpoint["pending_sends"]):
+                return
+            packet = checkpoint["pending_sends"][idx]
+            if not isinstance(packet, Send):
+                logger.warning(
+                    f"Ignoring invalid packet type {type(packet)} in pending sends"
+                )
+                return
+            if packet.node not in processes:
+                logger.warning(
+                    f"Ignoring unknown node name {packet.node} in pending sends"
+                )
+                return
+            # create task id
+            triggers = [PUSH]
+            checkpoint_ns = (
+                f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
+            task_id = _uuid5_str(
+                checkpoint_id,
+                checkpoint_ns,
+                str(step),
+                packet.node,
+                PUSH,
+                str(idx),
+            )
+        elif len(task_path) == 4:
+            # new PUSH tasks, executed in superstep n
+            # (PUSH, parent task path, idx of PUSH write, id of parent task)
+            task_path_t = cast(tuple[str, tuple, int, str], task_path)
+            writes_for_path = [w for w in pending_writes if w[0] == task_path_t[3]]
+            if task_path_t[2] >= len(writes_for_path):
+                logger.warning(
+                    f"Ignoring invalid write index {task_path[2]} in pending writes"
+                )
+                return
+            packet = writes_for_path[task_path_t[2]][2]
+            if not isinstance(packet, Send):
+                print("packet", task_path_t, writes_for_path)
+                logger.warning(
+                    f"Ignoring invalid packet type {type(packet)} in pending writes"
+                )
+                return
+            if packet.node not in processes:
+                logger.warning(
+                    f"Ignoring unknown node name {packet.node} in pending writes"
+                )
+                return
+            # create task id
+            triggers = [PUSH]
+            checkpoint_ns = (
+                f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
+            )
+            task_id = _uuid5_str(
+                checkpoint_id,
+                checkpoint_ns,
+                str(step),
+                packet.node,
+                PUSH,
+                _tuple_str(task_path[1]),
+                str(task_path[2]),
+            )
+        else:
+            logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
-        if packet.node not in processes:
-            logger.warning(f"Ignoring unknown node name {packet.node} in pending sends")
-            return
-        # create task id
-        triggers = [PUSH]
-        checkpoint_ns = (
-            f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
-        )
-        task_id = _uuid5_str(
-            checkpoint_id,
-            checkpoint_ns,
-            str(step),
-            packet.node,
-            PUSH,
-            str(idx),
-        )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         metadata = {
             "langgraph_step": step,
@@ -417,7 +530,7 @@ def prepare_single_task(
             "langgraph_checkpoint_ns": task_checkpoint_ns,
         }
         if task_id_checksum is not None:
-            assert task_id == task_id_checksum
+            assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
         if for_execution:
             proc = processes[packet.node]
             if node := proc.node:
@@ -481,6 +594,7 @@ def prepare_single_task(
         else:
             return PregelTask(task_id, packet.node, task_path)
     elif task_path[0] == PULL:
+        # (PULL, node name)
         name = cast(str, task_path[1])
         if name not in processes:
             return
@@ -642,3 +756,12 @@ def _uuid5_str(namespace: bytes, *parts: str) -> str:
     sha.update(b"".join(p.encode() for p in parts))
     hex = sha.hexdigest()
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
+
+
+def _tuple_str(tup: Union[str, int, tuple]) -> str:
+    """Generate a string representation of a tuple."""
+    return (
+        f"({', '.join(_tuple_str(x) for x in tup)})"
+        if isinstance(tup, (tuple, list))
+        else str(tup)
+    )

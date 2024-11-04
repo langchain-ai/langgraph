@@ -12,6 +12,7 @@ from typing_extensions import Self
 
 ERROR = "__error__"
 SCHEDULED = "__scheduled__"
+INTERRUPT = "__interrupt__"
 TASKS = "__pregel_tasks"
 
 Value = TypeVar("Value", covariant=True)
