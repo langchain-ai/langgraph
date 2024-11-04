@@ -56,7 +56,6 @@ from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
-    CONFIG_KEY_METADATA,
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -66,6 +65,7 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
+    METADATA,
     NS_END,
     NS_SEP,
 )
@@ -815,7 +815,7 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
-        config = merge_configs(self.config, config) if self.config else config
+        config = ensure_config(self.config, config)
         saved = checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
@@ -827,7 +827,7 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
-        checkpoint_metadata = config.get(CONFIG_KEY_METADATA, {})
+        checkpoint_metadata = config.get(METADATA, {})
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
             checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
@@ -971,7 +971,7 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
-        config = merge_configs(self.config, config) if self.config else config
+        config = ensure_config(self.config, config)
         saved = await checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
@@ -983,7 +983,7 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
-        checkpoint_metadata = config.get(CONFIG_KEY_METADATA, {})
+        checkpoint_metadata = config.get(METADATA, {})
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
             checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}

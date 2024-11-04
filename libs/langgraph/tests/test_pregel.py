@@ -7683,6 +7683,7 @@ def test_branch_then(
             "source": "update",
             "step": 0,
             "writes": {START: {"my_key": "key", "market": "DE"}},
+            "thread_id": "23",
         },
         parent_config=None,
     )

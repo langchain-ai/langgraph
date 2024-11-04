@@ -67,8 +67,7 @@ CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # callback to be called when a node is finished
-CONFIG_KEY_METADATA = sys.intern("metadata")
-# holds metadata for the graph invocation
+
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -81,6 +80,8 @@ NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
+METADATA = sys.intern("metadata")
+# key for metadata in RunnableConfig
 
 RESERVED = {
     TAG_HIDDEN,
@@ -113,4 +114,5 @@ RESERVED = {
     NS_SEP,
     NS_END,
     CONF,
+    METADATA,
 }
