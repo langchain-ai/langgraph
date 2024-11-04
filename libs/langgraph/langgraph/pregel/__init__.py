@@ -56,6 +56,7 @@ from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_METADATA,
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -826,14 +827,17 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
+        checkpoint_metadata = config.get(CONFIG_KEY_METADATA, {})
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
+            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = checkpointer.put(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {},
@@ -922,6 +926,7 @@ class Pregel(PregelProtocol):
                 checkpoint_config,
                 checkpoint,
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
@@ -978,14 +983,17 @@ class Pregel(PregelProtocol):
             config,
             {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
         )
+        checkpoint_metadata = config.get(CONFIG_KEY_METADATA, {})
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
+            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {},

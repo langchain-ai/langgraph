@@ -748,7 +748,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "step": 6, "writes": {"two": 5}},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 6,
+                "writes": {"two": 5},
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config=history[1].config,
         ),
@@ -768,6 +774,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "loop",
                 "step": 5,
                 "writes": {"one": None},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
@@ -788,6 +795,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "input",
                 "step": 4,
                 "writes": {"input": 3},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
@@ -808,6 +816,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "loop",
                 "step": 3,
                 "writes": {"one": None},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
@@ -828,6 +837,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "input",
                 "step": 2,
                 "writes": {"input": 20},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
@@ -843,7 +853,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "step": 1, "writes": {"two": 4}},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 1,
+                "writes": {"two": 4},
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
@@ -863,6 +879,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "loop",
                 "step": 0,
                 "writes": {"one": None},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[7].config,
@@ -883,6 +900,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "input",
                 "step": -1,
                 "writes": {"input": 2},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -949,6 +967,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 5,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[1].config,
@@ -969,6 +988,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 4,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
@@ -989,6 +1009,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 3,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
@@ -1009,6 +1030,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 2,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
@@ -1029,6 +1051,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 1,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
@@ -1044,7 +1067,13 @@ def test_fork_always_re_runs_nodes(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
@@ -1064,6 +1093,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "input",
                 "step": -1,
                 "writes": {"__start__": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -1496,6 +1526,7 @@ def test_pending_writes_resume(
         "source": "loop",
         "step": 0,
         "writes": None,
+        "thread_id": "1",
     }
     # should contain pending write of "one"
     checkpoint = checkpointer.get_tuple(thread1)
@@ -1584,6 +1615,7 @@ def test_pending_writes_resume(
             "step": 1,
             "source": "loop",
             "writes": {"one": {"value": 2}, "two": {"value": 3}},
+            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1628,7 +1660,13 @@ def test_pending_writes_resume(
                 "start:two": "__start__",
             },
         },
-        metadata={"parents": {}, "step": 0, "source": "loop", "writes": None},
+        metadata={
+            "parents": {},
+            "step": 0,
+            "source": "loop",
+            "writes": None,
+            "thread_id": "1",
+        },
         parent_config={
             "configurable": {
                 "thread_id": "1",
@@ -1668,6 +1706,7 @@ def test_pending_writes_resume(
             "step": -1,
             "source": "input",
             "writes": {"__start__": {"value": 1}},
+            "thread_id": "1",
         },
         parent_config=None,
         pending_writes=UnsortedSequence(
@@ -2117,7 +2156,9 @@ def test_conditional_graph(
 
     workflow.add_node("agent", agent)
     workflow.add_node(
-        "tools", execute_tools, metadata={"parents": {}, "version": 2, "variant": "b"}
+        "tools",
+        execute_tools,
+        metadata={"parents": {}, "version": 2, "variant": "b"},
     )
 
     workflow.set_entry_point("agent")
@@ -2311,6 +2352,7 @@ def test_conditional_graph(
                     }
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2362,6 +2404,7 @@ def test_conditional_graph(
                     "input": "what is weather in sf",
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2482,6 +2525,7 @@ def test_conditional_graph(
                     ),
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2537,6 +2581,7 @@ def test_conditional_graph(
                     }
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2582,6 +2627,7 @@ def test_conditional_graph(
                     "input": "what is weather in sf",
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2702,6 +2748,7 @@ def test_conditional_graph(
                     ),
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2757,6 +2804,7 @@ def test_conditional_graph(
                     }
                 }
             },
+            "thread_id": "3",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3230,6 +3278,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3272,6 +3321,7 @@ def test_conditional_state_graph(
                     )
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3348,6 +3398,7 @@ def test_conditional_state_graph(
                     )
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3399,6 +3450,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3440,6 +3492,7 @@ def test_conditional_state_graph(
                     )
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3514,6 +3567,7 @@ def test_conditional_state_graph(
                     )
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3541,7 +3595,13 @@ def test_conditional_state_graph(
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "thread_id": "3",
+        },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
 
@@ -3580,6 +3640,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "3",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3640,6 +3701,7 @@ def test_conditional_state_graph(
                     ],
                 }
             },
+            "thread_id": "3",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3702,6 +3764,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "4",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3762,6 +3825,7 @@ def test_conditional_state_graph(
                     ],
                 }
             },
+            "thread_id": "4",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4678,6 +4742,7 @@ def test_state_graph_packets(
                     )
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4731,6 +4796,7 @@ def test_state_graph_packets(
                     "something_extra": "hi there",
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4837,6 +4903,7 @@ def test_state_graph_packets(
                     )
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4887,6 +4954,7 @@ def test_state_graph_packets(
                     "something_extra": "hi there",
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5176,6 +5244,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5222,6 +5291,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5304,6 +5374,7 @@ def test_message_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5344,6 +5415,7 @@ def test_message_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5408,6 +5480,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5454,6 +5527,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5536,6 +5610,7 @@ def test_message_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5577,6 +5652,7 @@ def test_message_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5618,6 +5694,7 @@ def test_message_graph(
             "source": "update",
             "step": 6,
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5906,6 +5983,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5952,6 +6030,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6035,6 +6114,7 @@ def test_root_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6076,6 +6156,7 @@ def test_root_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6140,6 +6221,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6186,6 +6268,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6269,6 +6352,7 @@ def test_root_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6309,6 +6393,7 @@ def test_root_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6350,6 +6435,7 @@ def test_root_graph(
             "source": "update",
             "step": 6,
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6422,6 +6508,7 @@ def test_root_graph(
             "source": "update",
             "step": 6,
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6751,12 +6838,14 @@ def test_dynamic_interrupt(
             "source": "loop",
             "step": 0,
             "writes": None,
+            "thread_id": "1",
         },
         {
             "parents": {},
             "source": "input",
             "step": -1,
             "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+            "thread_id": "1",
         },
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
@@ -6772,7 +6861,13 @@ def test_dynamic_interrupt(
         ),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "thread_id": "1",
+        },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
 
@@ -6849,12 +6944,16 @@ def test_start_branch_then(
             "source": "loop",
             "step": 0,
             "writes": None,
+            "assistant_id": "a",
+            "thread_id": "1",
         },
         {
             "parents": {},
             "source": "input",
             "step": -1,
             "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+            "assistant_id": "a",
+            "thread_id": "1",
         },
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
@@ -6863,7 +6962,14 @@ def test_start_branch_then(
         next=("tool_two_slow",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "1",
+        },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
     # resume, for same result as above
@@ -6882,6 +6988,8 @@ def test_start_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"tool_two_slow": {"my_key": " slow"}},
+            "assistant_id": "a",
+            "thread_id": "1",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -6898,7 +7006,14 @@ def test_start_branch_then(
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread2).config,
         created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "2",
+        },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
     # resume, for same result as above
@@ -6917,6 +7032,8 @@ def test_start_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"tool_two_fast": {"my_key": " fast"}},
+            "assistant_id": "a",
+            "thread_id": "2",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -6933,7 +7050,14 @@ def test_start_branch_then(
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread3).config,
         created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "b",
+            "thread_id": "3",
+        },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
     # update state
@@ -6949,6 +7073,8 @@ def test_start_branch_then(
             "source": "update",
             "step": 1,
             "writes": {START: {"my_key": "key"}},
+            "assistant_id": "b",
+            "thread_id": "3",
         },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
@@ -6968,6 +7094,8 @@ def test_start_branch_then(
             "source": "loop",
             "step": 2,
             "writes": {"tool_two_fast": {"my_key": " fast"}},
+            "assistant_id": "b",
+            "thread_id": "3",
         },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
@@ -7041,6 +7169,7 @@ def test_branch_then(
                     "source": "input",
                     "step": -1,
                     "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                    "thread_id": "10",
                 },
                 "parent_config": None,
                 "next": ["__start__"],
@@ -7079,6 +7208,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 0,
                     "writes": None,
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7145,6 +7275,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 1,
                     "writes": {"prepare": {"my_key": " prepared"}},
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7216,6 +7347,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 2,
                     "writes": {"tool_two_slow": {"my_key": " slow"}},
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7282,6 +7414,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 3,
                     "writes": {"finish": {"my_key": " finished"}},
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7325,6 +7458,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "1",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7344,6 +7478,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "1",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7365,6 +7500,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "2",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7384,6 +7520,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "2",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7413,6 +7550,7 @@ def test_branch_then(
             "source": "loop",
             "step": 2,
             "writes": {"tool_two_slow": {"my_key": " slow"}},
+            "thread_id": "11",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7433,6 +7571,7 @@ def test_branch_then(
             "source": "update",
             "step": 3,
             "writes": {"tool_two_slow": {"my_key": "er"}},
+            "thread_id": "11",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7462,6 +7601,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "21",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7481,6 +7621,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "21",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7502,6 +7643,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "22",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7521,6 +7663,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "22",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7560,6 +7703,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "23",
         },
         parent_config=uconfig,
     )
@@ -7579,6 +7723,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "23",
         },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
