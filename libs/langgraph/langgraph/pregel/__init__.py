@@ -1080,6 +1080,7 @@ class Pregel(PregelProtocol):
                 checkpoint_config,
                 checkpoint,
                 {
+                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
