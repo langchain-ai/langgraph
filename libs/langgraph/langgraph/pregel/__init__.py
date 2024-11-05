@@ -515,6 +515,8 @@ class Pregel(PregelProtocol):
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
                         continue
+                    if tid not in next_tasks:
+                        continue
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
@@ -614,6 +616,8 @@ class Pregel(PregelProtocol):
             if apply_pending_writes and saved.pending_writes:
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    if tid not in next_tasks:
                         continue
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
@@ -891,6 +895,8 @@ class Pregel(PregelProtocol):
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
                         continue
+                    if tid not in next_tasks:
+                        continue
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(checkpoint, channels, tasks, None)
@@ -1072,6 +1078,8 @@ class Pregel(PregelProtocol):
                 )
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    if tid not in next_tasks:
                         continue
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
