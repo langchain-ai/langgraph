@@ -65,9 +65,11 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
+    ERROR,
     INTERRUPT,
     NS_END,
     NS_SEP,
+    SCHEDULED,
 )
 from langgraph.errors import (
     ErrorCode,
@@ -510,14 +512,16 @@ class Pregel(PregelProtocol):
                     )
             # apply pending writes
             if apply_pending_writes and saved.pending_writes:
-                for tid, *t in saved.pending_writes:
-                    next_tasks[tid].writes.append(t)  # type: ignore[arg-type]
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
-                tuple(t.name for t in next_tasks.values()),
+                tuple(t.name for t in next_tasks.values() if not t.writes),
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
@@ -608,14 +612,16 @@ class Pregel(PregelProtocol):
                     )
             # apply pending writes
             if apply_pending_writes and saved.pending_writes:
-                for tid, *t in saved.pending_writes:
-                    next_tasks[tid].writes.append(t)  # type: ignore[arg-type]
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
-                tuple(t.name for t in next_tasks.values()),
+                tuple(t.name for t in next_tasks.values() if not t.writes),
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],

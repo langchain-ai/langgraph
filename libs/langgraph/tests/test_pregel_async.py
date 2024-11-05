@@ -487,10 +487,7 @@ async def test_cancel_graph_astream(checkpointer_name: str) -> None:
             state = await graph.aget_state(thread1)
             assert state is not None
             assert state.values == {"value": 3}  # 1 + 2
-            assert state.next == (
-                "aparallelwhile",
-                "alittlewhile",
-            )
+            assert state.next == ("aparallelwhile",)
             assert state.metadata == {
                 "parents": {},
                 "source": "loop",
@@ -1727,7 +1724,7 @@ async def test_pending_writes_resume(
         state = await graph.aget_state(thread1)
         assert state is not None
         assert state.values == {"value": 3}
-        assert state.next == ("one", "two")
+        assert state.next == ("two",)
         assert state.tasks == (
             PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
             PregelTask(
@@ -1748,6 +1745,7 @@ async def test_pending_writes_resume(
         state = await graph.aget_state(state.config)
         assert state is not None
         assert state.values == {"value": 1}
+        assert state.next == ("one", "two")
         # should contain pending write of "one"
         checkpoint = await checkpointer.aget_tuple(thread1)
         assert checkpoint is not None

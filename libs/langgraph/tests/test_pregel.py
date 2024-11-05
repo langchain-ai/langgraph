@@ -1517,7 +1517,7 @@ def test_pending_writes_resume(
     state = graph.get_state(thread1)
     assert state is not None
     assert state.values == {"value": 3}
-    assert state.next == ("one", "two")
+    assert state.next == ("two",)
     assert state.tasks == (
         PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
         PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
@@ -1533,6 +1533,7 @@ def test_pending_writes_resume(
     state = graph.get_state(state.config)
     assert state is not None
     assert state.values == {"value": 1}
+    assert state.next == ("one", "two")
     # should contain pending write of "one"
     checkpoint = checkpointer.get_tuple(thread1)
     assert checkpoint is not None
