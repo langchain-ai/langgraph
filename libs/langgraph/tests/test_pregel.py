@@ -2097,6 +2097,205 @@ def test_send_react_interrupt(
     }
     assert foo_called == 0
 
+    # interrupt-update-resume flow, creating new Send in update call
+    foo_called = 0
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    thread1 = {"configurable": {"thread_id": "3"}}
+    assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+    assert foo_called == 0
+
+    # get state should show the pending task
+    state = graph.get_state(thread1)
+    assert state == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="hello"),
+                _AnyIdAIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "foo",
+                            "args": {"hi": [1, 2, 3]},
+                            "id": "",
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+            ]
+        },
+        next=("foo",),
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {
+                "agent": {
+                    "messages": _AnyIdAIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "foo",
+                                "args": {"hi": [1, 2, 3]},
+                                "id": "",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                }
+            },
+            "parents": {},
+            "thread_id": "3",
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="foo",
+                path=("__pregel_push", 0),
+                error=None,
+                interrupts=(),
+                state=None,
+                result=None,
+            ),
+        ),
+    )
+
+    # replace the tool call, should clear previous send, create new one
+    graph.update_state(
+        thread1,
+        {
+            "messages": AIMessage(
+                "",
+                id=ai_message.id,
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [4, 5, 6]},
+                        "id": "tool1",
+                        "type": "tool_call",
+                    }
+                ],
+            )
+        },
+    )
+
+    # prev tool call no longer in pending tasks, new tool call is
+    assert graph.get_state(thread1) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="hello"),
+                _AnyIdAIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "foo",
+                            "args": {"hi": [4, 5, 6]},
+                            "id": "tool1",
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+            ]
+        },
+        next=("foo",),
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "step": 2,
+            "source": "update",
+            "writes": {
+                "agent": {
+                    "messages": _AnyIdAIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "foo",
+                                "args": {"hi": [4, 5, 6]},
+                                "id": "tool1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                }
+            },
+            "parents": {},
+            "thread_id": "3",
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="foo",
+                path=("__pregel_push", 0),
+                error=None,
+                interrupts=(),
+                state=None,
+                result=None,
+            ),
+        ),
+    )
+
+    # prev tool call not executed, new tool call is
+    assert graph.invoke(None, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            AIMessage(
+                "",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [4, 5, 6]},
+                        "id": "tool1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(content="{'hi': [4, 5, 6]}", tool_call_id="tool1"),
+        ]
+    }
+    assert foo_called == 1
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_react_interrupt_control(
