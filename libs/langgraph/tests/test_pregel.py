@@ -2544,6 +2544,10 @@ def test_send_react_interrupt_control(
     }
     assert foo_called == 0
 
+    # interrupt-update-resume flow, creating new Send in update call
+
+    # TODO add here test with invoke(Control())
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_invoke_checkpoint_three(
