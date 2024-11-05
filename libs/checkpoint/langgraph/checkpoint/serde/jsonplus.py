@@ -25,7 +25,7 @@ from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import SendProtocol
+from langgraph.checkpoint.serde.types import ControlProtocol, SendProtocol
 from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
@@ -400,6 +400,21 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, (obj.node, obj.arg)),
+            ),
+        )
+    elif isinstance(obj, ControlProtocol):
+        return msgpack.ExtType(
+            EXT_CONSTRUCTOR_KW_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    {
+                        "update_state": obj.update_state,
+                        "trigger": obj.trigger,
+                        "send": obj.send,
+                    },
+                ),
             ),
         )
     elif dataclasses.is_dataclass(obj):

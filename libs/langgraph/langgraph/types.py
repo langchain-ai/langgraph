@@ -227,6 +227,10 @@ N = TypeVar("N")
 
 
 class Control(Generic[N]):
+    """A control object to update the graph's state, trigger nodes, and send messages."""
+
+    __slots__ = ("update_state", "trigger", "send")
+
     def __init__(
         self,
         *,
@@ -240,7 +244,9 @@ class Control(Generic[N]):
 
     def __repr__(self) -> str:
         contents = ", ".join(
-            f"{key}={value!r}" for key, value in self.__dict__.items() if value
+            f"{key}={value!r}"
+            for key in self.__slots__
+            if (value := getattr(self, key))
         )
         return f"Control({contents})"
 
