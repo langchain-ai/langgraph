@@ -231,6 +231,11 @@ class ToolNode(RunnableCallable):
         combined_state_updates = {}
         for state_update in state_updates:
             for k, v in state_update.items():
+                if k == self.messages_key:
+                    raise ValueError(
+                        "Cannot return state updates for the messages key."
+                    )
+
                 if k in combined_state_updates:
                     raise ValueError(
                         f"Received multiple state updates for the key: {k}"
