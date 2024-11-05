@@ -118,7 +118,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     ) -> Any:
         if (
             metadata
-            and kwargs.get("name") == metadata.get("langgraph_node")
+            and name == metadata.get("langgraph_node")
             and (not tags or TAG_HIDDEN not in tags)
         ):
             self.metadata[run_id] = (
