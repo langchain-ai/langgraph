@@ -863,55 +863,75 @@ class Pregel(PregelProtocol):
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
             checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-        # find last node that updated the state, if not provided
-        if values is None and as_node is None:
-            next_config = checkpointer.put(
-                checkpoint_config,
-                create_checkpoint(checkpoint, None, step),
-                {
-                    **checkpoint_metadata,
-                    "source": "update",
-                    "step": step + 1,
-                    "writes": {},
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
-                {},
-            )
-            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
-        elif as_node is None and not any(
-            v for vv in checkpoint["versions_seen"].values() for v in vv.values()
-        ):
-            if (
-                isinstance(self.input_channels, str)
-                and self.input_channels in self.nodes
-            ):
-                as_node = self.input_channels
-        elif as_node is None:
-            last_seen_by_node = sorted(
-                (v, n)
-                for n, seen in checkpoint["versions_seen"].items()
-                if n in self.nodes
-                for v in seen.values()
-            )
-            # if two nodes updated the state at the same time, it's ambiguous
-            if last_seen_by_node:
-                if len(last_seen_by_node) == 1:
-                    as_node = last_seen_by_node[0][1]
-                elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                    as_node = last_seen_by_node[-1][1]
-        if as_node is None:
-            raise InvalidUpdateError("Ambiguous update, specify as_node")
-        if as_node not in self.nodes:
-            raise InvalidUpdateError(f"Node {as_node} does not exist")
-        # update channels
         with ChannelsManager(
             self.channels,
             checkpoint,
             LoopProtocol(config=config, step=step + 1, stop=step + 2),
-        ) as (
-            channels,
-            managed,
-        ):
+        ) as (channels, managed):
+            # apply pending writes, if not on specific checkpoint
+            if CONFIG_KEY_CHECKPOINT_ID not in config[CONF] and saved is not None:
+                # tasks for this checkpoint
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    saved.config,
+                    saved.metadata.get("step", -1) + 1,
+                    for_execution=True,
+                    store=self.store,
+                    checkpointer=self.checkpointer or None,
+                    manager=None,
+                )
+                # apply writes
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    next_tasks[tid].writes.append((k, v))
+                if tasks := [t for t in next_tasks.values() if t.writes]:
+                    apply_writes(checkpoint, channels, tasks, None)
+            # find last node tha`t updated the state, if not provided
+            if values is None and as_node is None:
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            elif as_node is None and not any(
+                v for vv in checkpoint["versions_seen"].values() for v in vv.values()
+            ):
+                if (
+                    isinstance(self.input_channels, str)
+                    and self.input_channels in self.nodes
+                ):
+                    as_node = self.input_channels
+            elif as_node is None:
+                last_seen_by_node = sorted(
+                    (v, n)
+                    for n, seen in checkpoint["versions_seen"].items()
+                    if n in self.nodes
+                    for v in seen.values()
+                )
+                # if two nodes updated the state at the same time, it's ambiguous
+                if last_seen_by_node:
+                    if len(last_seen_by_node) == 1:
+                        as_node = last_seen_by_node[0][1]
+                    elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                        as_node = last_seen_by_node[-1][1]
+            if as_node is None:
+                raise InvalidUpdateError("Ambiguous update, specify as_node")
+            if as_node not in self.nodes:
+                raise InvalidUpdateError(f"Node {as_node} does not exist")
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].flat_writers
             if not writers:
@@ -1019,45 +1039,6 @@ class Pregel(PregelProtocol):
         if saved:
             checkpoint_config = patch_configurable(config, saved.config[CONF])
             checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-        # find last node that updated the state, if not provided
-        if values is None and as_node is None:
-            next_config = await checkpointer.aput(
-                checkpoint_config,
-                create_checkpoint(checkpoint, None, step),
-                {
-                    **checkpoint_metadata,
-                    "source": "update",
-                    "step": step + 1,
-                    "writes": {},
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
-                {},
-            )
-            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
-        elif as_node is None and not saved:
-            if (
-                isinstance(self.input_channels, str)
-                and self.input_channels in self.nodes
-            ):
-                as_node = self.input_channels
-        elif as_node is None:
-            last_seen_by_node = sorted(
-                (v, n)
-                for n, seen in checkpoint["versions_seen"].items()
-                if n in self.nodes
-                for v in seen.values()
-            )
-            # if two nodes updated the state at the same time, it's ambiguous
-            if last_seen_by_node:
-                if len(last_seen_by_node) == 1:
-                    as_node = last_seen_by_node[0][1]
-                elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                    as_node = last_seen_by_node[-1][1]
-        if as_node is None:
-            raise InvalidUpdateError("Ambiguous update, specify as_node")
-        if as_node not in self.nodes:
-            raise InvalidUpdateError(f"Node {as_node} does not exist")
-        # update channels, acting as the chosen node
         async with AsyncChannelsManager(
             self.channels,
             checkpoint,
@@ -1066,6 +1047,67 @@ class Pregel(PregelProtocol):
             channels,
             managed,
         ):
+            # apply pending writes, if not on specific checkpoint
+            if CONFIG_KEY_CHECKPOINT_ID not in config[CONF] and saved is not None:
+                # tasks for this checkpoint
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    saved.config,
+                    saved.metadata.get("step", -1) + 1,
+                    for_execution=True,
+                    store=self.store,
+                    checkpointer=self.checkpointer or None,
+                    manager=None,
+                )
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    next_tasks[tid].writes.append((k, v))
+                if tasks := [t for t in next_tasks.values() if t.writes]:
+                    apply_writes(checkpoint, channels, tasks, None)
+            # find last node that updated the state, if not provided
+            if values is None and as_node is None:
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            elif as_node is None and not saved:
+                if (
+                    isinstance(self.input_channels, str)
+                    and self.input_channels in self.nodes
+                ):
+                    as_node = self.input_channels
+            elif as_node is None:
+                last_seen_by_node = sorted(
+                    (v, n)
+                    for n, seen in checkpoint["versions_seen"].items()
+                    if n in self.nodes
+                    for v in seen.values()
+                )
+                # if two nodes updated the state at the same time, it's ambiguous
+                if last_seen_by_node:
+                    if len(last_seen_by_node) == 1:
+                        as_node = last_seen_by_node[0][1]
+                    elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                        as_node = last_seen_by_node[-1][1]
+            if as_node is None:
+                raise InvalidUpdateError("Ambiguous update, specify as_node")
+            if as_node not in self.nodes:
+                raise InvalidUpdateError(f"Node {as_node} does not exist")
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].flat_writers
             if not writers:
