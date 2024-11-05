@@ -11,6 +11,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    NamedTuple,
     Optional,
     Sequence,
     Tuple,
@@ -48,6 +49,11 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
 )
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+
+
+class StateUpdateArtifact(NamedTuple):
+    state_update: dict[str, Any]
+    artifact: Any = None
 
 
 def msg_content_output(output: Any) -> str | List[dict]:
@@ -221,8 +227,28 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
+        outputs, state_updates = zip(*outputs)
+        combined_state_updates = {}
+        for state_update in state_updates:
+            for k, v in state_update.items():
+                if k in combined_state_updates:
+                    raise ValueError(
+                        f"Received multiple state updates for the key: {k}"
+                    )
+
+                combined_state_updates[k] = v
+
+        if output_type == "list" and combined_state_updates:
+            raise ValueError(
+                "Cannot return state updates for a list input to ToolNode."
+            )
+
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {self.messages_key: outputs}
+        return (
+            outputs
+            if output_type == "list"
+            else {self.messages_key: list(outputs), **combined_state_updates}
+        )
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -256,9 +282,11 @@ class ToolNode(RunnableCallable):
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {self.messages_key: outputs}
 
-    def _run_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
+    def _run_one(
+        self, call: ToolCall, config: RunnableConfig
+    ) -> tuple[ToolMessage, dict[str, Any]]:
         if invalid_tool_message := self._validate_tool_call(call):
-            return invalid_tool_message
+            return invalid_tool_message, {}
 
         try:
             input = {**call, **{"type": "tool_call"}}
@@ -268,7 +296,12 @@ class ToolNode(RunnableCallable):
             tool_message.content = cast(
                 Union[str, list], msg_content_output(tool_message.content)
             )
-            return tool_message
+            if isinstance(tool_message.artifact, StateUpdateArtifact):
+                state_update = tool_message.artifact.state_update
+                tool_message.artifact = tool_message.artifact.artifact
+                return tool_message, state_update
+
+            return tool_message, {}
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
@@ -295,7 +328,7 @@ class ToolNode(RunnableCallable):
 
         return ToolMessage(
             content=content, name=call["name"], tool_call_id=call["id"], status="error"
-        )
+        ), {}
 
     async def _arun_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
