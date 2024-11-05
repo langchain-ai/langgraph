@@ -68,6 +68,9 @@ class WritesProtocol(Protocol):
     Implemented by PregelTaskWrites and PregelExecutableTask."""
 
     @property
+    def path(self) -> tuple[Union[str, int], ...]: ...
+
+    @property
     def name(self) -> str: ...
 
     @property
@@ -81,6 +84,7 @@ class PregelTaskWrites(NamedTuple):
     """Simplest implementation of WritesProtocol, for usage with writes that
     don't originate from a runnable task, eg. graph input, update_state, etc."""
 
+    path: tuple[Union[str, int], ...]
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
@@ -190,6 +194,9 @@ def apply_writes(
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
     externally."""
+    # sort tasks on path
+    tasks = sorted(tasks, key=lambda t: t.path)
+
     # update seen versions
     for task in tasks:
         checkpoint["versions_seen"].setdefault(task.name, {}).update(
@@ -444,7 +451,9 @@ def prepare_single_task(
                                 checkpoint,
                                 channels,
                                 managed,
-                                PregelTaskWrites(packet.node, writes, triggers),
+                                PregelTaskWrites(
+                                    task_path, packet.node, writes, triggers
+                                ),
                                 config,
                             ),
                             CONFIG_KEY_STORE: (
@@ -552,7 +561,7 @@ def prepare_single_task(
                                     checkpoint,
                                     channels,
                                     managed,
-                                    PregelTaskWrites(name, writes, triggers),
+                                    PregelTaskWrites(task_path, name, writes, triggers),
                                     config,
                                 ),
                                 CONFIG_KEY_STORE: (

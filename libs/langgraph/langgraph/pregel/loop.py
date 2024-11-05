@@ -477,7 +477,10 @@ class PregelLoop(LoopProtocol):
             mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
-                [*discard_tasks.values(), PregelTaskWrites(INPUT, input_writes, [])],
+                [
+                    *discard_tasks.values(),
+                    PregelTaskWrites((), INPUT, input_writes, []),
+                ],
                 self.checkpointer_get_next_version,
             )
             assert not mv_writes, "Can't write to SharedValues in graph input"
