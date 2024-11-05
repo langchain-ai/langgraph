@@ -869,7 +869,11 @@ class Pregel(PregelProtocol):
             LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (channels, managed):
             # apply pending writes, if not on specific checkpoint
-            if CONFIG_KEY_CHECKPOINT_ID not in config[CONF] and saved is not None:
+            if (
+                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                and saved is not None
+                and saved.pending_writes
+            ):
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -890,7 +894,7 @@ class Pregel(PregelProtocol):
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(checkpoint, channels, tasks, None)
-            # find last node tha`t updated the state, if not provided
+            # find last node that updated the state, if not provided
             if values is None and as_node is None:
                 next_config = checkpointer.put(
                     checkpoint_config,
@@ -1048,7 +1052,11 @@ class Pregel(PregelProtocol):
             managed,
         ):
             # apply pending writes, if not on specific checkpoint
-            if CONFIG_KEY_CHECKPOINT_ID not in config[CONF] and saved is not None:
+            if (
+                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                and saved is not None
+                and saved.pending_writes
+            ):
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
