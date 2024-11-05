@@ -5275,6 +5275,8 @@ def test_state_graph_packets(
         {"agent": {"messages": AIMessage(content="answer", id="ai3")}},
     ]
 
+    # interrupt after agent
+
     app_w_interrupt = workflow.compile(
         checkpointer=checkpointer,
         interrupt_after=["agent"],
@@ -5558,6 +5560,296 @@ def test_state_graph_packets(
                 }
             },
             "thread_id": "1",
+        },
+        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+    )
+
+    # interrupt before tools
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["tools"],
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    model.i = 0
+
+    assert [
+        c
+        for c in app_w_interrupt.stream(
+            {"messages": HumanMessage(content="what is weather in sf")}, config
+        )
+    ] == [
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                )
+            }
+        },
+        {"__interrupt__": ()},
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+        next=("tools",),
+        config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai1",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
+                    )
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+    )
+
+    # modify ai message
+    last_message = (app_w_interrupt.get_state(config)).values["messages"][-1]
+    last_message.tool_calls[0]["args"]["query"] = "a different query"
+    app_w_interrupt.update_state(
+        config, {"messages": last_message, "something_extra": "hi there"}
+    )
+
+    # message was replaced instead of appended
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai1",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "a different query"},
+                            },
+                        ],
+                    ),
+                    "something_extra": "hi there",
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "messages": _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                )
+            }
+        },
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                )
+            },
+        },
+        {"__interrupt__": ()},
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(
+            PregelTask(AnyStr(), "tools", (PUSH, 0)),
+            PregelTask(AnyStr(), "tools", (PUSH, 1)),
+        ),
+        next=("tools", "tools"),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai2",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another", "idx": 0},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one", "idx": 1},
+                            },
+                        ],
+                    )
+                },
+            },
+            "thread_id": "2",
+        },
+        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "messages": AIMessage(content="answer", id="ai2"),
+            "something_extra": "hi there",
+        },
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        },
+        tasks=(),
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(content="answer", id="ai2"),
+                    "something_extra": "hi there",
+                }
+            },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
