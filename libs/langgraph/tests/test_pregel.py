@@ -58,7 +58,7 @@ from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
-from langgraph.graph.message import MessageGraph, add_messages
+from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
@@ -74,7 +74,7 @@ from langgraph.pregel import (
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import Control, Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
@@ -748,7 +748,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "step": 6, "writes": {"two": 5}},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 6,
+                "writes": {"two": 5},
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config=history[1].config,
         ),
@@ -768,6 +774,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "loop",
                 "step": 5,
                 "writes": {"one": None},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
@@ -788,6 +795,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "input",
                 "step": 4,
                 "writes": {"input": 3},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
@@ -808,6 +816,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "loop",
                 "step": 3,
                 "writes": {"one": None},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
@@ -828,6 +837,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "input",
                 "step": 2,
                 "writes": {"input": 20},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
@@ -843,7 +853,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "step": 1, "writes": {"two": 4}},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 1,
+                "writes": {"two": 4},
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
@@ -863,6 +879,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "loop",
                 "step": 0,
                 "writes": {"one": None},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[7].config,
@@ -883,6 +900,7 @@ def test_invoke_two_processes_in_out_interrupt(
                 "source": "input",
                 "step": -1,
                 "writes": {"input": 2},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -949,6 +967,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 5,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[1].config,
@@ -969,6 +988,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 4,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
@@ -989,6 +1009,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 3,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
@@ -1009,6 +1030,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 2,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
@@ -1029,6 +1051,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "loop",
                 "step": 1,
                 "writes": {"add_one": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
@@ -1044,7 +1067,13 @@ def test_fork_always_re_runs_nodes(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
@@ -1064,6 +1093,7 @@ def test_fork_always_re_runs_nodes(
                 "source": "input",
                 "step": -1,
                 "writes": {"__start__": 1},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -1483,10 +1513,11 @@ def test_pending_writes_resume(
     assert two.calls == 2  # two attempts
 
     # latest checkpoint should be before nodes "one", "two"
+    # but we should have applied the write from "one"
     state = graph.get_state(thread1)
     assert state is not None
-    assert state.values == {"value": 1}
-    assert state.next == ("one", "two")
+    assert state.values == {"value": 3}
+    assert state.next == ("two",)
     assert state.tasks == (
         PregelTask(AnyStr(), "one", (PULL, "one"), result={"value": 2}),
         PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
@@ -1496,7 +1527,13 @@ def test_pending_writes_resume(
         "source": "loop",
         "step": 0,
         "writes": None,
+        "thread_id": "1",
     }
+    # get_state with checkpoint_id should not apply any pending writes
+    state = graph.get_state(state.config)
+    assert state is not None
+    assert state.values == {"value": 1}
+    assert state.next == ("one", "two")
     # should contain pending write of "one"
     checkpoint = checkpointer.get_tuple(thread1)
     assert checkpoint is not None
@@ -1584,6 +1621,7 @@ def test_pending_writes_resume(
             "step": 1,
             "source": "loop",
             "writes": {"one": {"value": 2}, "two": {"value": 3}},
+            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1628,7 +1666,13 @@ def test_pending_writes_resume(
                 "start:two": "__start__",
             },
         },
-        metadata={"parents": {}, "step": 0, "source": "loop", "writes": None},
+        metadata={
+            "parents": {},
+            "step": 0,
+            "source": "loop",
+            "writes": None,
+            "thread_id": "1",
+        },
         parent_config={
             "configurable": {
                 "thread_id": "1",
@@ -1668,6 +1712,7 @@ def test_pending_writes_resume(
             "step": -1,
             "source": "input",
             "writes": {"__start__": {"value": 1}},
+            "thread_id": "1",
         },
         parent_config=None,
         pending_writes=UnsortedSequence(
@@ -1702,6 +1747,603 @@ def test_cond_edge_after_send() -> None:
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
     assert graph.invoke(["0"]) == ["0", "1", "2", "2", "3"]
+
+
+def test_concurrent_emit_sends() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+
+        def __call__(self, state):
+            return (
+                [self.name]
+                if isinstance(state, list)
+                else ["|".join((self.name, str(state)))]
+            )
+
+    def send_for_fun(state):
+        return [Send("2", 1), Send("2", 2), "3.1"]
+
+    def send_for_profit(state):
+        return [Send("2", 3), Send("2", 4)]
+
+    def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node(Node("1"))
+    builder.add_node(Node("1.1"))
+    builder.add_node(Node("2"))
+    builder.add_node(Node("3"))
+    builder.add_node(Node("3.1"))
+    builder.add_edge(START, "1")
+    builder.add_edge(START, "1.1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("1.1", send_for_profit)
+    builder.add_conditional_edges("2", route_to_three)
+    graph = builder.compile()
+    assert graph.invoke(["0"]) == [
+        "0",
+        "1",
+        "1.1",
+        "2|1",
+        "2|2",
+        "2|3",
+        "2|4",
+        "3.1",
+        "3",
+    ]
+
+
+def test_send_sequences() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+
+        def __call__(self, state):
+            update = (
+                [self.name]
+                if isinstance(state, list)  # or isinstance(state, Control)
+                else ["|".join((self.name, str(state)))]
+            )
+            if isinstance(state, Control):
+                state.update_state = update
+                return state
+            else:
+                return update
+
+    def send_for_fun(state):
+        return [
+            Send("2", Control(send=Send("2", 3))),
+            Send("2", Control(send=Send("2", 4))),
+            "3.1",
+        ]
+
+    def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node(Node("1"))
+    builder.add_node(Node("2"))
+    builder.add_node(Node("3"))
+    builder.add_node(Node("3.1"))
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("2", route_to_three)
+    graph = builder.compile()
+    assert graph.invoke(["0"]) == [
+        "0",
+        "1",
+        "2|Control(send=Send(node='2', arg=3))",
+        "2|Control(send=Send(node='2', arg=4))",
+        "3.1",
+        "2|3",
+        "2|4",
+        "3",
+        "3",
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_send_react_interrupt(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    ai_message = AIMessage(
+        "",
+        id="ai1",
+        tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
+    )
+
+    def agent(state):
+        return {"messages": ai_message}
+
+    def route(state):
+        if isinstance(state["messages"][-1], AIMessage):
+            return [
+                Send(call["name"], call) for call in state["messages"][-1].tool_calls
+            ]
+
+    foo_called = 0
+
+    def foo(call: ToolCall):
+        nonlocal foo_called
+        foo_called += 1
+        return {"messages": ToolMessage(str(call["args"]), tool_call_id=call["id"])}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(agent)
+    builder.add_node(foo)
+    builder.add_edge(START, "agent")
+    builder.add_conditional_edges("agent", route)
+    graph = builder.compile()
+
+    assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(
+                content="{'hi': [1, 2, 3]}",
+                tool_call_id=AnyStr(),
+            ),
+        ]
+    }
+    assert foo_called == 1
+
+    # simple interrupt-resume flow
+    foo_called = 0
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+    assert foo_called == 0
+    assert graph.invoke(None, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(
+                content="{'hi': [1, 2, 3]}",
+                tool_call_id=AnyStr(),
+            ),
+        ]
+    }
+    assert foo_called == 1
+
+    # interrupt-update-resume flow
+    foo_called = 0
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    thread1 = {"configurable": {"thread_id": "2"}}
+    assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+    assert foo_called == 0
+
+    # get state should show the pending task
+    state = graph.get_state(thread1)
+    assert state == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="hello"),
+                _AnyIdAIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "foo",
+                            "args": {"hi": [1, 2, 3]},
+                            "id": "",
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+            ]
+        },
+        next=("foo",),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {
+                "agent": {
+                    "messages": _AnyIdAIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "foo",
+                                "args": {"hi": [1, 2, 3]},
+                                "id": "",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                }
+            },
+            "parents": {},
+            "thread_id": "2",
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="foo",
+                path=("__pregel_push", 0),
+                error=None,
+                interrupts=(),
+                state=None,
+                result=None,
+            ),
+        ),
+    )
+
+    # remove the tool call, clearing the pending task
+    graph.update_state(
+        thread1, {"messages": AIMessage("Bye now", id=ai_message.id, tool_calls=[])}
+    )
+
+    # tool call no longer in pending tasks
+    assert graph.get_state(thread1) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="hello"),
+                _AnyIdAIMessage(
+                    content="Bye now",
+                    tool_calls=[],
+                ),
+            ]
+        },
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "step": 2,
+            "source": "update",
+            "writes": {
+                "agent": {
+                    "messages": _AnyIdAIMessage(
+                        content="Bye now",
+                        tool_calls=[],
+                    )
+                }
+            },
+            "parents": {},
+            "thread_id": "2",
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(),
+    )
+
+    # tool call not executed
+    assert graph.invoke(None, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(content="Bye now"),
+        ]
+    }
+    assert foo_called == 0
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_send_react_interrupt_control(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    ai_message = AIMessage(
+        "",
+        id="ai1",
+        tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
+    )
+
+    def agent(state) -> Control[Literal["foo"]]:
+        return Control(
+            update_state={"messages": ai_message},
+            send=[Send(call["name"], call) for call in ai_message.tool_calls],
+        )
+
+    foo_called = 0
+
+    def foo(call: ToolCall):
+        nonlocal foo_called
+        foo_called += 1
+        return {"messages": ToolMessage(str(call["args"]), tool_call_id=call["id"])}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(agent)
+    builder.add_node(foo)
+    builder.add_edge(START, "agent")
+    graph = builder.compile()
+
+    assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(
+                content="{'hi': [1, 2, 3]}",
+                tool_call_id=AnyStr(),
+            ),
+        ]
+    }
+    assert foo_called == 1
+
+    # simple interrupt-resume flow
+    foo_called = 0
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+    assert foo_called == 0
+    assert graph.invoke(None, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(
+                content="{'hi': [1, 2, 3]}",
+                tool_call_id=AnyStr(),
+            ),
+        ]
+    }
+    assert foo_called == 1
+
+    # interrupt-update-resume flow
+    foo_called = 0
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    thread1 = {"configurable": {"thread_id": "2"}}
+    assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+    assert foo_called == 0
+
+    # get state should show the pending task
+    state = graph.get_state(thread1)
+    assert state == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="hello"),
+                _AnyIdAIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "foo",
+                            "args": {"hi": [1, 2, 3]},
+                            "id": "",
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+            ]
+        },
+        next=("foo",),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {
+                "agent": {
+                    "messages": _AnyIdAIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "foo",
+                                "args": {"hi": [1, 2, 3]},
+                                "id": "",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                }
+            },
+            "parents": {},
+            "thread_id": "2",
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="foo",
+                path=("__pregel_push", 0),
+                error=None,
+                interrupts=(),
+                state=None,
+                result=None,
+            ),
+        ),
+    )
+
+    # remove the tool call, clearing the pending task
+    graph.update_state(
+        thread1, {"messages": AIMessage("Bye now", id=ai_message.id, tool_calls=[])}
+    )
+
+    # tool call no longer in pending tasks
+    assert graph.get_state(thread1) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="hello"),
+                _AnyIdAIMessage(
+                    content="Bye now",
+                    tool_calls=[],
+                ),
+            ]
+        },
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "step": 2,
+            "source": "update",
+            "writes": {
+                "agent": {
+                    "messages": _AnyIdAIMessage(
+                        content="Bye now",
+                        tool_calls=[],
+                    )
+                }
+            },
+            "parents": {},
+            "thread_id": "2",
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(),
+    )
+
+    # tool call not executed
+    assert graph.invoke(None, thread1) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(content="Bye now"),
+        ]
+    }
+    assert foo_called == 0
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -2117,7 +2759,9 @@ def test_conditional_graph(
 
     workflow.add_node("agent", agent)
     workflow.add_node(
-        "tools", execute_tools, metadata={"parents": {}, "version": 2, "variant": "b"}
+        "tools",
+        execute_tools,
+        metadata={"parents": {}, "version": 2, "variant": "b"},
     )
 
     workflow.set_entry_point("agent")
@@ -2311,6 +2955,7 @@ def test_conditional_graph(
                     }
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2362,6 +3007,7 @@ def test_conditional_graph(
                     "input": "what is weather in sf",
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2482,6 +3128,7 @@ def test_conditional_graph(
                     ),
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2537,6 +3184,7 @@ def test_conditional_graph(
                     }
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2582,6 +3230,7 @@ def test_conditional_graph(
                     "input": "what is weather in sf",
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2702,6 +3351,7 @@ def test_conditional_graph(
                     ),
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -2757,6 +3407,7 @@ def test_conditional_graph(
                     }
                 }
             },
+            "thread_id": "3",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3230,6 +3881,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3272,6 +3924,7 @@ def test_conditional_state_graph(
                     )
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3348,6 +4001,7 @@ def test_conditional_state_graph(
                     )
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3399,6 +4053,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3440,6 +4095,7 @@ def test_conditional_state_graph(
                     )
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3514,6 +4170,7 @@ def test_conditional_state_graph(
                     )
                 }
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3541,7 +4198,13 @@ def test_conditional_state_graph(
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "thread_id": "3",
+        },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
 
@@ -3580,6 +4243,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "3",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3640,6 +4304,7 @@ def test_conditional_state_graph(
                     ],
                 }
             },
+            "thread_id": "3",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3702,6 +4367,7 @@ def test_conditional_state_graph(
                     ),
                 }
             },
+            "thread_id": "4",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -3762,6 +4428,7 @@ def test_conditional_state_graph(
                     ],
                 }
             },
+            "thread_id": "4",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4103,7 +4770,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_step": 1,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ["start:agent"],
-                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
@@ -4120,7 +4787,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
                 "langgraph_triggers": ["branch:agent:should_continue:tools"],
-                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_path": (PULL, "tools"),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -4162,7 +4829,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_step": 3,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ["tools"],
-                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
@@ -4179,7 +4846,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": ["branch:agent:should_continue:tools"],
-                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_path": (PULL, "tools"),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -4193,7 +4860,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": ["branch:agent:should_continue:tools"],
-                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_path": (PULL, "tools"),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -4205,7 +4872,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_step": 5,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ["tools"],
-                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
@@ -4678,6 +5345,7 @@ def test_state_graph_packets(
                     )
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4731,6 +5399,7 @@ def test_state_graph_packets(
                     "something_extra": "hi there",
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4837,6 +5506,7 @@ def test_state_graph_packets(
                     )
                 },
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -4887,6 +5557,7 @@ def test_state_graph_packets(
                     "something_extra": "hi there",
                 }
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5176,6 +5847,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5222,6 +5894,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5304,6 +5977,7 @@ def test_message_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5344,6 +6018,7 @@ def test_message_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5408,6 +6083,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5454,6 +6130,7 @@ def test_message_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5536,6 +6213,7 @@ def test_message_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5577,6 +6255,7 @@ def test_message_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5618,6 +6297,7 @@ def test_message_graph(
             "source": "update",
             "step": 6,
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5906,6 +6586,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -5952,6 +6633,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6035,6 +6717,7 @@ def test_root_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6076,6 +6759,7 @@ def test_root_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "1",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6140,6 +6824,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6186,6 +6871,7 @@ def test_root_graph(
                     id="ai1",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6269,6 +6955,7 @@ def test_root_graph(
                     id="ai2",
                 )
             },
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6309,6 +6996,7 @@ def test_root_graph(
             "source": "update",
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6350,6 +7038,7 @@ def test_root_graph(
             "source": "update",
             "step": 6,
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6422,6 +7111,7 @@ def test_root_graph(
             "source": "update",
             "step": 6,
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -6458,7 +7148,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000091"
+                content="an extra message", id="00000000-0000-4000-8000-000000000092"
             ),
             HumanMessage(content="what is weather in la"),
         ],
@@ -6751,12 +7441,14 @@ def test_dynamic_interrupt(
             "source": "loop",
             "step": 0,
             "writes": None,
+            "thread_id": "1",
         },
         {
             "parents": {},
             "source": "input",
             "step": -1,
             "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+            "thread_id": "1",
         },
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
@@ -6772,7 +7464,13 @@ def test_dynamic_interrupt(
         ),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "thread_id": "1",
+        },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
 
@@ -6849,12 +7547,16 @@ def test_start_branch_then(
             "source": "loop",
             "step": 0,
             "writes": None,
+            "assistant_id": "a",
+            "thread_id": "1",
         },
         {
             "parents": {},
             "source": "input",
             "step": -1,
             "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+            "assistant_id": "a",
+            "thread_id": "1",
         },
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
@@ -6863,7 +7565,14 @@ def test_start_branch_then(
         next=("tool_two_slow",),
         config=tool_two.checkpointer.get_tuple(thread1).config,
         created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "1",
+        },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
     # resume, for same result as above
@@ -6882,6 +7591,8 @@ def test_start_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"tool_two_slow": {"my_key": " slow"}},
+            "assistant_id": "a",
+            "thread_id": "1",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -6898,7 +7609,14 @@ def test_start_branch_then(
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread2).config,
         created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "2",
+        },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
     # resume, for same result as above
@@ -6917,6 +7635,8 @@ def test_start_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"tool_two_fast": {"my_key": " fast"}},
+            "assistant_id": "a",
+            "thread_id": "2",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -6933,7 +7653,14 @@ def test_start_branch_then(
         next=("tool_two_fast",),
         config=tool_two.checkpointer.get_tuple(thread3).config,
         created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
-        metadata={"parents": {}, "source": "loop", "step": 0, "writes": None},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "b",
+            "thread_id": "3",
+        },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
     # update state
@@ -6949,6 +7676,8 @@ def test_start_branch_then(
             "source": "update",
             "step": 1,
             "writes": {START: {"my_key": "key"}},
+            "assistant_id": "b",
+            "thread_id": "3",
         },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
@@ -6968,6 +7697,8 @@ def test_start_branch_then(
             "source": "loop",
             "step": 2,
             "writes": {"tool_two_fast": {"my_key": " fast"}},
+            "assistant_id": "b",
+            "thread_id": "3",
         },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
@@ -7041,6 +7772,7 @@ def test_branch_then(
                     "source": "input",
                     "step": -1,
                     "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                    "thread_id": "10",
                 },
                 "parent_config": None,
                 "next": ["__start__"],
@@ -7079,6 +7811,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 0,
                     "writes": None,
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7145,6 +7878,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 1,
                     "writes": {"prepare": {"my_key": " prepared"}},
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7216,6 +7950,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 2,
                     "writes": {"tool_two_slow": {"my_key": " slow"}},
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7282,6 +8017,7 @@ def test_branch_then(
                     "source": "loop",
                     "step": 3,
                     "writes": {"finish": {"my_key": " finished"}},
+                    "thread_id": "10",
                 },
                 "parent_config": {
                     "tags": [],
@@ -7325,6 +8061,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "1",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7344,6 +8081,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "1",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7365,6 +8103,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "2",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7384,6 +8123,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "2",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7413,6 +8153,7 @@ def test_branch_then(
             "source": "loop",
             "step": 2,
             "writes": {"tool_two_slow": {"my_key": " slow"}},
+            "thread_id": "11",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7433,6 +8174,7 @@ def test_branch_then(
             "source": "update",
             "step": 3,
             "writes": {"tool_two_slow": {"my_key": "er"}},
+            "thread_id": "11",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7462,6 +8204,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "21",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7481,6 +8224,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "21",
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
@@ -7502,6 +8246,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "22",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7521,6 +8266,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "22",
         },
         parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
     )
@@ -7540,6 +8286,7 @@ def test_branch_then(
             "source": "update",
             "step": 0,
             "writes": {START: {"my_key": "key", "market": "DE"}},
+            "thread_id": "23",
         },
         parent_config=None,
     )
@@ -7560,6 +8307,7 @@ def test_branch_then(
             "source": "loop",
             "step": 1,
             "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "23",
         },
         parent_config=uconfig,
     )
@@ -7579,6 +8327,7 @@ def test_branch_then(
             "source": "loop",
             "step": 3,
             "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "23",
         },
         parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
     )
@@ -7706,6 +8455,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "source": "update",
             "step": 4,
             "writes": {"retriever_one": {"docs": ["doc5"]}},
+            "thread_id": "2",
         },
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
@@ -8689,14 +9439,14 @@ def test_stream_subgraphs_during_execution(
         ),
         (FloatBetween(0.2, 0.3), ((), {"outer_1": {"my_key": " and parallel"}})),
         (
-            FloatBetween(0.5, 0.6),
+            FloatBetween(0.5, 0.8),
             (
                 (AnyStr("inner:"),),
                 {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
             ),
         ),
-        (FloatBetween(0.5, 0.6), ((), {"inner": {"my_key": "got here and there"}})),
-        (FloatBetween(0.5, 0.6), ((), {"outer_2": {"my_key": " and back again"}})),
+        (FloatBetween(0.5, 0.8), ((), {"inner": {"my_key": "got here and there"}})),
+        (FloatBetween(0.5, 0.8), ((), {"outer_2": {"my_key": " and back again"}})),
     ]
 
 
@@ -9032,6 +9782,7 @@ def test_nested_graph_state(
             "source": "loop",
             "writes": {"outer_1": {"my_key": "hi my value"}},
             "step": 1,
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -9085,6 +9836,13 @@ def test_nested_graph_state(
                             }
                         },
                         "step": 1,
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("inner:"),
+                        "langgraph_node": "inner",
+                        "langgraph_path": [PULL, "inner"],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": ["outer_1"],
+                        "langgraph_checkpoint_ns": AnyStr("inner:"),
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -9113,6 +9871,7 @@ def test_nested_graph_state(
             "source": "loop",
             "writes": {"outer_1": {"my_key": "hi my value"}},
             "step": 1,
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -9154,6 +9913,7 @@ def test_nested_graph_state(
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9182,7 +9942,13 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config={
                 "configurable": {
@@ -9215,6 +9981,7 @@ def test_nested_graph_state(
                 "source": "input",
                 "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -9246,6 +10013,13 @@ def test_nested_graph_state(
                 },
                 "step": 1,
                 "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("inner:"),
+                "langgraph_node": "inner",
+                "langgraph_path": [PULL, "inner"],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["outer_1"],
+                "langgraph_checkpoint_ns": AnyStr("inner:"),
             },
             created_at=AnyStr(),
             parent_config={
@@ -9278,6 +10052,13 @@ def test_nested_graph_state(
                 "writes": None,
                 "step": 0,
                 "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("inner:"),
+                "langgraph_node": "inner",
+                "langgraph_path": [PULL, "inner"],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["outer_1"],
+                "langgraph_checkpoint_ns": AnyStr("inner:"),
             },
             created_at=AnyStr(),
             parent_config={
@@ -9320,6 +10101,13 @@ def test_nested_graph_state(
                 "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("inner:"),
+                "langgraph_node": "inner",
+                "langgraph_path": [PULL, "inner"],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["outer_1"],
+                "langgraph_checkpoint_ns": AnyStr("inner:"),
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -9355,6 +10143,7 @@ def test_nested_graph_state(
                 "outer_2": {"my_key": "hi my value here and there and back again"}
             },
             "step": 3,
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -9386,6 +10175,7 @@ def test_nested_graph_state(
                     "outer_2": {"my_key": "hi my value here and there and back again"}
                 },
                 "step": 3,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9419,6 +10209,7 @@ def test_nested_graph_state(
                 "source": "loop",
                 "writes": {"inner": {"my_key": "hi my value here and there"}},
                 "step": 2,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9455,6 +10246,7 @@ def test_nested_graph_state(
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9483,7 +10275,13 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config={
                 "configurable": {
@@ -9516,6 +10314,7 @@ def test_nested_graph_state(
                 "source": "input",
                 "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -9622,6 +10421,7 @@ def test_doubly_nested_graph_state(
             "source": "loop",
             "writes": {"parent_1": {"my_key": "hi my value"}},
             "step": 1,
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -9663,6 +10463,7 @@ def test_doubly_nested_graph_state(
                 "source": "loop",
                 "writes": None,
                 "step": 0,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9709,6 +10510,13 @@ def test_doubly_nested_graph_state(
             "source": "loop",
             "writes": {"grandchild_1": {"my_key": "hi my value here"}},
             "step": 1,
+            "thread_id": "1",
+            "checkpoint_ns": AnyStr("child:"),
+            "langgraph_checkpoint_ns": AnyStr("child:"),
+            "langgraph_node": "child_1",
+            "langgraph_path": [PULL, AnyStr("child_1")],
+            "langgraph_step": 1,
+            "langgraph_triggers": [AnyStr("start:child_1")],
         },
         created_at=AnyStr(),
         parent_config={
@@ -9779,6 +10587,16 @@ def test_doubly_nested_graph_state(
                                         "grandchild_1": {"my_key": "hi my value here"}
                                     },
                                     "step": 1,
+                                    "thread_id": "1",
+                                    "checkpoint_ns": AnyStr("child:"),
+                                    "langgraph_checkpoint_ns": AnyStr("child:"),
+                                    "langgraph_node": "child_1",
+                                    "langgraph_path": [
+                                        PULL,
+                                        AnyStr("child_1"),
+                                    ],
+                                    "langgraph_step": 1,
+                                    "langgraph_triggers": [AnyStr("start:child_1")],
                                 },
                                 created_at=AnyStr(),
                                 parent_config={
@@ -9816,6 +10634,13 @@ def test_doubly_nested_graph_state(
                         "source": "loop",
                         "writes": None,
                         "step": 0,
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("child:"),
+                        "langgraph_node": "child",
+                        "langgraph_path": [PULL, AnyStr("child")],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": [AnyStr("parent_1")],
+                        "langgraph_checkpoint_ns": AnyStr("child:"),
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -9844,6 +10669,7 @@ def test_doubly_nested_graph_state(
             "source": "loop",
             "writes": {"parent_1": {"my_key": "hi my value"}},
             "step": 1,
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -9854,7 +10680,7 @@ def test_doubly_nested_graph_state(
             }
         },
     )
-    # resume
+    # # resume
     assert [c for c in app.stream(None, config, subgraphs=True)] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
@@ -9886,6 +10712,7 @@ def test_doubly_nested_graph_state(
                     "parent_2": {"my_key": "hi my value here and there and back again"}
                 },
                 "step": 3,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9918,6 +10745,7 @@ def test_doubly_nested_graph_state(
                     "parent_2": {"my_key": "hi my value here and there and back again"}
                 },
                 "step": 3,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9943,6 +10771,7 @@ def test_doubly_nested_graph_state(
                 "writes": {"child": {"my_key": "hi my value here and there"}},
                 "step": 2,
                 "parents": {},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -9990,6 +10819,7 @@ def test_doubly_nested_graph_state(
                 "source": "loop",
                 "writes": {"parent_1": {"my_key": "hi my value"}},
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -10010,7 +10840,13 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "writes": None, "step": 0, "parents": {}},
+            metadata={
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "parents": {},
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config={
                 "configurable": {
@@ -10043,6 +10879,7 @@ def test_doubly_nested_graph_state(
                 "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
                 "parents": {},
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -10077,6 +10914,13 @@ def test_doubly_nested_graph_state(
                 "writes": {"child_1": {"my_key": "hi my value here and there"}},
                 "step": 1,
                 "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child",
+                "langgraph_path": [PULL, AnyStr("child")],
+                "langgraph_step": 2,
+                "langgraph_triggers": [AnyStr("parent_1")],
+                "langgraph_checkpoint_ns": AnyStr("child:"),
             },
             created_at=AnyStr(),
             parent_config={
@@ -10109,6 +10953,13 @@ def test_doubly_nested_graph_state(
                 "writes": None,
                 "step": 0,
                 "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child",
+                "langgraph_path": [PULL, AnyStr("child")],
+                "langgraph_step": 2,
+                "langgraph_triggers": [AnyStr("parent_1")],
+                "langgraph_checkpoint_ns": AnyStr("child:"),
             },
             created_at=AnyStr(),
             parent_config={
@@ -10154,6 +11005,13 @@ def test_doubly_nested_graph_state(
                 "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child",
+                "langgraph_path": [PULL, AnyStr("child")],
+                "langgraph_step": 2,
+                "langgraph_triggers": [AnyStr("parent_1")],
+                "langgraph_checkpoint_ns": AnyStr("child:"),
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -10197,6 +11055,16 @@ def test_doubly_nested_graph_state(
                         AnyStr("child:"): AnyStr(),
                     }
                 ),
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [AnyStr("start:child_1")],
             },
             created_at=AnyStr(),
             parent_config={
@@ -10242,6 +11110,16 @@ def test_doubly_nested_graph_state(
                         AnyStr("child:"): AnyStr(),
                     }
                 ),
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [AnyStr("start:child_1")],
             },
             created_at=AnyStr(),
             parent_config={
@@ -10294,6 +11172,16 @@ def test_doubly_nested_graph_state(
                         AnyStr("child:"): AnyStr(),
                     }
                 ),
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [AnyStr("start:child_1")],
             },
             created_at=AnyStr(),
             parent_config={
@@ -10346,6 +11234,16 @@ def test_doubly_nested_graph_state(
                         AnyStr("child:"): AnyStr(),
                     }
                 ),
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [AnyStr("start:child_1")],
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -10460,7 +11358,13 @@ def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "writes": None,
+            "step": 0,
+            "thread_id": "1",
+        },
         created_at=AnyStr(),
         parent_config={
             "configurable": {
@@ -10492,6 +11396,13 @@ def test_send_to_nested_graphs(
             "source": "loop",
             "writes": {"edit": None},
             "parents": {"": AnyStr()},
+            "thread_id": "1",
+            "checkpoint_ns": AnyStr("generate_joke:"),
+            "langgraph_checkpoint_ns": AnyStr("generate_joke:"),
+            "langgraph_node": "generate_joke",
+            "langgraph_path": [PUSH, 0],
+            "langgraph_step": 1,
+            "langgraph_triggers": [PUSH],
         },
         created_at=AnyStr(),
         parent_config={
@@ -10530,6 +11441,13 @@ def test_send_to_nested_graphs(
             "source": "loop",
             "writes": {"edit": None},
             "parents": {"": AnyStr()},
+            "thread_id": "1",
+            "checkpoint_ns": AnyStr("generate_joke:"),
+            "langgraph_checkpoint_ns": AnyStr("generate_joke:"),
+            "langgraph_node": "generate_joke",
+            "langgraph_path": [PUSH, 1],
+            "langgraph_step": 1,
+            "langgraph_triggers": [PUSH],
         },
         created_at=AnyStr(),
         parent_config={
@@ -10583,6 +11501,7 @@ def test_send_to_nested_graphs(
                 ]
             },
             "step": 1,
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -10624,6 +11543,7 @@ def test_send_to_nested_graphs(
                     ]
                 },
                 "step": 1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -10670,7 +11590,13 @@ def test_send_to_nested_graphs(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "loop", "writes": None, "step": 0},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "thread_id": "1",
+            },
             created_at=AnyStr(),
             parent_config={
                 "configurable": {
@@ -10703,6 +11629,7 @@ def test_send_to_nested_graphs(
                 "source": "input",
                 "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
                 "step": -1,
+                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -10864,6 +11791,7 @@ def test_weather_subgraph(
             "writes": {"router_node": {"route": "weather"}},
             "step": 1,
             "parents": {},
+            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config={
@@ -10951,6 +11879,7 @@ def test_weather_subgraph(
             "writes": {"router_node": {"route": "weather"}},
             "step": 1,
             "parents": {},
+            "thread_id": "14",
         },
         created_at=AnyStr(),
         parent_config={
@@ -10991,6 +11920,15 @@ def test_weather_subgraph(
                         "writes": {"model_node": {"city": "San Francisco"}},
                         "step": 1,
                         "parents": {"": AnyStr()},
+                        "thread_id": "14",
+                        "checkpoint_ns": AnyStr("weather_graph:"),
+                        "langgraph_node": "weather_graph",
+                        "langgraph_path": [PULL, "weather_graph"],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": [
+                            "branch:router_node:route_after_prediction:weather_graph"
+                        ],
+                        "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
                     parent_config={
@@ -11041,6 +11979,7 @@ def test_weather_subgraph(
             "writes": {"router_node": {"route": "weather"}},
             "step": 1,
             "parents": {},
+            "thread_id": "14",
         },
         created_at=AnyStr(),
         parent_config={
@@ -11078,14 +12017,24 @@ def test_weather_subgraph(
                         }
                     },
                     metadata={
-                        "source": "update",
                         "step": 2,
+                        "source": "update",
                         "writes": {
                             "weather_node": {
                                 "messages": [{"role": "assistant", "content": "rainy"}]
                             }
                         },
                         "parents": {"": AnyStr()},
+                        "thread_id": "14",
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": AnyStr("weather_graph:"),
+                        "langgraph_node": "weather_graph",
+                        "langgraph_path": [PULL, "weather_graph"],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": [
+                            "branch:router_node:route_after_prediction:weather_graph"
+                        ],
+                        "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
                     parent_config={
