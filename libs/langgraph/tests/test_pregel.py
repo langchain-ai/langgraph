@@ -1787,11 +1787,11 @@ def test_concurrent_emit_sends() -> None:
         "0",
         "1",
         "1.1",
+        "3.1",
         "2|1",
         "2|2",
         "2|3",
         "2|4",
-        "3.1",
         "3",
     ]
 
@@ -1836,12 +1836,12 @@ def test_send_sequences() -> None:
     assert graph.invoke(["0"]) == [
         "0",
         "1",
+        "3.1",
         "2|Control(send=Send(node='2', arg=3))",
         "2|Control(send=Send(node='2', arg=4))",
-        "3.1",
+        "3",
         "2|3",
         "2|4",
-        "3",
         "3",
     ]
 

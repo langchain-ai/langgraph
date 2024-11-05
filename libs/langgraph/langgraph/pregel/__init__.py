@@ -941,7 +941,7 @@ class Pregel(PregelProtocol):
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             writes: deque[tuple[str, Any]] = deque()
-            task = PregelTaskWrites(as_node, writes, [INTERRUPT])
+            task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
             task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
             run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
             # execute task
@@ -1121,7 +1121,7 @@ class Pregel(PregelProtocol):
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             writes: deque[tuple[str, Any]] = deque()
-            task = PregelTaskWrites(as_node, writes, [INTERRUPT])
+            task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
             task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
             run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
             # execute task
