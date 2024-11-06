@@ -11,6 +11,7 @@ export type {
   Run,
   Thread,
   ThreadState,
+  ThreadStatus,
   Cron,
   Checkpoint,
 } from "./schema.js";
