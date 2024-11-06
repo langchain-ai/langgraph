@@ -289,17 +289,41 @@ ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
     faux_path = f"/deps/{config_path.parent.name}"
 
+    def test_file(file_name):
+        full_path = config_path.parent / file_name
+        try:
+            return full_path.is_file()
+        except OSError:
+            return False
+
+    npm, yarn, pnpm = [
+        test_file("package-lock.json"),
+        test_file("yarn.lock"),
+        test_file("pnpm-lock.yaml"),
+    ]
+
+    if yarn:
+        install_cmd = "yarn install --frozen-lockfile"
+    elif pnpm:
+        install_cmd = "pnpm i --frozen-lockfile"
+    elif npm:
+        install_cmd = "npm ci"
+    else:
+        install_cmd = "npm i"
+
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
 
 ADD . {faux_path}
 
-RUN cd {faux_path} && yarn install --frozen-lockfile
+RUN cd {faux_path} && {install_cmd}
 
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
-WORKDIR {faux_path}"""
+WORKDIR {faux_path}
+
+RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
 
 def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
