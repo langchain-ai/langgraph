@@ -381,20 +381,7 @@ class PregelLoop(LoopProtocol):
 
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
-            for tid, k, v in self.checkpoint_pending_writes:
-                if k in (ERROR, INTERRUPT):
-                    continue
-                if task := self.tasks.get(tid):
-                    if k == SCHEDULED:
-                        if v == max(
-                            self.checkpoint["versions_seen"]
-                            .get(INTERRUPT, {})
-                            .values(),
-                            default=None,
-                        ):
-                            self.tasks[tid] = task._replace(scheduled=True)
-                    else:
-                        task.writes.append((k, v))
+            self._match_writes(self.tasks)
         elif not self.skip_done_tasks:
             # "not skip_done_tasks" only applies to first tick after resuming
             self.skip_done_tasks = True
@@ -428,6 +415,20 @@ class PregelLoop(LoopProtocol):
         return True
 
     # private
+
+    def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
+        for tid, k, v in self.checkpoint_pending_writes:
+            if k in (ERROR, INTERRUPT):
+                continue
+            if task := tasks.get(tid):
+                if k == SCHEDULED:
+                    if v == max(
+                        self.checkpoint["versions_seen"].get(INTERRUPT, {}).values(),
+                        default=None,
+                    ):
+                        self.tasks[tid] = task._replace(scheduled=True)
+                else:
+                    task.writes.append((k, v))
 
     def _first(self, *, input_keys: Union[str, Sequence[str]]) -> None:
         # resuming from previous checkpoint requires
