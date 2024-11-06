@@ -13465,3 +13465,22 @@ def test_debug_nested_subgraphs():
                 assert stream_task["interrupts"] == history_task.interrupts
                 assert stream_task.get("error") == history_task.error
                 assert stream_task.get("state") == history_task.state
+
+
+def test_runnable_passthrough_node_graph() -> None:
+    class State(TypedDict):
+        changeme: str
+
+    async def dummy(state):
+        return state
+
+    agent = dummy | RunnablePassthrough.assign(prediction=RunnableLambda(lambda x: x))
+
+    graph_builder = StateGraph(State)
+
+    graph_builder.add_node("agent", agent)
+    graph_builder.add_edge(START, "agent")
+
+    graph = graph_builder.compile()
+
+    assert graph.get_graph(xray=True).to_json() == graph.get_graph(xray=False).to_json()
