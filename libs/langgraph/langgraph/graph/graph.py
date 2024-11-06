@@ -573,18 +573,12 @@ class CompiledGraph(Pregel):
                 metadata["__interrupt"] = "before"
             elif key in self.interrupt_after_nodes:
                 metadata["__interrupt"] = "after"
-            if xray:
-                subgraph = (
-                    subgraphs[key].get_graph(
-                        config=config,
-                        xray=xray - 1
-                        if isinstance(xray, int)
-                        and not isinstance(xray, bool)
-                        and xray > 0
-                        else xray,
-                    )
-                    if key in subgraphs
-                    else node.get_graph(config=config)
+            if xray and key in subgraphs:
+                subgraph = subgraphs[key].get_graph(
+                    config=config,
+                    xray=xray - 1
+                    if isinstance(xray, int) and not isinstance(xray, bool) and xray > 0
+                    else xray,
                 )
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
