@@ -15,6 +15,7 @@ import {
   SearchItemsResponse,
   ListNamespaceResponse,
   Item,
+  ThreadStatus,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import {
@@ -515,6 +516,11 @@ export class ThreadsClient extends BaseClient {
      * Offset to start from.
      */
     offset?: number;
+    /**
+     * Thread status to filter on.
+     * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
+     */
+    status?: ThreadStatus;
   }): Promise<Thread[]> {
     return this.fetch<Thread[]>("/threads/search", {
       method: "POST",
@@ -522,6 +528,7 @@ export class ThreadsClient extends BaseClient {
         metadata: query?.metadata ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        status: query?.status,
       },
     });
   }
