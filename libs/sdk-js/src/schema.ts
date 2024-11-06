@@ -10,7 +10,7 @@ type RunStatus =
   | "timeout"
   | "interrupted";
 
-type ThreadStatus = "idle" | "busy" | "interrupted" | "error";
+export type ThreadStatus = "idle" | "busy" | "interrupted" | "error";
 
 type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 
