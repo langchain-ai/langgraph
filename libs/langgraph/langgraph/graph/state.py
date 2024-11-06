@@ -429,7 +429,7 @@ class StateGraph(Graph):
         nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
         from_nodes: Optional[list[str]] = None,
     ) -> Self:
-        """Add a sequence of steps that will be executed in the provided order.
+        """Add a sequence of nodes that will be executed in the provided order.
 
         Args:
             nodes: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
