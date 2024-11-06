@@ -395,10 +395,6 @@ class PregelLoop(LoopProtocol):
                             self.tasks[tid] = task._replace(scheduled=True)
                     else:
                         task.writes.append((k, v))
-            # print output for any tasks we applied previous writes to
-            for task in self.tasks.values():
-                if task.writes:
-                    self._output_writes(task.id, task.writes, cached=True)
         elif not self.skip_done_tasks:
             # "not skip_done_tasks" only applies to first tick after resuming
             self.skip_done_tasks = True
@@ -423,6 +419,11 @@ class PregelLoop(LoopProtocol):
         # debug flag
         if self.debug:
             print_step_tasks(self.step, list(self.tasks.values()))
+
+        # print output for any tasks we applied previous writes to
+        for task in self.tasks.values():
+            if task.writes:
+                self._output_writes(task.id, task.writes, cached=True)
 
         return True
 
