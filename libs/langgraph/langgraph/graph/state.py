@@ -427,7 +427,6 @@ class StateGraph(Graph):
     def add_sequence(
         self,
         nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
-        from_nodes: Optional[list[str]] = None,
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 
@@ -448,9 +447,6 @@ class StateGraph(Graph):
         if len(nodes) < 1:
             raise ValueError("Sequence requires at least one node.")
 
-        if from_nodes is None:
-            from_nodes = [START]
-
         previous_name: Optional[str] = None
         for node in nodes:
             if isinstance(node, tuple) and len(node) == 2:
@@ -465,10 +461,7 @@ class StateGraph(Graph):
                 )
 
             self.add_node(name, node)
-            if previous_name is None:
-                for from_node in from_nodes:
-                    self.add_edge(from_node, name)
-            else:
+            if previous_name is not None:
                 self.add_edge(previous_name, name)
 
             previous_name = name

@@ -13492,6 +13492,7 @@ def test_add_sequence():
     # test unnamed steps
     builder = StateGraph(State)
     builder.add_sequence([step1, step2])
+    builder.add_edge(START, "step1")
     graph = builder.compile()
     result = graph.invoke({"foo": []})
     assert result == {"foo": ["step1", "step2"], "bar": "baz"}
@@ -13504,6 +13505,7 @@ def test_add_sequence():
     # test named steps
     builder_named_steps = StateGraph(State)
     builder_named_steps.add_sequence([("meow1", step1), ("meow2", step2)])
+    builder_named_steps.add_edge(START, "meow1")
     graph_named_steps = builder_named_steps.compile()
     result = graph_named_steps.invoke({"foo": []})
     stream_chunks = list(graph_named_steps.stream({"foo": []}))
@@ -13520,6 +13522,7 @@ def test_add_sequence():
             ("meow2", lambda state: {"bar": state["foo"][0] + "bar"}),
         ],
     )
+    builder_named_steps.add_edge(START, "meow1")
     graph_named_steps = builder_named_steps.compile()
     result = graph_named_steps.invoke({"foo": []})
     stream_chunks = list(graph_named_steps.stream({"foo": []}))
@@ -13540,7 +13543,9 @@ def test_add_sequence():
 
     builder_two_sequences = StateGraph(State)
     builder_two_sequences.add_sequence([a])
-    builder_two_sequences.add_sequence([b], from_nodes=["a"])
+    builder_two_sequences.add_sequence([b])
+    builder_two_sequences.add_edge(START, "a")
+    builder_two_sequences.add_edge("a", "b")
     graph_two_sequences = builder_two_sequences.compile()
 
     result = graph_two_sequences.invoke({"foo": []})
@@ -13563,22 +13568,30 @@ def test_add_sequence():
     def e(state: State):
         return {"foo": ["e"]}
 
+    def foo(state: State):
+        if state["foo"][0] == "a":
+            return "d"
+        else:
+            return "c"
+
     builder_complex = StateGraph(State)
     builder_complex.add_sequence([a, b])
+    builder_complex.add_conditional_edges("b", foo)
     builder_complex.add_node(c)
-    builder_complex.add_sequence([d, e], from_nodes=["c"])
-    builder_complex.add_edge("b", "c")
-    builder_complex.add_edge("e", END)
+    builder_complex.add_sequence([d, e])
+    builder_complex.add_edge(START, "a")
     graph_complex = builder_complex.compile()
 
     result = graph_complex.invoke({"foo": []})
-    assert result == {"foo": ["a", "b", "c", "d", "e"]}
+    assert result == {"foo": ["a", "b", "d", "e"]}
+
+    result = graph_complex.invoke({"foo": ["start"]})
+    assert result == {"foo": ["start", "a", "b", "c"]}
 
     stream_chunks = list(graph_complex.stream({"foo": []}))
     assert stream_chunks == [
         {"a": {"foo": ["a"]}},
         {"b": {"foo": ["b"]}},
-        {"c": {"foo": ["c"]}},
         {"d": {"foo": ["d"]}},
         {"e": {"foo": ["e"]}},
     ]
