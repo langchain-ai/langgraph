@@ -86,19 +86,19 @@ To create an assistant using the studio do the following steps:
 
 1. Click on the "Create New Assistant" button:
 
-![click create](./img/click_create_assistant.png)
+    ![click create](./img/click_create_assistant.png)
 
-2. Use the create assistant pane to enter info for the assistant you wish to create, and then click create:
+1. Use the create assistant pane to enter info for the assistant you wish to create, and then click create:
 
-![create](./img/create_assistant.png)
+    ![create](./img/create_assistant.png)
 
-3. See that your assistant was created and is displayed in the Studio
+1. See that your assistant was created and is displayed in the Studio
 
-![view create](./img/create_assistant_view.png)
+    ![view create](./img/create_assistant_view.png)
 
-4. Click on the edit button next to the selected assistant to manage your created assistant:
+1. Click on the edit button next to the selected assistant to manage your created assistant:
 
-![create edit](./img/edit_created_assistant.png)
+    ![create edit](./img/edit_created_assistant.png)
 
 ## Create a new version for your assistant
 
@@ -131,15 +131,15 @@ Let's now say we wanted to add a system prompt to our assistant. We can do this 
 
 1. First, click on the edit button next to the `openai_assistant`. Then, add a system prompt and click "Save New Version":
 
-![create new version](./img/create_new_version.png)
+    ![create new version](./img/create_new_version.png)
 
-2. Then you can see it is selected in the assistant dropdown:
+1. Then you can see it is selected in the assistant dropdown:
 
-![see version dropdown](./img/see_new_version.png)
+    ![see version dropdown](./img/see_new_version.png)
 
-3. And you can see all the version history in the edit pane for the assistant:
+1. And you can see all the version history in the edit pane for the assistant:
 
-![see versions](./img/see_version_history.png)
+    ![see versions](./img/see_version_history.png)
 
 ## Point your assistant to a different version
 
