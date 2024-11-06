@@ -840,65 +840,16 @@
         "data": "__start__"
       },
       {
-        "id": 1,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 3,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "language_models",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 6,
+        "id": "agent",
         "type": "runnable",
         "data": {
           "id": [
             "langchain",
             "schema",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableAssign"
           ],
-          "name": "Passthrough"
+          "name": "agent"
         }
       },
       {
@@ -927,45 +878,21 @@
     ],
     "edges": [
       {
-        "source": 3,
-        "target": 4
-      },
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 1,
-        "target": 3
-      },
-      {
-        "source": 5,
-        "target": 2
-      },
-      {
-        "source": 1,
-        "target": 6
-      },
-      {
-        "source": 6,
-        "target": 2
-      },
-      {
         "source": "__start__",
-        "target": 1
+        "target": "agent"
       },
       {
         "source": "tools",
-        "target": 1
+        "target": "agent"
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -977,16 +904,10 @@
 # name: test_conditional_graph[duckdb].4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> agent_parser;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	agent_parser --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
-  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1194,65 +1115,16 @@
         "data": "__start__"
       },
       {
-        "id": 1,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 3,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "language_models",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 6,
+        "id": "agent",
         "type": "runnable",
         "data": {
           "id": [
             "langchain",
             "schema",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableAssign"
           ],
-          "name": "Passthrough"
+          "name": "agent"
         }
       },
       {
@@ -1281,45 +1153,21 @@
     ],
     "edges": [
       {
-        "source": 3,
-        "target": 4
-      },
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 1,
-        "target": 3
-      },
-      {
-        "source": 5,
-        "target": 2
-      },
-      {
-        "source": 1,
-        "target": 6
-      },
-      {
-        "source": 6,
-        "target": 2
-      },
-      {
         "source": "__start__",
-        "target": 1
+        "target": "agent"
       },
       {
         "source": "tools",
-        "target": 1
+        "target": "agent"
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -1331,16 +1179,10 @@
 # name: test_conditional_graph[memory].4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> agent_parser;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	agent_parser --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
-  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1548,65 +1390,16 @@
         "data": "__start__"
       },
       {
-        "id": 1,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 3,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "language_models",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 6,
+        "id": "agent",
         "type": "runnable",
         "data": {
           "id": [
             "langchain",
             "schema",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableAssign"
           ],
-          "name": "Passthrough"
+          "name": "agent"
         }
       },
       {
@@ -1635,45 +1428,21 @@
     ],
     "edges": [
       {
-        "source": 3,
-        "target": 4
-      },
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 1,
-        "target": 3
-      },
-      {
-        "source": 5,
-        "target": 2
-      },
-      {
-        "source": 1,
-        "target": 6
-      },
-      {
-        "source": 6,
-        "target": 2
-      },
-      {
         "source": "__start__",
-        "target": 1
+        "target": "agent"
       },
       {
         "source": "tools",
-        "target": 1
+        "target": "agent"
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -1685,16 +1454,10 @@
 # name: test_conditional_graph[postgres].4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> agent_parser;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	agent_parser --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
-  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -1902,65 +1665,16 @@
         "data": "__start__"
       },
       {
-        "id": 1,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 3,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "language_models",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 6,
+        "id": "agent",
         "type": "runnable",
         "data": {
           "id": [
             "langchain",
             "schema",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableAssign"
           ],
-          "name": "Passthrough"
+          "name": "agent"
         }
       },
       {
@@ -1989,45 +1703,21 @@
     ],
     "edges": [
       {
-        "source": 3,
-        "target": 4
-      },
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 1,
-        "target": 3
-      },
-      {
-        "source": 5,
-        "target": 2
-      },
-      {
-        "source": 1,
-        "target": 6
-      },
-      {
-        "source": 6,
-        "target": 2
-      },
-      {
         "source": "__start__",
-        "target": 1
+        "target": "agent"
       },
       {
         "source": "tools",
-        "target": 1
+        "target": "agent"
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -2039,16 +1729,10 @@
 # name: test_conditional_graph[postgres_pipe].4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> agent_parser;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	agent_parser --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
-  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2256,65 +1940,16 @@
         "data": "__start__"
       },
       {
-        "id": 1,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 3,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "language_models",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 6,
+        "id": "agent",
         "type": "runnable",
         "data": {
           "id": [
             "langchain",
             "schema",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableAssign"
           ],
-          "name": "Passthrough"
+          "name": "agent"
         }
       },
       {
@@ -2343,45 +1978,21 @@
     ],
     "edges": [
       {
-        "source": 3,
-        "target": 4
-      },
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 1,
-        "target": 3
-      },
-      {
-        "source": 5,
-        "target": 2
-      },
-      {
-        "source": 1,
-        "target": 6
-      },
-      {
-        "source": 6,
-        "target": 2
-      },
-      {
         "source": "__start__",
-        "target": 1
+        "target": "agent"
       },
       {
         "source": "tools",
-        "target": 1
+        "target": "agent"
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -2393,16 +2004,10 @@
 # name: test_conditional_graph[postgres_pool].4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> agent_parser;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	agent_parser --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
-  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
@@ -2610,65 +2215,16 @@
         "data": "__start__"
       },
       {
-        "id": 1,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 3,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "language_models",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 6,
+        "id": "agent",
         "type": "runnable",
         "data": {
           "id": [
             "langchain",
             "schema",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableAssign"
           ],
-          "name": "Passthrough"
+          "name": "agent"
         }
       },
       {
@@ -2697,45 +2253,21 @@
     ],
     "edges": [
       {
-        "source": 3,
-        "target": 4
-      },
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 1,
-        "target": 3
-      },
-      {
-        "source": 5,
-        "target": 2
-      },
-      {
-        "source": 1,
-        "target": 6
-      },
-      {
-        "source": 6,
-        "target": 2
-      },
-      {
         "source": "__start__",
-        "target": 1
+        "target": "agent"
       },
       {
         "source": "tools",
-        "target": 1
+        "target": "agent"
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 2,
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -2747,16 +2279,10 @@
 # name: test_conditional_graph[sqlite].4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> agent_parser;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	agent_parser --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. &nbsp;continue&nbsp; .-> tools;
-  	Parallel_agent_outcome_Output -. &nbsp;exit&nbsp; .-> __end__;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbsp;continue&nbsp; .-> tools;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   
   '''
 # ---
