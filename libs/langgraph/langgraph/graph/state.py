@@ -434,8 +434,6 @@ class StateGraph(Graph):
             nodes: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
                 If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
                 Each node will be executed in the order provided.
-            from_nodes: an optional list of nodes that will be used as a starting point for the sequence.
-                If not provided, the sequence will start from the `START` node.
 
         Raises:
             ValueError: if the sequence is empty.
