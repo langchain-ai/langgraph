@@ -76,7 +76,9 @@ Output:
 
 ## Use graph with a webhook
 
-Now we can invoke a run with a webhook:
+To invoke a run with a webhook, we specify the `webhook` parameter with the desired endpoint when creating a run. Webhook requests are triggered by the end of a run.
+
+For example, if we can receive requests at `https://my-server.app/my-webhook-endpoint`, we can pass this to `stream`:
 
 === "Python"
 
@@ -89,7 +91,7 @@ Now we can invoke a run with a webhook:
         assistant_id=assistant_id,
         input=input,
         stream_mode="events",
-        webhook="your-webhook"
+        webhook="https://my-server.app/my-webhook-endpoint"
     ):
         # Do something with the stream output
         pass
@@ -107,7 +109,7 @@ Now we can invoke a run with a webhook:
       assistantID,
       {
         input: input,
-        webhook: "your-webhook"
+        webhook: "https://my-server.app/my-webhook-endpoint"
       }
     );
     for await (const chunk of streamResponse) {
@@ -124,8 +126,17 @@ Now we can invoke a run with a webhook:
         --data '{
             "assistant_id": <ASSISTANT_ID>,
             "input" : {"messages":[{"role": "user", "content": "Hello!"}]},
-            "webhook": <YOUR_WEBHOOK_URL>
+            "webhook": "https://my-server.app/my-webhook-endpoint"
         }'
     ```
 
-And that's it! Now you can trigger your custom webhooks whenever you want in your LangGraph applications!
+The schema for the payload sent to `my-webhook-endpoint` is that of a [run](../../concepts/langgraph_server.md/#runs). See [API Reference](https://langchain-ai.github.io/langgraph/cloud/reference/api/api_ref.html#model/run) for more detail. Note that the run input, configuration, etc. are included in the `kwargs` field.
+
+### Signing webhook requests
+
+To sign the webhook requests, we can specify a token parameter in the webhook URL, e.g.,
+```
+https://my-server.app/my-webhook-endpoint?token=...
+```
+
+The server should then extract the token from the request's parameters and validate it before processing the payload.

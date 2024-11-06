@@ -4,7 +4,7 @@ You may wish to copy (i.e. "fork") an existing thread in order to keep the exist
 
 ## Setup
 
-This code assumes you already have a thread to copy. You can read about what a thread is [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#threads) and learn how to stream a run on a thread in [these how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/#streaming).
+This code assumes you already have a thread to copy. You can read about what a thread is [here](../../concepts/langgraph_server.md#threads) and learn how to stream a run on a thread in [these how-to guides](../../how-tos/index.md#streaming_1).
 
 ### SDK initialization
 

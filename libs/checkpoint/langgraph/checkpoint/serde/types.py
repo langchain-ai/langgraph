@@ -4,6 +4,7 @@ from typing import (
     Protocol,
     Sequence,
     TypeVar,
+    Union,
     runtime_checkable,
 )
 
@@ -48,3 +49,13 @@ class SendProtocol(Protocol):
     def __repr__(self) -> str: ...
 
     def __eq__(self, value: object) -> bool: ...
+
+
+@runtime_checkable
+class ControlProtocol(Protocol):
+    # Mirrors langgraph.constants.Control
+    update_state: Optional[dict[str, Any]]
+    trigger: Union[str, Sequence[str]]
+    send: Union[Any, Sequence[Any]]
+
+    def __repr__(self) -> str: ...

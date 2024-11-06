@@ -250,9 +250,10 @@ def test_config_to_docker_nodejs():
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
-RUN cd /deps/unit_tests && yarn install --frozen-lockfile
+RUN cd /deps/unit_tests && npm i
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
-WORKDIR /deps/unit_tests"""
+WORKDIR /deps/unit_tests
+RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
 

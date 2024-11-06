@@ -304,10 +304,19 @@
             "description": "The ID of the assistant.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Assistant ID",
-              "description": "The ID of the assistant."
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "title": "Assistant ID",
+                  "description": "The ID of the assistant."
+                },
+                {
+                  "type": "string",
+                  "title": "Graph ID",
+                  "description": "The ID of the graph."
+                }
+              ]
             },
             "name": "assistant_id",
             "in": "path"

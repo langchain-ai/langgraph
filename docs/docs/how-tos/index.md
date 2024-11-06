@@ -90,9 +90,9 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 ### State Management
 
-- [Use Pydantic model as state](state-model.ipynb)
-- [Have a separate input and output schema](input_output_schema.ipynb)
-- [Pass private state between nodes inside the graph](pass_private_state.ipynb)
+- [How to use Pydantic model as state](state-model.ipynb)
+- [How to define input/output schema for your graph](input_output_schema.ipynb)
+- [How to pass private state between nodes inside the graph](pass_private_state.ipynb)
 
 ### Other
 
@@ -141,7 +141,8 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
- 
+- [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+
 ### Deployment
 
 LangGraph applications can be deployed using LangGraph Cloud, which provides a range of services to help you deploy, manage, and scale your applications.
@@ -219,11 +220,12 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 
 ## Troubleshooting
 
-The [Error Reference](../troubleshooting/errors/index.md) page contains guides around resolving common errors you may find while building with LangGraph. Errors referenced below will have an `lc_error_code` property corresponding to one of the below codes when they are thrown in code.
+These are the guides for resolving common errors you may find while building with LangGraph. Errors referenced below will have an `lc_error_code` property corresponding to one of the below codes when they are thrown in code.
 
 - [GRAPH_RECURSION_LIMIT](../troubleshooting/errors/GRAPH_RECURSION_LIMIT.md)
 - [INVALID_CONCURRENT_GRAPH_UPDATE](../troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md)
 - [INVALID_GRAPH_NODE_RETURN_VALUE](../troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
 - [MULTIPLE_SUBGRAPHS](../troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
+- [INVALID_CHAT_HISTORY](../troubleshooting/errors/INVALID_CHAT_HISTORY.md)
 
 

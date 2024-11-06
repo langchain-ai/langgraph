@@ -399,6 +399,9 @@ class PregelLoop(LoopProtocol):
             for task in self.tasks.values():
                 if task.writes:
                     self._output_writes(task.id, task.writes, cached=True)
+        elif not self.skip_done_tasks:
+            # "not skip_done_tasks" only applies to first tick after resuming
+            self.skip_done_tasks = True
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks.values()):
@@ -474,7 +477,10 @@ class PregelLoop(LoopProtocol):
             mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
-                [*discard_tasks.values(), PregelTaskWrites(INPUT, input_writes, [])],
+                [
+                    *discard_tasks.values(),
+                    PregelTaskWrites((), INPUT, input_writes, []),
+                ],
                 self.checkpointer_get_next_version,
             )
             assert not mv_writes, "Can't write to SharedValues in graph input"
@@ -491,6 +497,8 @@ class PregelLoop(LoopProtocol):
             )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+        for k, v in self.config["metadata"].items():
+            metadata.setdefault(k, v)  # type: ignore
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})

@@ -22,6 +22,7 @@ theme:
     - navigation.footer
     - navigation.indexes
     - navigation.instant
+    - navigation.sections
     - navigation.instant.prefetch
     - navigation.instant.progress
     - navigation.prune
@@ -53,6 +54,13 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
+  - redirects:
+      redirect_maps:
+        'cloud/index.md': 'concepts/index.md#langgraph-platform'
+        'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
+        'cloud/concepts/api.md': 'concepts/langgraph_server.md'
+        'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
+        'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
       handlers:
         python:
@@ -87,20 +95,21 @@ nav:
   - "How-to Guides": "how-tos/index.md"
   - Reference:
       - "reference/index.md"
-      - Graphs: reference/graphs.md
-      - RemoteGraph: reference/remote_graph.md
-      - Checkpointing: reference/checkpoints.md
-      - Storage: reference/store.md
-      - Prebuilt Components: reference/prebuilt.md
-      - Channels: reference/channels.md
-      - Errors: reference/errors.md
-      - Types: reference/types.md
-      - Constants: reference/constants.md
+      - Library:
+        - Graphs: reference/graphs.md
+        - Checkpointing: reference/checkpoints.md
+        - Storage: reference/store.md
+        - Prebuilt Components: reference/prebuilt.md
+        - Channels: reference/channels.md
+        - Errors: reference/errors.md
+        - Types: reference/types.md
+        - Constants: reference/constants.md
       - LangGraph Platform:
         - Server API: "cloud/reference/api/api_ref.md"
+        - CLI: "cloud/reference/cli.md"
         - SDK (Python): "cloud/reference/sdk/python_sdk_ref.md"
         - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
-        - CLI: "cloud/reference/cli.md"
+        - RemoteGraph: reference/remote_graph.md
         - Environment Variables: "cloud/reference/env_var.md"
 
 markdown_extensions:

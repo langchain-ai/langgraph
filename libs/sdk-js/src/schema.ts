@@ -14,6 +14,8 @@ export type ThreadStatus = "idle" | "busy" | "interrupted" | "error";
 
 type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 
+export type CancelAction = "interrupt" | "rollback";
+
 export interface Config {
   /**
    * Tags for this call and any sub-calls (eg. a Chain calling an LLM).
@@ -77,7 +79,17 @@ export interface GraphSchema {
 
 export type Subgraphs = Record<string, GraphSchema>;
 
-export type Metadata = Optional<Record<string, unknown>>;
+export type Metadata = Optional<{
+  source?: "input" | "loop" | "update" | (string & {});
+
+  step?: number;
+
+  writes?: Record<string, unknown> | null;
+
+  parents?: Record<string, string>;
+
+  [key: string]: unknown;
+}>;
 
 export interface AssistantBase {
   /** The ID of the assistant. */
@@ -108,7 +120,22 @@ export interface Assistant extends AssistantBase {
   /** The name of the assistant */
   name: string;
 }
-export type AssistantGraph = Record<string, Array<Record<string, unknown>>>;
+
+export interface AssistantGraph {
+  nodes: Array<{
+    id: string | number;
+    name?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data?: Record<string, any> | string;
+    metadata?: unknown;
+  }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    data?: string;
+    conditional?: boolean;
+  }>;
+}
 
 export interface Thread<ValuesType = DefaultValues> {
   /** The ID of the thread. */
@@ -182,7 +209,7 @@ export interface ThreadTask {
   id: string;
   name: string;
   error: Optional<string>;
-  interrupts: Array<Record<string, unknown>>;
+  interrupts: Array<{ value: unknown; when: "during" }>;
   checkpoint: Optional<Checkpoint>;
   state: Optional<ThreadState>;
 }

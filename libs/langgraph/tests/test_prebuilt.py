@@ -46,6 +46,7 @@ from langgraph.prebuilt import (
     create_react_agent,
     tools_condition,
 )
+from langgraph.prebuilt.chat_agent_executor import _validate_chat_history
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
@@ -157,6 +158,7 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
             "step": 1,
+            "thread_id": "123",
         }
         assert saved.pending_writes == []
 
@@ -188,6 +190,7 @@ async def test_no_modifier_async(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
                 "step": 1,
+                "thread_id": "123",
             }
             assert saved.pending_writes == []
 
@@ -376,6 +379,71 @@ def test_model_with_tools(tool_style: str):
     # test missing bound tools
     with pytest.raises(ValueError):
         create_react_agent(model.bind_tools([tool1]), [tool2])
+
+
+def test__validate_messages():
+    # empty input
+    _validate_chat_history([])
+
+    # single human message
+    _validate_chat_history(
+        [
+            HumanMessage(content="What's the weather?"),
+        ]
+    )
+
+    # human + AI
+    _validate_chat_history(
+        [
+            HumanMessage(content="What's the weather?"),
+            AIMessage(content="The weather is sunny and 75°F."),
+        ]
+    )
+
+    # Answered tool calls
+    _validate_chat_history(
+        [
+            HumanMessage(content="What's the weather?"),
+            AIMessage(
+                content="Let me check that for you.",
+                tool_calls=[{"id": "call1", "name": "get_weather", "args": {}}],
+            ),
+            ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+            AIMessage(content="The weather is sunny and 75°F."),
+        ]
+    )
+
+    # Unanswered tool calls
+    with pytest.raises(ValueError):
+        _validate_chat_history(
+            [
+                AIMessage(
+                    content="I'll check that for you.",
+                    tool_calls=[
+                        {"id": "call1", "name": "get_weather", "args": {}},
+                        {"id": "call2", "name": "get_time", "args": {}},
+                    ],
+                )
+            ]
+        )
+
+    with pytest.raises(ValueError):
+        _validate_chat_history(
+            [
+                HumanMessage(content="What's the weather and time?"),
+                AIMessage(
+                    content="I'll check that for you.",
+                    tool_calls=[
+                        {"id": "call1", "name": "get_weather", "args": {}},
+                        {"id": "call2", "name": "get_time", "args": {}},
+                    ],
+                ),
+                ToolMessage(content="Sunny, 75°F", tool_call_id="call1"),
+                AIMessage(
+                    content="The weather is sunny and 75°F. Let me check the time."
+                ),
+            ]
+        )
 
 
 def test__infer_handled_types() -> None:

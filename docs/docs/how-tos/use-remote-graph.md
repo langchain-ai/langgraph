@@ -217,6 +217,12 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
         "messages": [{"role": "user", "content": "what's the weather in sf"}]
     })
     print(result)
+
+    # stream outputs from both the parent graph and subgraph
+    for chunk in graph.stream({
+        "messages": [{"role": "user", "content": "what's the weather in sf"}]
+    }, subgraphs=True):
+        print(chunk)
     ```
 
 === "JavaScript"
@@ -240,4 +246,11 @@ Since the `RemoteGraph` behaves the same way as a regular `CompiledGraph`, it ca
       messages: [{ role: "user", content: "what's the weather in sf" }]
     });
     console.log(result);
+
+    // stream outputs from both the parent graph and subgraph
+    for await (const chunk of await graph.stream({
+      messages: [{ role: "user", content: "what's the weather in la" }]
+    }, { subgraphs: true })) {
+      console.log(chunk);
+    }
     ```
