@@ -307,6 +307,8 @@ class PregelLoop(LoopProtocol):
             )
             # clear pending writes
             self.checkpoint_pending_writes.clear()
+            # "not skip_done_tasks" only applies to first tick after resuming
+            self.skip_done_tasks = True
             # save checkpoint
             self._put_checkpoint(
                 {
@@ -382,9 +384,6 @@ class PregelLoop(LoopProtocol):
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             self._match_writes(self.tasks)
-        elif not self.skip_done_tasks:
-            # "not skip_done_tasks" only applies to first tick after resuming
-            self.skip_done_tasks = True
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks.values()):
