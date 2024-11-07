@@ -65,7 +65,7 @@ jobs:
             langsmith \
             langchain \
             GitPython \
-            git+https://${{ secrets.GITHUB_TOKEN }}@github.com/langchain-ai/mkdocs-material-insiders.git
+            "git+https://${{ secrets.GITHUB_TOKEN }}@github.com/langchain-ai/mkdocs-material-insiders.git"
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
