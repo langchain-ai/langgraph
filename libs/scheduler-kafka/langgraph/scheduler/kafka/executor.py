@@ -8,6 +8,7 @@ from contextlib import (
 )
 from functools import partial
 from typing import Any, Optional, Sequence
+from uuid import UUID
 
 import orjson
 from langchain_core.runnables import RunnableConfig
@@ -216,7 +217,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
             else:
                 # task was not found
                 await self.graph.checkpointer.aput_writes(
-                    msg["config"], [(ERROR, TaskNotFound())]
+                    msg["config"], [(ERROR, TaskNotFound())], str(UUID(int=0))
                 )
         # notify orchestrator
         fut = await self.producer.send(
@@ -417,7 +418,7 @@ class KafkaExecutor(AbstractContextManager):
             else:
                 # task was not found
                 self.graph.checkpointer.put_writes(
-                    msg["config"], [(ERROR, TaskNotFound())]
+                    msg["config"], [(ERROR, TaskNotFound())], str(UUID(int=0))
                 )
         # notify orchestrator
         fut = self.producer.send(
