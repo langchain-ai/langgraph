@@ -99,7 +99,6 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to run graph asynchronously](async.ipynb)
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
-- [How to use a Pydantic model as your state](state-model.ipynb)
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)

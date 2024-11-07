@@ -44,6 +44,8 @@ jobs:
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,8 +60,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with test
-          poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
+          poetry install --with test --no-root
+          poetry run pip install -U \
+            pytest \
+            pytest-check-links \
+            langsmith \
+            langchain \
+            GitPython \
+            "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
