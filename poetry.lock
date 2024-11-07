@@ -2912,7 +2912,7 @@ langchain-core = ">=0.3.0,<0.4.0"
 
 [[package]]
 name = "langgraph"
-version = "0.2.34"
+version = "0.2.45"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -2920,8 +2920,9 @@ files = []
 develop = true
 
 [package.dependencies]
-langchain-core = ">=0.2.39,<0.4"
+langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14"
 langgraph-checkpoint = "^2.0.0"
+langgraph-sdk = "^0.1.32"
 
 [package.source]
 type = "directory"
@@ -2929,7 +2930,7 @@ url = "libs/langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.1"
+version = "2.0.2"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -2946,7 +2947,7 @@ url = "libs/checkpoint"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.1"
+version = "2.0.2"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -2954,7 +2955,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langgraph-checkpoint = "^2.0.0"
+langgraph-checkpoint = "^2.0.2"
 orjson = ">=3.10.1"
 psycopg = "^3.0.0"
 psycopg-pool = "^3.0.0"
@@ -2965,7 +2966,7 @@ url = "libs/checkpoint-postgres"
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.0"
+version = "2.0.1"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0"
@@ -2974,7 +2975,7 @@ develop = true
 
 [package.dependencies]
 aiosqlite = "^0.20.0"
-langgraph-checkpoint = "^2.0.0"
+langgraph-checkpoint = "^2.0.2"
 
 [package.source]
 type = "directory"
@@ -2982,7 +2983,7 @@ url = "libs/checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.32"
+version = "0.1.35"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3397,14 +3398,12 @@ requests = "*"
 
 [[package]]
 name = "mkdocs-material"
-version = "9.5.38"
+version = "9.5.44+insiders.4.53.14"
 description = "Documentation that simply works"
 optional = false
 python-versions = ">=3.8"
-files = [
-    {file = "mkdocs_material-9.5.38-py3-none-any.whl", hash = "sha256:d4779051d52ba9f1e7e344b34de95449c7c366c212b388e4a2db9a3db043c228"},
-    {file = "mkdocs_material-9.5.38.tar.gz", hash = "sha256:1843c5171ad6b489550aeaf7358e5b7128cc03ddcf0fb4d91d19aa1e691a63b8"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 babel = ">=2.10,<3.0"
@@ -3412,6 +3411,7 @@ cairosvg = {version = ">=2.6,<3.0", optional = true, markers = "extra == \"imagi
 colorama = ">=0.4,<1.0"
 jinja2 = ">=3.0,<4.0"
 markdown = ">=3.2,<4.0"
+mergedeep = ">=1.3,<2.0"
 mkdocs = ">=1.6,<2.0"
 mkdocs-material-extensions = ">=1.3,<2.0"
 paginate = ">=0.5,<1.0"
@@ -3425,6 +3425,12 @@ requests = ">=2.26,<3.0"
 git = ["mkdocs-git-committers-plugin-2 (>=1.1,<2.0)", "mkdocs-git-revision-date-localized-plugin (>=1.2.4,<2.0)"]
 imaging = ["cairosvg (>=2.6,<3.0)", "pillow (>=10.2,<11.0)"]
 recommended = ["mkdocs-minify-plugin (>=0.7,<1.0)", "mkdocs-redirects (>=1.2,<2.0)", "mkdocs-rss-plugin (>=1.6,<2.0)"]
+
+[package.source]
+type = "git"
+url = "ssh://git@github.com/langchain-ai/mkdocs-material-insiders.git"
+reference = "HEAD"
+resolved_reference = "a3e2b2c042efeca331b79bfbba4cc94c5053c79f"
 
 [[package]]
 name = "mkdocs-material-extensions"
@@ -7331,4 +7337,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "67675531a6c4cd218c9effe87061234fbc778ff1afbb61327239b20556aa63da"
+content-hash = "3a3846e58a7bfbf0ec7473ca173164451f46417171aff082eeaf2009aac67487"

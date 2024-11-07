@@ -25,6 +25,7 @@ theme:
     - navigation.sections
     - navigation.instant.prefetch
     - navigation.instant.progress
+    - navigation.path
     - navigation.prune
     - navigation.tabs
     - navigation.tabs.sticky
