@@ -29,7 +29,11 @@ To use the Self-Hosted Enterprise version, you must acquire a license key that y
 ## How it works
 
 - Deploy Redis and Postgres instances on your own infrastructure.
-- Build the docker image for [LangGraph Server](./langgraph_server.md) using the [LangGraph CLI](./langgraph_cli.md)
+- Build the docker image for [LangGraph Server](./langgraph_server.md) using the [LangGraph CLI](./langgraph_cli.md).
 - Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
-See the [how-to guide](../how-tos/deploy-self-hosted.md) 
+For step-by-step instructions, see [How to set up a self-hosted deployment of LangGraph](../how-tos/deploy-self-hosted.md).
+
+## Related
+
+- [How to set up a self-hosted deployment of LangGraph](../how-tos/deploy-self-hosted.md).

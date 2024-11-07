@@ -53,7 +53,7 @@ You’ll build a Docker image using the [LangGraph CLI](./langgraph_cli.md), whi
 For more information, please see:
 
 * [Self-Hosted conceptual guide](./self_hosted.md)
-* [Self-Hosted Deployment how-to guide](../how-tos/deploy-self-hosted.md)
+* [Self-Hosted deployment how-to guide](../how-tos/deploy-self-hosted.md)
 
 ## Cloud SaaS
 
@@ -89,8 +89,8 @@ For more information please see:
 
 ## Related
 
-For more information please see:
+For more information, please see:
 
-* [LangGraph Platform Plans](./plans.md)
-* [LangGraph Platform Pricing](https://www.langchain.com/langgraph-platform-pricing)
+* [LangGraph Platform plans](./plans.md)
+* [LangGraph Platform pricing](https://www.langchain.com/langgraph-platform-pricing)
 * [Deployment how-to guides](../how-tos/index.md#deployment)
