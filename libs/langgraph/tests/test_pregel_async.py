@@ -2026,7 +2026,7 @@ async def test_send_sequences() -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, Control):
-                state.update_state = update
+                state.state = update
                 return state
             else:
                 return update
@@ -2523,7 +2523,7 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
 
     async def agent(state) -> Control[Literal["foo"]]:
         return Control(
-            update_state={"messages": ai_message},
+            state={"messages": ai_message},
             send=[Send(call["name"], call) for call in ai_message.tool_calls],
         )
 
@@ -2822,7 +2822,7 @@ async def test_max_concurrency(checkpointer_name: str) -> None:
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_max_concurrency_control(checkpointer_name: str) -> None:
     async def node1(state) -> Control[Literal["2"]]:
-        return Control(update_state=["1"], send=[Send("2", idx) for idx in range(100)])
+        return Control(state=["1"], send=[Send("2", idx) for idx in range(100)])
 
     node2_currently = 0
     node2_max_currently = 0
@@ -2835,7 +2835,7 @@ async def test_max_concurrency_control(checkpointer_name: str) -> None:
         await asyncio.sleep(0.1)
         node2_currently -= 1
 
-        return Control(update_state=[state], trigger="3")
+        return Control(state=[state], goto="3")
 
     async def node3(state) -> Literal["3"]:
         return ["3"]

@@ -229,17 +229,17 @@ N = TypeVar("N")
 class Control(Generic[N]):
     """A control object to update the graph's state, trigger nodes, and send messages."""
 
-    __slots__ = ("update_state", "trigger", "send")
+    __slots__ = ("state", "goto", "send")
 
     def __init__(
         self,
         *,
-        update_state: Optional[dict[str, Any]] = None,
-        trigger: Union[str, Sequence[str]] = (),
+        state: Optional[dict[str, Any]] = None,
+        goto: Union[str, Sequence[str]] = (),
         send: Union[Send, Sequence[Send]] = (),
     ) -> None:
-        self.update_state = update_state
-        self.trigger = trigger
+        self.state = state
+        self.goto = goto
         self.send = send
 
     def __repr__(self) -> str:
