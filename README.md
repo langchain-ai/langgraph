@@ -164,7 +164,7 @@ final_state = app.invoke(
     {"messages": [HumanMessage(content="what about ny")]},
     config={"configurable": {"thread_id": 42}}
 )
-final_state["messages"][-1].content
+print(final_state["messages"][-1].content)
 ```
 
 ```
