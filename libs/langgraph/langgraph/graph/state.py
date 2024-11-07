@@ -605,7 +605,7 @@ class CompiledStateGraph(CompiledGraph):
 
         def _get_root(input: Any) -> Any:
             if isinstance(input, Control):
-                return input.update_state
+                return input.state
             else:
                 return input
 
@@ -619,7 +619,7 @@ class CompiledStateGraph(CompiledGraph):
                     )
                 return input.get(key, SKIP_WRITE)
             elif isinstance(input, Control):
-                return _get_state_key(input.update_state, key=key)
+                return _get_state_key(input.state, key=key)
             elif get_type_hints(type(input)):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
@@ -797,13 +797,15 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
+    if isinstance(value, Send):
+        return [value]
     if not isinstance(value, Control):
         return EMPTY_SEQ
     rtn: list[Union[str, Send]] = []
-    if isinstance(value.trigger, str):
-        rtn.append(value.trigger)
+    if isinstance(value.goto, str):
+        rtn.append(value.goto)
     else:
-        rtn.extend(value.trigger)
+        rtn.extend(value.goto)
     if isinstance(value.send, Send):
         rtn.append(value.send)
     else:
@@ -811,14 +813,16 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     return rtn
 
 
-async def _acontrol_branch(value: Any) -> None:
+async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
+    if isinstance(value, Send):
+        return [value]
     if not isinstance(value, Control):
         return EMPTY_SEQ
     rtn: list[Union[str, Send]] = []
-    if isinstance(value.trigger, str):
-        rtn.append(value.trigger)
+    if isinstance(value.goto, str):
+        rtn.append(value.goto)
     else:
-        rtn.extend(value.trigger)
+        rtn.extend(value.goto)
     if isinstance(value.send, Send):
         rtn.append(value.send)
     else:

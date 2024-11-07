@@ -1809,7 +1809,7 @@ def test_send_sequences() -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, Control):
-                state.update_state = update
+                state.state = update
                 return state
             else:
                 return update
@@ -2313,7 +2313,7 @@ def test_send_react_interrupt_control(
 
     def agent(state) -> Control[Literal["foo"]]:
         return Control(
-            update_state={"messages": ai_message},
+            state={"messages": ai_message},
             send=[Send(call["name"], call) for call in ai_message.tool_calls],
         )
 
