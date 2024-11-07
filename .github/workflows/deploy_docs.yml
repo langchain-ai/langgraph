@@ -60,7 +60,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with test
+          poetry install --with test --no-root
           poetry run pip install -U \
             pytest \
             pytest-check-links \
