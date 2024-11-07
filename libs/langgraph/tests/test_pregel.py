@@ -13467,6 +13467,136 @@ def test_debug_nested_subgraphs():
                 assert stream_task.get("state") == history_task.state
 
 
+def test_add_sequence():
+    class State(TypedDict):
+        foo: Annotated[list[str], operator.add]
+        bar: str
+
+    def step1(state: State):
+        return {"foo": ["step1"], "bar": "baz"}
+
+    def step2(state: State):
+        return {"foo": ["step2"]}
+
+    # test raising if less than 1 steps
+    with pytest.raises(ValueError):
+        StateGraph(State).add_sequence([])
+
+    # test raising if duplicate step names
+    with pytest.raises(ValueError):
+        StateGraph(State).add_sequence([step1, step1])
+
+    with pytest.raises(ValueError):
+        StateGraph(State).add_sequence([("foo", step1), ("foo", step1)])
+
+    # test unnamed steps
+    builder = StateGraph(State)
+    builder.add_sequence([step1, step2])
+    builder.add_edge(START, "step1")
+    graph = builder.compile()
+    result = graph.invoke({"foo": []})
+    assert result == {"foo": ["step1", "step2"], "bar": "baz"}
+    stream_chunks = list(graph.stream({"foo": []}))
+    assert stream_chunks == [
+        {"step1": {"foo": ["step1"], "bar": "baz"}},
+        {"step2": {"foo": ["step2"]}},
+    ]
+
+    # test named steps
+    builder_named_steps = StateGraph(State)
+    builder_named_steps.add_sequence([("meow1", step1), ("meow2", step2)])
+    builder_named_steps.add_edge(START, "meow1")
+    graph_named_steps = builder_named_steps.compile()
+    result = graph_named_steps.invoke({"foo": []})
+    stream_chunks = list(graph_named_steps.stream({"foo": []}))
+    assert result == {"foo": ["step1", "step2"], "bar": "baz"}
+    assert stream_chunks == [
+        {"meow1": {"foo": ["step1"], "bar": "baz"}},
+        {"meow2": {"foo": ["step2"]}},
+    ]
+
+    builder_named_steps = StateGraph(State)
+    builder_named_steps.add_sequence(
+        [
+            ("meow1", lambda state: {"foo": ["foo"]}),
+            ("meow2", lambda state: {"bar": state["foo"][0] + "bar"}),
+        ],
+    )
+    builder_named_steps.add_edge(START, "meow1")
+    graph_named_steps = builder_named_steps.compile()
+    result = graph_named_steps.invoke({"foo": []})
+    stream_chunks = list(graph_named_steps.stream({"foo": []}))
+    # filtered by output schema
+    assert result == {"bar": "foobar", "foo": ["foo"]}
+    assert stream_chunks == [
+        {"meow1": {"foo": ["foo"]}},
+        {"meow2": {"bar": "foobar"}},
+    ]
+
+    # test two sequences
+
+    def a(state: State):
+        return {"foo": ["a"]}
+
+    def b(state: State):
+        return {"foo": ["b"]}
+
+    builder_two_sequences = StateGraph(State)
+    builder_two_sequences.add_sequence([a])
+    builder_two_sequences.add_sequence([b])
+    builder_two_sequences.add_edge(START, "a")
+    builder_two_sequences.add_edge("a", "b")
+    graph_two_sequences = builder_two_sequences.compile()
+
+    result = graph_two_sequences.invoke({"foo": []})
+    assert result == {"foo": ["a", "b"]}
+
+    stream_chunks = list(graph_two_sequences.stream({"foo": []}))
+    assert stream_chunks == [
+        {"a": {"foo": ["a"]}},
+        {"b": {"foo": ["b"]}},
+    ]
+
+    # test mixed nodes and sequences
+
+    def c(state: State):
+        return {"foo": ["c"]}
+
+    def d(state: State):
+        return {"foo": ["d"]}
+
+    def e(state: State):
+        return {"foo": ["e"]}
+
+    def foo(state: State):
+        if state["foo"][0] == "a":
+            return "d"
+        else:
+            return "c"
+
+    builder_complex = StateGraph(State)
+    builder_complex.add_sequence([a, b])
+    builder_complex.add_conditional_edges("b", foo)
+    builder_complex.add_node(c)
+    builder_complex.add_sequence([d, e])
+    builder_complex.add_edge(START, "a")
+    graph_complex = builder_complex.compile()
+
+    result = graph_complex.invoke({"foo": []})
+    assert result == {"foo": ["a", "b", "d", "e"]}
+
+    result = graph_complex.invoke({"foo": ["start"]})
+    assert result == {"foo": ["start", "a", "b", "c"]}
+
+    stream_chunks = list(graph_complex.stream({"foo": []}))
+    assert stream_chunks == [
+        {"a": {"foo": ["a"]}},
+        {"b": {"foo": ["b"]}},
+        {"d": {"foo": ["d"]}},
+        {"e": {"foo": ["e"]}},
+    ]
+
+
 def test_runnable_passthrough_node_graph() -> None:
     class State(TypedDict):
         changeme: str

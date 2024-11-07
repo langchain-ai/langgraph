@@ -68,6 +68,15 @@ def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
     )
 
 
+def _get_node_name(node: RunnableLike) -> str:
+    if isinstance(node, Runnable):
+        return node.get_name()
+    elif callable(node):
+        return getattr(node, "__name__", node.__class__.__name__)
+    else:
+        raise TypeError(f"Unsupported node type: {type(node)}")
+
+
 class StateNodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]]
@@ -225,7 +234,7 @@ class StateGraph(Graph):
             ValueError: If the key is already being used as a state key.
 
         Returns:
-            None
+            StateGraph
         """
         ...
 
@@ -249,7 +258,7 @@ class StateGraph(Graph):
             ValueError: If the key is already being used as a state key.
 
         Returns:
-            None
+            StateGraph
         """
         ...
 
@@ -302,7 +311,7 @@ class StateGraph(Graph):
             ```
 
         Returns:
-            None
+            StateGraph
         """
         if not isinstance(node, str):
             action = node
@@ -392,7 +401,7 @@ class StateGraph(Graph):
             ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
 
         Returns:
-            None
+            StateGraph
         """
         if isinstance(start_key, str):
             return super().add_edge(start_key, end_key)
@@ -413,6 +422,48 @@ class StateGraph(Graph):
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         self.waiting_edges.add((tuple(start_key), end_key))
+        return self
+
+    def add_sequence(
+        self,
+        nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
+    ) -> Self:
+        """Add a sequence of nodes that will be executed in the provided order.
+
+        Args:
+            nodes: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
+                If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
+                Each node will be executed in the order provided.
+
+        Raises:
+            ValueError: if the sequence is empty.
+            ValueError: if the sequence contains duplicate node names.
+
+        Returns:
+            StateGraph
+        """
+        if len(nodes) < 1:
+            raise ValueError("Sequence requires at least one node.")
+
+        previous_name: Optional[str] = None
+        for node in nodes:
+            if isinstance(node, tuple) and len(node) == 2:
+                name, node = node
+            else:
+                name = _get_node_name(node)
+
+            if name in self.nodes:
+                raise ValueError(
+                    f"Node names must be unique: node with the name '{name}' already exists. "
+                    "If you need to use two different runnables/callables with the same name (for example, using `lambda`), please provide them as tuples (name, runnable/callable)."
+                )
+
+            self.add_node(name, node)
+            if previous_name is not None:
+                self.add_edge(previous_name, name)
+
+            previous_name = name
+
         return self
 
     def compile(

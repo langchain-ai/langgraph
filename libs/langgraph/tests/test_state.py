@@ -5,11 +5,11 @@ from typing import Annotated as Annotated2
 from typing import Any, Optional
 
 import pytest
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import RunnableConfig, RunnableLambda
 from pydantic.v1 import BaseModel
 from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
-from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
+from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
 from langgraph.managed.shared_value import SharedValue
 
 
@@ -286,3 +286,35 @@ def test_raises_invalid_managed():
             match="Invalid managed channels detected in BadOutputState: some_output_channel. Managed channels are not permitted in Input/Output schema.",
         ):
             StateGraph(_state, input=_inp, output=_outp)
+
+
+def test__get_node_name() -> None:
+    # default runnable name
+    assert _get_node_name(RunnableLambda(func=lambda x: x)) == "RunnableLambda"
+    # custom runnable name
+    assert (
+        _get_node_name(RunnableLambda(name="my_runnable", func=lambda x: x))
+        == "my_runnable"
+    )
+
+    # lambda
+    assert _get_node_name(lambda x: x) == "<lambda>"
+
+    # regular function
+    def func(state):
+        return
+
+    assert _get_node_name(func) == "func"
+
+    class MyClass:
+        def __call__(self, state):
+            return
+
+        def class_method(self, state):
+            return
+
+    # callable class
+    assert _get_node_name(MyClass()) == "MyClass"
+
+    # class method
+    assert _get_node_name(MyClass().class_method) == "class_method"
