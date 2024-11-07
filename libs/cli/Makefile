@@ -5,7 +5,7 @@
 ######################
 
 test:
-	poetry run pytest tests
+	poetry run pytest tests/unit_tests
 
 ######################
 # LINTING AND FORMATTING
