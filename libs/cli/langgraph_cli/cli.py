@@ -15,6 +15,7 @@ from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
+from langgraph_cli.version import __version__
 
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
@@ -148,6 +149,7 @@ OPT_POSTGRES_URI = click.option(
 
 
 @click.group()
+@click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
 
