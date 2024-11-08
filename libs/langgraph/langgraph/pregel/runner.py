@@ -1,9 +1,11 @@
 import asyncio
 import concurrent.futures
 import time
+from functools import partial
 from typing import (
     Any,
     AsyncIterator,
+    Awaitable,
     Callable,
     Iterable,
     Iterator,
@@ -16,6 +18,7 @@ from typing import (
 
 from langgraph.constants import (
     CONF,
+    CONFIG_KEY_CALL,
     CONFIG_KEY_SEND,
     ERROR,
     INTERRUPT,
@@ -25,6 +28,7 @@ from langgraph.constants import (
     TAG_HIDDEN,
 )
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.pregel.algo import Call
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
 from langgraph.types import PregelExecutableTask, RetryPolicy
@@ -41,7 +45,7 @@ class PregelRunner:
         submit: Submit,
         put_writes: Callable[[str, Sequence[tuple[str, Any]]], None],
         schedule_task: Callable[
-            [PregelExecutableTask, int], Optional[PregelExecutableTask]
+            [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
         ],
         use_astream: bool = False,
         node_finished: Optional[Callable[[str], None]] = None,
@@ -67,11 +71,10 @@ class PregelRunner:
             prev_length = len(task.writes)
             # delegate to the underlying writer
             task.config[CONF][CONFIG_KEY_SEND](writes)
-            for idx, w in enumerate(task.writes):
-                # find the index for the newly inserted writes
-                if idx < prev_length:
-                    continue
-                assert writes[idx - prev_length] is w
+            # confirm no other concurrent writes were added
+            # TODO could use a lock here instead, if writes can come from many threads
+            assert len(task.writes) == prev_length + len(writes)
+            for idx, w in enumerate(writes, start=prev_length):
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
@@ -89,7 +92,10 @@ class PregelRunner:
                             run_with_retry,
                             next_task,
                             retry_policy,
-                            writer=writer,
+                            configurable={
+                                CONFIG_KEY_SEND: partial(writer, next_task),
+                                # CONFIG_KEY_CALL: partial(call, next_task),
+                            },
                             __reraise_on_exit__=reraise,
                         )
                     ] = next_task
@@ -102,7 +108,14 @@ class PregelRunner:
         if len(tasks) == 1 and timeout is None and get_waiter is None:
             t = tasks[0]
             try:
-                run_with_retry(t, retry_policy, writer=writer)
+                run_with_retry(
+                    t,
+                    retry_policy,
+                    configurable={
+                        CONFIG_KEY_SEND: partial(writer, t),
+                        # CONFIG_KEY_CALL: partial(call, t),
+                    },
+                )
                 self.commit(t, None)
             except Exception as exc:
                 self.commit(t, exc)
@@ -123,7 +136,10 @@ class PregelRunner:
                         run_with_retry,
                         t,
                         retry_policy,
-                        writer=writer,
+                        configurable={
+                            CONFIG_KEY_SEND: partial(writer, t),
+                            # CONFIG_KEY_CALL: partial(call, t),
+                        },
                         __reraise_on_exit__=reraise,
                     )
                 ] = t
@@ -172,21 +188,28 @@ class PregelRunner:
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
         def writer(
-            task: PregelExecutableTask, writes: Sequence[tuple[str, Any]]
-        ) -> None:
+            task: PregelExecutableTask,
+            writes: Sequence[tuple[str, Any]],
+            *,
+            calls: Optional[Sequence[Call]] = None,
+        ) -> Sequence[Optional[asyncio.Future]]:
             prev_length = len(task.writes)
             # delegate to the underlying writer
             task.config[CONF][CONFIG_KEY_SEND](writes)
-            for idx, w in enumerate(task.writes):
-                # find the index for the newly inserted writes
-                if idx < prev_length:
-                    continue
-                assert writes[idx - prev_length] is w
+            # confirm no other concurrent writes were added
+            # TODO could use a lock here instead, if writes can come from many threads
+            assert len(task.writes) == prev_length + len(writes)
+            rtn: dict[int, Optional[asyncio.Future]] = {}
+            for idx, w in enumerate(writes, start=prev_length):
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
                 # schedule the next task, if the callback returns one
-                if next_task := self.schedule_task(task, idx):
+                if next_task := self.schedule_task(
+                    task,
+                    idx,
+                    calls[idx] if calls is not None else None,
+                ):
                     # if the parent task was retried,
                     # the next task might already be running
                     if any(
@@ -194,21 +217,29 @@ class PregelRunner:
                     ):
                         continue
                     # schedule the next task
-                    futures[
-                        cast(
-                            asyncio.Future,
-                            self.submit(
-                                arun_with_retry,
-                                next_task,
-                                retry_policy,
-                                stream=self.use_astream,
-                                writer=writer,
-                                __name__=t.name,
-                                __cancel_on_exit__=True,
-                                __reraise_on_exit__=reraise,
-                            ),
-                        )
-                    ] = next_task
+                    fut = self.submit(
+                        arun_with_retry,
+                        next_task,
+                        retry_policy,
+                        stream=self.use_astream,
+                        configurable={
+                            CONFIG_KEY_SEND: partial(writer, next_task),
+                            CONFIG_KEY_CALL: partial(call, next_task),
+                        },
+                        __name__=t.name,
+                        __cancel_on_exit__=True,
+                        __reraise_on_exit__=reraise,
+                    )
+                    futures[cast(asyncio.Future, fut)] = next_task
+                    rtn[idx] = fut
+            return [rtn.get(i) for i in range(len(writes))]
+
+        def call(
+            task, func: str | Callable[[Any], Union[Awaitable[Any], Any]], input: Any
+        ) -> asyncio.Future[Any]:
+            (fut,) = writer(task, [(PUSH, None)], calls=[Call(func, input)])
+            assert fut is not None, "writer did not return a future for call"
+            return fut
 
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
@@ -220,7 +251,13 @@ class PregelRunner:
             t = tasks[0]
             try:
                 await arun_with_retry(
-                    t, retry_policy, stream=self.use_astream, writer=writer
+                    t,
+                    retry_policy,
+                    stream=self.use_astream,
+                    configurable={
+                        CONFIG_KEY_SEND: partial(writer, t),
+                        CONFIG_KEY_CALL: partial(call, t),
+                    },
                 )
                 self.commit(t, None)
             except Exception as exc:
@@ -245,7 +282,10 @@ class PregelRunner:
                             t,
                             retry_policy,
                             stream=self.use_astream,
-                            writer=writer,
+                            configurable={
+                                CONFIG_KEY_SEND: partial(writer, t),
+                                CONFIG_KEY_CALL: partial(call, t),
+                            },
                             __name__=t.name,
                             __cancel_on_exit__=True,
                             __reraise_on_exit__=reraise,

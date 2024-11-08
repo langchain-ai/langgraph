@@ -46,6 +46,8 @@ CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
 CONFIG_KEY_READ = sys.intern("__pregel_read")
 # holds the `read` function that returns a copy of the current state
+CONFIG_KEY_CALL = sys.intern("__pregel_call")
+# holds the `call` function that accepts a node/func, args and returns a future
 CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
 # holds a `BaseCheckpointSaver` passed from parent graph to child graphs
 CONFIG_KEY_STREAM = sys.intern("__pregel_stream")

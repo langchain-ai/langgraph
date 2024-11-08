@@ -73,6 +73,7 @@ from langgraph.managed.base import (
     WritableManagedValue,
 )
 from langgraph.pregel.algo import (
+    Call,
     GetNextVersion,
     PregelTaskWrites,
     apply_writes,
@@ -307,12 +308,9 @@ class PregelLoop(LoopProtocol):
             self._output_writes(task_id, writes)
 
     def accept_push(
-        self, task: PregelExecutableTask, write_idx: int
+        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
     ) -> Optional[PregelExecutableTask]:
         """Accept a PUSH from a task, potentially returning a new task to start."""
-        # don't start if an earlier PUSH has already triggered an interrupt
-        if self.to_interrupt:
-            return
         # don't start if we should interrupt *after* the original task
         if should_interrupt(self.checkpoint, self.interrupt_after, [task]):
             self.to_interrupt.append(task)
@@ -320,7 +318,7 @@ class PregelLoop(LoopProtocol):
         if pushed := cast(
             Optional[PregelExecutableTask],
             prepare_single_task(
-                (PUSH, task.path, write_idx, task.id),
+                (PUSH, task.path, write_idx, task.id, call),
                 None,
                 checkpoint=self.checkpoint,
                 pending_writes=[(task.id, *w) for w in task.writes],

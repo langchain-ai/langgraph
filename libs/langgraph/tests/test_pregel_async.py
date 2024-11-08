@@ -2864,12 +2864,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     PregelTask(
                         id=AnyStr(),
                         name="2",
-                        path=(
-                            "__pregel_push",
-                            ("__pregel_pull", "1"),
-                            2,
-                            AnyStr(),
-                        ),
+                        path=("__pregel_push", ("__pregel_pull", "1"), 2),
                         error=None,
                         interrupts=(),
                         state=None,
@@ -2878,12 +2873,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     PregelTask(
                         id=AnyStr(),
                         name="2",
-                        path=(
-                            "__pregel_push",
-                            ("__pregel_pull", "1"),
-                            3,
-                            AnyStr(),
-                        ),
+                        path=("__pregel_push", ("__pregel_pull", "1"), 3),
                         error=None,
                         interrupts=(),
                         state=None,
@@ -2894,14 +2884,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         name="2",
                         path=(
                             "__pregel_push",
-                            (
-                                "__pregel_push",
-                                ("__pregel_pull", "1"),
-                                2,
-                                AnyStr(),
-                            ),
+                            ("__pregel_push", ("__pregel_pull", "1"), 2),
                             2,
-                            AnyStr(),
                         ),
                         error=None,
                         interrupts=(),
@@ -2913,14 +2897,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         name="flaky",
                         path=(
                             "__pregel_push",
-                            (
-                                "__pregel_push",
-                                ("__pregel_pull", "1"),
-                                3,
-                                AnyStr(),
-                            ),
+                            ("__pregel_push", ("__pregel_pull", "1"), 3),
                             2,
-                            AnyStr(),
                         ),
                         error=None,
                         interrupts=(Interrupt(value="Bahh", when="during"),),
@@ -3157,7 +3135,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                    path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3314,7 +3292,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                    path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3401,7 +3379,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", (), 0, AnyStr()),
+                    path=("__pregel_push", (), 0),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3625,7 +3603,7 @@ async def test_send_react_interrupt_control(
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                    path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -6420,9 +6398,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     },
                 ),
-                PregelTask(
-                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-                ),
+                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
             ),
             next=("tools",),
             config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
@@ -6465,7 +6441,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
@@ -6596,12 +6572,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     },
                 ),
-                PregelTask(
-                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-                ),
-                PregelTask(
-                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
-                ),
+                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
+                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -6751,9 +6723,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     },
                 ),
-                PregelTask(
-                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-                ),
+                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
             ),
             next=("tools",),
             config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
@@ -6796,7 +6766,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
@@ -6929,12 +6899,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                         )
                     },
                 ),
-                PregelTask(
-                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-                ),
-                PregelTask(
-                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
-                ),
+                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
+                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -11612,7 +11578,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
+                    (PUSH, ("__pregel_pull", "__start__"), 1),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -11623,7 +11589,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
+                    (PUSH, ("__pregel_pull", "__start__"), 2),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -11764,7 +11730,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     PregelTask(
                         AnyStr(),
                         "generate_joke",
-                        (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
+                        (PUSH, ("__pregel_pull", "__start__"), 1),
                         state={
                             "configurable": {
                                 "thread_id": "1",
@@ -11776,7 +11742,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     PregelTask(
                         AnyStr(),
                         "generate_joke",
-                        (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
+                        (PUSH, ("__pregel_pull", "__start__"), 2),
                         state={
                             "configurable": {
                                 "thread_id": "1",

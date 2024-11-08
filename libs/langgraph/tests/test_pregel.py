@@ -2496,7 +2496,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -2653,7 +2653,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -2740,7 +2740,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", (), 0, AnyStr()),
+                path=("__pregel_push", (), 0),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -2965,7 +2965,7 @@ def test_send_react_interrupt_control(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -6043,9 +6043,7 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
         ),
         next=("tools",),
         config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
@@ -6085,7 +6083,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -6214,12 +6212,8 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
         ),
         next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -6366,9 +6360,7 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
         ),
         next=("tools",),
         config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
@@ -6408,7 +6400,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -6537,12 +6529,8 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
         ),
         next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -12786,7 +12774,7 @@ def test_send_to_nested_graphs(
             PregelTask(
                 AnyStr(),
                 "generate_joke",
-                (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
+                (PUSH, ("__pregel_pull", "__start__"), 1),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -12797,7 +12785,7 @@ def test_send_to_nested_graphs(
             PregelTask(
                 AnyStr(),
                 "generate_joke",
-                (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
+                (PUSH, ("__pregel_pull", "__start__"), 2),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -12850,7 +12838,7 @@ def test_send_to_nested_graphs(
             "checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_node": "generate_joke",
-            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 1, AnyStr()],
+            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 1],
             "langgraph_step": 0,
             "langgraph_triggers": [PUSH],
         },
@@ -12895,7 +12883,7 @@ def test_send_to_nested_graphs(
             "checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_node": "generate_joke",
-            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 2, AnyStr()],
+            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 2],
             "langgraph_step": 0,
             "langgraph_triggers": [PUSH],
         },
@@ -13021,7 +13009,7 @@ def test_send_to_nested_graphs(
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
+                    (PUSH, ("__pregel_pull", "__start__"), 1),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -13033,7 +13021,7 @@ def test_send_to_nested_graphs(
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
+                    (PUSH, ("__pregel_pull", "__start__"), 2),
                     state={
                         "configurable": {
                             "thread_id": "1",
