@@ -1,4 +1,4 @@
-.PHONY: test lint format
+.PHONY: test lint format test-integration
 
 ######################
 # TESTING AND COVERAGE
@@ -6,6 +6,8 @@
 
 test:
 	poetry run pytest tests/unit_tests
+test-integration:
+	poetry run pytest tests/integration_tests
 
 ######################
 # LINTING AND FORMATTING

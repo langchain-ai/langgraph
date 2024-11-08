@@ -1,28 +1,33 @@
-"""Unit tests for the 'new' CLI command."""
+"""Unit tests for the 'new' CLI command.
+
+This command creates a new LangGraph project using a specified template.
+"""
 
 import os
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zipfile import ZipFile
 
-import requests
+import urllib3
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli
 from langgraph_cli.templates import TEMPLATE_ID_TO_CONFIG
 
 
-@patch.object(requests, "get")
-def test_create_new_with_mocked_download(mock_get: patch) -> None:
+@patch.object(urllib3.PoolManager, "request")
+def test_create_new_with_mocked_download(mock_request: MagicMock) -> None:
     """Test the 'new' CLI command with a mocked download response."""
     # Mock the response content to simulate a ZIP file
     mock_zip_content = BytesIO()
     with ZipFile(mock_zip_content, "w") as mock_zip:
         mock_zip.writestr("test-file.txt", "Test content.")
-    mock_get.return_value.status_code = 200
-    mock_get.return_value.content = mock_zip_content.getvalue()
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.data = mock_zip_content.getvalue()
+    mock_request.return_value.__enter__.return_value = mock_response
 
     with TemporaryDirectory() as temp_dir:
         runner = CliRunner()

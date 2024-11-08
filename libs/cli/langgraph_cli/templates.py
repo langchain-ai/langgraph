@@ -6,7 +6,7 @@ from typing import Dict, Optional
 from zipfile import ZipFile
 
 import click
-import requests
+import urllib3
 
 TEMPLATES: Dict[str, Dict[str, str]] = {
     "New LangGraph Project": {
@@ -102,20 +102,27 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
         path (str): The path where the repository should be extracted.
     """
     click.secho("📥 Attempting to download repository as a ZIP archive...", fg="yellow")
+    click.secho(f"URL: {repo_url}", fg="yellow")
+    # Use via a pool manager since the `request` method is not available in urllib3
+    # until version v2.0.0
+    http = urllib3.PoolManager()
+
     try:
-        response = requests.get(repo_url, stream=True)
-        if response.status_code == 200:
-            with ZipFile(BytesIO(response.content)) as zip_file:
-                zip_file.extractall(path)
-                # Move extracted contents to path
-                for item in os.listdir(path):
-                    if item.endswith("-main"):
-                        extracted_dir = os.path.join(path, item)
-                        for filename in os.listdir(extracted_dir):
-                            shutil.move(os.path.join(extracted_dir, filename), path)
-                        shutil.rmtree(extracted_dir)
-            click.secho(f"✅ Downloaded and extracted repository to {path}", fg="green")
-    except requests.exceptions.RequestException as e:
+        with http.request("GET", repo_url, preload_content=False) as response:
+            if response.status == 200:
+                with ZipFile(BytesIO(response.data)) as zip_file:
+                    zip_file.extractall(path)
+                    # Move extracted contents to path
+                    for item in os.listdir(path):
+                        if item.endswith("-main"):
+                            extracted_dir = os.path.join(path, item)
+                            for filename in os.listdir(extracted_dir):
+                                shutil.move(os.path.join(extracted_dir, filename), path)
+                            shutil.rmtree(extracted_dir)
+                click.secho(
+                    f"✅ Downloaded and extracted repository to {path}", fg="green"
+                )
+    except urllib3.exceptions.HTTPError as e:
         click.secho(
             f"❌ Error: Failed to download repository.\n" f"Details: {e}\n",
             fg="red",
