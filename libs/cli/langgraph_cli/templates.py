@@ -3,10 +3,10 @@ import shutil
 import sys
 from io import BytesIO
 from typing import Dict, Optional
+from urllib import error, request
 from zipfile import ZipFile
 
 import click
-import urllib3
 
 TEMPLATES: Dict[str, Dict[str, str]] = {
     "New LangGraph Project": {
@@ -103,14 +103,10 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
     """
     click.secho("📥 Attempting to download repository as a ZIP archive...", fg="yellow")
     click.secho(f"URL: {repo_url}", fg="yellow")
-    # Use via a pool manager since the `request` method is not available in urllib3
-    # until version v2.0.0
-    http = urllib3.PoolManager()
-
     try:
-        with http.request("GET", repo_url, preload_content=False) as response:
+        with request.urlopen(repo_url) as response:
             if response.status == 200:
-                with ZipFile(BytesIO(response.data)) as zip_file:
+                with ZipFile(BytesIO(response.read())) as zip_file:
                     zip_file.extractall(path)
                     # Move extracted contents to path
                     for item in os.listdir(path):
@@ -122,7 +118,7 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                 click.secho(
                     f"✅ Downloaded and extracted repository to {path}", fg="green"
                 )
-    except urllib3.exceptions.HTTPError as e:
+    except error.HTTPError as e:
         click.secho(
             f"❌ Error: Failed to download repository.\n" f"Details: {e}\n",
             fg="red",
