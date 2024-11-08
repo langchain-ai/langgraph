@@ -1,6 +1,8 @@
 import pathlib
 
-from langgraph_cli.cli import prepare_args_and_stdin
+from click.testing import CliRunner
+
+from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
@@ -115,3 +117,17 @@ services:
 """
     assert actual_args == expected_args
     assert clean_empty_lines(actual_stdin) == expected_stdin
+
+
+def test_version_option() -> None:
+    """Test the --version option of the CLI."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--version"])
+
+    # Verify that the command executed successfully
+    assert result.exit_code == 0, "Expected exit code 0 for --version option"
+
+    # Check that the output contains the correct version information
+    assert (
+        "LangGraph CLI, version" in result.output
+    ), "Expected version information in output"
