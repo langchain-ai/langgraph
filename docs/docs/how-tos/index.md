@@ -40,7 +40,7 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
 
-### Human in the Loop
+### Human-in-the-loop
 
 [Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
 you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
