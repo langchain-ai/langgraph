@@ -66,20 +66,26 @@ class PregelRunner:
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
         def writer(
-            task: PregelExecutableTask, writes: Sequence[tuple[str, Any]]
-        ) -> None:
+            task: PregelExecutableTask,
+            writes: Sequence[tuple[str, Any]],
+            *,
+            calls: Optional[Sequence[Call]] = None,
+        ) -> Sequence[Optional[concurrent.futures.Future]]:
             prev_length = len(task.writes)
             # delegate to the underlying writer
             task.config[CONF][CONFIG_KEY_SEND](writes)
             # confirm no other concurrent writes were added
             # TODO could use a lock here instead, if writes can come from many threads
             assert len(task.writes) == prev_length + len(writes)
+            rtn: dict[int, Optional[concurrent.futures.Future]] = {}
             for idx, w in enumerate(writes, start=prev_length):
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
                 # schedule the next task, if the callback returns one
-                if next_task := self.schedule_task(task, idx):
+                if next_task := self.schedule_task(
+                    task, idx, calls[idx - prev_length] if calls else None
+                ):
                     # if the parent task was retried,
                     # the next task might already be running
                     if any(
@@ -87,18 +93,26 @@ class PregelRunner:
                     ):
                         continue
                     # schedule the next task
-                    futures[
-                        self.submit(
-                            run_with_retry,
-                            next_task,
-                            retry_policy,
-                            configurable={
-                                CONFIG_KEY_SEND: partial(writer, next_task),
-                                # CONFIG_KEY_CALL: partial(call, next_task),
-                            },
-                            __reraise_on_exit__=reraise,
-                        )
-                    ] = next_task
+                    fut = self.submit(
+                        run_with_retry,
+                        next_task,
+                        retry_policy,
+                        configurable={
+                            CONFIG_KEY_SEND: partial(writer, next_task),
+                            CONFIG_KEY_CALL: partial(call, next_task),
+                        },
+                        __reraise_on_exit__=reraise,
+                    )
+                    futures[fut] = next_task
+                    rtn[idx - prev_length] = fut
+            return [rtn.get(i) for i in range(len(writes))]
+
+        def call(
+            task, func: str | Callable[[Any], Union[Awaitable[Any], Any]], input: Any
+        ) -> concurrent.futures.Future[Any]:
+            (fut,) = writer(task, [(PUSH, None)], calls=[Call(func, input)])
+            assert fut is not None, "writer did not return a future for call"
+            return fut
 
         tasks = tuple(tasks)
         futures: dict[concurrent.futures.Future, Optional[PregelExecutableTask]] = {}
@@ -113,7 +127,7 @@ class PregelRunner:
                     retry_policy,
                     configurable={
                         CONFIG_KEY_SEND: partial(writer, t),
-                        # CONFIG_KEY_CALL: partial(call, t),
+                        CONFIG_KEY_CALL: partial(call, t),
                     },
                 )
                 self.commit(t, None)
@@ -138,7 +152,7 @@ class PregelRunner:
                         retry_policy,
                         configurable={
                             CONFIG_KEY_SEND: partial(writer, t),
-                            # CONFIG_KEY_CALL: partial(call, t),
+                            CONFIG_KEY_CALL: partial(call, t),
                         },
                         __reraise_on_exit__=reraise,
                     )
@@ -208,7 +222,7 @@ class PregelRunner:
                 if next_task := self.schedule_task(
                     task,
                     idx,
-                    calls[idx] if calls is not None else None,
+                    calls[idx - prev_length] if calls is not None else None,
                 ):
                     # if the parent task was retried,
                     # the next task might already be running
@@ -231,7 +245,7 @@ class PregelRunner:
                         __reraise_on_exit__=reraise,
                     )
                     futures[cast(asyncio.Future, fut)] = next_task
-                    rtn[idx] = fut
+                    rtn[idx - prev_length] = fut
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(

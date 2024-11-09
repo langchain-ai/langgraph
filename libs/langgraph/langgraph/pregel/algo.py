@@ -58,6 +58,7 @@ from langgraph.constants import (
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
+from langgraph.pregel.call import get_runnable_for_func
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
@@ -98,8 +99,14 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
+    __slots__ = ("func", "input")
+
     func: str | Callable
     input: Any
+
+    def __init__(self, func: str | Callable, input: Any) -> None:
+        self.func = func
+        self.input = input
 
 
 def should_interrupt(
@@ -184,7 +191,7 @@ def local_write(
     """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
     Validates writes and forwards them to `commit` function."""
     for chan, value in writes:
-        if chan in (PUSH, TASKS):
+        if chan in (PUSH, TASKS) and value is not None:
             if not isinstance(value, Send):
                 raise InvalidUpdateError(f"Expected Send, got {value}")
             if value.node not in process_keys:
@@ -464,7 +471,87 @@ def prepare_single_task(
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
-    if task_path[0] == PUSH:
+    if task_path[0] == PUSH and isinstance(task_path[-1], Call):
+        # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
+        task_path_t = cast(tuple[str, tuple, int, str, Optional[Call]], task_path)
+        call = task_path_t[-1]
+        proc = get_runnable_for_func(call.func)
+        name = proc.name
+        if name is None:
+            raise ValueError("`call` functions must have a `__name__` attribute")
+        # create task id
+        triggers = [PUSH]
+        checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
+        task_id = _uuid5_str(
+            checkpoint_id,
+            checkpoint_ns,
+            str(step),
+            name,
+            PUSH,
+            _tuple_str(task_path[1]),
+            str(task_path[2]),
+        )
+        task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        metadata = {
+            "langgraph_step": step,
+            "langgraph_node": name,
+            "langgraph_triggers": triggers,
+            "langgraph_path": task_path[:3],
+            "langgraph_checkpoint_ns": task_checkpoint_ns,
+        }
+        if task_id_checksum is not None:
+            assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
+        if for_execution:
+            writes: deque[tuple[str, Any]] = deque()
+            return PregelExecutableTask(
+                name,
+                call.input,
+                proc,
+                writes,
+                patch_config(
+                    merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+                    run_name=name,
+                    callbacks=(
+                        manager.get_child(f"graph:step:{step}") if manager else None
+                    ),
+                    configurable={
+                        CONFIG_KEY_TASK_ID: task_id,
+                        # deque.extend is thread-safe
+                        CONFIG_KEY_SEND: partial(
+                            local_write,
+                            writes.extend,
+                            processes.keys(),
+                        ),
+                        CONFIG_KEY_READ: partial(
+                            local_read,
+                            step,
+                            checkpoint,
+                            channels,
+                            managed,
+                            PregelTaskWrites(task_path[:3], name, writes, triggers),
+                            config,
+                        ),
+                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
+                        CONFIG_KEY_CHECKPOINTER: (
+                            checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                        ),
+                        CONFIG_KEY_CHECKPOINT_MAP: {
+                            **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                            parent_ns: checkpoint["id"],
+                        },
+                        CONFIG_KEY_CHECKPOINT_ID: None,
+                        CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                    },
+                ),
+                triggers,
+                None,
+                None,
+                task_id,
+                task_path[:3],
+            )
+        else:
+            return PregelTask(task_id, name, task_path[:3])
+    elif task_path[0] == PUSH:
         if len(task_path) == 2:  # TODO: remove branch in 1.0
             # legacy SEND tasks, executed in superstep n+1
             # (PUSH, idx of pending send)
@@ -498,13 +585,7 @@ def prepare_single_task(
         elif len(task_path) >= 4:
             # new PUSH tasks, executed in superstep n
             # (PUSH, parent task path, idx of PUSH write, id of parent task)
-            task_path_t = cast(
-                Union[
-                    tuple[str, tuple, int, str],
-                    tuple[str, tuple, int, str, Optional[Call]],
-                ],
-                task_path,
-            )
+            task_path_t = cast(tuple[str, tuple, int, str], task_path)
             writes_for_path = [w for w in pending_writes if w[0] == task_path_t[3]]
             if task_path_t[2] >= len(writes_for_path):
                 logger.warning(
@@ -513,12 +594,7 @@ def prepare_single_task(
                 return
             packet = writes_for_path[task_path_t[2]][2]
             if packet is None:
-                if len(task_path_t) == 5:
-                    packet = task_path_t[4]
-                else:
-                    # no packet to replay, this is a "call" task
-                    return
-            # TODO handle Call packets
+                return
             if not isinstance(packet, Send):
                 logger.warning(
                     f"Ignoring invalid packet type {type(packet)} in pending writes"
@@ -623,7 +699,6 @@ def prepare_single_task(
                     task_path[:3],
                     writers=proc.flat_writers,
                 )
-
         else:
             return PregelTask(task_id, packet.node, task_path[:3])
     elif task_path[0] == PULL:

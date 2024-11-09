@@ -37,9 +37,7 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            task.proc.invoke(task.input, config)
-            # if successful, end
-            break
+            return task.proc.invoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -128,10 +126,10 @@ async def arun_with_retry(
             if stream:
                 async for _ in task.proc.astream(task.input, config):
                     pass
+                # if successful, end
+                break
             else:
-                await task.proc.ainvoke(task.input, config)
-            # if successful, end
-            break
+                return await task.proc.ainvoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
