@@ -887,6 +887,7 @@ class Pregel(PregelProtocol):
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
@@ -1106,6 +1107,7 @@ class Pregel(PregelProtocol):
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
