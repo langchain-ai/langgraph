@@ -10,11 +10,11 @@ import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import START
 from langgraph.errors import NodeInterrupt
-from langgraph.graph.state import CompiledStateGraph, StateGraph
+from langgraph.graph.state import CompiledStateGraph, GraphCommand, StateGraph
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.default_sync import DefaultProducer
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from langgraph.types import Control, Send
+from langgraph.types import Send
 from tests.any import AnyDict
 from tests.drain import drain_topics
 
@@ -48,16 +48,15 @@ def mk_push_graph(
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, Control):
-                state.state = update
-                return state
+            if isinstance(state, GraphCommand):
+                return state.copy(update=update)
             else:
                 return update
 
     def send_for_fun(state):
         return [
-            Send("2", Control(send=Send("2", 3))),
-            Send("2", Control(send=Send("flaky", 4))),
+            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", GraphCommand(send=Send("flaky", 4))),
             "3.1",
         ]
 
