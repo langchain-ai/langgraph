@@ -478,6 +478,11 @@ class Pregel(PregelProtocol):
                 checkpointer=self.checkpointer or None,
                 manager=None,
             )
+            print(
+                saved.checkpoint["versions_seen"],
+                saved.checkpoint["pending_sends"],
+                # next_tasks,
+            )
             # get the subgraphs
             subgraphs = dict(self.get_subgraphs())
             parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
@@ -872,6 +877,46 @@ class Pregel(PregelProtocol):
             checkpoint,
             LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (channels, managed):
+            # no values, just clear all tasks
+            if values is None and as_node is None:
+                # tasks for this checkpoint
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    saved.config,
+                    saved.metadata.get("step", -1) + 1,
+                    for_execution=True,
+                    store=self.store,
+                    checkpointer=self.checkpointer or None,
+                    manager=None,
+                )
+                # apply writes from tasks that already ran
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    if tid not in next_tasks:
+                        continue
+                    next_tasks[tid].writes.append((k, v))
+                # clear all current tasks
+                apply_writes(checkpoint, channels, next_tasks.values(), None)
+                # save checkpoint
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -901,23 +946,7 @@ class Pregel(PregelProtocol):
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(checkpoint, channels, tasks, None)
             # find last node that updated the state, if not provided
-            if values is None and as_node is None:
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            elif as_node is None and not any(
+            if as_node is None and not any(
                 v for vv in checkpoint["versions_seen"].values() for v in vv.values()
             ):
                 if (
@@ -1057,6 +1086,46 @@ class Pregel(PregelProtocol):
             channels,
             managed,
         ):
+            # no values, just clear all tasks
+            if values is None and as_node is None:
+                # tasks for this checkpoint
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    saved.config,
+                    saved.metadata.get("step", -1) + 1,
+                    for_execution=True,
+                    store=self.store,
+                    checkpointer=self.checkpointer or None,
+                    manager=None,
+                )
+                # apply writes from tasks that already ran
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    if tid not in next_tasks:
+                        continue
+                    next_tasks[tid].writes.append((k, v))
+                # clear all current tasks
+                apply_writes(checkpoint, channels, next_tasks.values(), None)
+                # save checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -1085,23 +1154,7 @@ class Pregel(PregelProtocol):
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(checkpoint, channels, tasks, None)
             # find last node that updated the state, if not provided
-            if values is None and as_node is None:
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            elif as_node is None and not saved:
+            if as_node is None and not saved:
                 if (
                     isinstance(self.input_channels, str)
                     and self.input_channels in self.nodes

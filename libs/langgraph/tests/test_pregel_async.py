@@ -342,6 +342,28 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
             ][-1].config,
         )
 
+        # clear the interrupt and next tasks
+        await tool_two.aupdate_state(thread1, None)
+        # interrupt is cleared, task will still run next
+        tup = await tool_two.checkpointer.aget_tuple(thread1)
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value ⛰️", "market": "DE"},
+            next=(),
+            tasks=(),
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
+            metadata={
+                "parents": {},
+                "source": "update",
+                "step": 1,
+                "writes": {},
+                "thread_id": "1",
+            },
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
+        )
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_node_not_cancelled_on_other_node_interrupted(
