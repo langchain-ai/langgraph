@@ -256,7 +256,7 @@ class Command:
         )
         return f"Command({contents})"
 
-    def __eq__(self, value):
+    def __eq__(self, value: Any) -> bool:
         return type(value) is type(self) and all(
             getattr(self, key) == getattr(value, key) for key in self.__all_slots__
         )
