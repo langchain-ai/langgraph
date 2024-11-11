@@ -327,7 +327,6 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
 ALL_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
-    "duckdb",
     "postgres",
     "postgres_pipe",
     "postgres_pool",

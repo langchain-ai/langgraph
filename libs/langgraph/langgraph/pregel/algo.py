@@ -173,7 +173,7 @@ def local_write(
     """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
     Validates writes and forwards them to `commit` function."""
     for chan, value in writes:
-        if chan == PUSH:
+        if chan in (PUSH, TASKS):
             if not isinstance(value, Send):
                 raise InvalidUpdateError(f"Expected Send, got {value}")
             if value.node not in process_keys:

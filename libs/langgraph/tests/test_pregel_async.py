@@ -51,7 +51,14 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
+from langgraph.constants import (
+    CONFIG_KEY_NODE_FINISHED,
+    ERROR,
+    FF_SEND_V2,
+    PULL,
+    PUSH,
+    START,
+)
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph, GraphCommand, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
@@ -2022,17 +2029,31 @@ async def test_concurrent_emit_sends() -> None:
     builder.add_conditional_edges("1.1", send_for_profit)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert await graph.ainvoke(["0"]) == [
-        "0",
-        "1",
-        "1.1",
-        "2|1",
-        "2|2",
-        "2|3",
-        "2|4",
-        "3",
-        "3.1",
-    ]
+    assert await graph.ainvoke(["0"]) == (
+        [
+            "0",
+            "1",
+            "1.1",
+            "2|1",
+            "2|2",
+            "2|3",
+            "2|4",
+            "3",
+            "3.1",
+        ]
+        if FF_SEND_V2
+        else [
+            "0",
+            "1",
+            "1.1",
+            "3.1",
+            "2|1",
+            "2|2",
+            "2|3",
+            "2|4",
+            "3",
+        ]
+    )
 
 
 @pytest.mark.repeat(10)
@@ -2073,16 +2094,34 @@ async def test_send_sequences(checkpointer_name: str) -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert await graph.ainvoke(["0"]) == [
-        "0",
-        "1",
-        "2|Command(send=Send(node='2', arg=3))",
-        "2|Command(send=Send(node='2', arg=4))",
-        "2|3",
-        "2|4",
-        "3",
-        "3.1",
-    ]
+    assert (
+        await graph.ainvoke(["0"])
+        == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "2|3",
+            "2|4",
+            "3",
+            "3.1",
+        ]
+        if FF_SEND_V2
+        else [
+            "0",
+            "1",
+            "3.1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "3",
+            "2|3",
+            "2|4",
+            "3",
+        ]
+    )
+
+    if not FF_SEND_V2:
+        return
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(checkpointer=checkpointer, interrupt_before=["3.1"])
@@ -2110,6 +2149,9 @@ async def test_send_sequences(checkpointer_name: str) -> None:
 @pytest.mark.repeat(20)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
+    if not FF_SEND_V2:
+        pytest.skip("Send deduplication is only available in Send V2")
+
     class InterruptOnce:
         ticks: int = 0
 
@@ -2541,6 +2583,9 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             ]
         }
         assert foo_called == 0
+
+        if not FF_SEND_V2:
+            return
 
         # get state should show the pending task
         state = await graph.aget_state(thread1)
@@ -3003,6 +3048,9 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
             ]
         }
         assert foo_called == 0
+
+        if not FF_SEND_V2:
+            return
 
         # get state should show the pending task
         state = await graph.aget_state(thread1)
@@ -5825,6 +5873,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             },
             {"__interrupt__": ()},
         ]
+
+        if not FF_SEND_V2:
+            return
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
@@ -11029,6 +11080,20 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
 
         # check state
         outer_state = await graph.aget_state(config)
+
+        if not FF_SEND_V2:
+            # update state of dogs joke graph
+            await graph.aupdate_state(
+                outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
+            )
+
+            # continue past interrupt
+            assert await graph.ainvoke(None, config=config) == {
+                "subjects": ["cats", "dogs"],
+                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
+            }
+            return
+
         assert outer_state == StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             tasks=(
