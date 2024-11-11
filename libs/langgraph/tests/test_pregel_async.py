@@ -51,10 +51,9 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
-from langgraph.graph import END, Graph, StateGraph
-from langgraph.graph.graph import START
+from langgraph.graph import END, Graph, GraphCommand, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
@@ -63,7 +62,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Control, Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -2035,7 +2034,8 @@ async def test_concurrent_emit_sends() -> None:
     ]
 
 
-async def test_send_sequences() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_send_sequences(checkpointer_name: str) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -2047,16 +2047,16 @@ async def test_send_sequences() -> None:
                 if isinstance(state, list)  # or isinstance(state, Control)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, Control):
-                state.state = update
+            if isinstance(state, GraphCommand):
+                state.update = update
                 return state
             else:
                 return update
 
     async def send_for_fun(state):
         return [
-            Send("2", Control(send=Send("2", 3))),
-            Send("2", Control(send=Send("2", 4))),
+            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", GraphCommand(send=Send("2", 4))),
             "3.1",
         ]
 
@@ -2076,13 +2076,28 @@ async def test_send_sequences() -> None:
         "0",
         "1",
         "3.1",
-        "2|Control(send=Send(node='2', arg=3))",
-        "2|Control(send=Send(node='2', arg=4))",
+        "2|Command(send=Send(node='2', arg=3))",
+        "2|Command(send=Send(node='2', arg=4))",
         "3",
         "2|3",
         "2|4",
         "3",
     ]
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert await graph.ainvoke(["0"], thread1) == [
+            "0",
+            "1",
+            "3.1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "3",
+            "2|3",
+            "2|4",
+            "3",
+        ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -2543,9 +2558,9 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
         tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
     )
 
-    async def agent(state) -> Control[Literal["foo"]]:
-        return Control(
-            state={"messages": ai_message},
+    async def agent(state) -> GraphCommand[Literal["foo"]]:
+        return GraphCommand(
+            update={"messages": ai_message},
             send=[Send(call["name"], call) for call in ai_message.tool_calls],
         )
 
@@ -2843,13 +2858,13 @@ async def test_max_concurrency(checkpointer_name: str) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_max_concurrency_control(checkpointer_name: str) -> None:
-    async def node1(state) -> Control[Literal["2"]]:
-        return Control(state=["1"], send=[Send("2", idx) for idx in range(100)])
+    async def node1(state) -> GraphCommand[Literal["2"]]:
+        return GraphCommand(update=["1"], send=[Send("2", idx) for idx in range(100)])
 
     node2_currently = 0
     node2_max_currently = 0
 
-    async def node2(state) -> Control[Literal["3"]]:
+    async def node2(state) -> GraphCommand[Literal["3"]]:
         nonlocal node2_currently, node2_max_currently
         node2_currently += 1
         if node2_currently > node2_max_currently:
@@ -2857,7 +2872,7 @@ async def test_max_concurrency_control(checkpointer_name: str) -> None:
         await asyncio.sleep(0.1)
         node2_currently -= 1
 
-        return Control(state=[state], goto="3")
+        return GraphCommand(update=[state], goto="3")
 
     async def node3(state) -> Literal["3"]:
         return ["3"]

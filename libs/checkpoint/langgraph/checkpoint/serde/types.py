@@ -52,10 +52,8 @@ class SendProtocol(Protocol):
 
 
 @runtime_checkable
-class ControlProtocol(Protocol):
-    # Mirrors langgraph.constants.Control
-    update_state: Optional[dict[str, Any]]
-    trigger: Union[str, Sequence[str]]
+class CommandProtocol(Protocol):
+    # Mirrors langgraph.types.Command
+    update: Optional[dict[str, Any]]
     send: Union[Any, Sequence[Any]]
-
-    def __repr__(self) -> str: ...
+    __all_slots__: set[str]

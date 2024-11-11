@@ -4,13 +4,11 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Generic,
     Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
-    TypeVar,
     Union,
     cast,
 )
@@ -223,32 +221,45 @@ class Send:
         )
 
 
-N = TypeVar("N")
+class Command:
+    """One or more commands to update the graph's state and send messages to nodes."""
 
-
-class Control(Generic[N]):
-    """A control object to update the graph's state, trigger nodes, and send messages."""
-
-    __slots__ = ("state", "goto", "send")
+    __slots__ = ("update", "send")
 
     def __init__(
         self,
         *,
-        state: Optional[dict[str, Any]] = None,
-        goto: Union[str, Sequence[str]] = (),
+        update: Optional[dict[str, Any]] = None,
         send: Union[Send, Sequence[Send]] = (),
     ) -> None:
-        self.state = state
-        self.goto = goto
+        self.update = update
         self.send = send
 
+    @property
+    def __all_slots__(self) -> set[str]:
+        # get all slots from mro
+        slots = set()
+        for cls in type(self).__mro__:
+            if ss := getattr(cls, "__slots__", ()):
+                if isinstance(ss, str):
+                    slots.add(ss)
+                else:
+                    slots.update(ss)
+        return slots
+
     def __repr__(self) -> str:
+        # get all non-None values
         contents = ", ".join(
             f"{key}={value!r}"
-            for key in self.__slots__
+            for key in self.__all_slots__
             if (value := getattr(self, key))
         )
-        return f"Control({contents})"
+        return f"Command({contents})"
+
+    def __eq__(self, value):
+        return type(value) is type(self) and all(
+            getattr(self, key) == getattr(value, key) for key in self.__all_slots__
+        )
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
