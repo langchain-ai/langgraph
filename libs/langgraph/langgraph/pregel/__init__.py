@@ -478,11 +478,6 @@ class Pregel(PregelProtocol):
                 checkpointer=self.checkpointer or None,
                 manager=None,
             )
-            print(
-                saved.checkpoint["versions_seen"],
-                saved.checkpoint["pending_sends"],
-                # next_tasks,
-            )
             # get the subgraphs
             subgraphs = dict(self.get_subgraphs())
             parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")

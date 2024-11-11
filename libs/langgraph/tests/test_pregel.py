@@ -54,12 +54,10 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
-from langgraph.graph import END, Graph
-from langgraph.graph.graph import START
+from langgraph.graph import END, Graph, GraphCommand, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
-from langgraph.graph.state import StateGraph
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
@@ -74,7 +72,7 @@ from langgraph.pregel import (
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Control, Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
@@ -1808,16 +1806,16 @@ def test_send_sequences() -> None:
                 if isinstance(state, list)  # or isinstance(state, Control)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, Control):
-                state.state = update
+            if isinstance(state, GraphCommand):
+                state.update = update
                 return state
             else:
                 return update
 
     def send_for_fun(state):
         return [
-            Send("2", Control(send=Send("2", 3))),
-            Send("2", Control(send=Send("2", 4))),
+            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", GraphCommand(send=Send("2", 4))),
             "3.1",
         ]
 
@@ -1837,8 +1835,8 @@ def test_send_sequences() -> None:
         "0",
         "1",
         "3.1",
-        "2|Control(send=Send(node='2', arg=3))",
-        "2|Control(send=Send(node='2', arg=4))",
+        "2|Command(send=Send(node='2', arg=3))",
+        "2|Command(send=Send(node='2', arg=4))",
         "3",
         "2|3",
         "2|4",
@@ -2311,9 +2309,9 @@ def test_send_react_interrupt_control(
         tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
     )
 
-    def agent(state) -> Control[Literal["foo"]]:
-        return Control(
-            state={"messages": ai_message},
+    def agent(state) -> GraphCommand[Literal["foo"]]:
+        return GraphCommand(
+            update={"messages": ai_message},
             send=[Send(call["name"], call) for call in ai_message.tool_calls],
         )
 
