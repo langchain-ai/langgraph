@@ -65,6 +65,7 @@ from langgraph.constants import (
     START,
 )
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
+from langgraph.func import imp, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
@@ -1967,6 +1968,29 @@ def test_send_sequences() -> None:
             "3",
         ]
     )
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    @task()
+    def mapper(input: str) -> str:
+        print(f"mapper {input}")
+        return input * 2
+
+    @imp(checkpointer=checkpointer)
+    def graph(input: list[str]) -> list[str]:
+        futures = [mapper(i) for i in input]
+        mapped = [f.result() for f in futures]
+        # answer = interrupt("question")
+        # TODO raises NodeInterrupt if no answer provided yet
+        # returns answer (saved in writes?) if provided
+        # what is the API for passing the answer?
+        return mapped
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert graph.invoke(["0", "1"], thread1) == ["00", "11"]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
