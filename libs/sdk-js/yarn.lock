@@ -37,10 +37,10 @@
     wrap-ansi "^8.1.0"
     wrap-ansi-cjs "npm:wrap-ansi@^7.0.0"
 
-"@langchain/scripts@^0.1.3":
-  version "0.1.3"
-  resolved "https://registry.yarnpkg.com/@langchain/scripts/-/scripts-0.1.3.tgz#feceec6aaf15ec0cec43a7d6979a224acc8263f2"
-  integrity sha512-n//AURe2vDwT1DT6XaSrdlBu5FLc+fHsDFHhBzYxLgWzIOHSzYNUZZQTPAEQJZjeFoJUS84eV8q1cfQuHsAQdw==
+"@langchain/scripts@^0.1.4":
+  version "0.1.4"
+  resolved "https://registry.yarnpkg.com/@langchain/scripts/-/scripts-0.1.4.tgz#8c5d03d627686f20b9522213c12e2b329e73e381"
+  integrity sha512-O+mv2aqUIm3XWxYBrwFWMeTI3aHWeFR8OYjGFXKc1MGV/3LLao3PciyQvKUg1SL7FemHJ1ltDx74rKuEv8xxPA==
   dependencies:
     "@octokit/rest" "^21.0.2"
     "@rollup/wasm-node" "^4.19.0"
