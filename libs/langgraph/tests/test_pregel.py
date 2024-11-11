@@ -1875,16 +1875,15 @@ def test_send_dedupe_on_resume(
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, Control):
-                state.state = update
-                return state
+            if isinstance(state, GraphCommand):
+                return state.copy(update=update)
             else:
                 return update
 
     def send_for_fun(state):
         return [
-            Send("2", Control(send=Send("2", 3))),
-            Send("2", Control(send=Send("flaky", 4))),
+            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", GraphCommand(send=Send("flaky", 4))),
             "3.1",
         ]
 
@@ -1906,8 +1905,8 @@ def test_send_dedupe_on_resume(
     assert graph.invoke(["0"], thread1, debug=1) == [
         "0",
         "1",
-        "2|Control(send=Send(node='2', arg=3))",
-        "2|Control(send=Send(node='flaky', arg=4))",
+        "2|Command(send=Send(node='2', arg=3))",
+        "2|Command(send=Send(node='flaky', arg=4))",
         "2|3",
     ]
     assert builder.nodes["2"].runnable.func.ticks == 3
@@ -1922,8 +1921,8 @@ def test_send_dedupe_on_resume(
     assert graph.invoke(None, thread1, debug=1) == [
         "0",
         "1",
-        "2|Control(send=Send(node='2', arg=3))",
-        "2|Control(send=Send(node='flaky', arg=4))",
+        "2|Command(send=Send(node='2', arg=3))",
+        "2|Command(send=Send(node='flaky', arg=4))",
         "2|3",
         "flaky|4",
         "3",
@@ -1945,8 +1944,8 @@ def test_send_dedupe_on_resume(
                 values=[
                     "0",
                     "1",
-                    "2|Control(send=Send(node='2', arg=3))",
-                    "2|Control(send=Send(node='flaky', arg=4))",
+                    "2|Command(send=Send(node='2', arg=3))",
+                    "2|Command(send=Send(node='flaky', arg=4))",
                     "2|3",
                     "flaky|4",
                     "3",
@@ -1981,8 +1980,8 @@ def test_send_dedupe_on_resume(
                 values=[
                     "0",
                     "1",
-                    "2|Control(send=Send(node='2', arg=3))",
-                    "2|Control(send=Send(node='flaky', arg=4))",
+                    "2|Command(send=Send(node='2', arg=3))",
+                    "2|Command(send=Send(node='flaky', arg=4))",
                     "2|3",
                     "flaky|4",
                 ],
@@ -1999,8 +1998,8 @@ def test_send_dedupe_on_resume(
                     "writes": {
                         "1": ["1"],
                         "2": [
-                            ["2|Control(send=Send(node='2', arg=3))"],
-                            ["2|Control(send=Send(node='flaky', arg=4))"],
+                            ["2|Command(send=Send(node='2', arg=3))"],
+                            ["2|Command(send=Send(node='flaky', arg=4))"],
                             ["2|3"],
                         ],
                         "flaky": ["flaky|4"],
@@ -2085,7 +2084,7 @@ def test_send_dedupe_on_resume(
                         error=None,
                         interrupts=(),
                         state=None,
-                        result=["2|Control(send=Send(node='2', arg=3))"],
+                        result=["2|Command(send=Send(node='2', arg=3))"],
                     ),
                     PregelTask(
                         id=AnyStr(),
@@ -2099,7 +2098,7 @@ def test_send_dedupe_on_resume(
                         error=None,
                         interrupts=(),
                         state=None,
-                        result=["2|Control(send=Send(node='flaky', arg=4))"],
+                        result=["2|Command(send=Send(node='flaky', arg=4))"],
                     ),
                     PregelTask(
                         id=AnyStr(),
@@ -2904,7 +2903,7 @@ def test_send_react_interrupt_control(
 
     # interrupt-update-resume flow, creating new Send in update call
 
-    # TODO add here test with invoke(Control())
+    # TODO add here test with invoke(Command())
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

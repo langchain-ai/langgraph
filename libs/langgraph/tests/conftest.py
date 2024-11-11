@@ -335,7 +335,6 @@ ALL_CHECKPOINTERS_SYNC = [
 ALL_CHECKPOINTERS_ASYNC = [
     "memory",
     "sqlite_aio",
-    "duckdb_aio",
     "postgres_aio",
     "postgres_aio_pipe",
     "postgres_aio_pool",

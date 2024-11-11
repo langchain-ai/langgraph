@@ -2035,7 +2035,9 @@ async def test_concurrent_emit_sends() -> None:
     ]
 
 
-async def test_send_sequences() -> None:
+@pytest.mark.repeat(10)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_send_sequences(checkpointer_name: str) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -2074,22 +2076,40 @@ async def test_send_sequences() -> None:
     assert await graph.ainvoke(["0"]) == [
         "0",
         "1",
-        "3.1",
-        "2|Control(send=Send(node='2', arg=3))",
-        "2|Control(send=Send(node='2', arg=4))",
-        "3",
+        "2|Command(send=Send(node='2', arg=3))",
+        "2|Command(send=Send(node='2', arg=4))",
         "2|3",
         "2|4",
         "3",
+        "3.1",
     ]
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["3.1"])
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert await graph.ainvoke(["0"], thread1) == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "2|3",
+            "2|4",
+        ]
+        assert await graph.ainvoke(None, thread1) == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "2|3",
+            "2|4",
+            "3",
+            "3.1",
+        ]
 
 
 @pytest.mark.repeat(20)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
-    if checkpointer_name == "duckdb_aio":
-        pytest.skip("DuckDB isn't returning the right history")
-
     class InterruptOnce:
         ticks: int = 0
 
@@ -2112,16 +2132,15 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, Control):
-                state.state = update
-                return state
+            if isinstance(state, GraphCommand):
+                return state.copy(update=update)
             else:
                 return update
 
     def send_for_fun(state):
         return [
-            Send("2", Control(send=Send("2", 3))),
-            Send("2", Control(send=Send("flaky", 4))),
+            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", GraphCommand(send=Send("flaky", 4))),
             "3.1",
         ]
 
@@ -2144,8 +2163,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert await graph.ainvoke(["0"], thread1, debug=1) == [
             "0",
             "1",
-            "2|Control(send=Send(node='2', arg=3))",
-            "2|Control(send=Send(node='flaky', arg=4))",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='flaky', arg=4))",
             "2|3",
         ]
         assert builder.nodes["2"].runnable.func.ticks == 3
@@ -2154,8 +2173,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert await graph.ainvoke(None, thread1, debug=1) == [
             "0",
             "1",
-            "2|Control(send=Send(node='2', arg=3))",
-            "2|Control(send=Send(node='flaky', arg=4))",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='flaky', arg=4))",
             "2|3",
             "flaky|4",
             "3",
@@ -2172,8 +2191,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 values=[
                     "0",
                     "1",
-                    "2|Control(send=Send(node='2', arg=3))",
-                    "2|Control(send=Send(node='flaky', arg=4))",
+                    "2|Command(send=Send(node='2', arg=3))",
+                    "2|Command(send=Send(node='flaky', arg=4))",
                     "2|3",
                     "flaky|4",
                     "3",
@@ -2208,8 +2227,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 values=[
                     "0",
                     "1",
-                    "2|Control(send=Send(node='2', arg=3))",
-                    "2|Control(send=Send(node='flaky', arg=4))",
+                    "2|Command(send=Send(node='2', arg=3))",
+                    "2|Command(send=Send(node='flaky', arg=4))",
                     "2|3",
                     "flaky|4",
                 ],
@@ -2226,8 +2245,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     "writes": {
                         "1": ["1"],
                         "2": [
-                            ["2|Control(send=Send(node='2', arg=3))"],
-                            ["2|Control(send=Send(node='flaky', arg=4))"],
+                            ["2|Command(send=Send(node='2', arg=3))"],
+                            ["2|Command(send=Send(node='flaky', arg=4))"],
                             ["2|3"],
                         ],
                         "flaky": ["flaky|4"],
@@ -2312,7 +2331,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         error=None,
                         interrupts=(),
                         state=None,
-                        result=["2|Control(send=Send(node='2', arg=3))"],
+                        result=["2|Command(send=Send(node='2', arg=3))"],
                     ),
                     PregelTask(
                         id=AnyStr(),
@@ -2326,7 +2345,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         error=None,
                         interrupts=(),
                         state=None,
-                        result=["2|Control(send=Send(node='flaky', arg=4))"],
+                        result=["2|Command(send=Send(node='flaky', arg=4))"],
                     ),
                     PregelTask(
                         id=AnyStr(),
