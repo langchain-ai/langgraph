@@ -7968,6 +7968,24 @@ def test_dynamic_interrupt(
         },
         parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
     )
+    # clear the interrupt and next tasks
+    tool_two.update_state(thread1, None)
+    # interrupt is cleared, task will still run next
+    assert tool_two.get_state(thread1) == StateSnapshot(
+        values={"my_key": "value ⛰️", "market": "DE"},
+        next=(),
+        tasks=(),
+        config=tool_two.checkpointer.get_tuple(thread1).config,
+        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 1,
+            "writes": {},
+            "thread_id": "1",
+        },
+        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+    )
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

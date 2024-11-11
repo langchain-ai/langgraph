@@ -197,6 +197,7 @@ def apply_writes(
     # sort tasks on path
     tasks = sorted(tasks, key=lambda t: t.path)
 
+    print("versions_seen", checkpoint["versions_seen"], [task.name for task in tasks])
     # update seen versions
     for task in tasks:
         checkpoint["versions_seen"].setdefault(task.name, {}).update(
