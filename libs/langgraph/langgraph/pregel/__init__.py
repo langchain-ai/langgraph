@@ -879,28 +879,29 @@ class Pregel(PregelProtocol):
         ) as (channels, managed):
             # no values, just clear all tasks
             if values is None and as_node is None:
-                # tasks for this checkpoint
-                next_tasks = prepare_next_tasks(
-                    checkpoint,
-                    self.nodes,
-                    channels,
-                    managed,
-                    saved.config,
-                    saved.metadata.get("step", -1) + 1,
-                    for_execution=True,
-                    store=self.store,
-                    checkpointer=self.checkpointer or None,
-                    manager=None,
-                )
-                # apply writes from tasks that already ran
-                for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
-                        continue
-                    if tid not in next_tasks:
-                        continue
-                    next_tasks[tid].writes.append((k, v))
-                # clear all current tasks
-                apply_writes(checkpoint, channels, next_tasks.values(), None)
+                if saved is not None:
+                    # tasks for this checkpoint
+                    next_tasks = prepare_next_tasks(
+                        checkpoint,
+                        self.nodes,
+                        channels,
+                        managed,
+                        saved.config,
+                        saved.metadata.get("step", -1) + 1,
+                        for_execution=True,
+                        store=self.store,
+                        checkpointer=self.checkpointer or None,
+                        manager=None,
+                    )
+                    # apply writes from tasks that already ran
+                    for tid, k, v in saved.pending_writes or []:
+                        if k in (ERROR, INTERRUPT, SCHEDULED):
+                            continue
+                        if tid not in next_tasks:
+                            continue
+                        next_tasks[tid].writes.append((k, v))
+                    # clear all current tasks
+                    apply_writes(checkpoint, channels, next_tasks.values(), None)
                 # save checkpoint
                 next_config = checkpointer.put(
                     checkpoint_config,
@@ -1088,28 +1089,29 @@ class Pregel(PregelProtocol):
         ):
             # no values, just clear all tasks
             if values is None and as_node is None:
-                # tasks for this checkpoint
-                next_tasks = prepare_next_tasks(
-                    checkpoint,
-                    self.nodes,
-                    channels,
-                    managed,
-                    saved.config,
-                    saved.metadata.get("step", -1) + 1,
-                    for_execution=True,
-                    store=self.store,
-                    checkpointer=self.checkpointer or None,
-                    manager=None,
-                )
-                # apply writes from tasks that already ran
-                for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
-                        continue
-                    if tid not in next_tasks:
-                        continue
-                    next_tasks[tid].writes.append((k, v))
-                # clear all current tasks
-                apply_writes(checkpoint, channels, next_tasks.values(), None)
+                if saved is not None:
+                    # tasks for this checkpoint
+                    next_tasks = prepare_next_tasks(
+                        checkpoint,
+                        self.nodes,
+                        channels,
+                        managed,
+                        saved.config,
+                        saved.metadata.get("step", -1) + 1,
+                        for_execution=True,
+                        store=self.store,
+                        checkpointer=self.checkpointer or None,
+                        manager=None,
+                    )
+                    # apply writes from tasks that already ran
+                    for tid, k, v in saved.pending_writes or []:
+                        if k in (ERROR, INTERRUPT, SCHEDULED):
+                            continue
+                        if tid not in next_tasks:
+                            continue
+                        next_tasks[tid].writes.append((k, v))
+                    # clear all current tasks
+                    apply_writes(checkpoint, channels, next_tasks.values(), None)
                 # save checkpoint
                 next_config = await checkpointer.aput(
                     checkpoint_config,
