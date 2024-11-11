@@ -1834,13 +1834,12 @@ def test_send_sequences() -> None:
     assert graph.invoke(["0"]) == [
         "0",
         "1",
-        "3.1",
         "2|Command(send=Send(node='2', arg=3))",
         "2|Command(send=Send(node='2', arg=4))",
-        "3",
         "2|3",
         "2|4",
         "3",
+        "3.1",
     ]
 
 
