@@ -21,7 +21,8 @@ from langgraph.store.base import BaseStore
 from langgraph.store.duckdb import AsyncDuckDBStore, DuckDBStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
-from tests.memory_assert import MemorySaverAssertImmutable
+
+pytest.register_assert_rewrite("tests.memory_assert")
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 # TODO: fix this once core is released
@@ -49,6 +50,8 @@ def deterministic_uuids(mocker: MockerFixture) -> MockerFixture:
 
 @pytest.fixture(scope="function")
 def checkpointer_memory():
+    from tests.memory_assert import MemorySaverAssertImmutable
+
     yield MemorySaverAssertImmutable()
 
 
@@ -225,6 +228,8 @@ async def awith_checkpointer(
     if checkpointer_name is None:
         yield None
     elif checkpointer_name == "memory":
+        from tests.memory_assert import MemorySaverAssertImmutable
+
         yield MemorySaverAssertImmutable()
     elif checkpointer_name == "sqlite_aio":
         async with _checkpointer_sqlite_aio() as checkpointer:

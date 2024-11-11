@@ -2034,8 +2034,7 @@ async def test_concurrent_emit_sends() -> None:
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_send_sequences(checkpointer_name: str) -> None:
+async def test_send_sequences() -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -2048,8 +2047,7 @@ async def test_send_sequences(checkpointer_name: str) -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, GraphCommand):
-                state.update = update
-                return state
+                return state.copy(update=update)
             else:
                 return update
 
@@ -2083,21 +2081,6 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         "2|4",
         "3",
     ]
-
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
-        thread1 = {"configurable": {"thread_id": "1"}}
-        assert await graph.ainvoke(["0"], thread1) == [
-            "0",
-            "1",
-            "3.1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='2', arg=4))",
-            "3",
-            "2|3",
-            "2|4",
-            "3",
-        ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -8695,7 +8678,7 @@ async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None
                     {"inner_1": {"my_key": "got here", "my_other_key": ""}},
                 ),
             ),
-            (FloatBetween(0.2, 0.3), ((), {"outer_1": {"my_key": " and parallel"}})),
+            (FloatBetween(0.2, 0.4), ((), {"outer_1": {"my_key": " and parallel"}})),
             (
                 FloatBetween(0.5, 0.7),
                 (

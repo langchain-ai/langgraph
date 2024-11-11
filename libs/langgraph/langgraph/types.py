@@ -261,6 +261,11 @@ class Command:
             getattr(self, key) == getattr(value, key) for key in self.__all_slots__
         )
 
+    def copy(self, **kwargs: Any) -> Self:
+        for slot in self.__all_slots__:
+            kwargs.setdefault(slot, getattr(self, slot))
+        return self.__class__(**kwargs)
+
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
 
