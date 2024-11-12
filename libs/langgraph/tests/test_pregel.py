@@ -79,7 +79,14 @@ from langgraph.pregel import (
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import (
+    Command,
+    Interrupt,
+    PregelTask,
+    Send,
+    StreamWriter,
+    interrupt,
+)
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
@@ -8360,8 +8367,10 @@ def test_dynamic_interrupt(
         nonlocal tool_two_node_count
         tool_two_node_count += 1
         if s["market"] == "DE":
-            raise NodeInterrupt("Just because...")
-        return {"my_key": " all good"}
+            answer = interrupt("Just because...")
+        else:
+            answer = " all good"
+        return {"my_key": answer}
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
@@ -8393,6 +8402,20 @@ def test_dynamic_interrupt(
     with pytest.raises(ValueError, match="thread_id"):
         tool_two.invoke({"my_key": "value", "market": "DE"})
 
+    # flow: interrupt -> resume with answer
+    thread2 = {"configurable": {"thread_id": "2"}}
+    # stop when about to enter node
+    assert [
+        c for c in tool_two.stream({"my_key": "value ⛰️", "market": "DE"}, thread2)
+    ] == [
+        {"__interrupt__": [Interrupt(value="Just because...", when="during")]},
+    ]
+    # resume with answer
+    assert [c for c in tool_two.stream(Command(resume=" my answer"), thread2)] == [
+        {"tool_two": {"my_key": " my answer"}},
+    ]
+
+    # flow: interrupt -> clear tasks
     thread1 = {"configurable": {"thread_id": "1"}}
     # stop when about to enter node
     assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
