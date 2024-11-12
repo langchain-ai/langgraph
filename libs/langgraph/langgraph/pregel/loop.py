@@ -417,7 +417,6 @@ class PregelLoop(LoopProtocol):
             )
             for key, values in mv_writes.items():
                 self._update_mv(key, values)
-            print("applied null writes", null_writes)
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
@@ -544,7 +543,6 @@ class PregelLoop(LoopProtocol):
             # save writes
             for tid, ws in writes.items():
                 self.put_writes(tid, ws)
-            print("applied cmd", writes)
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
             # TODO shouldn't these writes be passed to put_writes too?
@@ -559,22 +557,19 @@ class PregelLoop(LoopProtocol):
                     }
                 )
             # discard any unfinished tasks from previous checkpoint
-            if not isinstance(self.input, Command):
-                discard_tasks = prepare_next_tasks(
-                    self.checkpoint,
-                    self.checkpoint_pending_writes,
-                    self.nodes,
-                    self.channels,
-                    self.managed,
-                    self.config,
-                    self.step,
-                    for_execution=True,
-                    store=None,
-                    checkpointer=None,
-                    manager=None,
-                )
-            else:
-                discard_tasks = {}
+            discard_tasks = prepare_next_tasks(
+                self.checkpoint,
+                self.checkpoint_pending_writes,
+                self.nodes,
+                self.channels,
+                self.managed,
+                self.config,
+                self.step,
+                for_execution=True,
+                store=None,
+                checkpointer=None,
+                manager=None,
+            )
             # apply input writes
             mv_writes = apply_writes(
                 self.checkpoint,
