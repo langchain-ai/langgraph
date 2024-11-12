@@ -92,8 +92,9 @@ class GraphCommand(Command, Generic[N]):
         update: Optional[dict[str, Any]] = None,
         goto: Union[str, Sequence[str]] = (),
         send: Union[Send, Sequence[Send]] = (),
+        resume: Optional[Union[Any, dict[str, Any]]] = None,
     ) -> None:
-        super().__init__(update=update, send=send)
+        super().__init__(update=update, send=send, resume=resume)
         self.goto = goto
 
 

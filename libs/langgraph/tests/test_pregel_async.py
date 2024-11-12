@@ -69,7 +69,14 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import (
+    Command,
+    Interrupt,
+    PregelTask,
+    Send,
+    StreamWriter,
+    interrupt,
+)
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -262,8 +269,10 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         nonlocal tool_two_node_count
         tool_two_node_count += 1
         if s["market"] == "DE":
-            raise NodeInterrupt("Just because...")
-        return {"my_key": " all good"}
+            answer = interrupt("Just because...")
+        else:
+            answer = " all good"
+        return {"my_key": answer}
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
@@ -296,6 +305,25 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         with pytest.raises(ValueError, match="thread_id"):
             await tool_two.ainvoke({"my_key": "value", "market": "DE"})
 
+        # flow: interrupt -> resume with answer
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value ⛰️", "market": "DE"}, thread2
+            )
+        ] == [
+            {"__interrupt__": [Interrupt(value="Just because...", when="during")]},
+        ]
+        # resume with answer
+        assert [
+            c async for c in tool_two.astream(Command(resume=" my answer"), thread2)
+        ] == [
+            {"tool_two": {"my_key": " my answer"}},
+        ]
+
+        # flow: interrupt -> clear
         thread1 = {"configurable": {"thread_id": "1"}}
         # stop when about to enter node
         assert [
@@ -350,7 +378,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
 
         # clear the interrupt and next tasks
         await tool_two.aupdate_state(thread1, None)
-        # interrupt is cleared, task will still run next
+        # interrupt is cleared, as well as the next tasks
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -376,7 +404,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
     checkpointer_name: str,
 ) -> None:
     class State(TypedDict):
-        hello: str
+        hello: Annotated[str, operator.add]
 
     awhiles = 0
     inner_task_cancelled = False
@@ -387,15 +415,14 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         awhiles += 1
         try:
             await asyncio.sleep(1)
-            return {"hello": "again"}
+            return {"hello": " again"}
         except asyncio.CancelledError:
             nonlocal inner_task_cancelled
             inner_task_cancelled = True
             raise
 
     async def iambad(input: State) -> None:
-        if input["hello"] != "bye":
-            raise NodeInterrupt("I am bad")
+        return {"hello": interrupt("I am bad")}
 
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
@@ -407,20 +434,25 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         thread = {"configurable": {"thread_id": "1"}}
 
         # writes from "awhile" are applied to last chunk
-        assert await graph.ainvoke({"hello": "world"}, thread) == {"hello": "again"}
+        assert await graph.ainvoke({"hello": "world"}, thread) == {
+            "hello": "world again"
+        }
 
         assert not inner_task_cancelled
         assert awhiles == 1
 
-        assert await graph.ainvoke(None, thread, debug=True) == {"hello": "again"}
+        assert await graph.ainvoke(None, thread, debug=True) == {"hello": "world again"}
 
         assert not inner_task_cancelled
         assert awhiles == 1
 
-        assert await graph.ainvoke({"hello": "bye"}, thread) == {"hello": "again"}
+        # resume with answer
+        assert await graph.ainvoke(Command(resume=" okay"), thread) == {
+            "hello": "world again okay"
+        }
 
         assert not inner_task_cancelled
-        assert awhiles == 2
+        assert awhiles == 1
 
 
 @pytest.mark.repeat(10)

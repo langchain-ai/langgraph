@@ -1,6 +1,6 @@
 import asyncio
 import concurrent.futures
-from collections import deque
+from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
 from types import TracebackType
 from typing import (
@@ -52,7 +52,9 @@ from langgraph.constants import (
     INPUT,
     INTERRUPT,
     NS_SEP,
+    NULL_TASK_ID,
     PUSH,
+    RESUME,
     SCHEDULED,
     TAG_HIDDEN,
 )
@@ -92,6 +94,7 @@ from langgraph.pregel.executor import (
     Submit,
 )
 from langgraph.pregel.io import (
+    map_command,
     map_input,
     map_output_updates,
     map_output_values,
@@ -102,7 +105,13 @@ from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
-from langgraph.types import All, LoopProtocol, PregelExecutableTask, StreamProtocol
+from langgraph.types import (
+    All,
+    Command,
+    LoopProtocol,
+    PregelExecutableTask,
+    StreamProtocol,
+)
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
@@ -273,7 +282,8 @@ class PregelLoop(LoopProtocol):
                 task_id,
             )
         # output writes
-        self._output_writes(task_id, writes)
+        if hasattr(self, "tasks"):
+            self._output_writes(task_id, writes)
 
     def accept_push(
         self, task: PregelExecutableTask, write_idx: int
@@ -395,6 +405,19 @@ class PregelLoop(LoopProtocol):
             self.status = "out_of_steps"
             return False
 
+        # apply NULL writes
+        if null_writes := [
+            w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
+        ]:
+            mv_writes = apply_writes(
+                self.checkpoint,
+                self.channels,
+                [PregelTaskWrites((), INPUT, null_writes, [])],
+                self.checkpointer_get_next_version,
+            )
+            for key, values in mv_writes.items():
+                self._update_mv(key, values)
+            print("applied null writes", null_writes)
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
@@ -478,7 +501,7 @@ class PregelLoop(LoopProtocol):
 
     def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
         for tid, k, v in self.checkpoint_pending_writes:
-            if k in (ERROR, INTERRUPT):
+            if k in (ERROR, INTERRUPT, RESUME):
                 continue
             if task := tasks.get(tid):
                 if k == SCHEDULED:
@@ -510,8 +533,21 @@ class PregelLoop(LoopProtocol):
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
             )
+        # map command to writes
+        elif isinstance(self.input, Command):
+            writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
+            # group writes by task ID
+            for tid, c, v in map_command(self.input):
+                writes[tid].append((c, v))
+            if not writes:
+                raise EmptyInputError("Received empty Command input")
+            # save writes
+            for tid, ws in writes.items():
+                self.put_writes(tid, ws)
+            print("applied cmd", writes)
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # TODO shouldn't these writes be passed to put_writes too?
             # check if we should delegate (used by subgraphs in distributed mode)
             if self.config[CONF].get(CONFIG_KEY_DELEGATE):
                 raise GraphDelegate(
@@ -523,19 +559,22 @@ class PregelLoop(LoopProtocol):
                     }
                 )
             # discard any unfinished tasks from previous checkpoint
-            discard_tasks = prepare_next_tasks(
-                self.checkpoint,
-                self.checkpoint_pending_writes,
-                self.nodes,
-                self.channels,
-                self.managed,
-                self.config,
-                self.step,
-                for_execution=True,
-                store=None,
-                checkpointer=None,
-                manager=None,
-            )
+            if not isinstance(self.input, Command):
+                discard_tasks = prepare_next_tasks(
+                    self.checkpoint,
+                    self.checkpoint_pending_writes,
+                    self.nodes,
+                    self.channels,
+                    self.managed,
+                    self.config,
+                    self.step,
+                    for_execution=True,
+                    store=None,
+                    checkpointer=None,
+                    manager=None,
+                )
+            else:
+                discard_tasks = {}
             # apply input writes
             mv_writes = apply_writes(
                 self.checkpoint,

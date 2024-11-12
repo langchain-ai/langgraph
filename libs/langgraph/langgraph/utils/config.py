@@ -290,3 +290,10 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
         ):
             empty["metadata"][key] = value
     return empty
+
+
+def get_configurable() -> dict[str, Any]:
+    if var_config := var_child_runnable_config.get():
+        return var_config[CONF]
+    else:
+        raise RuntimeError("Called get_configurable outside of a runnable context")

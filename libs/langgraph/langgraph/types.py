@@ -224,16 +224,18 @@ class Send:
 class Command:
     """One or more commands to update the graph's state and send messages to nodes."""
 
-    __slots__ = ("update", "send")
+    __slots__ = ("update", "send", "resume")
 
     def __init__(
         self,
         *,
         update: Optional[dict[str, Any]] = None,
         send: Union[Send, Sequence[Send]] = (),
+        resume: Optional[Union[Any, dict[str, Any]]] = None,
     ) -> None:
         self.update = update
         self.send = send
+        self.resume = resume
 
     @property
     def __all_slots__(self) -> set[str]:
@@ -307,3 +309,16 @@ class LoopProtocol:
         self.store = store
         self.step = step
         self.stop = stop
+
+
+def interrupt(value: Any) -> Any:
+    from langgraph.constants import CONFIG_KEY_RESUME_VALUE, MISSING
+    from langgraph.errors import NodeInterrupt
+    from langgraph.utils.config import get_configurable
+
+    conf = get_configurable()
+    print("interrupt", conf.get(CONFIG_KEY_RESUME_VALUE))
+    if (resume := conf.get(CONFIG_KEY_RESUME_VALUE, MISSING)) and resume is not MISSING:
+        return resume
+    else:
+        raise NodeInterrupt(value)

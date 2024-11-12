@@ -66,9 +66,11 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     ERROR,
+    INPUT,
     INTERRUPT,
     NS_END,
     NS_SEP,
+    NULL_TASK_ID,
     PUSH,
     SCHEDULED,
 )
@@ -519,6 +521,15 @@ class Pregel(PregelProtocol):
                         config, subgraphs=True
                     )
             # apply pending writes
+            if null_writes := [
+                w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+            ]:
+                apply_writes(
+                    saved.checkpoint,
+                    channels,
+                    [PregelTaskWrites((), INPUT, null_writes, [])],
+                    None,
+                )
             if apply_pending_writes and saved.pending_writes:
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -622,6 +633,15 @@ class Pregel(PregelProtocol):
                         config, subgraphs=True
                     )
             # apply pending writes
+            if null_writes := [
+                w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+            ]:
+                apply_writes(
+                    saved.checkpoint,
+                    channels,
+                    [PregelTaskWrites((), INPUT, null_writes, [])],
+                    None,
+                )
             if apply_pending_writes and saved.pending_writes:
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -898,6 +918,18 @@ class Pregel(PregelProtocol):
                         checkpointer=self.checkpointer or None,
                         manager=None,
                     )
+                    # apply null writes
+                    if null_writes := [
+                        w[1:]
+                        for w in saved.pending_writes or []
+                        if w[0] == NULL_TASK_ID
+                    ]:
+                        apply_writes(
+                            saved.checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, null_writes, [])],
+                            None,
+                        )
                     # apply writes from tasks that already ran
                     for tid, k, v in saved.pending_writes or []:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -943,6 +975,16 @@ class Pregel(PregelProtocol):
                     checkpointer=self.checkpointer or None,
                     manager=None,
                 )
+                # apply null writes
+                if null_writes := [
+                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+                ]:
+                    apply_writes(
+                        saved.checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, null_writes, [])],
+                        None,
+                    )
                 # apply writes
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -1118,6 +1160,18 @@ class Pregel(PregelProtocol):
                         checkpointer=self.checkpointer or None,
                         manager=None,
                     )
+                    # apply null writes
+                    if null_writes := [
+                        w[1:]
+                        for w in saved.pending_writes or []
+                        if w[0] == NULL_TASK_ID
+                    ]:
+                        apply_writes(
+                            saved.checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, null_writes, [])],
+                            None,
+                        )
                     # apply writes from tasks that already ran
                     for tid, k, v in saved.pending_writes or []:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -1163,6 +1217,16 @@ class Pregel(PregelProtocol):
                     checkpointer=self.checkpointer or None,
                     manager=None,
                 )
+                # apply null writes
+                if null_writes := [
+                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+                ]:
+                    apply_writes(
+                        saved.checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, null_writes, [])],
+                        None,
+                    )
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
                         continue

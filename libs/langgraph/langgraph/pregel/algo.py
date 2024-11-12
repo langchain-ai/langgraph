@@ -36,17 +36,21 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUME_VALUE,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
     EMPTY_SEQ,
     INTERRUPT,
+    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
+    NULL_TASK_ID,
     PULL,
     PUSH,
     RESERVED,
+    RESUME,
     TAG_HIDDEN,
     TASKS,
     Send,
@@ -199,6 +203,9 @@ def apply_writes(
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
     tasks = sorted(tasks, key=lambda t: t.path[:3])
+    # if no task has triggers this is applying writes from the null task only
+    # so we don't do anything other than update the channels written to
+    bump_step = any(t.triggers for t in tasks)
 
     # update seen versions
     for task in tasks:
@@ -230,7 +237,7 @@ def apply_writes(
             )
 
     # clear pending sends
-    if checkpoint["pending_sends"]:
+    if checkpoint["pending_sends"] and bump_step:
         checkpoint["pending_sends"].clear()
 
     # Group writes by channel
@@ -238,12 +245,10 @@ def apply_writes(
     pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
-            if chan == NO_WRITES:
+            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT):
                 pass
             elif chan == TASKS:  # TODO: remove branch in 1.0
                 checkpoint["pending_sends"].append(val)
-            elif chan == PUSH:
-                pass
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
             else:
@@ -267,13 +272,14 @@ def apply_writes(
             updated_channels.add(chan)
 
     # Channels that weren't updated in this step are notified of a new step
-    for chan in channels:
-        if chan not in updated_channels:
-            if channels[chan].update([]) and get_next_version is not None:
-                checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version,
-                    channels[chan],
-                )
+    if bump_step:
+        for chan in channels:
+            if chan not in updated_channels:
+                if channels[chan].update([]) and get_next_version is not None:
+                    checkpoint["channel_versions"][chan] = get_next_version(
+                        max_version,
+                        channels[chan],
+                    )
 
     # Return managed values writes to be applied externally
     return pending_writes_by_managed
@@ -582,6 +588,14 @@ def prepare_single_task(
                             },
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                            CONFIG_KEY_RESUME_VALUE: next(
+                                (
+                                    v
+                                    for tid, c, v in pending_writes
+                                    if tid in (NULL_TASK_ID, task_id) and c == RESUME
+                                ),
+                                MISSING,
+                            ),
                         },
                     ),
                     triggers,
@@ -599,6 +613,19 @@ def prepare_single_task(
         if name not in processes:
             return
         proc = processes[name]
+        print(
+            "preparing task",
+            task_path,
+            pending_writes,
+            sorted(
+                (chan, read_channel(channels, chan, return_exception=True))
+                for chan in proc.triggers
+                # if not isinstance(
+                #     read_channel(channels, chan, return_exception=True),
+                #     EmptyChannelError,
+                # )
+            ),
+        )
         version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
         null_version = version_type()  # type: ignore[misc]
         if null_version is None:
@@ -639,6 +666,7 @@ def prepare_single_task(
                 "langgraph_path": task_path,
                 "langgraph_checkpoint_ns": task_checkpoint_ns,
             }
+            print("preparing task", task_id, task_path, pending_writes)
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum
             if for_execution:
@@ -691,6 +719,15 @@ def prepare_single_task(
                                 },
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                                CONFIG_KEY_RESUME_VALUE: next(
+                                    (
+                                        v
+                                        for tid, c, v in pending_writes
+                                        if tid in (NULL_TASK_ID, task_id)
+                                        and c == RESUME
+                                    ),
+                                    MISSING,
+                                ),
                             },
                         ),
                         triggers,
