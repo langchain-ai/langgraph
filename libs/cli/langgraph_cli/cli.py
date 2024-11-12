@@ -16,6 +16,7 @@ from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
+from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.version import __version__
 
 OPT_DOCKER_COMPOSE = click.option(
@@ -516,6 +517,19 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
         fg="cyan",
         bold=True,
     )
+
+
+@click.argument("path", required=False)
+@click.option(
+    "--template",
+    type=str,
+    help=TEMPLATE_HELP_STRING,
+)
+@cli.command("new", help="Create a new LangGraph project from a template.")
+@log_command
+def new(path: Optional[str], template: Optional[str]) -> None:
+    """Create a new LangGraph project from a template."""
+    return create_new(path, template)
 
 
 def prepare_args_and_stdin(
