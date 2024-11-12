@@ -64,9 +64,12 @@ def _choose_template() -> str:
         click.secho(template_name, fg="cyan", nl=False)
         click.secho(f" - {template_info['description']}", fg="white")
 
-    # Get the template choice from user
-    template_choice: int = click.prompt(
-        "Enter the number of your template choice", type=int
+    # Get the template choice from the user, defaulting to the first template if blank
+    template_choice: Optional[int] = click.prompt(
+        "Enter the number of your template choice (default is 1)",
+        type=int,
+        default=1,
+        show_default=False,
     )
 
     template_keys = list(TEMPLATES.keys())
