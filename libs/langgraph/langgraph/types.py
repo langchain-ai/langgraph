@@ -317,7 +317,6 @@ def interrupt(value: Any) -> Any:
     from langgraph.utils.config import get_configurable
 
     conf = get_configurable()
-    print("interrupt", conf.get(CONFIG_KEY_RESUME_VALUE))
     if (resume := conf.get(CONFIG_KEY_RESUME_VALUE, MISSING)) and resume is not MISSING:
         return resume
     else:
