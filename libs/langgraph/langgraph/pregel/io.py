@@ -22,8 +22,7 @@ from langgraph.types import Command, PregelExecutableTask, Send
 def is_task_id(task_id: str) -> bool:
     """Check if a string is a valid task id."""
     try:
-        u = UUID(task_id)
-        print(u.version)
+        UUID(task_id)
     except ValueError:
         return False
     return True
