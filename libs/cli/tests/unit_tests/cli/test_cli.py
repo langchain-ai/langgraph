@@ -4,7 +4,6 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Generator
 
 from click.testing import CliRunner
 
@@ -158,27 +157,6 @@ def test_version_option() -> None:
     ), "Expected version information in output"
 
 
-@contextmanager
-def temporary_config_folder(
-    config_content: Dict[str, object],
-) -> Generator[Path, None, None]:
-    # Create a temporary directory
-    temp_dir = tempfile.mkdtemp()
-    try:
-        # Define the path for the config.json file
-        config_path = Path(temp_dir) / "config.json"
-
-        # Write the provided dictionary content to config.json
-        with open(config_path, "w", encoding="utf-8") as config_file:
-            json.dump(config_content, config_file)
-
-        # Yield the temporary directory path for use within the context
-        yield config_path.parent
-    finally:
-        # Cleanup the temporary directory and its contents
-        shutil.rmtree(temp_dir)
-
-
 def test_dockerfile_command_basic() -> None:
     """Test the 'dockerfile' command with basic configuration."""
     runner = CliRunner()
@@ -197,7 +175,7 @@ def test_dockerfile_command_basic() -> None:
 
         # Assert command was successful
         assert result.exit_code == 0, result.output
-        assert "✅ Added: Dockerfile" in result.output
+        assert "✅ Created: Dockerfile" in result.output
 
         # Check if Dockerfile was created
         assert save_path.exists()
@@ -231,10 +209,12 @@ def test_dockerfile_command_with_docker_compose() -> None:
 
         # Assert command was successful
         assert result.exit_code == 0
-        assert "✅ Added: Dockerfile" in result.output
-        assert "✅ Added: .dockerignore" in result.output
-        assert "✅ Added: docker-compose.yml" in result.output
-        assert "✅ Added: .env" in result.output or "➖ Skipped: .env" in result.output
+        assert "✅ Created: Dockerfile" in result.output
+        assert "✅ Created: .dockerignore" in result.output
+        assert "✅ Created: docker-compose.yml" in result.output
+        assert (
+            "✅ Created: .env" in result.output or "➖ Skipped: .env" in result.output
+        )
         assert "🎉 Files generated successfully" in result.output
 
         # Check if Dockerfile, .dockerignore, docker-compose.yml, and .env were created
