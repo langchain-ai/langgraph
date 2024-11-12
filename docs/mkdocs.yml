@@ -92,13 +92,16 @@ nav:
   - Tutorials:
       - tutorials/index.md
       - Quick Start:
+        - Quick Start: tutorials#quick-start
         - tutorials/introduction.ipynb
         - cloud/quick_start.md
       - Chatbots:
+          - Chatbots: tutorials#chatbots
           - tutorials/customer-support/customer-support.ipynb
           - tutorials/chatbots/information-gather-prompting.ipynb
           - tutorials/code_assistant/langgraph_code_assistant.ipynb
       - RAG:
+          - RAG: tutorials#rag
           - tutorials/rag/langgraph_adaptive_rag.ipynb
           - tutorials/rag/langgraph_adaptive_rag_local.ipynb
           - tutorials/rag/langgraph_agentic_rag.ipynb
@@ -108,24 +111,30 @@ nav:
           - tutorials/rag/langgraph_self_rag_local.ipynb
           - tutorials/sql-agent.ipynb
       - Agent Architectures:
+          - Agent Architectures: tutorials#agent-architectures
           - Multi-Agent Systems:
+              - Multi-Agent Systems: tutorials#multi-agent-systems
               - tutorials/multi_agent/multi-agent-collaboration.ipynb
               - tutorials/multi_agent/agent_supervisor.ipynb
               - tutorials/multi_agent/hierarchical_agent_teams.ipynb
           - Planning Agents:
+              - Planning Agents: tutorials#planning-agents
               - tutorials/plan-and-execute/plan-and-execute.ipynb
               - tutorials/rewoo/rewoo.ipynb
               - tutorials/llm-compiler/LLMCompiler.ipynb
           - Reflection & Critique:
+              - Reflection & Critique: tutorials#reflection-critique
               - tutorials/reflection/reflection.ipynb
               - tutorials/reflexion/reflexion.ipynb
               - tutorials/tot/tot.ipynb
               - tutorials/lats/lats.ipynb
               - tutorials/self-discover/self-discover.ipynb
       - Evaluation & Analysis:
+          - Evaluation & Analysis: tutorials#evaluation
           - tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
           - tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
       - Experimental:
+          - Experimental: tutorials#experimental
           - tutorials/storm/storm.ipynb
           - tutorials/tnt-llm/tnt-llm.ipynb
           - tutorials/web-navigation/web_voyager.ipynb
@@ -135,11 +144,14 @@ nav:
   - How-to Guides:
       - how-tos/index.md
       - LangGraph:
+        - LangGraph: how-tos#langgraph
         - Controllability:
+            - Controllability: how-tos#controllability
             - how-tos/branching.ipynb
             - how-tos/map-reduce.ipynb
             - how-tos/recursion-limit.ipynb
         - Persistence:
+            - Persistence: how-tos#persistence
             - how-tos/persistence.ipynb
             - how-tos/subgraph-persistence.ipynb
             - how-tos/cross-thread-persistence.ipynb
@@ -147,10 +159,12 @@ nav:
             - how-tos/persistence_mongodb.ipynb
             - how-tos/persistence_redis.ipynb
         - Memory:
+            - Memory: how-tos#memory
             - how-tos/memory/manage-conversation-history.ipynb
             - how-tos/memory/delete-messages.ipynb
             - how-tos/memory/add-summary-conversation-history.ipynb
         - Human-in-the-loop:
+            - Human-in-the-loop: how-tos#human-in-the-loop
             - how-tos/human_in_the_loop/breakpoints.ipynb
             - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
             - how-tos/human_in_the_loop/edit-graph-state.ipynb
@@ -158,6 +172,7 @@ nav:
             - how-tos/human_in_the_loop/time-travel.ipynb
             - how-tos/human_in_the_loop/review-tool-calls.ipynb
         - Streaming:
+            - Streaming: how-tos#streaming
             - how-tos/stream-values.ipynb
             - how-tos/stream-updates.ipynb
             - how-tos/streaming-tokens.ipynb
@@ -170,20 +185,24 @@ nav:
             - how-tos/streaming-subgraphs.ipynb
             - how-tos/disable-streaming.ipynb
         - Tool calling:
+            - Tool calling: how-tos#tool-calling
             - how-tos/tool-calling.ipynb
             - how-tos/tool-calling-errors.ipynb
             - how-tos/pass-run-time-values-to-tools.ipynb
             - how-tos/pass-config-to-tools.ipynb
             - how-tos/many-tools.ipynb
         - Subgraphs:
+            - Subgraphs: how-tos#subgraphs
             - how-tos/subgraph.ipynb
             - how-tos/subgraphs-manage-state.ipynb
             - how-tos/subgraph-transform-state.ipynb
         - State Management:
+            - State Management: how-tos#state-management
             - how-tos/state-model.ipynb
             - how-tos/input_output_schema.ipynb
             - how-tos/pass_private_state.ipynb
         - Other:
+            - Other: how-tos#other
             - how-tos/async.ipynb
             - how-tos/visualization.ipynb
             - how-tos/configuration.ipynb
@@ -192,13 +211,16 @@ nav:
             - how-tos/run-id-langsmith.ipynb
             - how-tos/return-when-recursion-limit-hits.ipynb
         - Prebuilt ReAct Agent:
+            - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
             - how-tos/create-react-agent.ipynb
             - how-tos/create-react-agent-memory.ipynb
             - how-tos/create-react-agent-system-prompt.ipynb
             - how-tos/create-react-agent-hitl.ipynb
             - how-tos/react-agent-from-scratch.ipynb
       - LangGraph Platform:
+          - LangGraph Platform: how-tos#langgraph-platform
           - Application Structure:
+              - Application Structure: how-tos#application-structure
               - cloud/deployment/setup.md
               - cloud/deployment/setup_pyproject.md
               - cloud/deployment/setup_javascript.md
@@ -206,21 +228,26 @@ nav:
               - cloud/deployment/test_locally.md
               - cloud/deployment/graph_rebuild.md
           - Deployment:
+              - Deployment: how-tos#deployment
               - cloud/deployment/cloud.md
               - how-tos/deploy-self-hosted.md
               - how-tos/use-remote-graph.md
           - Assistants:
+              - Assistants: how-tos#assistants
               - cloud/how-tos/configuration_cloud.md
               - cloud/how-tos/assistant_versioning.md
           - Threads:
+              - Threads: how-tos#threads
               - cloud/how-tos/copy_threads.md
               - cloud/how-tos/check_thread_status.md
           - Runs:
+              - Runs: how-tos#runs
               - cloud/how-tos/background_run.md
               - cloud/how-tos/same-thread.md
               - cloud/how-tos/cron_jobs.md
               - cloud/how-tos/stateless_runs.md
           - Streaming:
+              - Streaming: how-tos#streaming_1
               - cloud/how-tos/stream_values.md
               - cloud/how-tos/stream_updates.md
               - cloud/how-tos/stream_messages.md
@@ -228,12 +255,14 @@ nav:
               - cloud/how-tos/stream_debug.md
               - cloud/how-tos/stream_multiple.md
           - Human-in-the-loop:
+              - Human-in-the-loop: how-tos#human-in-the-loop_1
               - cloud/how-tos/human_in_the_loop_breakpoint.md
               - cloud/how-tos/human_in_the_loop_user_input.md
               - cloud/how-tos/human_in_the_loop_edit_state.md
               - cloud/how-tos/human_in_the_loop_time_travel.md
               - cloud/how-tos/human_in_the_loop_review_tool_calls.md
           - Double-texting:
+              - Double-texting: how-tos#double-texting
               - cloud/how-tos/interrupt_concurrent.md
               - cloud/how-tos/rollback_concurrent.md
               - cloud/how-tos/reject_concurrent.md
@@ -243,11 +272,13 @@ nav:
           - Cron Jobs:
               - cloud/how-tos/cron_jobs.md
           - LangGraph Studio:
+              - LangGraph Studio: how-tos#langgraph-studio
               - cloud/how-tos/test_deployment.md
               - cloud/how-tos/test_local_deployment.md
               - cloud/how-tos/invoke_studio.md
               - cloud/how-tos/threads_studio.md
       - Troubleshooting:
+          - Troubleshooting: how-tos#troubleshooting
           - troubleshooting/errors/index.md
           - troubleshooting/errors/GRAPH_RECURSION_LIMIT.md
           - troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md
@@ -257,6 +288,7 @@ nav:
   - Conceptual Guides:
       - concepts/index.md
       - LangGraph:
+        - LangGraph: concepts#langgraph
         - concepts/high_level.md
         - concepts/low_level.md
         - concepts/agentic_concepts.md
@@ -267,22 +299,27 @@ nav:
         - concepts/streaming.md
         - concepts/faq.md
       - LangGraph Platform:
+        - LangGraph Platform: concepts#langgraph-platform
         - High Level:
+          - High Level: concepts#high-level
           - concepts/langgraph_platform.md
           - concepts/deployment_options.md
           - concepts/plans.md
           - concepts/template_applications.md
         - Components:
+          - Components: concepts#components
           - concepts/langgraph_server.md
           - concepts/langgraph_studio.md
           - concepts/langgraph_cli.md
           - concepts/sdk.md
           - how-tos/use-remote-graph.md
         - LangGraph Server:
+          - LangGraph Server: concepts#langgraph-server
           - concepts/application_structure.md
           - concepts/assistants.md
           - concepts/double_texting.md
         - Deployment Options:
+          - Deployment Options: concepts#deployment-options
           - concepts/self_hosted.md
           - concepts/langgraph_cloud.md
           - concepts/bring_your_own_cloud.md
@@ -400,3 +437,5 @@ validation:
   # because it creates anchors in the generated report
   # and those anchors are not available in the actual doc
   anchors: info
+  # this is needed to handle headers with anchors for nav
+  not_found: info

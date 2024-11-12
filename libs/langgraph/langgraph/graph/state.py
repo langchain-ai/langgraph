@@ -8,11 +8,13 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
+    Generic,
     Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -48,12 +50,14 @@ from langgraph.managed.base import (
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, Control, RetryPolicy
+from langgraph.types import All, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
+
+N = TypeVar("N")
 
 
 def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
@@ -75,6 +79,22 @@ def _get_node_name(node: RunnableLike) -> str:
         return getattr(node, "__name__", node.__class__.__name__)
     else:
         raise TypeError(f"Unsupported node type: {type(node)}")
+
+
+class GraphCommand(Command, Generic[N]):
+    """One or more commands to update a StateGraph's state and go to, or send messages to nodes."""
+
+    __slots__ = ("goto",)
+
+    def __init__(
+        self,
+        *,
+        update: Optional[dict[str, Any]] = None,
+        goto: Union[str, Sequence[str]] = (),
+        send: Union[Send, Sequence[Send]] = (),
+    ) -> None:
+        super().__init__(update=update, send=send)
+        self.goto = goto
 
 
 class StateNodeSpec(NamedTuple):
@@ -369,7 +389,7 @@ class StateGraph(Graph):
                             input = input_hint
                 if (
                     (rtn := hints.get("return"))
-                    and get_origin(rtn) is Control
+                    and get_origin(rtn) is GraphCommand
                     and (rargs := get_args(rtn))
                     and get_origin(rargs[0]) is Literal
                     and (vals := get_args(rargs[0]))
@@ -604,8 +624,8 @@ class CompiledStateGraph(CompiledGraph):
             ]
 
         def _get_root(input: Any) -> Any:
-            if isinstance(input, Control):
-                return input.state
+            if isinstance(input, Command):
+                return input.update
             else:
                 return input
 
@@ -618,8 +638,8 @@ class CompiledStateGraph(CompiledGraph):
                         f"Expected node {key} to update at least one of {output_keys}, got {input}"
                     )
                 return input.get(key, SKIP_WRITE)
-            elif isinstance(input, Control):
-                return _get_state_key(input.state, key=key)
+            elif isinstance(input, Command):
+                return _get_state_key(input.update, key=key)
             elif get_type_hints(type(input)):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
@@ -799,7 +819,7 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, Control):
+    if not isinstance(value, GraphCommand):
         return EMPTY_SEQ
     rtn: list[Union[str, Send]] = []
     if isinstance(value.goto, str):
@@ -816,7 +836,7 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
 async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, Control):
+    if not isinstance(value, GraphCommand):
         return EMPTY_SEQ
     rtn: list[Union[str, Send]] = []
     if isinstance(value.goto, str):
