@@ -500,7 +500,6 @@ def prepare_single_task(
                 return
             packet = writes_for_path[task_path_t[2]][2]
             if not isinstance(packet, Send):
-                print("packet", task_path_t, writes_for_path)
                 logger.warning(
                     f"Ignoring invalid packet type {type(packet)} in pending writes"
                 )
@@ -613,19 +612,6 @@ def prepare_single_task(
         if name not in processes:
             return
         proc = processes[name]
-        print(
-            "preparing task",
-            task_path,
-            pending_writes,
-            sorted(
-                (chan, read_channel(channels, chan, return_exception=True))
-                for chan in proc.triggers
-                # if not isinstance(
-                #     read_channel(channels, chan, return_exception=True),
-                #     EmptyChannelError,
-                # )
-            ),
-        )
         version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
         null_version = version_type()  # type: ignore[misc]
         if null_version is None:
@@ -666,7 +652,6 @@ def prepare_single_task(
                 "langgraph_path": task_path,
                 "langgraph_checkpoint_ns": task_checkpoint_ns,
             }
-            print("preparing task", task_id, task_path, pending_writes)
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum
             if for_execution:
