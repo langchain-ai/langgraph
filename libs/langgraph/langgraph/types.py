@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
+import sys
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -46,6 +47,11 @@ StreamWriter = Callable[[Any], None]
 """Callable that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using stream_mode="custom"."""
+
+if sys.version_info >= (3, 10):
+    _DC_KWARGS = {"kw_only": True, "slots": True}
+else:
+    _DC_KWARGS = {}
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -104,9 +110,11 @@ class CachePolicy(NamedTuple):
     pass
 
 
-@dataclass
+@dataclass(**_DC_KWARGS)
 class Interrupt:
     value: Any
+    resumable: bool = False
+    ns: Optional[str] = None
     when: Literal["during"] = "during"
 
 
@@ -318,12 +326,25 @@ class LoopProtocol:
 
 
 def interrupt(value: Any) -> Any:
-    from langgraph.constants import CONFIG_KEY_RESUME_VALUE, MISSING
-    from langgraph.errors import NodeInterrupt
+    from langgraph.constants import (
+        CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_RESUME_VALUE,
+        MISSING,
+        NS_SEP,
+    )
+    from langgraph.errors import GraphInterrupt
     from langgraph.utils.config import get_configurable
 
     conf = get_configurable()
     if (resume := conf.get(CONFIG_KEY_RESUME_VALUE, MISSING)) and resume is not MISSING:
         return resume
     else:
-        raise NodeInterrupt(value)
+        raise GraphInterrupt(
+            (
+                Interrupt(
+                    value=value,
+                    resumable=True,
+                    ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                ),
+            )
+        )

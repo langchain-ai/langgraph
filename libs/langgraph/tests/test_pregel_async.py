@@ -318,7 +318,15 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 {"my_key": "value ⛰️", "market": "DE"}, thread2
             )
         ] == [
-            {"__interrupt__": [Interrupt(value="Just because...", when="during")]},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:")],
+                    ),
+                )
+            },
         ]
         # resume with answer
         assert [
@@ -336,7 +344,15 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 {"my_key": "value ⛰️", "market": "DE"}, thread1
             )
         ] == [
-            {"__interrupt__": [Interrupt(value="Just because...", when="during")]},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:")],
+                    ),
+                )
+            },
         ]
         assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
             {
@@ -363,7 +379,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                     AnyStr(),
                     "tool_two",
                     (PULL, "tool_two"),
-                    interrupts=(Interrupt("Just because..."),),
+                    interrupts=(
+                        Interrupt(
+                            value="Just because...",
+                            resumable=True,
+                            ns=[AnyStr("tool_two:")],
+                        ),
+                    ),
                 ),
             ),
             config=tup.config,
