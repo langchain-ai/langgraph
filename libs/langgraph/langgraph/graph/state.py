@@ -14,7 +14,6 @@ from typing import (
     Optional,
     Sequence,
     Type,
-    TypeVar,
     Union,
     cast,
     get_args,
@@ -50,14 +49,12 @@ from langgraph.managed.base import (
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, Command, RetryPolicy
+from langgraph.types import All, Checkpointer, Command, N, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
-
-N = TypeVar("N")
 
 
 def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
@@ -81,7 +78,7 @@ def _get_node_name(node: RunnableLike) -> str:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
-class GraphCommand(Command, Generic[N]):
+class GraphCommand(Generic[N], Command[N]):
     """One or more commands to update a StateGraph's state and go to, or send messages to nodes."""
 
     __slots__ = ("goto",)
@@ -90,9 +87,9 @@ class GraphCommand(Command, Generic[N]):
         self,
         *,
         update: Optional[dict[str, Any]] = None,
-        goto: Union[str, Sequence[str]] = (),
         send: Union[Send, Sequence[Send]] = (),
         resume: Optional[Union[Any, dict[str, Any]]] = None,
+        goto: Union[str, Sequence[str]] = (),
     ) -> None:
         super().__init__(update=update, send=send, resume=resume)
         self.goto = goto
@@ -390,7 +387,7 @@ class StateGraph(Graph):
                             input = input_hint
                 if (
                     (rtn := hints.get("return"))
-                    and get_origin(rtn) is GraphCommand
+                    and get_origin(rtn) in (Command, GraphCommand)
                     and (rargs := get_args(rtn))
                     and get_origin(rargs[0]) is Literal
                     and (vals := get_args(rargs[0]))

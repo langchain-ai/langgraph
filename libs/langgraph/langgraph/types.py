@@ -4,11 +4,14 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Generic,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
     cast,
 )
@@ -221,7 +224,10 @@ class Send:
         )
 
 
-class Command:
+N = TypeVar("N", bound=Hashable)
+
+
+class Command(Generic[N]):
     """One or more commands to update the graph's state and send messages to nodes."""
 
     __slots__ = ("update", "send", "resume")
