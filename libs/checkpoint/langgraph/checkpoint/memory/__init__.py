@@ -364,8 +364,12 @@ class MemorySaver(
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         checkpoint_id = config["configurable"]["checkpoint_id"]
         outer_key = (thread_id, checkpoint_ns, checkpoint_id)
+        outer_writes_ = self.writes.get(outer_key)
         for idx, (c, v) in enumerate(writes):
             inner_key = (task_id, WRITES_IDX_MAP.get(c, idx))
+            if inner_key[1] >= 0 and outer_writes_ and inner_key in outer_writes_:
+                continue
+
             self.writes[outer_key][inner_key] = (task_id, c, self.serde.dumps_typed(v))
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
