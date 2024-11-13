@@ -13,6 +13,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 
+from langgraph.pregel.remote import RemoteException
 
 def test_with_config():
     # set up test
@@ -796,3 +797,97 @@ async def test_langgraph_cloud_integration():
     remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
     graph = await remote_pregel.aget_graph(xray=True)
     print("graph:", graph)
+
+
+def test_stream_error_events():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(event="error", data="Remote error occurred")
+    ]
+    
+    remote_graph = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+    
+    with pytest.raises(RemoteException, match="Remote error occurred"):
+        for _ in remote_graph.stream(
+            {"input": "data"},
+            config={"configurable": {"thread_id": "thread_1"}},
+            stream_mode="values"
+        ):
+            pass
+
+@pytest.mark.anyio
+async def test_astream_error_events():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(event="error", data="Remote error occurred")
+    ]
+    mock_async_client.runs.stream.return_value = async_iter
+    
+    remote_graph = RemoteGraph("test_graph_id", client=mock_async_client)
+    
+    with pytest.raises(RemoteException, match="Remote error occurred"):
+        async for _ in remote_graph.astream(
+            {"input": "data"},
+            config={"configurable": {"thread_id": "thread_1"}},
+            stream_mode="values"
+        ):
+            pass
+
+
+def test_invoke_empty_response():
+    # Test sync version
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = []
+    remote_graph = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+    result = remote_graph.invoke({"input": "data"})
+    assert result is None
+
+@pytest.mark.anyio
+async def test_ainvoke_empty_response():
+    # Test async version
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = []
+    mock_async_client.runs.stream.return_value = async_iter
+    remote_graph = RemoteGraph("test_graph_id", client=mock_async_client)
+    result = await remote_graph.ainvoke({"input": "data"})
+    assert result is None
+
+
+def test_stream_modes_messages_mapping():
+    remote_graph = RemoteGraph("test_graph_id", sync_client=MagicMock())
+    
+    # Test mapping 'messages' to 'messages-tuple'
+    stream_modes, requested, req_single, stream = remote_graph._get_stream_modes(
+        stream_mode="messages", 
+        config=None
+    )
+    
+    assert "messages-tuple" in stream_modes
+    assert "messages" not in stream_modes
+    assert "messages" in requested
+    assert "messages-tuple" not in requested
+    
+    # Test with list of modes
+    stream_modes, requested, req_single, stream = remote_graph._get_stream_modes(
+        stream_mode=["messages", "updates"], 
+        config=None
+    )
+    
+    assert "messages-tuple" in stream_modes
+    assert "messages" not in stream_modes
+    assert "messages" in requested
+    assert "messages-tuple" not in requested
+
+
+def test_validate_client_not_initialized():
+    remote_graph = RemoteGraph("test_graph_id", sync_client=MagicMock())
+    with pytest.raises(ValueError, match="Async client is not initialized"):
+        remote_graph._validate_client()
+
+
+def test_validate_sync_client_not_initialized():
+    remote_graph = RemoteGraph("test_graph_id", client=MagicMock())
+    with pytest.raises(ValueError, match="Sync client is not initialized"):
+        remote_graph._validate_sync_client()

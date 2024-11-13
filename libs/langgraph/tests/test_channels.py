@@ -86,3 +86,16 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+def test_last_value_empty_update() -> None:
+    channel = LastValue(int)
+    assert not channel.update([])
+
+
+def test_last_value_equality() -> None:
+    channel1 = LastValue(int)
+    channel2 = LastValue(int)
+    assert channel1 == channel2
+    # Test against different type
+    assert channel1 != "not a channel"
+
