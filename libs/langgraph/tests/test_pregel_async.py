@@ -2973,7 +2973,9 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
+async def test_send_react_interrupt_control(
+    checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
@@ -2982,7 +2984,7 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
         tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
     )
 
-    async def agent(state) -> GraphCommand[Literal["foo"]]:
+    async def agent(state) -> Command[Literal["foo"]]:
         return GraphCommand(
             update={"messages": ai_message},
             send=[Send(call["name"], call) for call in ai_message.tool_calls],
@@ -3000,6 +3002,7 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     assert await graph.ainvoke({"messages": [HumanMessage("hello")]}) == {
         "messages": [

@@ -2691,7 +2691,7 @@ def test_send_react_interrupt(
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_react_interrupt_control(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
@@ -2721,6 +2721,7 @@ def test_send_react_interrupt_control(
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
         "messages": [
