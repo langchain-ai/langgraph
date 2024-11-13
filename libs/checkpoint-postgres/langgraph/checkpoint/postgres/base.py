@@ -261,10 +261,10 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
         # construct predicate for config filter
         if config:
-            if thread_id := config["configurable"].get("thread_id"):
+            if thread_id := config["configurable"].get("thread_id") is not None:
                 wheres.append("thread_id = %s")
                 param_values.append(thread_id)
-            if checkpoint_ns := config["configurable"].get("checkpoint_ns"):
+            if checkpoint_ns := config["configurable"].get("checkpoint_ns") is not None:
                 wheres.append("checkpoint_ns = %s")
                 param_values.append(checkpoint_ns)
             if checkpoint_id := get_checkpoint_id(config):
