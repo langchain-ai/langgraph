@@ -25,6 +25,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
     INTERRUPT,
+    RESUME,
     SCHEDULED,
     ChannelProtocol,
     SendProtocol,
@@ -450,4 +451,4 @@ Special writes (e.g. errors) map to negative indices, to avoid those writes from
 conflicting with regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
-WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3}
+WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}

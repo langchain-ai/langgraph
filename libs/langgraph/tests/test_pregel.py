@@ -8,6 +8,7 @@ import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from random import randrange
 from typing import (
     Annotated,
@@ -79,7 +80,14 @@ from langgraph.pregel import (
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import (
+    Command,
+    Interrupt,
+    PregelTask,
+    Send,
+    StreamWriter,
+    interrupt,
+)
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
@@ -1827,9 +1835,8 @@ def test_send_sequences() -> None:
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, GraphCommand):
-                state.update = update
-                return state
+            if isinstance(state, Command):
+                return replace(state, update=update)
             else:
                 return update
 
@@ -1911,7 +1918,7 @@ def test_send_dedupe_on_resume(
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, GraphCommand):
-                return state.copy(update=update)
+                return replace(state, update=update)
             else:
                 return update
 
@@ -2684,7 +2691,7 @@ def test_send_react_interrupt(
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_react_interrupt_control(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
@@ -2714,6 +2721,7 @@ def test_send_react_interrupt_control(
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
         "messages": [
@@ -8360,8 +8368,10 @@ def test_dynamic_interrupt(
         nonlocal tool_two_node_count
         tool_two_node_count += 1
         if s["market"] == "DE":
-            raise NodeInterrupt("Just because...")
-        return {"my_key": " all good"}
+            answer = interrupt("Just because...")
+        else:
+            answer = " all good"
+        return {"my_key": answer}
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
@@ -8393,6 +8403,28 @@ def test_dynamic_interrupt(
     with pytest.raises(ValueError, match="thread_id"):
         tool_two.invoke({"my_key": "value", "market": "DE"})
 
+    # flow: interrupt -> resume with answer
+    thread2 = {"configurable": {"thread_id": "2"}}
+    # stop when about to enter node
+    assert [
+        c for c in tool_two.stream({"my_key": "value ⛰️", "market": "DE"}, thread2)
+    ] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="Just because...",
+                    resumable=True,
+                    ns=[AnyStr("tool_two:")],
+                ),
+            )
+        },
+    ]
+    # resume with answer
+    assert [c for c in tool_two.stream(Command(resume=" my answer"), thread2)] == [
+        {"tool_two": {"my_key": " my answer"}},
+    ]
+
+    # flow: interrupt -> clear tasks
     thread1 = {"configurable": {"thread_id": "1"}}
     # stop when about to enter node
     assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
@@ -8423,7 +8455,13 @@ def test_dynamic_interrupt(
                 AnyStr(),
                 "tool_two",
                 (PULL, "tool_two"),
-                interrupts=(Interrupt("Just because..."),),
+                interrupts=(
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:")],
+                    ),
+                ),
             ),
         ),
         config=tool_two.checkpointer.get_tuple(thread1).config,

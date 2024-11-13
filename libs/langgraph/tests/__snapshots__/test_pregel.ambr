@@ -5108,6 +5108,81 @@
   
   '''
 # ---
+# name: test_send_react_interrupt_control[memory]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	agent(agent)
+  	foo([foo]):::last
+  	__start__ --> agent;
+  	agent -.-> foo;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_send_react_interrupt_control[postgres]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	agent(agent)
+  	foo([foo]):::last
+  	__start__ --> agent;
+  	agent -.-> foo;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_send_react_interrupt_control[postgres_pipe]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	agent(agent)
+  	foo([foo]):::last
+  	__start__ --> agent;
+  	agent -.-> foo;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_send_react_interrupt_control[postgres_pool]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	agent(agent)
+  	foo([foo]):::last
+  	__start__ --> agent;
+  	agent -.-> foo;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_send_react_interrupt_control[sqlite]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	agent(agent)
+  	foo([foo]):::last
+  	__start__ --> agent;
+  	agent -.-> foo;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_simple_multi_edge
   '''
   graph TD;
