@@ -1960,6 +1960,85 @@ async def test_pending_writes_resume(
         )
 
 
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_run_from_checkpoint_id_retains_previous_writes(
+    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+) -> None:
+    class MyState(TypedDict):
+        myval: Annotated[int, operator.add]
+        otherval: bool
+
+    class Anode:
+        def __init__(self):
+            self.switch = False
+
+        async def __call__(self, state: MyState):
+            self.switch = not self.switch
+            return {"myval": 2 if self.switch else 1, "otherval": self.switch}
+
+    builder = StateGraph(MyState)
+    thenode = Anode()  # Fun.
+    builder.add_node("node_one", thenode)
+    builder.add_node("node_two", thenode)
+    builder.add_edge(START, "node_one")
+
+    def _getedge(src: str):
+        swap = "node_one" if src == "node_two" else "node_two"
+
+        def _edge(st: MyState) -> Literal["__end__", "node_one", "node_two"]:
+            if st["myval"] > 3:
+                return END
+            if st["otherval"]:
+                return swap
+            return src
+
+        return _edge
+
+    builder.add_conditional_edges("node_one", _getedge("node_one"))
+    builder.add_conditional_edges("node_two", _getedge("node_two"))
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+
+        thread_id = uuid.uuid4()
+        thread1 = {"configurable": {"thread_id": str(thread_id)}}
+
+        result = await graph.ainvoke({"myval": 1}, thread1)
+        assert result["myval"] == 4
+        history = [c async for c in graph.aget_state_history(thread1)]
+
+        assert len(history) == 4
+        assert history[-1].values == {"myval": 0}
+        assert history[0].values == {"myval": 4, "otherval": False}
+
+        second_run_config = {
+            **thread1,
+            "configurable": {
+                **thread1["configurable"],
+                "checkpoint_id": history[1].config["configurable"]["checkpoint_id"],
+            },
+        }
+        second_result = await graph.ainvoke(None, second_run_config)
+        assert second_result == {"myval": 5, "otherval": True}
+
+        new_history = [
+            c
+            async for c in graph.aget_state_history(
+                {"configurable": {"thread_id": str(thread_id), "checkpoint_ns": ""}}
+            )
+        ]
+
+        assert len(new_history) == len(history) + 1
+        for original, new in zip(history, new_history[1:]):
+            assert original.values == new.values
+            assert original.next == new.next
+            assert original.metadata["step"] == new.metadata["step"]
+
+        def _get_tasks(hist: list, start: int):
+            return [h.tasks for h in hist[start:]]
+
+        assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+
+
 async def test_cond_edge_after_send() -> None:
     class Node:
         def __init__(self, name: str):
