@@ -19,6 +19,9 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MemorySaver(
@@ -366,6 +369,16 @@ class MemorySaver(
         outer_key = (thread_id, checkpoint_ns, checkpoint_id)
         for idx, (c, v) in enumerate(writes):
             inner_key = (task_id, WRITES_IDX_MAP.get(c, idx))
+            if (
+                inner_key[1] >= 0
+                and (outer_writes := self.writes.get(outer_key))
+                and inner_key in outer_writes
+            ):
+                _LOGGER.debug(
+                    f"Skipping duplicate writes for [{outer_key}][{inner_key}]"
+                )
+                continue
+                
             self.writes[outer_key][inner_key] = (task_id, c, self.serde.dumps_typed(v))
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
