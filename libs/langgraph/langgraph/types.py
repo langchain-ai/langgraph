@@ -1,5 +1,5 @@
 from collections import deque
-from dataclasses import dataclass
+import dataclasses
 import sys
 from typing import (
     TYPE_CHECKING,
@@ -49,9 +49,9 @@ Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using stream_mode="custom"."""
 
 if sys.version_info >= (3, 10):
-    _DC_KWARGS = {"kw_only": True, "slots": True}
+    _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 else:
-    _DC_KWARGS = {}
+    _DC_KWARGS = {"frozen": True}
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -110,7 +110,7 @@ class CachePolicy(NamedTuple):
     pass
 
 
-@dataclass(**_DC_KWARGS)
+@dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
     value: Any
     resumable: bool = False
@@ -235,52 +235,22 @@ class Send:
 N = TypeVar("N", bound=Hashable)
 
 
+@dataclasses.dataclass(**_DC_KWARGS)
 class Command(Generic[N]):
     """One or more commands to update the graph's state and send messages to nodes."""
 
-    __slots__ = ("update", "send", "resume")
-
-    def __init__(
-        self,
-        *,
-        update: Optional[dict[str, Any]] = None,
-        send: Union[Send, Sequence[Send]] = (),
-        resume: Optional[Union[Any, dict[str, Any]]] = None,
-    ) -> None:
-        self.update = update
-        self.send = send
-        self.resume = resume
-
-    @property
-    def __all_slots__(self) -> set[str]:
-        # get all slots from mro
-        slots = set()
-        for cls in type(self).__mro__:
-            if ss := getattr(cls, "__slots__", ()):
-                if isinstance(ss, str):
-                    slots.add(ss)
-                else:
-                    slots.update(ss)
-        return slots
+    update: Optional[dict[str, Any]] = None
+    send: Union[Send, Sequence[Send]] = ()
+    resume: Optional[Union[Any, dict[str, Any]]] = None
 
     def __repr__(self) -> str:
         # get all non-None values
         contents = ", ".join(
             f"{key}={value!r}"
-            for key in self.__all_slots__
-            if (value := getattr(self, key))
+            for key, value in dataclasses.asdict(self).items()
+            if value
         )
         return f"Command({contents})"
-
-    def __eq__(self, value: Any) -> bool:
-        return type(value) is type(self) and all(
-            getattr(self, key) == getattr(value, key) for key in self.__all_slots__
-        )
-
-    def copy(self, **kwargs: Any) -> Self:
-        for slot in self.__all_slots__:
-            kwargs.setdefault(slot, getattr(self, slot))
-        return self.__class__(**kwargs)
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]

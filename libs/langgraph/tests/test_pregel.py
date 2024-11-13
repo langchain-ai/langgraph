@@ -8,6 +8,7 @@ import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from random import randrange
 from typing import (
     Annotated,
@@ -1834,9 +1835,8 @@ def test_send_sequences() -> None:
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, GraphCommand):
-                state.update = update
-                return state
+            if isinstance(state, Command):
+                return replace(state, update=update)
             else:
                 return update
 
@@ -1918,7 +1918,7 @@ def test_send_dedupe_on_resume(
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, GraphCommand):
-                return state.copy(update=update)
+                return replace(state, update=update)
             else:
                 return update
 

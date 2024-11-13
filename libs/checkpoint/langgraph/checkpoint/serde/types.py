@@ -4,7 +4,6 @@ from typing import (
     Protocol,
     Sequence,
     TypeVar,
-    Union,
     runtime_checkable,
 )
 
@@ -51,11 +50,3 @@ class SendProtocol(Protocol):
     def __repr__(self) -> str: ...
 
     def __eq__(self, value: object) -> bool: ...
-
-
-@runtime_checkable
-class CommandProtocol(Protocol):
-    # Mirrors langgraph.types.Command
-    update: Optional[dict[str, Any]]
-    send: Union[Any, Sequence[Any]]
-    __all_slots__: set[str]

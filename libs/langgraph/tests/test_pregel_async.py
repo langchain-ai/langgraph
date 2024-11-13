@@ -6,6 +6,7 @@ import sys
 import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import replace
 from time import perf_counter
 from typing import (
     Annotated,
@@ -2133,7 +2134,7 @@ async def test_send_sequences(checkpointer_name: str) -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, GraphCommand):
-                return state.copy(update=update)
+                return replace(state, update=update)
             else:
                 return update
 
@@ -2237,7 +2238,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, GraphCommand):
-                return state.copy(update=update)
+                return replace(state, update=update)
             else:
                 return update
 
