@@ -161,18 +161,18 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
+            interrupt_after=graph.interrupt_after_nodes,
+            interrupt_before=graph.interrupt_before_nodes,
             check_subgraphs=False,
         ) as loop:
-            if loop.tick(
-                input_keys=graph.input_channels,
-                interrupt_after=graph.interrupt_after_nodes,
-                interrupt_before=graph.interrupt_before_nodes,
-            ):
+            if loop.tick(input_keys=graph.input_channels):
                 # wait for checkpoint to be saved
                 if hasattr(loop, "_put_checkpoint_fut"):
                     await loop._put_checkpoint_fut
                 # schedule any new tasks
-                if new_tasks := [t for t in loop.tasks.values() if not t.scheduled]:
+                if new_tasks := [
+                    t for t in loop.tasks.values() if not t.scheduled and not t.writes
+                ]:
                     # send messages to executor
                     futures = await asyncio.gather(
                         *(
@@ -351,18 +351,18 @@ class KafkaOrchestrator(AbstractContextManager):
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
+            interrupt_after=graph.interrupt_after_nodes,
+            interrupt_before=graph.interrupt_before_nodes,
             check_subgraphs=False,
         ) as loop:
-            if loop.tick(
-                input_keys=graph.input_channels,
-                interrupt_after=graph.interrupt_after_nodes,
-                interrupt_before=graph.interrupt_before_nodes,
-            ):
+            if loop.tick(input_keys=graph.input_channels):
                 # wait for checkpoint to be saved
                 if hasattr(loop, "_put_checkpoint_fut"):
                     loop._put_checkpoint_fut.result()
                 # schedule any new tasks
-                if new_tasks := [t for t in loop.tasks.values() if not t.scheduled]:
+                if new_tasks := [
+                    t for t in loop.tasks.values() if not t.scheduled and not t.writes
+                ]:
                     # send messages to executor
                     futures = [
                         self.producer.send(

@@ -25,7 +25,7 @@ from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import CommandProtocol, SendProtocol
+from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
@@ -121,11 +121,6 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, SendProtocol):
             return self._encode_constructor_args(
                 obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
-            )
-        elif isinstance(obj, CommandProtocol):
-            return self._encode_constructor_args(
-                obj.__class__,
-                kwargs={k: getattr(obj, k) for k in obj.__all_slots__},
             )
         elif isinstance(obj, (bytes, bytearray)):
             return self._encode_constructor_args(
@@ -405,17 +400,6 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, (obj.node, obj.arg)),
-            ),
-        )
-    elif isinstance(obj, CommandProtocol):
-        return msgpack.ExtType(
-            EXT_CONSTRUCTOR_KW_ARGS,
-            _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    {k: getattr(obj, k) for k in obj.__all_slots__},
-                ),
             ),
         )
     elif dataclasses.is_dataclass(obj):
