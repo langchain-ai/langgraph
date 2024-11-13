@@ -38,6 +38,7 @@ from langchain_core.tools.base import get_all_basemodel_annotations
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphInterrupt
+from langgraph.graph import GraphCommand
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
 
@@ -221,7 +222,23 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
-        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
+
+        # check if any of the tools returned GraphCommand artifact
+        command_outputs = [
+            output for output in outputs if isinstance(output.artifact, GraphCommand)
+        ]
+        if len(command_outputs) > 1:
+            raise ValueError("Cannot have multiple GraphCommands")
+
+        if len(command_outputs) == 1:
+            if output_type == "list":
+                raise TypeError(
+                    "Cannot return GraphCommand updates for a list input to ToolNode."
+                )
+
+            command: GraphCommand = command_outputs[0].artifact
+            return {**command.update, self.messages_key: outputs}
+
         return outputs if output_type == "list" else {self.messages_key: outputs}
 
     def invoke(
