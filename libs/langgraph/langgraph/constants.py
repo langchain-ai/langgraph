@@ -1,4 +1,5 @@
 import sys
+from os import getenv
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, cast
 
@@ -10,6 +11,7 @@ from langgraph.types import Interrupt, Send  # noqa: F401
 # --- Empty read-only containers ---
 EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 EMPTY_SEQ: tuple[str, ...] = tuple()
+MISSING = object()
 
 # --- Public constants ---
 TAG_NOSTREAM = sys.intern("langsmith:nostream")
@@ -28,6 +30,8 @@ INPUT = sys.intern("__input__")
 # for values passed as input to the graph
 INTERRUPT = sys.intern("__interrupt__")
 # for dynamic interrupts raised by nodes
+RESUME = sys.intern("__resume__")
+# for values passed to resume a node after an interrupt
 ERROR = sys.intern("__error__")
 # for errors raised by nodes
 NO_WRITES = sys.intern("__no_writes__")
@@ -69,6 +73,8 @@ CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # callback to be called when a node is finished
+CONFIG_KEY_RESUME_VALUE = sys.intern("__pregel_resume_value")
+# holds the value that "answers" an interrupt() call
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -81,12 +87,17 @@ NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
+FF_SEND_V2 = getenv("LANGGRAPH_FF_SEND_V2", "false").lower() == "true"
+# temporary flag to enable new Send semantics
+NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
+# the task_id to use for writes that are not associated with a task
 
 RESERVED = {
     TAG_HIDDEN,
     # reserved write keys
     INPUT,
     INTERRUPT,
+    RESUME,
     ERROR,
     NO_WRITES,
     SCHEDULED,

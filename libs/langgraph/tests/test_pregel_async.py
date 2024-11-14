@@ -6,6 +6,7 @@ import sys
 import uuid
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import replace
 from time import perf_counter
 from typing import (
     Annotated,
@@ -51,7 +52,14 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
+from langgraph.constants import (
+    CONFIG_KEY_NODE_FINISHED,
+    ERROR,
+    FF_SEND_V2,
+    PULL,
+    PUSH,
+    START,
+)
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
 from langgraph.graph import END, Graph, GraphCommand, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
@@ -62,7 +70,14 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Interrupt, PregelTask, Send, StreamWriter
+from langgraph.types import (
+    Command,
+    Interrupt,
+    PregelTask,
+    Send,
+    StreamWriter,
+    interrupt,
+)
 from tests.any_str import AnyDict, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
@@ -243,6 +258,10 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
         await graph.ainvoke(1)
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt(checkpointer_name: str) -> None:
     class State(TypedDict):
@@ -255,8 +274,10 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         nonlocal tool_two_node_count
         tool_two_node_count += 1
         if s["market"] == "DE":
-            raise NodeInterrupt("Just because...")
-        return {"my_key": " all good"}
+            answer = interrupt("Just because...")
+        else:
+            answer = " all good"
+        return {"my_key": answer}
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
@@ -289,6 +310,33 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         with pytest.raises(ValueError, match="thread_id"):
             await tool_two.ainvoke({"my_key": "value", "market": "DE"})
 
+        # flow: interrupt -> resume with answer
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value ⛰️", "market": "DE"}, thread2
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:")],
+                    ),
+                )
+            },
+        ]
+        # resume with answer
+        assert [
+            c async for c in tool_two.astream(Command(resume=" my answer"), thread2)
+        ] == [
+            {"tool_two": {"my_key": " my answer"}},
+        ]
+
+        # flow: interrupt -> clear
         thread1 = {"configurable": {"thread_id": "1"}}
         # stop when about to enter node
         assert [
@@ -297,7 +345,15 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 {"my_key": "value ⛰️", "market": "DE"}, thread1
             )
         ] == [
-            {"__interrupt__": [Interrupt(value="Just because...", when="during")]},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:")],
+                    ),
+                )
+            },
         ]
         assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
             {
@@ -324,7 +380,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                     AnyStr(),
                     "tool_two",
                     (PULL, "tool_two"),
-                    interrupts=(Interrupt("Just because..."),),
+                    interrupts=(
+                        Interrupt(
+                            value="Just because...",
+                            resumable=True,
+                            ns=[AnyStr("tool_two:")],
+                        ),
+                    ),
                 ),
             ),
             config=tup.config,
@@ -343,7 +405,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
 
         # clear the interrupt and next tasks
         await tool_two.aupdate_state(thread1, None)
-        # interrupt is cleared, task will still run next
+        # interrupt is cleared, as well as the next tasks
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -364,12 +426,16 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         )
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_node_not_cancelled_on_other_node_interrupted(
     checkpointer_name: str,
 ) -> None:
     class State(TypedDict):
-        hello: str
+        hello: Annotated[str, operator.add]
 
     awhiles = 0
     inner_task_cancelled = False
@@ -380,15 +446,14 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         awhiles += 1
         try:
             await asyncio.sleep(1)
-            return {"hello": "again"}
+            return {"hello": " again"}
         except asyncio.CancelledError:
             nonlocal inner_task_cancelled
             inner_task_cancelled = True
             raise
 
     async def iambad(input: State) -> None:
-        if input["hello"] != "bye":
-            raise NodeInterrupt("I am bad")
+        return {"hello": interrupt("I am bad")}
 
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
@@ -399,20 +464,26 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         graph = builder.compile(checkpointer=checkpointer)
         thread = {"configurable": {"thread_id": "1"}}
 
-        assert await graph.ainvoke({"hello": "world"}, thread) == {"hello": "world"}
+        # writes from "awhile" are applied to last chunk
+        assert await graph.ainvoke({"hello": "world"}, thread) == {
+            "hello": "world again"
+        }
 
         assert not inner_task_cancelled
         assert awhiles == 1
 
-        assert await graph.ainvoke(None, thread, debug=True) == {"hello": "world"}
+        assert await graph.ainvoke(None, thread, debug=True) == {"hello": "world again"}
 
         assert not inner_task_cancelled
         assert awhiles == 1
 
-        assert await graph.ainvoke({"hello": "bye"}, thread) == {"hello": "again"}
+        # resume with answer
+        assert await graph.ainvoke(Command(resume=" okay"), thread) == {
+            "hello": "world again okay"
+        }
 
         assert not inner_task_cancelled
-        assert awhiles == 2
+        assert awhiles == 1
 
 
 @pytest.mark.repeat(10)
@@ -2100,20 +2171,36 @@ async def test_concurrent_emit_sends() -> None:
     builder.add_conditional_edges("1.1", send_for_profit)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert await graph.ainvoke(["0"]) == [
-        "0",
-        "1",
-        "1.1",
-        "3.1",
-        "2|1",
-        "2|2",
-        "2|3",
-        "2|4",
-        "3",
-    ]
+    assert await graph.ainvoke(["0"]) == (
+        [
+            "0",
+            "1",
+            "1.1",
+            "2|1",
+            "2|2",
+            "2|3",
+            "2|4",
+            "3",
+            "3.1",
+        ]
+        if FF_SEND_V2
+        else [
+            "0",
+            "1",
+            "1.1",
+            "3.1",
+            "2|1",
+            "2|2",
+            "2|3",
+            "2|4",
+            "3",
+        ]
+    )
 
 
-async def test_send_sequences() -> None:
+@pytest.mark.repeat(10)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_send_sequences(checkpointer_name: str) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -2126,7 +2213,7 @@ async def test_send_sequences() -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, GraphCommand):
-                return state.copy(update=update)
+                return replace(state, update=update)
             else:
                 return update
 
@@ -2149,17 +2236,373 @@ async def test_send_sequences() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert await graph.ainvoke(["0"]) == [
-        "0",
-        "1",
-        "3.1",
-        "2|Command(send=Send(node='2', arg=3))",
-        "2|Command(send=Send(node='2', arg=4))",
-        "3",
-        "2|3",
-        "2|4",
-        "3",
-    ]
+    assert (
+        await graph.ainvoke(["0"])
+        == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "2|3",
+            "2|4",
+            "3",
+            "3.1",
+        ]
+        if FF_SEND_V2
+        else [
+            "0",
+            "1",
+            "3.1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "3",
+            "2|3",
+            "2|4",
+            "3",
+        ]
+    )
+
+    if not FF_SEND_V2:
+        return
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["3.1"])
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert await graph.ainvoke(["0"], thread1) == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "2|3",
+            "2|4",
+        ]
+        assert await graph.ainvoke(None, thread1) == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='2', arg=4))",
+            "2|3",
+            "2|4",
+            "3",
+            "3.1",
+        ]
+
+
+@pytest.mark.repeat(20)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
+    if not FF_SEND_V2:
+        pytest.skip("Send deduplication is only available in Send V2")
+
+    class InterruptOnce:
+        ticks: int = 0
+
+        def __call__(self, state):
+            self.ticks += 1
+            if self.ticks == 1:
+                raise NodeInterrupt("Bahh")
+            return ["|".join(("flaky", str(state)))]
+
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            self.ticks = 0
+            setattr(self, "__name__", name)
+
+        def __call__(self, state):
+            self.ticks += 1
+            update = (
+                [self.name]
+                if isinstance(state, list)
+                else ["|".join((self.name, str(state)))]
+            )
+            if isinstance(state, GraphCommand):
+                return replace(state, update=update)
+            else:
+                return update
+
+    def send_for_fun(state):
+        return [
+            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", GraphCommand(send=Send("flaky", 4))),
+            "3.1",
+        ]
+
+    def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node(Node("1"))
+    builder.add_node(Node("2"))
+    builder.add_node(Node("3"))
+    builder.add_node(Node("3.1"))
+    builder.add_node("flaky", InterruptOnce())
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("2", route_to_three)
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert await graph.ainvoke(["0"], thread1, debug=1) == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='flaky', arg=4))",
+            "2|3",
+        ]
+        assert builder.nodes["2"].runnable.func.ticks == 3
+        assert builder.nodes["flaky"].runnable.func.ticks == 1
+        # resume execution
+        assert await graph.ainvoke(None, thread1, debug=1) == [
+            "0",
+            "1",
+            "2|Command(send=Send(node='2', arg=3))",
+            "2|Command(send=Send(node='flaky', arg=4))",
+            "2|3",
+            "flaky|4",
+            "3",
+            "3.1",
+        ]
+        # node "2" doesn't get called again, as we recover writes saved before
+        assert builder.nodes["2"].runnable.func.ticks == 3
+        # node "flaky" gets called again, as it was interrupted
+        assert builder.nodes["flaky"].runnable.func.ticks == 2
+        # check history
+        history = [c async for c in graph.aget_state_history(thread1)]
+        assert history == [
+            StateSnapshot(
+                values=[
+                    "0",
+                    "1",
+                    "2|Command(send=Send(node='2', arg=3))",
+                    "2|Command(send=Send(node='flaky', arg=4))",
+                    "2|3",
+                    "flaky|4",
+                    "3",
+                    "3.1",
+                ],
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"3": ["3"], "3.1": ["3.1"]},
+                    "thread_id": "1",
+                    "step": 2,
+                    "parents": {},
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(),
+            ),
+            StateSnapshot(
+                values=[
+                    "0",
+                    "1",
+                    "2|Command(send=Send(node='2', arg=3))",
+                    "2|Command(send=Send(node='flaky', arg=4))",
+                    "2|3",
+                    "flaky|4",
+                ],
+                next=("3", "3.1"),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "1": ["1"],
+                        "2": [
+                            ["2|Command(send=Send(node='2', arg=3))"],
+                            ["2|Command(send=Send(node='flaky', arg=4))"],
+                            ["2|3"],
+                        ],
+                        "flaky": ["flaky|4"],
+                    },
+                    "thread_id": "1",
+                    "step": 1,
+                    "parents": {},
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(
+                    PregelTask(
+                        id=AnyStr(),
+                        name="3",
+                        path=("__pregel_pull", "3"),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["3"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="3.1",
+                        path=("__pregel_pull", "3.1"),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["3.1"],
+                    ),
+                ),
+            ),
+            StateSnapshot(
+                values=["0"],
+                next=("1", "2", "2", "2", "flaky"),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": None,
+                    "thread_id": "1",
+                    "step": 0,
+                    "parents": {},
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(
+                    PregelTask(
+                        id=AnyStr(),
+                        name="1",
+                        path=("__pregel_pull", "1"),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["1"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="2",
+                        path=(
+                            "__pregel_push",
+                            ("__pregel_pull", "1"),
+                            2,
+                            AnyStr(),
+                        ),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["2|Command(send=Send(node='2', arg=3))"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="2",
+                        path=(
+                            "__pregel_push",
+                            ("__pregel_pull", "1"),
+                            3,
+                            AnyStr(),
+                        ),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["2|Command(send=Send(node='flaky', arg=4))"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="2",
+                        path=(
+                            "__pregel_push",
+                            (
+                                "__pregel_push",
+                                ("__pregel_pull", "1"),
+                                2,
+                                AnyStr(),
+                            ),
+                            2,
+                            AnyStr(),
+                        ),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["2|3"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="flaky",
+                        path=(
+                            "__pregel_push",
+                            (
+                                "__pregel_push",
+                                ("__pregel_pull", "1"),
+                                3,
+                                AnyStr(),
+                            ),
+                            2,
+                            AnyStr(),
+                        ),
+                        error=None,
+                        interrupts=(Interrupt(value="Bahh", when="during"),),
+                        state=None,
+                        result=["flaky|4"],
+                    ),
+                ),
+            ),
+            StateSnapshot(
+                values=[],
+                next=("__start__",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "input",
+                    "writes": {"__start__": ["0"]},
+                    "thread_id": "1",
+                    "step": -1,
+                    "parents": {},
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+                tasks=(
+                    PregelTask(
+                        id=AnyStr(),
+                        name="__start__",
+                        path=("__pregel_pull", "__start__"),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["0"],
+                    ),
+                ),
+            ),
+        ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -2283,6 +2726,9 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
         }
         assert foo_called == 0
 
+        if not FF_SEND_V2:
+            return
+
         # get state should show the pending task
         state = await graph.aget_state(thread1)
         assert state == StateSnapshot(
@@ -2311,23 +2757,9 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 1,
+                "step": 0,
                 "source": "loop",
-                "writes": {
-                    "agent": {
-                        "messages": _AnyIdAIMessage(
-                            content="",
-                            tool_calls=[
-                                {
-                                    "name": "foo",
-                                    "args": {"hi": [1, 2, 3]},
-                                    "id": "",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    }
-                },
+                "writes": None,
                 "parents": {},
                 "thread_id": "2",
             },
@@ -2342,8 +2774,32 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             tasks=(
                 PregelTask(
                     id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            content="",
+                            additional_kwargs={},
+                            response_metadata={},
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "foo",
+                                    "args": {"hi": [1, 2, 3]},
+                                    "id": "",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -2377,7 +2833,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 2,
+                "step": 1,
                 "source": "update",
                 "writes": {
                     "agent": {
@@ -2460,23 +2916,9 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 1,
+                "step": 0,
                 "source": "loop",
-                "writes": {
-                    "agent": {
-                        "messages": _AnyIdAIMessage(
-                            content="",
-                            tool_calls=[
-                                {
-                                    "name": "foo",
-                                    "args": {"hi": [1, 2, 3]},
-                                    "id": "",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    }
-                },
+                "writes": None,
                 "parents": {},
                 "thread_id": "3",
             },
@@ -2491,8 +2933,30 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             tasks=(
                 PregelTask(
                     id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            "",
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "foo",
+                                    "args": {"hi": [1, 2, 3]},
+                                    "id": "",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -2547,7 +3011,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 2,
+                "step": 1,
                 "source": "update",
                 "writes": {
                     "agent": {
@@ -2579,7 +3043,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", (), 0, AnyStr()),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -2611,7 +3075,9 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
+async def test_send_react_interrupt_control(
+    checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
@@ -2620,7 +3086,7 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
         tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
     )
 
-    async def agent(state) -> GraphCommand[Literal["foo"]]:
+    async def agent(state) -> Command[Literal["foo"]]:
         return GraphCommand(
             update={"messages": ai_message},
             send=[Send(call["name"], call) for call in ai_message.tool_calls],
@@ -2638,6 +3104,7 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     assert await graph.ainvoke({"messages": [HumanMessage("hello")]}) == {
         "messages": [
@@ -2727,6 +3194,9 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
         }
         assert foo_called == 0
 
+        if not FF_SEND_V2:
+            return
+
         # get state should show the pending task
         state = await graph.aget_state(thread1)
         assert state == StateSnapshot(
@@ -2755,23 +3225,9 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 1,
+                "step": 0,
                 "source": "loop",
-                "writes": {
-                    "agent": {
-                        "messages": _AnyIdAIMessage(
-                            content="",
-                            tool_calls=[
-                                {
-                                    "name": "foo",
-                                    "args": {"hi": [1, 2, 3]},
-                                    "id": "",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    }
-                },
+                "writes": None,
                 "parents": {},
                 "thread_id": "2",
             },
@@ -2786,8 +3242,32 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
             tasks=(
                 PregelTask(
                     id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            content="",
+                            additional_kwargs={},
+                            response_metadata={},
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "foo",
+                                    "args": {"hi": [1, 2, 3]},
+                                    "id": "",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -2821,7 +3301,7 @@ async def test_send_react_interrupt_control(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 2,
+                "step": 1,
                 "source": "update",
                 "writes": {
                     "agent": {
@@ -2912,7 +3392,7 @@ async def test_max_concurrency(checkpointer_name: str) -> None:
         graph = builder.compile(checkpointer=checkpointer, interrupt_before=["2"])
         thread1 = {"max_concurrency": 10, "configurable": {"thread_id": "1"}}
 
-        assert await graph.ainvoke(["0"], thread1) == ["0", "1"]
+        assert await graph.ainvoke(["0"], thread1, debug=True) == ["0", "1"]
         state = await graph.aget_state(thread1)
         assert state.values == ["0", "1"]
         assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
@@ -5539,6 +6019,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             {"__interrupt__": ()},
         ]
 
+        if not FF_SEND_V2:
+            return
+
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
                 "messages": [
@@ -5556,7 +6039,33 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            "",
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "query"},
+                                    "id": "tool_call123",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
+                ),
+            ),
             next=("tools",),
             config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
             created_at=(
@@ -5565,22 +6074,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai1",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call123",
-                                    "name": "search_api",
-                                    "args": {"query": "query"},
-                                },
-                            ],
-                        )
-                    }
-                },
+                "step": 0,
+                "writes": None,
                 "thread_id": "1",
             },
             parent_config=[
@@ -5612,14 +6107,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 2,
+                "step": 1,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(
@@ -5715,8 +6210,40 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 ]
             },
             tasks=(
-                PregelTask(AnyStr(), "tools", (PUSH, 0)),
-                PregelTask(AnyStr(), "tools", (PUSH, 1)),
+                PregelTask(
+                    id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            "",
+                            id="ai2",
+                            tool_calls=[
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "another", "idx": 0},
+                                    "id": "tool_call234",
+                                    "type": "tool_call",
+                                },
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "a third one", "idx": 1},
+                                    "id": "tool_call567",
+                                    "type": "tool_call",
+                                },
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
+                ),
+                PregelTask(
+                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
+                ),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -5724,25 +6251,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 4,
+                "step": 2,
                 "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai2",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call234",
-                                    "name": "search_api",
-                                    "args": {"query": "another", "idx": 0},
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "name": "search_api",
-                                    "args": {"query": "a third one", "idx": 1},
-                                },
-                            ],
-                        )
+                    "tools": {
+                        "messages": _AnyIdToolMessage(
+                            content="result for a different query",
+                            name="search_api",
+                            tool_call_id="tool_call123",
+                        ),
                     },
                 },
                 "thread_id": "1",
@@ -5789,7 +6305,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 5,
+                "step": 3,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(content="answer", id="ai2"),
@@ -5852,7 +6368,35 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            content="",
+                            additional_kwargs={},
+                            response_metadata={},
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "query"},
+                                    "id": "tool_call123",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
+                ),
+            ),
             next=("tools",),
             config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
             created_at=(
@@ -5861,22 +6405,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai1",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call123",
-                                    "name": "search_api",
-                                    "args": {"query": "query"},
-                                },
-                            ],
-                        )
-                    }
-                },
+                "step": 0,
+                "writes": None,
                 "thread_id": "2",
             },
             parent_config=[
@@ -5908,14 +6438,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 2,
+                "step": 1,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(
@@ -6011,8 +6541,42 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 ]
             },
             tasks=(
-                PregelTask(AnyStr(), "tools", (PUSH, 0)),
-                PregelTask(AnyStr(), "tools", (PUSH, 1)),
+                PregelTask(
+                    id=AnyStr(),
+                    name="agent",
+                    path=("__pregel_pull", "agent"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={
+                        "messages": AIMessage(
+                            content="",
+                            additional_kwargs={},
+                            response_metadata={},
+                            id="ai2",
+                            tool_calls=[
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "another", "idx": 0},
+                                    "id": "tool_call234",
+                                    "type": "tool_call",
+                                },
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "a third one", "idx": 1},
+                                    "id": "tool_call567",
+                                    "type": "tool_call",
+                                },
+                            ],
+                        )
+                    },
+                ),
+                PregelTask(
+                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
+                ),
+                PregelTask(
+                    AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
+                ),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -6020,25 +6584,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 4,
+                "step": 2,
                 "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai2",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call234",
-                                    "name": "search_api",
-                                    "args": {"query": "another", "idx": 0},
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "name": "search_api",
-                                    "args": {"query": "a third one", "idx": 1},
-                                },
-                            ],
-                        )
+                    "tools": {
+                        "messages": _AnyIdToolMessage(
+                            content="result for a different query",
+                            name="search_api",
+                            tool_call_id="tool_call123",
+                        ),
                     },
                 },
                 "thread_id": "2",
@@ -6085,7 +6638,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 5,
+                "step": 3,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(content="answer", id="ai2"),
@@ -8852,7 +9405,7 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
         # test invoke w/ nested interrupt
         config = {"configurable": {"thread_id": "1"}}
         assert await app.ainvoke({"my_key": ""}, config, debug=True) == {
-            "my_key": "",
+            "my_key": " and parallel",
         }
 
         assert await app.ainvoke(None, config, debug=True) == {
@@ -8887,6 +9440,7 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
             c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
         ] == [
             {"my_key": ""},
+            {"my_key": " and parallel"},
         ]
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {"my_key": ""},
@@ -8905,6 +9459,7 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
         # while we're waiting for the node w/ interrupt inside to finish
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {"my_key": ""},
+            {"my_key": " and parallel"},
         ]
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {"my_key": ""},
@@ -8919,6 +9474,7 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
             c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
         ] == [
             {"my_key": ""},
+            {"my_key": " and parallel"},
         ]
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {"my_key": ""},
@@ -10659,7 +11215,8 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
 
         # invoke and pause at nested interrupt
         assert await graph.ainvoke(
-            {"subjects": ["cats", "dogs"]}, config={**config, "callbacks": [tracer]}
+            {"subjects": ["cats", "dogs"]},
+            config={**config, "callbacks": [tracer]},
         ) == {
             "subjects": ["cats", "dogs"],
             "jokes": [],
@@ -10668,13 +11225,36 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
 
         # check state
         outer_state = await graph.aget_state(config)
+
+        if not FF_SEND_V2:
+            # update state of dogs joke graph
+            await graph.aupdate_state(
+                outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
+            )
+
+            # continue past interrupt
+            assert await graph.ainvoke(None, config=config) == {
+                "subjects": ["cats", "dogs"],
+                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
+            }
+            return
+
         assert outer_state == StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             tasks=(
                 PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=("__pregel_pull", "__start__"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={"subjects": ["cats", "dogs"]},
+                ),
+                PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, 0),
+                    (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -10685,7 +11265,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, 1),
+                    (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -10704,24 +11284,25 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
             },
             metadata={
                 "parents": {},
-                "source": "loop",
-                "writes": None,
-                "step": 0,
+                "source": "input",
+                "writes": {
+                    "__start__": {
+                        "subjects": [
+                            "cats",
+                            "dogs",
+                        ],
+                    }
+                },
+                "step": -1,
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
+            parent_config=None,
         )
 
         # update state of dogs joke graph
         await graph.aupdate_state(
-            outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
+            outer_state.tasks[2].state, {"subject": "turtles - hohoho"}
         )
 
         # continue past interrupt
@@ -10754,7 +11335,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                         {"jokes": ["Joke about turtles - hohoho"]},
                     ]
                 },
-                "step": 1,
+                "step": 0,
                 "thread_id": "1",
             },
             created_at=AnyStr(),
@@ -10797,7 +11378,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                             {"jokes": ["Joke about turtles - hohoho"]},
                         ]
                     },
-                    "step": 1,
+                    "step": 0,
                     "thread_id": "1",
                 },
                 created_at=AnyStr(),
@@ -10810,13 +11391,22 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 },
             ),
             StateSnapshot(
-                values={"subjects": ["cats", "dogs"], "jokes": []},
-                next=("generate_joke", "generate_joke"),
+                values={"jokes": []},
+                next=("__start__", "generate_joke", "generate_joke"),
                 tasks=(
+                    PregelTask(
+                        id=AnyStr(),
+                        name="__start__",
+                        path=("__pregel_pull", "__start__"),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result={"subjects": ["cats", "dogs"]},
+                    ),
                     PregelTask(
                         AnyStr(),
                         "generate_joke",
-                        (PUSH, 0),
+                        (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
                         state={
                             "configurable": {
                                 "thread_id": "1",
@@ -10828,7 +11418,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                     PregelTask(
                         AnyStr(),
                         "generate_joke",
-                        (PUSH, 1),
+                        (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
                         state={
                             "configurable": {
                                 "thread_id": "1",
@@ -10847,40 +11437,6 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 },
                 metadata={
                     "parents": {},
-                    "source": "loop",
-                    "writes": None,
-                    "step": 0,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-            ),
-            StateSnapshot(
-                values={"jokes": []},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "__start__",
-                        (PULL, "__start__"),
-                        result={"subjects": ["cats", "dogs"]},
-                    ),
-                ),
-                next=("__start__",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
                     "source": "input",
                     "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
                     "step": -1,
@@ -10890,7 +11446,7 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 parent_config=None,
             ),
         ]
-        assert actual_history[1] == expected_history[1]
+        assert actual_history == expected_history
 
 
 @pytest.mark.skipif(

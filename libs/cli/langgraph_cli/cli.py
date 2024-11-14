@@ -6,6 +6,7 @@ from typing import Callable, Optional, Sequence
 
 import click
 import click.exceptions
+from click import secho
 
 import langgraph_cli.config
 import langgraph_cli.docker
@@ -170,9 +171,7 @@ def cli():
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
 )
-@cli.command(
-    help="Start langgraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use."
-)
+@cli.command(help="🚀 Launch LangGraph API server.")
 @log_command
 def up(
     config: pathlib.Path,
@@ -337,7 +336,7 @@ def _build(
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
-    help="Build langgraph API server docker image",
+    help="📦 Build LangGraph API server Docker image.",
     context_settings=dict(
         ignore_unknown_options=True,
     ),
@@ -360,14 +359,86 @@ def build(
         )
 
 
+def _get_docker_ignore_content() -> str:
+    """Return the content of a .dockerignore file.
+
+    This file is used to exclude files and directories from the Docker build context.
+
+    It may be overly broad, but it's better to be safe than sorry.
+
+    The main goal is to exclude .env files by default.
+    """
+    return """\
+# Ignore node_modules and other dependency directories
+node_modules
+bower_components
+vendor
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Ignore .env files and other environment files
+.env
+.env.*
+*.local
+
+# Ignore git-related files
+.git
+.gitignore
+
+# Ignore Docker-related files and configs
+.dockerignore
+docker-compose.yml
+
+# Ignore build and cache directories
+dist
+build
+.cache
+__pycache__
+
+# Ignore IDE and editor configurations
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+.DS_Store  # macOS-specific
+
+# Ignore test and coverage files
+coverage
+*.coverage
+*.test.js
+*.spec.js
+tests
+"""
+
+
 @OPT_CONFIG
 @click.argument("save_path", type=click.Path(resolve_path=True))
-@cli.command(help="Generate a Dockerfile for langgraph API server")
+@cli.command(
+    help="🐳 Generate a Dockerfile for the LangGraph API server, with Docker Compose options."
+)
+@click.option(
+    # Add a flag for adding a docker-compose.yml file as part of the output
+    "--add-docker-compose",
+    help=(
+        "Add additional files for running the LangGraph API server with "
+        "docker-compose. These files include a docker-compose.yml, .env file, "
+        "and a .dockerignore file."
+    ),
+    is_flag=True,
+)
 @log_command
-def dockerfile(save_path: pathlib.Path, config: pathlib.Path):
-    with open(config) as f:
+def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -> None:
+    save_path = pathlib.Path(save_path).absolute()
+    secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
+    with open(config, encoding="utf-8") as f:
         config_json = langgraph_cli.config.validate_config(json.load(f))
-    with open(save_path, "w") as f:
+    secho("✅ Configuration validated!", fg="green")
+
+    secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
+    with open(str(save_path), "w", encoding="utf-8") as f:
         f.write(
             langgraph_cli.config.config_to_docker(
                 config,
@@ -377,6 +448,66 @@ def dockerfile(save_path: pathlib.Path, config: pathlib.Path):
                 else "langchain/langgraph-api",
             )
         )
+    secho("✅ Created: Dockerfile", fg="green")
+
+    if add_docker_compose:
+        # Add docker compose and related files
+        # Add .dockerignore file in the same directory as the Dockerfile
+        with open(str(save_path.parent / ".dockerignore"), "w", encoding="utf-8") as f:
+            f.write(_get_docker_ignore_content())
+        secho("✅ Created: .dockerignore", fg="green")
+
+        # Generate a docker-compose.yml file
+        path = str(save_path.parent / "docker-compose.yml")
+        with open(path, "w", encoding="utf-8") as f:
+            with Runner() as runner:
+                capabilities = langgraph_cli.docker.check_capabilities(runner)
+
+            compose_dict = langgraph_cli.docker.compose_as_dict(
+                capabilities,
+                port=8123,
+            )
+            # Add .env file to the docker-compose.yml for the langgraph-api service
+            compose_dict["services"]["langgraph-api"]["env_file"] = [".env"]
+            # Add the Dockerfile to the build context
+            compose_dict["services"]["langgraph-api"]["build"] = {
+                "context": ".",
+                "dockerfile": save_path.name,
+            }
+            f.write(langgraph_cli.docker.dict_to_yaml(compose_dict))
+            secho("✅ Created: docker-compose.yml", fg="green")
+
+        # Check if the .env file exists in the same directory as the Dockerfile
+        if not (save_path.parent / ".env").exists():
+            # Also add an empty .env file
+            with open(str(save_path.parent / ".env"), "w", encoding="utf-8") as f:
+                f.writelines(
+                    [
+                        "# Uncomment the following line to add your LangSmith API key",
+                        "\n",
+                        "# LANGSMITH_API_KEY=your-api-key",
+                        "\n",
+                        "# Or if you have a LangGraph Cloud license key, "
+                        "then uncomment the following line: ",
+                        "\n",
+                        "# LANGGRAPH_CLOUD_LICENSE_KEY=your-license-key",
+                        "\n",
+                        "# Add any other environment variables go below...",
+                    ]
+                )
+
+            secho("✅ Created: .env", fg="green")
+        else:
+            # Do nothing since the .env file already exists. Not a great
+            # idea to overwrite in case the user has added custom env vars set
+            # in the .env file already.
+            secho("➖ Skipped: .env. It already exists!", fg="yellow")
+
+    secho(
+        f"🎉 Files generated successfully at path {save_path.parent}!",
+        fg="cyan",
+        bold=True,
+    )
 
 
 @click.argument("path", required=False)
@@ -385,7 +516,7 @@ def dockerfile(save_path: pathlib.Path, config: pathlib.Path):
     type=str,
     help=TEMPLATE_HELP_STRING,
 )
-@cli.command("new", help="Create a new LangGraph project from a template.")
+@cli.command("new", help="🌱 Create a new LangGraph project from a template.")
 @log_command
 def new(path: Optional[str], template: Optional[str]) -> None:
     """Create a new LangGraph project from a template."""

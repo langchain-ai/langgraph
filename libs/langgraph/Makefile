@@ -49,7 +49,7 @@ test:
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres && poetry run ptw . -- --ff -v -x -n auto --dist worksteal --snapshot-update --tb short $(TEST); \
+	make start-postgres && poetry run ptw . -- --ff -vv -x -n auto --dist worksteal --snapshot-update --tb short $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
