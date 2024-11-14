@@ -22,12 +22,13 @@ from langgraph._api.deprecation import deprecated_parameter
 from langgraph.constants import Send
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import StateGraph
+from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import GraphCommand
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.prebuilt.handoff import Handoff
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.handoff import Handoff
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 from langgraph.utils.runnable import RunnableCallable
@@ -762,18 +763,22 @@ def make_agent_v2(
     state_modifier: Optional[StateModifier] = None,
 ):
     """Create an agent node that calls the language model and tools."""
-    handoff_tools = [tool for tool in tools if isinstance(tool, HandoffTool)]
-    destinations = [tool.metadata["hand_off_to"] for tool in handoff_tools]
     agent = create_react_agent(
         model, tools, state_schema=AgentState, state_modifier=state_modifier
     )
 
+    # The GraphCommand cannot be used here.
+    # This is just a temporary hack to show ROUTING via visualization.
+    # Any chance we could provide soem API to show this kind of routing?!
     def agent_node(
         # Unclear on what to do here with the state.
         state: AgentState,
         config: RunnableConfig,
-    ) -> GraphCommand[Literal[*destinations]]:
+    ):
         """Agent node that calls the language model and tools."""
+        print("Entering agent.")
+        print(state)
+        print("---")
         # Here it's pretty confusing since we need to route only the "new" messages.
         # We could assume it's a single Human message for now, but this does not
         # look amazing.
@@ -782,14 +787,22 @@ def make_agent_v2(
         # Check if its a tool with an artifact:
         last_message = messages[-1]
 
-        if isinstance(last_message, ToolMessage) and last_message.artifact:
+        if isinstance(last_message, ToolMessage):
+            print("--- HERE ---")
+            print(last_message)
             # Let's inspect the artifact to see if it's a Handoff.
             if isinstance(last_message.artifact, Handoff):
                 # If it is, we'll return a command to handoff to the specified agent.
-                return {
+                print("HANDOFF")
+                update = {
                     "messages": messages,
-                    "route_id": last_message.artifact.hand_off_to,
+                    # It's unclear that we want a graphcommand. The semantics
+                    # Are a bit bizarre w/ respect to parent vs. internal state
+                    # updates + gotos are w/ respect to parent graph only!
+                    "route_id": last_message.artifact.node,
                 }
+                print(update)
+                return update
 
         return {
             "messages": messages,
