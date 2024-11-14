@@ -1753,6 +1753,7 @@ class Pregel(PregelProtocol):
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
+                debug=debug,
             ) as loop:
                 # create runner
                 runner = PregelRunner(

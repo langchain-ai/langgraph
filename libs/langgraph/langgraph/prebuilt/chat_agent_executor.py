@@ -1,4 +1,14 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+from typing import (
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    Tuple,
+)
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -8,19 +18,21 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
-from typing_extensions import Annotated, TypedDict
-
 from langgraph._api.deprecation import deprecated_parameter
+from langgraph.constants import Send
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.graph.state import GraphCommand
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.handoff import Handoff
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 from langgraph.utils.runnable import RunnableCallable
+from typing_extensions import Annotated, TypedDict
 
 
 # We create the AgentState that we will pass around
@@ -684,6 +696,113 @@ def create_react_agent(
     )
 
 
+class RouterState(TypedDict):
+    route_id: Optional[str]  # Rename to "to"
+
+
+def add_entrypoint_router(
+    graph: StateGraph,
+    *,
+    routes: Sequence[Tuple[str, StateGraph]],
+    default_route: str,
+) -> StateGraph:
+    """Add an entrypoint conditional edge router to the graph.
+
+    Args:
+        graph: The graph to add the router to.
+        routes: A list of tuples where the first element is the name of the route
+                and the second element is the graph for the route.
+        default_route: The name of the default route to use on the first interaction.
+
+    Returns:
+        The graph with the router added.
+    """
+    channels = graph.schemas[graph.schema]
+    if "route_id" not in channels:
+        raise ValueError("Graph must have a 'route_id' channel")
+
+    route_names = [name for name, _ in routes]
+
+    if default_route not in route_names:
+        raise ValueError(
+            f"Default route '{default_route}' not found in routes {route_names}"
+        )
+
+    def router(state: graph.schema) -> Literal[*route_names, "__end__"]:
+        """Router node that determines where to go next."""
+        return Send(
+            node=state.get("route_id", default_route),
+            arg=state,
+        )
+
+    graph.add_conditional_edges(
+        "__start__",
+        router,
+    )
+
+    for name, node in routes:
+        graph.add_node(
+            name,
+            node,
+        )
+
+    return graph
+
+
+# Not obvious we should be creating a graph rather than adding a node directly
+# to a graph, so that "name" is specified once
+
+
+def make_agent_v2(
+    model: LanguageModelLike,
+    tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
+    # What do we do with things like is_last_step and remaining_steps?
+    # We definitely do not want them to be part of the shared state.
+    # How can I put a mask on top of the state?
+    # state_schema: AgentState,
+    state_modifier: Optional[StateModifier] = None,
+):
+    """Create an agent node that calls the language model and tools."""
+    agent = create_react_agent(
+        model, tools, state_schema=AgentState, state_modifier=state_modifier
+    )
+
+    # The GraphCommand cannot be used here.
+    # This is just a temporary hack to show ROUTING via visualization.
+    # Any chance we could provide soem API to show this kind of routing?!
+    def agent_node(
+        # Unclear on what to do here with the state.
+        state: AgentState,
+        config: RunnableConfig,
+    ):
+        """Agent node that calls the language model and tools."""
+        # Here it's pretty confusing since we need to route only the "new" messages.
+        # We could assume it's a single Human message for now, but this does not
+        # look amazing.
+        response = agent.invoke({"messages": [state["messages"][-1]]}, config)
+        messages = response["messages"]
+        # Check if its a tool with an artifact:
+        last_message = messages[-1]
+
+        if isinstance(last_message, ToolMessage):
+            # Let's inspect the artifact to see if it's a Handoff.
+            if isinstance(last_message.artifact, Handoff):
+                # If it is, we'll return a command to handoff to the specified agent.
+                return {
+                    "messages": messages,
+                    # It's unclear that we want a graphcommand. The semantics
+                    # Are a bit bizarre w/ respect to parent vs. internal state
+                    # updates + gotos are w/ respect to parent graph only!
+                    "route_id": last_message.artifact.node,
+                }
+
+        return {
+            "messages": messages,
+        }
+
+    return agent_node
+
+
 # Keep for backwards compatibility
 create_tool_calling_executor = create_react_agent
 
@@ -691,4 +810,5 @@ __all__ = [
     "create_react_agent",
     "create_tool_calling_executor",
     "AgentState",
+    "add_entrypoint_router",
 ]

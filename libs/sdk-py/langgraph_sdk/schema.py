@@ -339,3 +339,14 @@ class StreamPart(NamedTuple):
     """The type of event for this stream part."""
     data: dict
     """The data payload associated with the event."""
+
+
+class Send(TypedDict):
+    node: str
+    input: Optional[dict[str, Any]]
+
+
+class Command(TypedDict, total=False):
+    send: Union[Send, Sequence[Send]]
+    update: dict[str, Any]
+    resume: Any

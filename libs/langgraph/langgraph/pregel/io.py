@@ -69,19 +69,11 @@ def map_command(
 ) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if cmd.send:
-        if isinstance(cmd.send, (tuple, list)) and all(
-            isinstance(x, Send)
-            or isinstance(x, (list, tuple))
-            and len(x) == 2
-            and isinstance(x[0], str)
-            for x in cmd.send
-        ):
+        if isinstance(cmd.send, (tuple, list)):
             sends = cmd.send
         else:
             sends = [cmd.send]
         for send in sends:
-            if isinstance(send, tuple) and len(send) == 2 and isinstance(send[0], str):
-                send = Send(*send)
             if not isinstance(send, Send):
                 raise TypeError(
                     f"In Command.send, expected Send, got {type(send).__name__}"
