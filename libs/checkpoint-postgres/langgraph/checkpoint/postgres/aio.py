@@ -1,10 +1,10 @@
 import asyncio
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
-from psycopg.errors import UndefinedTable
+from psycopg.errors import NotSupportedError, UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -264,29 +264,28 @@ class AsyncPostgresSaver(BasePostgresSaver):
             }
         }
 
-        async with self._cursor() as cur:
-            async with cur.connection.transaction() if self.pipe is None else nullcontext():
-                await cur.executemany(
-                    self.UPSERT_CHECKPOINT_BLOBS_SQL,
-                    await asyncio.to_thread(
-                        self._dump_blobs,
-                        thread_id,
-                        checkpoint_ns,
-                        copy.pop("channel_values"),  # type: ignore[misc]
-                        new_versions,
-                    ),
-                )
-                await cur.execute(
-                    self.UPSERT_CHECKPOINTS_SQL,
-                    (
-                        thread_id,
-                        checkpoint_ns,
-                        checkpoint["id"],
-                        checkpoint_id,
-                        Jsonb(self._dump_checkpoint(copy)),
-                        self._dump_metadata(metadata),
-                    ),
-                )
+        async with self._cursor(pipeline=True) as cur:
+            await cur.executemany(
+                self.UPSERT_CHECKPOINT_BLOBS_SQL,
+                await asyncio.to_thread(
+                    self._dump_blobs,
+                    thread_id,
+                    checkpoint_ns,
+                    copy.pop("channel_values"),  # type: ignore[misc]
+                    new_versions,
+                ),
+            )
+            await cur.execute(
+                self.UPSERT_CHECKPOINTS_SQL,
+                (
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint["id"],
+                    checkpoint_id,
+                    Jsonb(self._dump_checkpoint(copy)),
+                    self._dump_metadata(metadata),
+                ),
+            )
         return next_config
 
     async def aput_writes(
@@ -317,11 +316,20 @@ class AsyncPostgresSaver(BasePostgresSaver):
             task_id,
             writes,
         )
-        async with self._cursor() as cur:
+        async with self._cursor(pipeline=True) as cur:
             await cur.executemany(query, params)
 
     @asynccontextmanager
-    async def _cursor(self) -> AsyncIterator[AsyncCursor[DictRow]]:
+    async def _cursor(
+        self, *, pipeline: bool = False
+    ) -> AsyncIterator[AsyncCursor[DictRow]]:
+        """Create a database cursor as a context manager.
+
+        Args:
+            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+                Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
+                If pipeline mode is not supported, will fall back to using transaction context manager.
+        """
         async with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -331,7 +339,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                         yield cur
                 finally:
-                    await self.pipe.sync()
+                    if pipeline:
+                        await self.pipe.sync()
+            elif pipeline:
+                # a connection not in pipeline mode can only be used by one
+                # thread/coroutine at a time, so we acquire a lock
+                try:
+                    async with self.lock, conn.pipeline(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+                except NotSupportedError:
+                    # Use connection's transaction context manager when pipeline mode not supported
+                    async with self.lock, conn.transaction(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
             else:
                 async with self.lock, conn.cursor(
                     binary=True, row_factory=dict_row
