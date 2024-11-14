@@ -1,5 +1,5 @@
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import Any, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
@@ -308,27 +308,29 @@ class PostgresSaver(BasePostgresSaver):
             }
         }
 
-        with self._cursor(pipeline=True) as cur:
-            cur.executemany(
-                self.UPSERT_CHECKPOINT_BLOBS_SQL,
-                self._dump_blobs(
-                    thread_id,
-                    checkpoint_ns,
-                    copy.pop("channel_values"),  # type: ignore[misc]
-                    new_versions,
-                ),
-            )
-            cur.execute(
-                self.UPSERT_CHECKPOINTS_SQL,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint["id"],
-                    checkpoint_id,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(metadata),
-                ),
-            )
+        with self._cursor() as cur:
+            # Use connection's transaction context manager when not in pipeline mode
+            with cur.connection.transaction() if self.pipe is None else nullcontext():
+                cur.executemany(
+                    self.UPSERT_CHECKPOINT_BLOBS_SQL,
+                    self._dump_blobs(
+                        thread_id,
+                        checkpoint_ns,
+                        copy.pop("channel_values"),  # type: ignore[misc]
+                        new_versions,
+                    ),
+                )
+                cur.execute(
+                    self.UPSERT_CHECKPOINTS_SQL,
+                    (
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint["id"],
+                        checkpoint_id,
+                        Jsonb(self._dump_checkpoint(copy)),
+                        self._dump_metadata(metadata),
+                    ),
+                )
         return next_config
 
     def put_writes(
@@ -351,7 +353,7 @@ class PostgresSaver(BasePostgresSaver):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else self.INSERT_CHECKPOINT_WRITES_SQL
         )
-        with self._cursor(pipeline=True) as cur:
+        with self._cursor() as cur:
             cur.executemany(
                 query,
                 self._dump_writes(
@@ -364,7 +366,7 @@ class PostgresSaver(BasePostgresSaver):
             )
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(self) -> Iterator[Cursor[DictRow]]:
         with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -374,15 +376,7 @@ class PostgresSaver(BasePostgresSaver):
                     with conn.cursor(binary=True, row_factory=dict_row) as cur:
                         yield cur
                 finally:
-                    if pipeline:
-                        self.pipe.sync()
-            elif pipeline:
-                # a connection not in pipeline mode can only be used by one
-                # thread/coroutine at a time, so we acquire a lock
-                with self.lock, conn.pipeline(), conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
-                    yield cur
+                    self.pipe.sync()
             else:
                 with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
