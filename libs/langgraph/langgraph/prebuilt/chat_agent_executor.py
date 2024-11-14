@@ -1,4 +1,3 @@
-import json
 from typing import (
     Callable,
     Literal,
@@ -19,13 +18,14 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
-from langgraph.constants import Send
 from langgraph._api.deprecation import deprecated_parameter
+from langgraph.constants import Send
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import GraphCommand
 from langgraph.managed import IsLastStep, RemainingSteps
+from langgraph.prebuilt.handoff import Handoff
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
@@ -699,56 +699,19 @@ class RouterState(TypedDict):
     route_id: Optional[str]  # Rename to "to"
 
 
-def add_router(
+def add_entrypoint_router(
     graph: StateGraph,
     *,
     routes: Sequence[Tuple[str, StateGraph]],
+    default_route: str,
 ) -> StateGraph:
-    """Add a router with routes to the graph.
+    """Add an entrypoint conditional edge router to the graph.
 
     Args:
         graph: The graph to add the router to.
         routes: A list of tuples where the first element is the name of the route
                 and the second element is the graph for the route.
-
-    Returns:
-        The graph with the router added.
-    """
-    route_names = [name for name, _ in routes]
-    default_route = route_names[0]
-
-    def router(state: AgentState) -> GraphCommand[Literal[*route_names, "__end__"]]:
-        if "route_id" not in state:
-            return GraphCommand(
-                update={"route_id": default_route},
-                goto=default_route,
-            )
-        return GraphCommand(
-            goto=state["route_id"],
-        )
-
-    graph.add_node("router", router)
-    graph.set_entry_point("router")
-    for name, node in routes:
-        graph.add_node(
-            name,
-            node,
-        )
-
-    return graph
-
-
-def add_routing_edge(
-    graph: StateGraph,
-    *,
-    routes: Sequence[Tuple[str, StateGraph]],
-) -> StateGraph:
-    """Add a router with routes to the graph.
-
-    Args:
-        graph: The graph to add the router to.
-        routes: A list of tuples where the first element is the name of the route
-                and the second element is the graph for the route.
+        default_route: The name of the default route to use on the first interaction.
 
     Returns:
         The graph with the router added.
@@ -758,9 +721,14 @@ def add_routing_edge(
         raise ValueError("Graph must have a 'route_id' channel")
 
     route_names = [name for name, _ in routes]
-    default_route = route_names[0]
 
-    def router(state: AgentState) -> Literal[*route_names, "__end__"]:
+    if default_route not in route_names:
+        raise ValueError(
+            f"Default route '{default_route}' not found in routes {route_names}"
+        )
+
+    def router(state: graph.schema) -> Literal[*route_names, "__end__"]:
+        """Router node that determines where to go next."""
         return Send(
             node=state.get("route_id", default_route),
             arg=state,
@@ -778,6 +746,56 @@ def add_routing_edge(
         )
 
     return graph
+
+
+# Not obvious we should be creating a graph rather than adding a node directly
+# to a graph, so that "name" is specified once
+
+
+def make_agent_v2(
+    model: LanguageModelLike,
+    tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
+    # What do we do with things like is_last_step and remaining_steps?
+    # We definitely do not want them to be part of the shared state.
+    # How can I put a mask on top of the state?
+    # state_schema: AgentState,
+    state_modifier: Optional[StateModifier] = None,
+):
+    """Create an agent node that calls the language model and tools."""
+    handoff_tools = [tool for tool in tools if isinstance(tool, HandoffTool)]
+    destinations = [tool.metadata["hand_off_to"] for tool in handoff_tools]
+    agent = create_react_agent(
+        model, tools, state_schema=AgentState, state_modifier=state_modifier
+    )
+
+    def agent_node(
+        # Unclear on what to do here with the state.
+        state: AgentState,
+        config: RunnableConfig,
+    ) -> GraphCommand[Literal[*destinations]]:
+        """Agent node that calls the language model and tools."""
+        # Here it's pretty confusing since we need to route only the "new" messages.
+        # We could assume it's a single Human message for now, but this does not
+        # look amazing.
+        response = agent.invoke({"messages": [state["messages"][-1]]}, config)
+        messages = response["messages"]
+        # Check if its a tool with an artifact:
+        last_message = messages[-1]
+
+        if isinstance(last_message, ToolMessage) and last_message.artifact:
+            # Let's inspect the artifact to see if it's a Handoff.
+            if isinstance(last_message.artifact, Handoff):
+                # If it is, we'll return a command to handoff to the specified agent.
+                return {
+                    "messages": messages,
+                    "route_id": last_message.artifact.hand_off_to,
+                }
+
+        return {
+            "messages": messages,
+        }
+
+    return agent_node
 
 
 # Keep for backwards compatibility
