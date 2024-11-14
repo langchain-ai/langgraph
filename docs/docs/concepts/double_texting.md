@@ -15,10 +15,12 @@ If you do not want to use LangGraph Platform, we describe the options we have im
 ![](img/double_texting.png)
 
 ## Reject
+
 This is the simplest option, this just rejects any follow up runs and does not allow double texting. 
 See the [how-to guide](../cloud/how-tos/reject_concurrent.md) for configuring the reject double text option.
 
 ## Enqueue
+
 This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run. 
 See the [how-to guide](../cloud/how-tos/enqueue_concurrent.md) for configuring the enqueue double text option.
 
@@ -35,10 +37,6 @@ See the [how-to guide](../cloud/how-tos/interrupt_concurrent.md) for configuring
 
 ## Rollback
 
-This option rolls back all work done up until that point. 
-It then sends the user input in, basically as if it just followed the original run input. 
-
-This may create some weird states - for example, you may have two `User` messages in a row, with no `Asssitant` message in between them. 
-You will need to make sure the LLM you are calling can handle that, or combine those into a single `User` message.
+This option interrupts the current execution AND rolls back all work done up until that point, including the original run input. It then sends the new user input in, basically as if it was the original input.
 
 See the [how-to guide](../cloud/how-tos/rollback_concurrent.md) for configuring the rollback double text option.
