@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import sys
 import uuid
@@ -17,15 +18,22 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
+from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Annotated, NotRequired, Required
 
+from langgraph.constants import CONFIG_KEY_STREAM_WRITER
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
+from langgraph.store.base import BaseStore
 from langgraph.utils.fields import _is_optional_type, get_field_default
-from langgraph.utils.runnable import is_async_callable, is_async_generator
+from langgraph.utils.runnable import (
+    RunnableCallable,
+    RunnableSeq,
+    coerce_to_runnable,
+    is_async_callable,
+    is_async_generator,
+)
 
-from typing import Any, Optional
-from langchain_core.runnables import RunnableConfig
 pytestmark = pytest.mark.anyio
 
 
@@ -230,79 +238,84 @@ def test_is_required():
     assert get_field_default("val_9", gcannos["val_9"], MyGrandChildDict) is None
     assert get_field_default("val_13", gcannos["val_13"], MyGrandChildDict) == ...
 
+
 async def test_runnable_callable_ainvoke_context() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    import asyncio
-    
     async def afunc(x):
         await asyncio.sleep(0.1)
         return x * 2
-        
+
     runnable = RunnableCallable(func=None, afunc=afunc)
     config = {"configurable": {}, "conf": {}}
-    
+
     result = await runnable.ainvoke(5, config)
     assert result == 10
-    
+
     # Test error handling
     async def error_func(x):
         raise ValueError("Test error")
-        
+
     error_runnable = RunnableCallable(func=None, afunc=error_func)
     with pytest.raises(ValueError, match="Test error"):
         await error_runnable.ainvoke(5, config)
 
 
 def test_runnable_callable_missing_config_key() -> None:
-    from langgraph.utils.runnable import RunnableCallable
     from langgraph.store.base import BaseStore
-    
+    from langgraph.utils.runnable import RunnableCallable
+
     def func(x, store: BaseStore):
         return x
-        
+
     runnable = RunnableCallable(func=func)
     config = {"configurable": {}, "conf": {}}
-    
+
     with pytest.raises(ValueError, match="Missing required config key"):
         runnable.invoke("test", config)
 
 
 def test_runnable_seq_init_validation() -> None:
-    from langgraph.utils.runnable import RunnableSeq, RunnableCallable
-    
-    def step1(x): return x + 1
-    def step2(x): return x * 2
-    
+    from langgraph.utils.runnable import RunnableSeq
+
+    def step1(x):
+        return x + 1
+
+    def step2(x):
+        return x * 2
+
     # Test valid initialization
     seq = RunnableSeq(step1, step2, name="test_seq")
     assert len(seq.steps) == 2
     assert seq.name == "test_seq"
-    
+
     # Test error with single step
     with pytest.raises(ValueError, match="must have at least 2 steps"):
         RunnableSeq(step1)
 
+
 def test_runnable_seq_edge_cases() -> None:
-    from langgraph.utils.runnable import RunnableSeq, RunnableSequence
-    
-    def step1(x): return x + 1
-    def step2(x): return x * 2
-    
+    from langgraph.utils.runnable import RunnableSeq
+
+    def step1(x):
+        return x + 1
+
+    def step2(x):
+        return x * 2
+
     seq = RunnableSeq(step1, step2)
-    
+
     # Test __or__ with RunnableSeq
     other_seq = RunnableSeq(step1, step2)
     combined = seq | other_seq
     assert len(combined.steps) == 4
-    
+
     # Test __ror__ with RunnableSeq
     combined = other_seq | seq
     assert len(combined.steps) == 4
-    
+
     # Test __or__ with regular function
     combined = seq | step1
     assert len(combined.steps) == 3
-    
+
     # Test name propagation
     named_seq = RunnableSeq(step1, step2, name="test_seq")
     combined = named_seq | step1
@@ -310,50 +323,47 @@ def test_runnable_seq_edge_cases() -> None:
 
 
 def test_runnable_seq_stream() -> None:
-    from langgraph.utils.runnable import RunnableSeq
-    from langgraph.constants import CONFIG_KEY_STREAM_WRITER
-    
-    def step1(x): return x + 1
-    def step2(x): return x * 2
-    
+    def step1(x):
+        return x + 1
+
+    def step2(x):
+        return x * 2
+
     seq = RunnableSeq(step1, step2)
-    
+
     # Test normal streaming
     config = {"configurable": {}, "conf": {}, "recursion_limit": 10}
     result = list(seq.stream(5, config))
     assert result == [12]
-    
+
     # Test with custom stream writer
     def stream_writer(x):
         return x
-        
+
     config["conf"][CONFIG_KEY_STREAM_WRITER] = stream_writer
     result = list(seq.stream(5, config))
     assert result == [12]
-    
+
     # Test error handling
     def error_step(x):
         raise ValueError("Test error")
-        
+
     error_seq = RunnableSeq(step1, error_step)
     with pytest.raises(ValueError, match="Test error"):
         list(error_seq.stream(5, config))
 
 
 def test_runnable_callable_config_errors() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    from langgraph.store.base import BaseStore
-    
     def func(x, store: BaseStore, writer=None):
         return x
-        
+
     runnable = RunnableCallable(func=func)
     config = {"configurable": {}, "conf": {}}
-    
+
     # Test missing required config key
     with pytest.raises(ValueError, match="Missing required config key"):
         runnable.invoke("test", config)
-        
+
     # Test with config but missing store
     config["conf"]["writer"] = None
     with pytest.raises(ValueError, match="Missing required config key"):
@@ -361,10 +371,9 @@ def test_runnable_callable_config_errors() -> None:
 
 
 def test_runnable_callable_repr() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    
-    def test_func(x): return x
-    
+    def test_func(x):
+        return x
+
     runnable = RunnableCallable(func=test_func, tags=["test"])
     repr_str = repr(runnable)
     assert "test_func" in repr_str
@@ -372,31 +381,27 @@ def test_runnable_callable_repr() -> None:
 
 
 def test_runnable_callable_missing_functions() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    
-    with pytest.raises(ValueError, match="At least one of func or afunc must be provided"):
+    with pytest.raises(
+        ValueError, match="At least one of func or afunc must be provided"
+    ):
         RunnableCallable(func=None, afunc=None)
 
 
-
 async def test_runnable_seq_async_error_handling() -> None:
-    from langgraph.utils.runnable import RunnableSeq
-    import asyncio
-    
-    def step1(x): 
+    def step1(x):
         return x + 1
-        
+
     async def step2(x):
         await asyncio.sleep(0.1)
         raise ValueError("Test async error")
-        
+
     seq = RunnableSeq(step1, step2)
     config = {"configurable": {}, "conf": {}}
-    
+
     # Test error handling in ainvoke
     with pytest.raises(ValueError, match="Test async error"):
         await seq.ainvoke(5, config)
-        
+
     # Test error handling in astream
     with pytest.raises(ValueError, match="Test async error"):
         async for _ in seq.astream(5, config):
@@ -404,29 +409,26 @@ async def test_runnable_seq_async_error_handling() -> None:
 
 
 async def test_runnable_callable_config_recursion() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    from langchain_core.runnables import Runnable
-    
     # Test recursive runnable that returns another runnable
     class InnerRunnable(Runnable):
         def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
             return input * 2
-            
+
     def outer_func(x):
         return InnerRunnable()
-        
+
     runnable = RunnableCallable(func=outer_func, recurse=True)
     result = runnable.invoke(5, {"configurable": {}, "conf": {}})
     assert result == 10
-    
+
     # Test async version
     async def async_outer_func(x):
         return InnerRunnable()
-        
+
     async_runnable = RunnableCallable(func=None, afunc=async_outer_func, recurse=True)
     result = await async_runnable.ainvoke(5, {"configurable": {}, "conf": {}})
     assert result == 10
-    
+
     # Test with recursion disabled
     no_recurse = RunnableCallable(func=outer_func, recurse=False)
     result = no_recurse.invoke(5, {"configurable": {}, "conf": {}})
@@ -434,92 +436,78 @@ async def test_runnable_callable_config_recursion() -> None:
 
 
 async def test_runnable_callable_missing_sync_func() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    
     async def afunc(x):
         return x * 2
-        
+
     runnable = RunnableCallable(func=None, afunc=afunc)
-    
+
     # Test error when trying to use sync invoke with async-only runnable
     with pytest.raises(TypeError, match="No synchronous function provided"):
         runnable.invoke(5, None)
-        
+
     # Test successful async invoke
     result = await runnable.ainvoke(5, None)
     assert result == 10
 
 
 async def test_runnable_seq_ainvoke_error_handling() -> None:
-    from langgraph.utils.runnable import RunnableSeq
-    
-    def step1(x): 
+    def step1(x):
         return x + 1
-        
+
     async def error_step(x):
         raise ValueError("Test error")
-        
+
     seq = RunnableSeq(step1, error_step)
-    
+
     config = {"configurable": {}, "conf": {}}
-    
+
     with pytest.raises(ValueError, match="Test error"):
         await seq.ainvoke(5, config)
 
 
 async def test_runnable_seq_astream() -> None:
-    from langgraph.utils.runnable import RunnableSeq
-    
-    def step1(x): 
+    def step1(x):
         return x + 1
-        
+
     async def astep2(x):
         return x * 2
-        
+
     seq = RunnableSeq(step1, astep2)
-    
+
     config = {"configurable": {}, "conf": {}}
     result = []
-    
+
     async for chunk in seq.astream(5, config):
         result.append(chunk)
-        
+
     assert result == [12]
 
 
 async def test_runnable_callable_no_sync_func() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    
-    async def afunc(x): 
+    async def afunc(x):
         return x
-        
+
     runnable = RunnableCallable(func=None, afunc=afunc)
-    
+
     with pytest.raises(TypeError, match="No synchronous function provided"):
         runnable.invoke(5, None)
 
 
 def test_coerce_unsupported_type() -> None:
-    from langgraph.utils.runnable import coerce_to_runnable
-    
     # Test with unsupported type
     with pytest.raises(TypeError, match="Expected a Runnable, callable or dict"):
         coerce_to_runnable([1, 2, 3], name="test", trace=True)
-        
+
     with pytest.raises(TypeError, match="Expected a Runnable, callable or dict"):
         coerce_to_runnable(123, name="test", trace=True)
 
 
 async def test_runnable_callable_ainvoke_missing_config() -> None:
-    from langgraph.utils.runnable import RunnableCallable
-    from langgraph.store.base import BaseStore
-    
     async def afunc(x, store: BaseStore):
         return x
-        
+
     runnable = RunnableCallable(func=None, afunc=afunc)
     config = {"configurable": {}, "conf": {}}
-    
+
     with pytest.raises(ValueError, match="Missing required config key"):
         await runnable.ainvoke("test", config)
-

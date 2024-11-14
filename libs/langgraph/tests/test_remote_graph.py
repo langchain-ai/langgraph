@@ -10,10 +10,9 @@ from langchain_core.runnables.graph import (
 from langgraph_sdk.schema import StreamPart
 
 from langgraph.errors import GraphInterrupt
-from langgraph.pregel.remote import RemoteGraph
+from langgraph.pregel.remote import RemoteException, RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 
-from langgraph.pregel.remote import RemoteException
 
 def test_with_config():
     # set up test
@@ -91,7 +90,6 @@ def test_get_graph():
     ]
 
 
-@pytest.mark.anyio
 async def test_aget_graph():
     # set up test
     mock_async_client = AsyncMock()
@@ -185,7 +183,6 @@ def test_get_state():
     )
 
 
-@pytest.mark.anyio
 async def test_aget_state():
     mock_async_client = AsyncMock()
     mock_async_client.threads.get_state.return_value = {
@@ -292,7 +289,6 @@ def test_get_state_history():
     )
 
 
-@pytest.mark.anyio
 async def test_aget_state_history():
     # set up test
     mock_async_client = AsyncMock()
@@ -376,7 +372,6 @@ def test_update_state():
     }
 
 
-@pytest.mark.anyio
 async def test_aupdate_state():
     # set up test
     mock_async_client = AsyncMock()
@@ -508,7 +503,6 @@ def test_stream():
     ]
 
 
-@pytest.mark.anyio
 async def test_astream():
     # set up test
     mock_async_client = MagicMock()
@@ -677,7 +671,6 @@ def test_invoke():
     assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
-@pytest.mark.anyio
 async def test_ainvoke():
     # set up test
     mock_async_client = MagicMock()
@@ -706,7 +699,6 @@ async def test_ainvoke():
 
 
 @pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")
-@pytest.mark.anyio
 async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client
 
@@ -804,18 +796,18 @@ def test_stream_error_events():
     mock_sync_client.runs.stream.return_value = [
         StreamPart(event="error", data="Remote error occurred")
     ]
-    
+
     remote_graph = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
-    
+
     with pytest.raises(RemoteException, match="Remote error occurred"):
         for _ in remote_graph.stream(
             {"input": "data"},
             config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode="values"
+            stream_mode="values",
         ):
             pass
 
-@pytest.mark.anyio
+
 async def test_astream_error_events():
     mock_async_client = MagicMock()
     async_iter = MagicMock()
@@ -823,14 +815,14 @@ async def test_astream_error_events():
         StreamPart(event="error", data="Remote error occurred")
     ]
     mock_async_client.runs.stream.return_value = async_iter
-    
+
     remote_graph = RemoteGraph("test_graph_id", client=mock_async_client)
-    
+
     with pytest.raises(RemoteException, match="Remote error occurred"):
         async for _ in remote_graph.astream(
             {"input": "data"},
             config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode="values"
+            stream_mode="values",
         ):
             pass
 
@@ -843,7 +835,7 @@ def test_invoke_empty_response():
     result = remote_graph.invoke({"input": "data"})
     assert result is None
 
-@pytest.mark.anyio
+
 async def test_ainvoke_empty_response():
     # Test async version
     mock_async_client = MagicMock()
@@ -857,24 +849,22 @@ async def test_ainvoke_empty_response():
 
 def test_stream_modes_messages_mapping():
     remote_graph = RemoteGraph("test_graph_id", sync_client=MagicMock())
-    
+
     # Test mapping 'messages' to 'messages-tuple'
     stream_modes, requested, req_single, stream = remote_graph._get_stream_modes(
-        stream_mode="messages", 
-        config=None
+        stream_mode="messages", config=None
     )
-    
+
     assert "messages-tuple" in stream_modes
     assert "messages" not in stream_modes
     assert "messages" in requested
     assert "messages-tuple" not in requested
-    
+
     # Test with list of modes
     stream_modes, requested, req_single, stream = remote_graph._get_stream_modes(
-        stream_mode=["messages", "updates"], 
-        config=None
+        stream_mode=["messages", "updates"], config=None
     )
-    
+
     assert "messages-tuple" in stream_modes
     assert "messages" not in stream_modes
     assert "messages" in requested

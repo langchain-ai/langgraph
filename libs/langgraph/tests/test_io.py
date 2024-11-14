@@ -1,12 +1,15 @@
 from typing import Iterator
 
-from langgraph.pregel.io import single
-from langgraph.pregel.io import AddableValuesDict
 import pytest
-from langgraph.pregel.io import map_output_values, AddableValuesDict
-from langgraph.pregel.io import map_output_updates
-from langgraph.pregel.io import map_input
-from langgraph.pregel.io import AddableUpdatesDict
+
+from langgraph.pregel.io import (
+    AddableUpdatesDict,
+    AddableValuesDict,
+    map_input,
+    map_output_updates,
+    map_output_values,
+    single,
+)
 
 
 def test_single() -> None:
@@ -23,15 +26,16 @@ def test_single() -> None:
     assert single(myiter()) == 1
     assert closed
 
+
 def test_addable_values_dict_operations() -> None:
     d1 = AddableValuesDict({"a": 1})
     d2 = {"b": 2}
-    
+
     # Test __add__
     result = d1 + d2
     assert isinstance(result, dict)
     assert result == {"a": 1, "b": 2}
-    
+
     # Test __radd__
     result = d2 + d1
     assert isinstance(result, dict)
@@ -41,13 +45,15 @@ def test_addable_values_dict_operations() -> None:
 def test_addable_updates_dict() -> None:
     d1 = AddableUpdatesDict({"a": 1})
     d2 = {"b": 2}
-    
+
     # Test __add__
     result = d1 + d2
     assert result == [{"a": 1}, {"b": 2}]
-    
+
     # Test __radd__ raises TypeError
-    with pytest.raises(TypeError, match="AddableUpdatesDict does not support right-side addition"):
+    with pytest.raises(
+        TypeError, match="AddableUpdatesDict does not support right-side addition"
+    ):
         d2 + d1
 
 
@@ -55,14 +61,12 @@ def test_map_output_values_sequence() -> None:
     class MockChannel:
         def __init__(self, value):
             self.value = value
+
         def get(self):
             return self.value
 
-    channels = {
-        "ch1": MockChannel("value1"),
-        "ch2": MockChannel("value2")
-    }
-    
+    channels = {"ch1": MockChannel("value1"), "ch2": MockChannel("value2")}
+
     # Test with sequence output channels and True pending writes
     result = list(map_output_values(["ch1", "ch2"], True, channels))
     assert len(result) == 1
@@ -72,30 +76,27 @@ def test_map_output_values_sequence() -> None:
 
 def test_map_output_updates_basic() -> None:
     from dataclasses import dataclass
-    
+
     @dataclass
     class MockTask:
         name: str
         config: dict
-        
+
     task1 = MockTask("node1", {})
     task2 = MockTask("node2", {"tags": ["hidden"]})
-    
-    tasks = [
-        (task1, [("channel1", "value1")]),
-        (task2, [("channel2", "value2")])
-    ]
-    
+
+    tasks = [(task1, [("channel1", "value1")]), (task2, [("channel2", "value2")])]
+
     # Test with string output channel
     result = list(map_output_updates("channel1", tasks))
     assert len(result) == 1
     assert result[0]["node1"] == "value1"
-    
+
     # Test with sequence output channels
     result = list(map_output_updates(["channel1", "channel2"], tasks))
     assert len(result) == 1
     assert result[0]["node1"] == {"channel1": "value1"}
-    
+
     # Test with cached=True
     result = list(map_output_updates(["channel1"], tasks, cached=True))
     assert len(result) == 1
@@ -120,4 +121,3 @@ def test_map_input() -> None:
     # Test with invalid input type
     with pytest.raises(TypeError, match="Expected chunk to be a dict"):
         list(map_input(["ch1", "ch2"], "invalid"))
-
