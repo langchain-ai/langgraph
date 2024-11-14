@@ -13,6 +13,8 @@ from langgraph.errors import GraphInterrupt
 from langgraph.pregel.remote import RemoteException, RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 
+pytestmark = pytest.mark.anyio
+
 
 def test_with_config():
     # set up test
