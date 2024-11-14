@@ -60,5 +60,3 @@ def test_local_write_validation() -> None:
     invalid_node = [(TASKS, Send("invalid_node", "test"))]
     with pytest.raises(InvalidUpdateError, match="Invalid node name"):
         local_write(commit, process_keys, invalid_node)
-
-# TODO: add more tests
