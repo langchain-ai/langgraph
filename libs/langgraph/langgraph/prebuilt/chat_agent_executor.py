@@ -776,9 +776,6 @@ def make_agent_v2(
         config: RunnableConfig,
     ):
         """Agent node that calls the language model and tools."""
-        print("Entering agent.")
-        print(state)
-        print("---")
         # Here it's pretty confusing since we need to route only the "new" messages.
         # We could assume it's a single Human message for now, but this does not
         # look amazing.
@@ -788,21 +785,16 @@ def make_agent_v2(
         last_message = messages[-1]
 
         if isinstance(last_message, ToolMessage):
-            print("--- HERE ---")
-            print(last_message)
             # Let's inspect the artifact to see if it's a Handoff.
             if isinstance(last_message.artifact, Handoff):
                 # If it is, we'll return a command to handoff to the specified agent.
-                print("HANDOFF")
-                update = {
+                return {
                     "messages": messages,
                     # It's unclear that we want a graphcommand. The semantics
                     # Are a bit bizarre w/ respect to parent vs. internal state
                     # updates + gotos are w/ respect to parent graph only!
                     "route_id": last_message.artifact.node,
                 }
-                print(update)
-                return update
 
         return {
             "messages": messages,
