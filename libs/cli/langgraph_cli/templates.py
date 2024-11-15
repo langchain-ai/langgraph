@@ -85,7 +85,7 @@ def _choose_template() -> str:
         fg="green",
     )
     version_choice: int = click.prompt(
-        "Choose version (1 for Python 🐍, 2 for JS/TS 🌐)", type=int
+        "Choose language (1 for Python 🐍, 2 for JS/TS 🌐)", type=int
     )
 
     if version_choice == 1:
