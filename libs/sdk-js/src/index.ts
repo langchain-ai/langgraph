@@ -10,6 +10,7 @@ export type {
   Metadata,
   Run,
   Thread,
+  ThreadTask,
   ThreadState,
   ThreadStatus,
   Cron,
