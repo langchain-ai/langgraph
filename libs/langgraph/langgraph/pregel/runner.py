@@ -87,8 +87,6 @@ class PregelRunner:
                 if next_task := self.schedule_task(
                     task, idx, calls[idx - prev_length] if calls else None
                 ):
-                    # if the parent task was retried,
-                    # the next task might already be running
                     if fut := next(
                         (
                             f
@@ -97,8 +95,12 @@ class PregelRunner:
                         ),
                         None,
                     ):
+                        # if the parent task was retried,
+                        # the next task might already be running
                         rtn[idx - prev_length] = fut
                     elif next_task.writes:
+                        # if it already ran, return the result
+                        # TODO we could also set the result for non-RETURN writes
                         fut = concurrent.futures.Future()
                         if val := next(v for c, v in next_task.writes if c == RETURN):
                             fut.set_result(val)
