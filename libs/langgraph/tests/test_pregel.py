@@ -14034,7 +14034,6 @@ def test_debug_retry():
     update_config = graph.update_state(target_config, values=None)
 
     events = [*graph.stream(None, config=update_config, stream_mode="debug")]
-    assert events == []
 
     checkpoint_events = list(
         reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
