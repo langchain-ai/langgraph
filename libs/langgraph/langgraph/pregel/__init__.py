@@ -65,6 +65,7 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
+    END,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -901,8 +902,8 @@ class Pregel(PregelProtocol):
             checkpoint,
             LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (channels, managed):
-            # no values, just clear all tasks
-            if values is None and as_node is None:
+            # no values as END, just clear all tasks
+            if values is None and as_node == END:
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
@@ -943,6 +944,25 @@ class Pregel(PregelProtocol):
                 next_config = checkpointer.put(
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # no values, copy checkpoint
+            if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    next_checkpoint,
                     {
                         **checkpoint_metadata,
                         "source": "update",
