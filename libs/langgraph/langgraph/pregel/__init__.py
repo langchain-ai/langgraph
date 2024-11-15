@@ -1164,7 +1164,7 @@ class Pregel(PregelProtocol):
             managed,
         ):
             # no values, just clear all tasks
-            if values is None and as_node is None:
+            if values is None and as_node == END:
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
@@ -1205,6 +1205,25 @@ class Pregel(PregelProtocol):
                 next_config = await checkpointer.aput(
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # no values, copy checkpoint
+            if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    next_checkpoint,
                     {
                         **checkpoint_metadata,
                         "source": "update",

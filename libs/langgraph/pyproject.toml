@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.2.49"
+version = "0.2.50"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
