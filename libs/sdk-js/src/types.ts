@@ -23,6 +23,19 @@ export type StreamEvent =
   | "messages/complete"
   | (string & {});
 
+export interface Send {
+  node: string;
+  input: Record<string, unknown> | null;
+}
+
+export interface Command {
+  update?: Record<string, unknown>;
+
+  resume?: unknown;
+
+  send?: Send | Send[];
+}
+
 interface RunsInvokePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
@@ -107,6 +120,11 @@ interface RunsInvokePayload {
    * Behavior if the specified run doesn't exist. Defaults to "reject".
    */
   ifNotExists?: "create" | "reject";
+
+  /**
+   * One or more commands to invoke the graph with.
+   */
+  command?: Command;
 }
 
 export interface RunsStreamPayload extends RunsInvokePayload {
