@@ -52,6 +52,7 @@ from langgraph.constants import (
     PUSH,
     RESERVED,
     RESUME,
+    RETURN,
     TAG_HIDDEN,
     TASKS,
     Send,
@@ -259,7 +260,7 @@ def apply_writes(
     pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
-            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT):
+            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN):
                 pass
             elif chan == TASKS:  # TODO: remove branch in 1.0
                 checkpoint["pending_sends"].append(val)
@@ -509,7 +510,7 @@ def prepare_single_task(
                 proc,
                 writes,
                 patch_config(
-                    merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+                    merge_configs(config, {"metadata": metadata}),
                     run_name=name,
                     callbacks=(
                         manager.get_child(f"graph:step:{step}") if manager else None

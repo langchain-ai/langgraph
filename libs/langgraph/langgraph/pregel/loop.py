@@ -347,9 +347,8 @@ class PregelLoop(LoopProtocol):
             # match any pending writes to the new task
             if self.skip_done_tasks:
                 self._match_writes({pushed.id: pushed})
-            # return the new task, to be started, if not run before
-            if not pushed.writes:
-                return pushed
+            # return the new task, to be started if not run before
+            return pushed
 
     def tick(
         self,

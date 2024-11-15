@@ -40,6 +40,8 @@ SCHEDULED = sys.intern("__scheduled__")
 # marker to signal node was scheduled (in distributed mode)
 TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
+RETURN = sys.intern("__return__")
+# for writes of a task where we simply record the return value
 
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")

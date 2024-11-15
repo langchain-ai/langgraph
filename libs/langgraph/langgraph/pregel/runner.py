@@ -25,6 +25,7 @@ from langgraph.constants import (
     NO_WRITES,
     PUSH,
     RESUME,
+    RETURN,
     TAG_HIDDEN,
 )
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
@@ -88,23 +89,42 @@ class PregelRunner:
                 ):
                     # if the parent task was retried,
                     # the next task might already be running
-                    if any(
-                        t == next_task.id for t in futures.values() if t is not None
+                    if fut := next(
+                        (
+                            f
+                            for f, t in futures.items()
+                            if t is not None and t == next_task.id
+                        ),
+                        None,
                     ):
-                        continue
-                    # schedule the next task
-                    fut = self.submit(
-                        run_with_retry,
-                        next_task,
-                        retry_policy,
-                        configurable={
-                            CONFIG_KEY_SEND: partial(writer, next_task),
-                            CONFIG_KEY_CALL: partial(call, next_task),
-                        },
-                        __reraise_on_exit__=reraise,
-                    )
-                    futures[fut] = next_task
-                    rtn[idx - prev_length] = fut
+                        rtn[idx - prev_length] = fut
+                    elif next_task.writes:
+                        fut = concurrent.futures.Future()
+                        if val := next(v for c, v in next_task.writes if c == RETURN):
+                            fut.set_result(val)
+                        elif exc := next(v for c, v in next_task.writes if c == ERROR):
+                            fut.set_exception(
+                                exc
+                                if isinstance(exc, BaseException)
+                                else Exception(exc)
+                            )
+                        else:
+                            fut.set_result(None)
+                        rtn[idx - prev_length] = fut
+                    else:
+                        # schedule the next task
+                        fut = self.submit(
+                            run_with_retry,
+                            next_task,
+                            retry_policy,
+                            configurable={
+                                CONFIG_KEY_SEND: partial(writer, next_task),
+                                CONFIG_KEY_CALL: partial(call, next_task),
+                            },
+                            __reraise_on_exit__=reraise,
+                        )
+                        futures[fut] = next_task
+                        rtn[idx - prev_length] = fut
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(
@@ -116,6 +136,7 @@ class PregelRunner:
 
         tasks = tuple(tasks)
         futures: dict[concurrent.futures.Future, Optional[PregelExecutableTask]] = {}
+        done_futures: set[concurrent.futures.Future] = set()
         # give control back to the caller
         yield
         # fast path if single task with no timeout and no waiter
@@ -133,7 +154,12 @@ class PregelRunner:
                 self.commit(t, None)
             except Exception as exc:
                 self.commit(t, exc)
-                if reraise:
+                if reraise and futures:
+                    # will be re-raised after futures are done
+                    fut = concurrent.futures.Future()
+                    fut.set_exception(exc)
+                    done_futures.add(fut)
+                elif reraise:
                     raise
             if not futures:  # maybe `t` schuduled another task
                 return
@@ -157,7 +183,6 @@ class PregelRunner:
                         __reraise_on_exit__=reraise,
                     )
                 ] = t
-        done_futures: set[concurrent.futures.Future] = set()
         end_time = timeout + time.monotonic() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = concurrent.futures.wait(
@@ -183,6 +208,7 @@ class PregelRunner:
                 del fut, task
             # maybe stop other tasks
             if _should_stop_others(done):
+                print("stopping others")
                 break
             # give control back to the caller
             yield

@@ -1,7 +1,9 @@
 import sys
 import types
 
-from langgraph.utils.runnable import RunnableCallable
+from langgraph.constants import RETURN
+from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 """
 Utilities borrowed from cloudpickle.
@@ -101,13 +103,24 @@ def _lookup_module_and_qualname(obj, name=None):
 
 def get_runnable_for_func(
     func: types.FunctionType,
-) -> RunnableCallable:
+) -> RunnableSeq:
     if func in CACHE:
         return CACHE[func]
     elif not _lookup_module_and_qualname(func):
-        return RunnableCallable(func)
+        return RunnableSeq(
+            RunnableCallable(func, trace=False),
+            ChannelWrite([ChannelWriteEntry(RETURN)]),
+            name=func.__name__,
+        )
     else:
-        return CACHE.setdefault(func, RunnableCallable(func))
+        return CACHE.setdefault(
+            func,
+            RunnableSeq(
+                RunnableCallable(func, trace=False),
+                ChannelWrite([ChannelWriteEntry(RETURN)]),
+                name=func.__name__,
+            ),
+        )
 
 
 CACHE: dict[types.FunctionType, RunnableCallable] = {}
