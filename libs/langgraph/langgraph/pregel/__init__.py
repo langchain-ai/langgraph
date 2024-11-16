@@ -946,7 +946,7 @@ class Pregel(PregelProtocol):
                     create_checkpoint(checkpoint, None, step),
                     {
                         **checkpoint_metadata,
-                        "source": "fork",
+                        "source": "update",
                         "step": step + 1,
                         "writes": {},
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1226,7 +1226,7 @@ class Pregel(PregelProtocol):
                     next_checkpoint,
                     {
                         **checkpoint_metadata,
-                        "source": "update",
+                        "source": "fork",
                         "step": step + 1,
                         "writes": {},
                         "parents": saved.metadata.get("parents", {}) if saved else {},
