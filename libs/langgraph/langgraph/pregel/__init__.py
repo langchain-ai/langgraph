@@ -961,7 +961,7 @@ class Pregel(PregelProtocol):
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
                 next_config = checkpointer.put(
-                    checkpoint_config,
+                    saved.parent_config or saved.config if saved else checkpoint_config,
                     next_checkpoint,
                     {
                         **checkpoint_metadata,
@@ -1222,7 +1222,7 @@ class Pregel(PregelProtocol):
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
                 next_config = await checkpointer.aput(
-                    checkpoint_config,
+                    saved.parent_config or saved.config if saved else checkpoint_config,
                     next_checkpoint,
                     {
                         **checkpoint_metadata,
