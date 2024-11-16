@@ -1112,6 +1112,18 @@ class Pregel(PregelProtocol):
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        """Update the state of the graph asynchronously with the given values, as if they came from node as_node. If as_node is not provided, it will be set to the last node that updated the state, if not ambiguous.
+
+        Args:
+            config (RunnableConfig): The configuration to use for the update.
+            values (Optional[Union[dict[str, Any], Any]]): The values to update the state with.
+            as_node (Optional[str], default: None): The node to attribute the update to.
+                If not provided, it will be set to the last node that updated the state,
+                if not ambiguous.
+
+        Returns:
+            RunnableConfig: The updated configuration.
+        """
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
