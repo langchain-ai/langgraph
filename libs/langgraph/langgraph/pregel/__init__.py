@@ -961,6 +961,24 @@ class Pregel(PregelProtocol):
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
                 next_config = checkpointer.put(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
                     saved.parent_config or saved.config if saved else checkpoint_config,
                     next_checkpoint,
                     {
@@ -1218,6 +1236,24 @@ class Pregel(PregelProtocol):
                 )
             # no values, copy checkpoint
             if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
                 next_config = await checkpointer.aput(
