@@ -77,11 +77,9 @@ class MemorySaver(
         self.storage = factory(lambda: defaultdict(dict))
         self.writes = factory(dict)
         self.stack = ExitStack()
-        try:
+        if factory is not defaultdict:
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
-        except (TypeError, AttributeError):
-            pass
 
     def __enter__(self) -> "MemorySaver":
         return self.stack.__enter__()
