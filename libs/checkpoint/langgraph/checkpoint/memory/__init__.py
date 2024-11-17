@@ -7,7 +7,7 @@ from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type
 
 from langchain_core.runnables import RunnableConfig
 
@@ -71,16 +71,16 @@ class MemorySaver(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        factory=defaultdict,
+        factory: Type[defaultdict] = defaultdict,
     ) -> None:
         super().__init__(serde=serde)
         self.storage = factory(lambda: defaultdict(dict))
         self.writes = factory(dict)
         self.stack = ExitStack()
         try:
-            self.stack.enter_context(self.storage)
-            self.stack.enter_context(self.writes)
-        except TypeError:
+            self.stack.enter_context(self.storage)  # type: ignore[arg-type]
+            self.stack.enter_context(self.writes)  # type: ignore[arg-type]
+        except (TypeError, AttributeError):
             pass
 
     def __enter__(self) -> "MemorySaver":
@@ -506,14 +506,14 @@ class PersistentDict(defaultdict):
 
     """
 
-    def __init__(self, *args, filename: str, **kwds):
+    def __init__(self, *args: Any, filename: str, **kwds: Any) -> None:
         self.flag = "c"  # r=readonly, c=create, or n=new
         self.mode = None  # None or an octal triple like 0644
         self.format = "pickle"  # 'csv', 'json', or 'pickle'
         self.filename = filename
         super().__init__(*args, **kwds)
 
-    def sync(self):
+    def sync(self) -> None:
         "Write dict to disk"
         if self.flag == "r":
             return
@@ -531,23 +531,23 @@ class PersistentDict(defaultdict):
         if self.mode is not None:
             os.chmod(self.filename, self.mode)
 
-    def close(self):
+    def close(self) -> None:
         self.sync()
         self.clear()
 
-    def __enter__(self):
+    def __enter__(self) -> "PersistentDict":
         return self
 
-    def __exit__(self, *exc_info):
+    def __exit__(self, *exc_info: Any) -> None:
         self.close()
 
-    def dump(self, fileobj):
+    def dump(self, fileobj: Any) -> None:
         if self.format == "pickle":
             pickle.dump(dict(self), fileobj, 2)
         else:
             raise NotImplementedError("Unknown format: " + repr(self.format))
 
-    def load(self):
+    def load(self) -> None:
         # try formats from most restrictive to least restrictive
         if self.flag == "n":
             return
