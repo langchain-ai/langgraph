@@ -319,6 +319,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(query, params)
 
+    async def _check_pipeline_support(self, conn: AsyncConnection[DictRow]) -> None:
+        if self.supports_pipeline is not None:
+            return
+
+        try:
+            async with conn.pipeline():
+                self.supports_pipeline = True
+        except NotSupportedError:
+            self.supports_pipeline = False
+
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
@@ -342,14 +352,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     if pipeline:
                         await self.pipe.sync()
             elif pipeline:
+                await self._check_pipeline_support(conn)
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
-                try:
+                if self.supports_pipeline:
                     async with self.lock, conn.pipeline(), conn.cursor(
                         binary=True, row_factory=dict_row
                     ) as cur:
                         yield cur
-                except NotSupportedError:
+                else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     async with self.lock, conn.transaction(), conn.cursor(
                         binary=True, row_factory=dict_row
