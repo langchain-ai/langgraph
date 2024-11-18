@@ -975,6 +975,23 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -1229,6 +1246,23 @@ class Pregel(PregelProtocol):
                         "source": "update",
                         "step": step + 1,
                         "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
