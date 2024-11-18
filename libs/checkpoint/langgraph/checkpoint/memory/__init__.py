@@ -1,27 +1,25 @@
 import asyncio
+import logging
 import os
 import pickle
 import random
 import shutil
 from collections import defaultdict
-from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
+from contextlib import (AbstractAsyncContextManager, AbstractContextManager,
+                        ExitStack)
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type
+from typing import (Any, AsyncIterator, Dict, Iterator, Optional, Sequence,
+                    Tuple, Type)
 
 from langchain_core.runnables import RunnableConfig
-
-from langgraph.checkpoint.base import (
-    WRITES_IDX_MAP,
-    BaseCheckpointSaver,
-    ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-    SerializerProtocol,
-    get_checkpoint_id,
-)
+from langgraph.checkpoint.base import (WRITES_IDX_MAP, BaseCheckpointSaver,
+                                       ChannelVersions, Checkpoint,
+                                       CheckpointMetadata, CheckpointTuple,
+                                       SerializerProtocol, get_checkpoint_id)
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
+
+logger = logging.getLogger(__name__)
 
 
 class MemorySaver(
@@ -557,6 +555,6 @@ class PersistentDict(defaultdict):
                 except EOFError:
                     return
                 except Exception:
-                    print(fileobj)
+                    logging.error(f"Failed to load file: {fileobj.name}")
                     raise
             raise ValueError("File not in a supported format")
