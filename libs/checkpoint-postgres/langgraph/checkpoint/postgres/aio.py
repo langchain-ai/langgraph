@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
-from psycopg.errors import NotSupportedError, UndefinedTable
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
+from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -55,6 +55,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
+        self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
     @asynccontextmanager
@@ -319,16 +320,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(query, params)
 
-    async def _check_pipeline_support(self, conn: AsyncConnection[DictRow]) -> None:
-        if self.supports_pipeline is not None:
-            return
-
-        try:
-            async with conn.pipeline():
-                self.supports_pipeline = True
-        except NotSupportedError:
-            self.supports_pipeline = False
-
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
@@ -352,7 +343,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     if pipeline:
                         await self.pipe.sync()
             elif pipeline:
-                await self._check_pipeline_support(conn)
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:

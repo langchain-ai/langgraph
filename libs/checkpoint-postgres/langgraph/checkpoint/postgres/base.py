@@ -133,7 +133,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
     jsonplus_serde = JsonPlusSerializer()
-    supports_pipeline: Optional[bool] = None
+    supports_pipeline: bool
 
     def _load_checkpoint(
         self,

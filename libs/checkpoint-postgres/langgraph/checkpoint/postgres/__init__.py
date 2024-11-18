@@ -3,8 +3,8 @@ from contextlib import contextmanager
 from typing import Any, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import Connection, Cursor, Pipeline
-from psycopg.errors import NotSupportedError, UndefinedTable
+from psycopg import Capabilities, Connection, Cursor, Pipeline
+from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -52,6 +52,7 @@ class PostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
+        self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
     @contextmanager
@@ -363,16 +364,6 @@ class PostgresSaver(BasePostgresSaver):
                 ),
             )
 
-    def _check_pipeline_support(self, conn: Connection[DictRow]) -> None:
-        if self.supports_pipeline is not None:
-            return
-
-        try:
-            with conn.pipeline():
-                self.supports_pipeline = True
-        except NotSupportedError:
-            self.supports_pipeline = False
-
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
         """Create a database cursor as a context manager.
@@ -394,7 +385,6 @@ class PostgresSaver(BasePostgresSaver):
                     if pipeline:
                         self.pipe.sync()
             elif pipeline:
-                self._check_pipeline_support(conn)
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
