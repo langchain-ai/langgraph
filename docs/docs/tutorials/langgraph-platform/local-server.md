@@ -18,7 +18,7 @@ This is a quick start guide to help you get a LangGraph app up and running local
     brew install langgraph-cli
     ```
 
-## Create a LangGraph App
+## 🌱 Create a LangGraph App
 
 Create a new app from the `react-agent` template. This template is a simple agent that can be flexibly extended to many tools.
 
@@ -45,8 +45,8 @@ a `.env` file in the root of your new LangGraph app and copy the contents of the
 
 ```bash
 LANGSMITH_API_KEY=lsv2...
-ANTHROPIC_API_KEY=sk-
 TAVILY_API_KEY=tvly-...
+ANTHROPIC_API_KEY=sk-
 OPENAI_API_KEY=sk-...
 ```
 
@@ -66,7 +66,7 @@ OPENAI_API_KEY=sk-...
     </ul>
 </details>
 
-## Launch LangGraph Server
+## 🚀 Launch LangGraph Server
 
 ```shell
 langgraph up
