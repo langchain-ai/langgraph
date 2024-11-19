@@ -55,13 +55,13 @@ OPENAI_API_KEY=sk-...
         <li> <b>LANGSMITH_API_KEY</b>: Go to the <a href="https://smith.langchain.com/settings">LangSmith Settings page</a>. Then clck <b>Create API Key</b>.
         </li>
         <li>
-            <b>ANTHROPIC_API_KEY</b>: Get an API key from <a href="https://www.anthropic.com/api">Anthropic</a>.
+            <b>ANTHROPIC_API_KEY</b>: Get an API key from <a href="https://console.anthropic.com/">Anthropic</a>.
         </li>
         <li>
             <b>OPENAI_API_KEY</b>: Get an API key from <a href="https://openai.com/">OpenAI</a>.
         </li>
         <li>
-            <b>TAVILY_API_KEY</b>: Get an API key on the <a href="https://tavily.com/">Tavily website</a>.
+            <b>TAVILY_API_KEY</b>: Get an API key on the <a href="https://app.tavily.com/">Tavily website</a>.
         </li>
     </ul>
 </details>
