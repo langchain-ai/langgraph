@@ -17,4 +17,4 @@ export type {
   Checkpoint,
 } from "./schema.js";
 
-export type { OnConflictBehavior } from "./types.js";
+export type { OnConflictBehavior, Command } from "./types.js";
