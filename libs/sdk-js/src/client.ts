@@ -693,6 +693,7 @@ export class RunsClient extends BaseClient {
   }> {
     const json: Record<string, any> = {
       input: payload?.input,
+      command: payload?.command,
       config: payload?.config,
       metadata: payload?.metadata,
       stream_mode: payload?.streamMode,
@@ -780,6 +781,7 @@ export class RunsClient extends BaseClient {
   ): Promise<Run> {
     const json: Record<string, any> = {
       input: payload?.input,
+      command: payload?.command,
       config: payload?.config,
       metadata: payload?.metadata,
       assistant_id: assistantId,
@@ -849,6 +851,7 @@ export class RunsClient extends BaseClient {
   ): Promise<ThreadState["values"]> {
     const json: Record<string, any> = {
       input: payload?.input,
+      command: payload?.command,
       config: payload?.config,
       metadata: payload?.metadata,
       assistant_id: assistantId,

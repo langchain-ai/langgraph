@@ -1,10 +1,14 @@
 import asyncio
+import logging
+import os
+import pickle
 import random
+import shutil
 from collections import defaultdict
-from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type
 
 from langchain_core.runnables import RunnableConfig
 
@@ -19,6 +23,8 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
+
+logger = logging.getLogger(__name__)
 
 
 class MemorySaver(
@@ -68,13 +74,18 @@ class MemorySaver(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
+        factory: Type[defaultdict] = defaultdict,
     ) -> None:
         super().__init__(serde=serde)
-        self.storage = defaultdict(lambda: defaultdict(dict))
-        self.writes = defaultdict(dict)
+        self.storage = factory(lambda: defaultdict(dict))
+        self.writes = factory(dict)
+        self.stack = ExitStack()
+        if factory is not defaultdict:
+            self.stack.enter_context(self.storage)  # type: ignore[arg-type]
+            self.stack.enter_context(self.writes)  # type: ignore[arg-type]
 
     def __enter__(self) -> "MemorySaver":
-        return self
+        return self.stack.__enter__()
 
     def __exit__(
         self,
@@ -82,10 +93,10 @@ class MemorySaver(
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        return
+        return self.stack.__exit__(exc_type, exc_value, traceback)
 
     async def __aenter__(self) -> "MemorySaver":
-        return self
+        return self.stack.__enter__()
 
     async def __aexit__(
         self,
@@ -93,7 +104,7 @@ class MemorySaver(
         __exc_value: Optional[BaseException],
         __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        return
+        return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the in-memory storage.
@@ -361,7 +372,7 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved writes' timestamp.
         """
         thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"]["checkpoint_id"]
         outer_key = (thread_id, checkpoint_ns, checkpoint_id)
         outer_writes_ = self.writes.get(outer_key)
@@ -478,3 +489,76 @@ class MemorySaver(
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
+
+class PersistentDict(defaultdict):
+    """Persistent dictionary with an API compatible with shelve and anydbm.
+
+    The dict is kept in memory, so the dictionary operations run as fast as
+    a regular dictionary.
+
+    Write to disk is delayed until close or sync (similar to gdbm's fast mode).
+
+    Input file format is automatically discovered.
+    Output file format is selectable between pickle, json, and csv.
+    All three serialization formats are backed by fast C implementations.
+
+    Adapted from https://code.activestate.com/recipes/576642-persistent-dict-with-multiple-standard-file-format/
+
+    """
+
+    def __init__(self, *args: Any, filename: str, **kwds: Any) -> None:
+        self.flag = "c"  # r=readonly, c=create, or n=new
+        self.mode = None  # None or an octal triple like 0644
+        self.format = "pickle"  # 'csv', 'json', or 'pickle'
+        self.filename = filename
+        super().__init__(*args, **kwds)
+
+    def sync(self) -> None:
+        "Write dict to disk"
+        if self.flag == "r":
+            return
+        tempname = self.filename + ".tmp"
+        fileobj = open(tempname, "wb" if self.format == "pickle" else "w")
+        try:
+            self.dump(fileobj)
+        except Exception:
+            os.remove(tempname)
+            raise
+        finally:
+            fileobj.close()
+        shutil.move(tempname, self.filename)  # atomic commit
+        if self.mode is not None:
+            os.chmod(self.filename, self.mode)
+
+    def close(self) -> None:
+        self.sync()
+        self.clear()
+
+    def __enter__(self) -> "PersistentDict":
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.close()
+
+    def dump(self, fileobj: Any) -> None:
+        if self.format == "pickle":
+            pickle.dump(dict(self), fileobj, 2)
+        else:
+            raise NotImplementedError("Unknown format: " + repr(self.format))
+
+    def load(self) -> None:
+        # try formats from most restrictive to least restrictive
+        if self.flag == "n":
+            return
+        with open(self.filename, "rb" if self.format == "pickle" else "r") as fileobj:
+            for loader in (pickle.load,):
+                fileobj.seek(0)
+                try:
+                    return self.update(loader(fileobj))
+                except EOFError:
+                    return
+                except Exception:
+                    logging.error(f"Failed to load file: {fileobj.name}")
+                    raise
+            raise ValueError("File not in a supported f ormat")

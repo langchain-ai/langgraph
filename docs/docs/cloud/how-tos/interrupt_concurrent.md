@@ -94,6 +94,7 @@ Now we can start our two runs and join the second on euntil it has completed:
         assistant_id,
         input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
+    # sleep a bit to get partial outputs from the first run
     await asyncio.sleep(2)
     run = await client.runs.create(
         thread["thread_id"],
@@ -114,6 +115,7 @@ Now we can start our two runs and join the second on euntil it has completed:
       assistantId,
       { input: { messages: [{ role: "human", content: "what's the weather in sf?" }] } }
     );
+    // sleep a bit to get partial outputs from the first run
     await new Promise(resolve => setTimeout(resolve, 2000)); 
 
     let run = await client.runs.create(

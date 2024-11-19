@@ -65,10 +65,14 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
+    END,
     ERROR,
+    INPUT,
     INTERRUPT,
     NS_END,
     NS_SEP,
+    NULL_TASK_ID,
+    PUSH,
     SCHEDULED,
 )
 from langgraph.errors import (
@@ -98,7 +102,13 @@ from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_version
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, LoopProtocol, StateSnapshot, StreamMode
+from langgraph.types import (
+    All,
+    Checkpointer,
+    LoopProtocol,
+    StateSnapshot,
+    StreamMode,
+)
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -468,6 +478,7 @@ class Pregel(PregelProtocol):
             # tasks for this checkpoint
             next_tasks = prepare_next_tasks(
                 saved.checkpoint,
+                saved.pending_writes or [],
                 self.nodes,
                 channels,
                 managed,
@@ -511,6 +522,15 @@ class Pregel(PregelProtocol):
                         config, subgraphs=True
                     )
             # apply pending writes
+            if null_writes := [
+                w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+            ]:
+                apply_writes(
+                    saved.checkpoint,
+                    channels,
+                    [PregelTaskWrites((), INPUT, null_writes, [])],
+                    None,
+                )
             if apply_pending_writes and saved.pending_writes:
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -570,6 +590,7 @@ class Pregel(PregelProtocol):
             # tasks for this checkpoint
             next_tasks = prepare_next_tasks(
                 saved.checkpoint,
+                saved.pending_writes or [],
                 self.nodes,
                 channels,
                 managed,
@@ -613,6 +634,15 @@ class Pregel(PregelProtocol):
                         config, subgraphs=True
                     )
             # apply pending writes
+            if null_writes := [
+                w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+            ]:
+                apply_writes(
+                    saved.checkpoint,
+                    channels,
+                    [PregelTaskWrites((), INPUT, null_writes, [])],
+                    None,
+                )
             if apply_pending_writes and saved.pending_writes:
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -872,12 +902,13 @@ class Pregel(PregelProtocol):
             checkpoint,
             LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (channels, managed):
-            # no values, just clear all tasks
-            if values is None and as_node is None:
+            # no values as END, just clear all tasks
+            if values is None and as_node == END:
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
@@ -888,6 +919,18 @@ class Pregel(PregelProtocol):
                         checkpointer=self.checkpointer or None,
                         manager=None,
                     )
+                    # apply null writes
+                    if null_writes := [
+                        w[1:]
+                        for w in saved.pending_writes or []
+                        if w[0] == NULL_TASK_ID
+                    ]:
+                        apply_writes(
+                            saved.checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, null_writes, [])],
+                            None,
+                        )
                     # apply writes from tasks that already ran
                     for tid, k, v in saved.pending_writes or []:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -913,6 +956,42 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            # no values, copy checkpoint
+            if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -922,6 +1001,7 @@ class Pregel(PregelProtocol):
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
+                    saved.pending_writes,
                     self.nodes,
                     channels,
                     managed,
@@ -932,6 +1012,16 @@ class Pregel(PregelProtocol):
                     checkpointer=self.checkpointer or None,
                     manager=None,
                 )
+                # apply null writes
+                if null_writes := [
+                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+                ]:
+                    apply_writes(
+                        saved.checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, null_writes, [])],
+                        None,
+                    )
                 # apply writes
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -1001,8 +1091,14 @@ class Pregel(PregelProtocol):
                 ),
             )
             # save task writes
-            if saved:
-                checkpointer.put_writes(checkpoint_config, task.writes, task_id)
+            # channel writes are saved to current checkpoint
+            # push writes are saved to next checkpoint
+            channel_writes, push_writes = (
+                [w for w in task.writes if w[0] != PUSH],
+                [w for w in task.writes if w[0] == PUSH],
+            )
+            if saved and channel_writes:
+                checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
             mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
@@ -1023,6 +1119,8 @@ class Pregel(PregelProtocol):
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
+            if push_writes:
+                checkpointer.put_writes(next_config, push_writes, task_id)
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
     async def aupdate_state(
@@ -1083,11 +1181,12 @@ class Pregel(PregelProtocol):
             managed,
         ):
             # no values, just clear all tasks
-            if values is None and as_node is None:
+            if values is None and as_node == END:
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
@@ -1098,6 +1197,18 @@ class Pregel(PregelProtocol):
                         checkpointer=self.checkpointer or None,
                         manager=None,
                     )
+                    # apply null writes
+                    if null_writes := [
+                        w[1:]
+                        for w in saved.pending_writes or []
+                        if w[0] == NULL_TASK_ID
+                    ]:
+                        apply_writes(
+                            saved.checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, null_writes, [])],
+                            None,
+                        )
                     # apply writes from tasks that already ran
                     for tid, k, v in saved.pending_writes or []:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
@@ -1123,6 +1234,42 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            # no values, copy checkpoint
+            if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -1132,6 +1279,7 @@ class Pregel(PregelProtocol):
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
+                    saved.pending_writes,
                     self.nodes,
                     channels,
                     managed,
@@ -1142,6 +1290,16 @@ class Pregel(PregelProtocol):
                     checkpointer=self.checkpointer or None,
                     manager=None,
                 )
+                # apply null writes
+                if null_writes := [
+                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+                ]:
+                    apply_writes(
+                        saved.checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, null_writes, [])],
+                        None,
+                    )
                 for tid, k, v in saved.pending_writes:
                     if k in (ERROR, INTERRUPT, SCHEDULED):
                         continue
@@ -1208,14 +1366,23 @@ class Pregel(PregelProtocol):
                 ),
             )
             # save task writes
-            if saved:
-                await checkpointer.aput_writes(checkpoint_config, writes, task_id)
+            # channel writes are saved to current checkpoint
+            # push writes are saved to next checkpoint
+            channel_writes, push_writes = (
+                [w for w in task.writes if w[0] != PUSH],
+                [w for w in task.writes if w[0] == PUSH],
+            )
+            if saved and channel_writes:
+                await checkpointer.aput_writes(
+                    checkpoint_config, channel_writes, task_id
+                )
             # apply to checkpoint and save
             mv_writes = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # save checkpoint, after applying writes
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
@@ -1230,6 +1397,9 @@ class Pregel(PregelProtocol):
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
+            # save push writes
+            if push_writes:
+                await checkpointer.aput_writes(next_config, push_writes, task_id)
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
     def _defaults(
@@ -1432,12 +1602,16 @@ class Pregel(PregelProtocol):
                 specs=self.channels,
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
+                interrupt_before=interrupt_before_,
+                interrupt_after=interrupt_after_,
+                manager=run_manager,
                 debug=debug,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
                     submit=loop.submit,
                     put_writes=loop.put_writes,
+                    schedule_task=loop.accept_push,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
@@ -1468,12 +1642,7 @@ class Pregel(PregelProtocol):
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick(
-                    input_keys=self.input_channels,
-                    interrupt_before=interrupt_before_,
-                    interrupt_after=interrupt_after_,
-                    manager=run_manager,
-                ):
+                while loop.tick(input_keys=self.input_channels):
                     for _ in runner.tick(
                         loop.tasks.values(),
                         timeout=self.step_timeout,
@@ -1654,11 +1823,16 @@ class Pregel(PregelProtocol):
                 specs=self.channels,
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
+                interrupt_before=interrupt_before_,
+                interrupt_after=interrupt_after_,
+                manager=run_manager,
+                debug=debug,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
                     submit=loop.submit,
                     put_writes=loop.put_writes,
+                    schedule_task=loop.accept_push,
                     use_astream=do_stream is not None,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
@@ -1678,12 +1852,7 @@ class Pregel(PregelProtocol):
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick(
-                    input_keys=self.input_channels,
-                    interrupt_before=interrupt_before_,
-                    interrupt_after=interrupt_after_,
-                    manager=run_manager,
-                ):
+                while loop.tick(input_keys=self.input_channels):
                     async for _ in runner.atick(
                         loop.tasks.values(),
                         timeout=self.step_timeout,

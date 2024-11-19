@@ -194,6 +194,14 @@ def map_debug_checkpoint(
                 else {
                     "id": t.id,
                     "name": t.name,
+                    "result": t.result,
+                    "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
+                }
+                if t.result
+                else {
+                    "id": t.id,
+                    "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
                     "state": t.state,
                 }
@@ -208,7 +216,7 @@ def print_step_tasks(step: int, next_tasks: list[PregelExecutableTask]) -> None:
     print(
         f"{get_colored_text(f'[{step}:tasks]', color='blue')} "
         + get_bolded_text(
-            f"Starting step {step} with {n_tasks} task{'s' if n_tasks != 1 else ''}:\n"
+            f"Starting {n_tasks} task{'s' if n_tasks != 1 else ''} for step {step}:\n"
         )
         + "\n".join(
             f"- {get_colored_text(task.name, 'green')} -> {pformat(task.input)}"

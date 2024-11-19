@@ -208,8 +208,14 @@ export interface ThreadState<ValuesType = DefaultValues> {
 export interface ThreadTask {
   id: string;
   name: string;
+  result?: unknown;
   error: Optional<string>;
-  interrupts: Array<{ value: unknown; when: "during" }>;
+  interrupts: Array<{
+    value: unknown;
+    when: "during";
+    resumable: boolean;
+    ns?: string[];
+  }>;
   checkpoint: Optional<Checkpoint>;
   state: Optional<ThreadState>;
 }

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-cli"
-version = "0.1.53"
+version = "0.1.55rc1"
 description = "CLI for interacting with LangGraph API"
 authors = []
 license = "MIT"
@@ -14,6 +14,7 @@ langgraph = "langgraph_cli.cli:cli"
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
 click = "^8.1.7"
+langgraph-api-inmem = { version = ">=0.0.2,<0.1.0", optional = true }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"
@@ -23,6 +24,9 @@ pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
 pytest-watch = "^4.2.0"
 mypy = "^1.10.0"
+
+[tool.poetry.extras]
+inmem = ["langgraph-api-inmem"]
 
 [tool.pytest.ini_options]
 # --strict-markers will raise errors on unknown marks.

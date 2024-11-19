@@ -1359,7 +1359,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.2"
+version = "2.0.4"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1429,7 +1429,7 @@ url = "../checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.35"
+version = "0.1.36"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3425,4 +3425,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "f0b7800f90041227ba4d7b72482c70fabdbacc95e8a3a784fdebc88721728a91"
+content-hash = "9bf5668d3f70f3b77457906732404a6401583a5966f70a72ef10a68f2a5b27ad"
