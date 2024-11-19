@@ -8,7 +8,7 @@ title: Tutorials
 
 New to LangGraph or LLM app development? Read this material to get up and running building your first applications.
 
-## Get Started 🚀
+## Get Started 🚀 {#quick-start}
 
 - [LangGraph Quickstart](introduction.ipynb): Start with the basics and get hands-on experience by building a chatbot with LangGraph from scratch. In this tutorial, we will build a chatbot that can use tools and keep track of conversation history. We will also leverage LangGraph features to add human-in-the-loop capabilities to the chatbot and see how time-travel works.
 

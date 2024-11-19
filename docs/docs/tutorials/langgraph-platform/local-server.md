@@ -1,11 +1,11 @@
-# Get started with LangGraph Platform
-
-!!! note "Requirements"
-
-    - [Docker](https://docs.docker.com/get-docker/)
-    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/) >= 0.1.54
+# Quick Start: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
+
+!!! info "Requirements"
+
+    - [Docker](https://docs.docker.com/get-docker/): Please install Docker before proceeding.
+    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli >= 0.1.54.
 
 ## Install the LangGraph CLI
 
@@ -92,8 +92,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     
     Currently, LangGraph Studio Web does not support Safari when running a server locally.
 
-
-## Use the API
+## Test the API
 
 === "Python SDK (Async)"
 
@@ -215,14 +214,29 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
 
 !!! tip "Auth"
 
-    If you're connecting to a remote server, you may need to provide a LangSmith
-    API key in the `Authorization` header. Please see the API Reference for the clients
+    If you're connecting to a remote server, you will need to provide a LangSmith
+    API Key for authorization. Please see the API Reference for the clients
     for more information.
 
-## Related
+## Next Steps
 
-There are many more things you can do with LangGraph Platform. For more information, see:
+Now that you have a LangGraph app running locally, take your journey further by exploring deployment and advanced features:
 
-* [LangGraph Server API](../../cloud/reference/api/api_ref.html)
-* [Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref/)
-* [JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref/)
+### 🌐 Deploy to LangGraph Cloud
+
+- **[LangGraph Cloud QuickStart](../../cloud/quick_start.md)**: Learn how to deploy your LangGraph app using LangGraph Cloud.
+
+### 📚 Learn More about LangGraph Platform
+
+Expand your knowledge with these resources:
+
+- **[LangGraph Platform Concepts](../../../concepts/#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.  
+- **[LangGraph Platform How-to Guides](../../../how-tos/#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+
+### 🛠️ Developer References
+
+Access detailed documentation for development and API usage:
+
+- **[LangGraph Server API Reference](../../cloud/reference/api/api_ref.html)**: Explore the LangGraph Server API documentation.  
+- **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref/)**: Get detailed guidance on the Python SDK.  
+- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref/)**: Learn how to use the JavaScript/TypeScript SDK.
