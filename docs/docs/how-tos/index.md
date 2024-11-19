@@ -103,6 +103,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 - [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
+- [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
 
 ### Prebuilt ReAct Agent
 
@@ -141,6 +142,7 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+- [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
 
 ### Deployment
 
