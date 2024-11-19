@@ -109,29 +109,6 @@ langgraph dev [OPTIONS]
 | `--debug-port INTEGER`     |                  | Port for debugger to listen on                                                            |
 | `--help`                   |                  | Display command documentation                                                              |
 
-Example using the debugger:
-
-```bash
-# Install debugpy
-pip install debugpy
-
-# Start server with debugger enabled
-langgraph dev --debug-port 5678
-```
-
-VS Code launch configuration (`launch.json`):
-```json
-{
-  "name": "Attach to LangGraph",
-  "type": "debugpy",
-  "request": "attach",
-  "connect": {
-    "host": "0.0.0.0",
-    "port": 5678
-  }
-}
-```
-
 ### `build`
 
 Build LangGraph Cloud API server Docker image.

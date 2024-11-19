@@ -1,9 +1,10 @@
 # How to connect a local agent to LangGraph Studio
 
-When developing your agent, you may want to connect it to [LangGraph Studio](../concepts/langgraph_studio.md).
-This can be useful to visualize your graph as you work on it, interact with it, and debug any edge cases.
+This guide shows you how to connect your local agent to [LangGraph Studio](../concepts/langgraph_studio.md) for visualization, interaction, and debugging.
 
-There are two ways to do this:
+## Connection Options
+
+There are two ways to connect your local agent to LangGraph Studio:
 
 - [LangGraph Desktop](../concepts/langgraph_studio.md#desktop-app): Application, Mac only, requires Docker
 - [Development Server](../concepts/langgraph_studio.md#dev-server): Python package, all platforms, no Docker
@@ -27,11 +28,12 @@ pip install "langgraph-cli[inmem]==0.1.55"
 
 ## Run the development server
 
-Make sure you are in the directory with your `langgraph.json` and then start the development server.
+1. Navigate to your project directory (where `langgraph.json` is located)
 
-```shell
-langgraph dev
-```
+2. Start the server:
+   ```bash
+   langgraph dev
+   ```
 
 This will look for the `langgraph.json` file in your current directory. 
 In there, it will find the paths to the graph(s), and start those up.
@@ -46,3 +48,39 @@ Your graph is still running locally, the UI is connecting to visualizing the age
 The graph will always use the most up-to-date code, so you will be able to change the underlying code and have it automatically reflected in the studio.
 This is useful for debugging workflows.
 You can run your graph in the UI until it messes up, go in and change your code, and then rerun from the node that failed.
+
+# (Optional) Attach a debugger
+
+For step-by-step debugging with breakpoints and variable inspection:
+
+```bash
+# Install debugpy package
+pip install debugpy
+
+# Start server with debugging enabled
+langgraph dev --debug-port 5678
+```
+
+Then attach your preferred debugger:
+
+=== "VS Code"
+    Add this configuration to `launch.json`:
+    ```json
+    {
+      "name": "Attach to LangGraph",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "0.0.0.0",
+        "port": 5678
+      }
+    }
+    ```
+    Specify the port number you chose in the previous step.
+
+=== "PyCharm"
+    1. Go to Run → Edit Configurations
+    2. Click + and select "Python Debug Server"
+    3. Set IDE host name: `localhost`
+    4. Set port: `5678` (or the port number you chose in the previous step)
+    5. Click "OK" and start debugging
