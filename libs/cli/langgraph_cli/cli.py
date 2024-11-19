@@ -566,7 +566,10 @@ def new(path: Optional[str], template: Optional[str]) -> None:
     type=int,
     help="Enable remote debugging by listening on specified port. Requires debugpy to be installed",
 )
-@cli.command("dev", help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support")
+@cli.command(
+    "dev",
+    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
+)
 @log_command
 def dev(
     host: str,
@@ -589,7 +592,7 @@ def dev(
             raise click.UsageError(
                 "Required package 'langgraph-api-inmem' is not installed.\n"
                 "Please install it with:\n\n"
-                "    pip install -U \"langgraph-cli[inmem]\"\n\n"
+                '    pip install -U "langgraph-cli[inmem]"\n\n'
                 "If you're developing the langgraph-cli package locally, you can install in development mode:\n"
                 "    pip install -e ."
             ) from None
