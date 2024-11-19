@@ -633,6 +633,6 @@ class CompiledGraph(Pregel):
         """Mime bundle used by Jupyter to display the graph"""
         output = {
             "text/plain": repr(self),
-            "image/png": self.get_graph().draw_mermaid_png()
+            "image/png": self.get_graph().draw_mermaid_png(),
         }
         return output
