@@ -144,7 +144,7 @@ Learn how to set up your app for deployment to LangGraph Platform:
 
 ### Deployment
 
-There are a number of ways to deploy your LangGraph Platform applications:
+LangGraph applications can be deployed using LangGraph Cloud, which provides a range of services to help you deploy, manage, and scale your applications.
 
 - [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 - [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
