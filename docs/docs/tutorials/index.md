@@ -10,7 +10,7 @@ New to LangGraph or LLM app development? Read this material to get up and runnin
 
 ## Get Started 🚀 {#quick-start}
 
-- [LangGraph Quickstart](introduction.ipynb): Start with the basics and get hands-on experience by building a chatbot with LangGraph from scratch. In this tutorial, we will build a chatbot that can use tools and keep track of conversation history. We will also leverage LangGraph features to add human-in-the-loop capabilities to the chatbot and see how time-travel works.
+- [LangGraph Quickstart](introduction.ipynb): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
 - [LangGraph Server Quickstart](langgraph-platform/local-server.md): Launch a LangGraph server locally and interact with it using the REST API and LangGraph Studio Web UI.
 - [LangGraph Cloud QuickStart](../cloud/quick_start.md): Deploy a LangGraph app using LangGraph Cloud.
 
