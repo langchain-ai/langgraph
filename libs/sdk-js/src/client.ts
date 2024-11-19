@@ -62,7 +62,8 @@ class BaseClient {
 
     // default limit being capped by Chrome
     // https://github.com/nodejs/undici/issues/1373
-    this.apiUrl = config?.apiUrl || "http://localhost:8123";
+    // Regex to remove trailing slash, if present
+    this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
     if (config?.apiKey != null) {
       this.defaultHeaders["X-Api-Key"] = config.apiKey;
