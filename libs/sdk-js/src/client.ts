@@ -34,6 +34,35 @@ import {
 } from "./types.js";
 import { mergeSignals } from "./utils/signals.js";
 
+/**
+ * Get the API key from the environment.
+ * Precedence:
+ *   1. explicit argument
+ *   2. LANGGRAPH_API_KEY
+ *   3. LANGSMITH_API_KEY
+ *   4. LANGCHAIN_API_KEY
+ *
+ * @param apiKey - Optional API key provided as an argument
+ * @returns The API key if found, otherwise undefined
+ */
+export function getApiKey(apiKey?: string): string | undefined {
+  if (apiKey) {
+    return apiKey;
+  }
+
+  const prefixes = ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"];
+
+  for (const prefix of prefixes) {
+    const envKey = process.env[`${prefix}_API_KEY`];
+    if (envKey) {
+      // Remove surrounding quotes
+      return envKey.trim().replace(/^["']|["']$/g, "");
+    }
+  }
+
+  return undefined;
+}
+
 interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
@@ -65,8 +94,9 @@ class BaseClient {
     // Regex to remove trailing slash, if present
     this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
-    if (config?.apiKey != null) {
-      this.defaultHeaders["X-Api-Key"] = config.apiKey;
+    const apiKey = getApiKey(config?.apiKey);
+    if (apiKey) {
+      this.defaultHeaders["X-Api-Key"] = apiKey;
     }
   }
 
