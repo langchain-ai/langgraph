@@ -509,13 +509,13 @@ langgraph-sdk = ">=0.1.32,<0.2.0"
 
 [[package]]
 name = "langgraph-api-inmem"
-version = "0.0.2"
+version = "0.0.3"
 description = ""
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 files = [
-    {file = "langgraph_api_inmem-0.0.2-py3-none-any.whl", hash = "sha256:71769d03d4e7d7ef133290e68dd8b126395d516356a653e22f6997c3cefb3af3"},
-    {file = "langgraph_api_inmem-0.0.2.tar.gz", hash = "sha256:62327775d099f24a80f2d9605a4f1fcceb121157b45d671bcfd191a9cad2b8d4"},
+    {file = "langgraph_api_inmem-0.0.3-py3-none-any.whl", hash = "sha256:161f76dd916048c59ae2007bea3ab3e066479aeeaef3d348e815908c18af82d0"},
+    {file = "langgraph_api_inmem-0.0.3.tar.gz", hash = "sha256:9ca6a4065877967028909fb1b5b9085503d7b0021067a43e663e55c865ff7e2c"},
 ]
 
 [package.dependencies]
@@ -1575,4 +1575,4 @@ inmem = ["langgraph-api-inmem"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "431a17a3d5aa4084654e984a912add78e55f3f121727b74a10f47a9a806af546"
+content-hash = "5a3dc8012db6a4cd103de557563e23f92b825caddd1d83c838282211a7aab4e3"

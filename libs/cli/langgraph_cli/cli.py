@@ -527,33 +527,49 @@ def new(path: Optional[str], template: Optional[str]) -> None:
     return create_new(path, template)
 
 
-@click.option("--host", default="127.0.0.1", help="Host to bind the server to")
-@click.option("--port", default=2024, type=int, help="Port to bind the server to")
-@click.option("--no-reload", is_flag=True, help="Disable auto-reload")
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    help="Network interface to bind the development server to. Default 127.0.0.1 is recommended for security. Only use 0.0.0.0 in trusted networks",
+)
+@click.option(
+    "--port",
+    default=2024,
+    type=int,
+    help="Port number to bind the development server to. Example: langgraph dev --port 8000",
+)
+@click.option(
+    "--no-reload",
+    is_flag=True,
+    help="Disable automatic reloading when code changes are detected",
+)
 @click.option(
     "--config",
     type=click.Path(exists=True),
     default="langgraph.json",
-    help="Path to configuration file",
+    help="Path to configuration file declaring dependencies, graphs and environment variables",
 )
 @click.option(
     "--n-jobs-per-worker",
     default=None,
     type=int,
-    help="Number of jobs per worker. Default is None (meaning 10)",
+    help="Maximum number of concurrent jobs each worker process can handle. Default: 10",
 )
 @click.option(
     "--no-browser",
     is_flag=True,
-    help="Disable automatic browser opening",
+    help="Skip automatically opening the browser when the server starts",
 )
 @click.option(
     "--debug-port",
     default=None,
     type=int,
-    help="Port for debugger to listen on (default: none)",
+    help="Enable remote debugging by listening on specified port. Requires debugpy to be installed",
 )
-@cli.command("dev", help="🏃‍♀️‍➡️ Run LangGraph API server in development mode.")
+@cli.command(
+    "dev",
+    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
+)
 @log_command
 def dev(
     host: str,
@@ -576,13 +592,13 @@ def dev(
             raise click.UsageError(
                 "Required package 'langgraph-api-inmem' is not installed.\n"
                 "Please install it with:\n\n"
-                "    pip install langgraph-api-inmem\n\n"
-                "If you're developing locally, you can install it in development mode:\n"
+                '    pip install -U "langgraph-cli[inmem]"\n\n'
+                "If you're developing the langgraph-cli package locally, you can install in development mode:\n"
                 "    pip install -e ."
             ) from None
         raise click.UsageError(
             "Could not import run_server. This likely means your installation is incomplete.\n"
-            "Please ensure both langgraph-cli and langgraph-api-inmem are installed correctly."
+            "Please ensure langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
         ) from None
 
     import json
