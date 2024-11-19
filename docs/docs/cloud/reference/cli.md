@@ -53,7 +53,7 @@ Example:
 }
 ```
 
-Example:
+Example with environment variables:
 
 ```json
 {
@@ -78,6 +78,60 @@ The base command for the LangGraph CLI is `langgraph`.
 langgraph [OPTIONS] COMMAND [ARGS]
 ```
 
+### `dev`
+
+Run LangGraph API server in development mode with hot reloading and debugging capabilities. This lightweight server requires no Docker installation and is suitable for development and testing. State is persisted to a local directory.
+
+**Installation**
+
+This command requires the "inmem" extra to be installed:
+
+```bash
+pip install -U "langgraph-cli[inmem]"
+```
+
+**Usage**
+
+```
+langgraph dev [OPTIONS]
+```
+
+**Options**
+
+| Option                       | Default          | Description                                                                                |
+|----------------------------|------------------|--------------------------------------------------------------------------------------------|
+| `-c, --config FILE`        | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables       |
+| `--host TEXT`              | `127.0.0.1`      | Host to bind the server to                                                                |
+| `--port INTEGER`           | `2024`           | Port to bind the server to                                                                |
+| `--no-reload`              |                  | Disable auto-reload                                                                        |
+| `--n-jobs-per-worker INTEGER` |               | Number of jobs per worker. Default is 10                                                  |
+| `--no-browser`             |                  | Disable automatic browser opening                                                          |
+| `--debug-port INTEGER`     |                  | Port for debugger to listen on                                                            |
+| `--help`                   |                  | Display command documentation                                                              |
+
+Example using the debugger:
+
+```bash
+# Install debugpy
+pip install debugpy
+
+# Start server with debugger enabled
+langgraph dev --debug-port 5678
+```
+
+VS Code launch configuration (`launch.json`):
+```json
+{
+  "name": "Attach to LangGraph",
+  "type": "debugpy",
+  "request": "attach",
+  "connect": {
+    "host": "0.0.0.0",
+    "port": 5678
+  }
+}
+```
+
 ### `build`
 
 Build LangGraph Cloud API server Docker image.
@@ -100,7 +154,7 @@ langgraph build [OPTIONS]
 
 ### `up`
 
-Start langgraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use.
+Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use.
 
 **Usage**
 
@@ -120,8 +174,8 @@ langgraph up [OPTIONS]
 | `--verbose`                  |                           | Show more output from the server logs.                                                                                |
 | `-c, --config FILE`          | `langgraph.json`          | Path to configuration file declaring dependencies, graphs and environment variables.                                  |
 | `-d, --docker-compose FILE`  |                           | Path to docker-compose.yml file with additional services to launch.                                                   |
-| `-p, --port INTEGER`         | `8123`                    | Port to expose. Example: `langgraph test --port 8000`                                                                 |
-| `--pull / --no-pull`         | `pull`                    | Pull latest images. Use --no-pull for running the server with locally-built images. Example: `langgraph up --no-pull` |
+| `-p, --port INTEGER`         | `8123`                    | Port to expose. Example: `langgraph up --port 8000`                                                                 |
+| `--pull / --no-pull`         | `pull`                    | Pull latest images. Use `--no-pull` for running the server with locally-built images. Example: `langgraph up --no-pull` |
 | `--recreate / --no-recreate` | `no-recreate`             | Recreate containers even if their configuration and image haven't changed                                             |
 | `--help`                     |                           | Display command documentation.                                                                                        |
 
@@ -148,9 +202,9 @@ Example:
 langgraph dockerfile -c langgraph.json Dockerfile
 ```
 
-Would generate something like the following:
+This generates a Dockerfile that looks similar to:
 
-```text
+```dockerfile
 FROM langchain/langgraph-api:3.11
 
 ADD ./pipconf.txt /pipconfig.txt
@@ -170,6 +224,3 @@ RUN set -ex && \
 RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph", "storm": "/deps/__outer_graphs/src/storm.py:graph"}'
-```
-
-You can then customize, build images, push, and deploy from this file.
