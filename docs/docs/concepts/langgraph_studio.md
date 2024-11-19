@@ -35,7 +35,7 @@ While in Beta, LangGraph Studio is available for free to all [LangSmith](https:/
 
 If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
 
-### Dev server
+### Development server
 
 LangGraph CLI also contains a command for running an in-memory development server that can be used to connect a local LangGraph app with the studio.
 See [instructions here](../cloud/reference/cli.md#dev) for more information.
