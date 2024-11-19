@@ -230,13 +230,13 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 Expand your knowledge with these resources:
 
-- **[LangGraph Platform Concepts](../../../concepts/#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.  
-- **[LangGraph Platform How-to Guides](../../../how-tos/#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+- **[LangGraph Platform Concepts](../../concepts#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.  
+- **[LangGraph Platform How-to Guides](../../how-tos#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
 
 ### 🛠️ Developer References
 
 Access detailed documentation for development and API usage:
 
 - **[LangGraph Server API Reference](../../cloud/reference/api/api_ref.html)**: Explore the LangGraph Server API documentation.  
-- **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref/)**: Get detailed guidance on the Python SDK.  
-- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref/)**: Learn how to use the JavaScript/TypeScript SDK.
+- **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md)**: Get detailed guidance on the Python SDK.  
+- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Learn how to use the JavaScript/TypeScript SDK.
