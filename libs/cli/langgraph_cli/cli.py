@@ -560,9 +560,9 @@ def dev(
     port: int,
     no_reload: bool,
     config: str,
-    n_jobs_per_worker: int | None,
+    n_jobs_per_worker: Optional[int],
     no_browser: bool,
-    debug_port: int | None,
+    debug_port: Optional[int],
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
