@@ -280,7 +280,10 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             continue
         for k, v in config.items():
             if v is not None and k in CONFIG_KEYS:
-                empty[k] = v  # type: ignore[literal-required]
+                if k == CONF:
+                    empty[k] = v.copy()  # type: ignore[literal-required]
+                else:
+                    empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
             if v is not None and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
