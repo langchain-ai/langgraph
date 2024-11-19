@@ -12,10 +12,11 @@ from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
 from langgraph.errors import ErrorCode, create_error_message
-from langgraph.graph import StateGraph
+from langgraph.graph import START, GraphCommand, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
+from langgraph.prebuilt.handoff import HandoffTool
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
@@ -191,6 +192,13 @@ def _validate_chat_history(
         error_code=ErrorCode.INVALID_CHAT_HISTORY,
     )
     raise ValueError(error_message)
+
+
+def validate_state_schema(
+    state_schema: StateSchemaType, expected_keys: Sequence[str]
+) -> None:
+    if missing_keys := set(expected_keys) - set(state_schema.__annotations__):
+        raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
@@ -524,10 +532,9 @@ def create_react_agent(
     """
 
     if state_schema is not None:
-        if missing_keys := {"messages", "is_last_step"} - set(
-            state_schema.__annotations__
-        ):
-            raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
+        validate_state_schema(
+            state_schema, ["messages", "is_last_step", "remaining_steps"]
+        )
 
     if isinstance(tools, ToolExecutor):
         tool_classes: Sequence[BaseTool] = tools.tools
@@ -682,6 +689,147 @@ def create_react_agent(
         interrupt_after=interrupt_after,
         debug=debug,
     )
+
+
+def add_entrypoint_router(
+    graph: StateGraph,
+    *,
+    route_to: Sequence[tuple[str, CompiledGraph]],
+    default_start_node: str,
+) -> StateGraph:
+    """Add an entrypoint conditional edge router to the graph.
+
+    Args:
+        graph: The graph to add the router to.
+        route_to: A list of tuples where the first element is the name of the graph to route to
+                and the second element is the graph to route to.
+        default_start_graph: The name of the default route to use on the first interaction.
+
+    Returns:
+        The graph with the router added.
+    """
+    channels = graph.schemas[graph.schema]
+    if "node" not in channels:
+        raise ValueError("Graph must have a 'node' channel")
+
+    node_names = [name for name, _ in route_to]
+
+    if default_start_node not in node_names:
+        raise ValueError(
+            f"Default route '{default_start_node}' not found in routes {node_names}"
+        )
+
+    def router(state) -> Literal[*node_names]:  # type: ignore
+        """Router node that determines where to go next."""
+        return state.get("node", default_start_node)
+
+    graph.add_conditional_edges(START, router)
+
+    for name, node in route_to:
+        graph.add_node(name, node)
+
+    return graph
+
+
+# This extends the AgentState schema to include
+# the currently active node
+class AgentRouterState(AgentState):
+    node: str
+
+
+def make_agent_node(
+    model: LanguageModelLike,
+    tools: Union[Sequence[BaseTool], ToolNode],
+    *,
+    state_schema: StateSchemaType,
+    input_processor: Callable[[dict], dict] = None,
+    output_processor: Callable[[dict], dict] = None,
+    state_modifier: Optional[StateModifier] = None,
+    interrupt_before: Optional[Sequence[str]] = None,
+    interrupt_after: Optional[Sequence[str]] = None,
+) -> Callable[[AgentRouterState], GraphCommand]:
+    """Create an agent node that calls the language model and tools.
+
+    This wraps create_react_agent with additional functionality to support:
+    (1) multi-agent communication (via input/output processors)
+    (2) multi-agent routing (via GraphCommand)
+
+    Args:
+        model: The `LangChain` chat model that supports tool calling.
+        tools: A list of tools, a ToolExecutor, or a ToolNode instance.
+        state_schema: An optional state schema that defines graph state.
+            Must have `messages` and `is_last_step` keys.
+            Defaults to `AgentState` that defines those two keys.
+        state_modifier: An optional
+            state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
+
+            Can take a few different forms:
+
+            - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
+            - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
+            - Callable: This function should take in full graph state and the output is then passed to the language model.
+            - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+        interrupt_before: An optional list of node names to interrupt before.
+            Should be one of the following: "agent", "tools".
+            This is useful if you want to add a user confirmation or other interrupt before taking an action.
+        interrupt_after: An optional list of node names to interrupt after.
+            Should be one of the following: "agent", "tools".
+            This is useful if you want to return directly or run additional processing on an output.
+
+    Returns:
+        A callable that takes in state conforming to `AgentRouterState` and returns a `GraphCommand`.
+    """
+    validate_state_schema(
+        state_schema, ["messages", "is_last_step", "remaining_steps", "node"]
+    )
+    agent = create_react_agent(
+        model,
+        tools,
+        state_schema=state_schema,
+        state_modifier=state_modifier,
+        interrupt_before=interrupt_before,
+        interrupt_after=interrupt_after,
+    )
+
+    destinations = [
+        tool.goto
+        for tool in tools
+        if isinstance(tool, HandoffTool) and tool.goto is not None
+    ]
+
+    def agent_node(state: dict) -> GraphCommand[Literal[*destinations]]:  # type: ignore
+        """Agent node that calls the language model and tools."""
+        # process the input state before passing it to the agent. this can be used to:
+        # (1) control how much information is passed to the agent (e.g. only last message vs full message history)
+        # (2) remap state keys to match the agent's expected input schema
+        inputs = input_processor(state) if input_processor else state
+        response = agent.invoke(inputs)
+        last_message = response["messages"][-1]
+        # process the output from the agent before returning it to the next agent. this can be used to:
+        # (1) control how much information is passed to the next agent (e.g. only last message vs full message history)
+        # (2) remap state keys to match the next agent's expected input schema
+        outputs = output_processor(response) if output_processor else response
+        # Check if the last message from the agent is a tool message with an artifact.
+        # NOTE: this expects the handoff tools to have return_direct = True
+        if isinstance(last_message, ToolMessage) and isinstance(
+            last_message.artifact, GraphCommand
+        ):
+            goto = last_message.artifact.goto
+            tool_state_update = last_message.artifact.update or {}
+
+            if "messages" in tool_state_update:
+                raise ValueError("Messages cannot be updated by a GraphCommand")
+
+            # combine with the state updates from the tools
+            outputs.update(tool_state_update)
+            if goto:
+                outputs["node"] = goto
+
+            return GraphCommand(update=outputs, goto=goto)
+
+        return GraphCommand(update=outputs)
+
+    return agent_node
 
 
 # Keep for backwards compatibility

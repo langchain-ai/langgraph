@@ -38,6 +38,7 @@ from langchain_core.tools.base import get_all_basemodel_annotations
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphInterrupt
+from langgraph.graph import GraphCommand
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
 
@@ -221,8 +222,40 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
-        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {self.messages_key: outputs}
+
+        # handle state updates from the tools
+        combined_state_updates: dict[str, Any] = {}
+        for output in outputs:
+            if not isinstance(output.artifact, GraphCommand):
+                continue
+
+            tool_state_update = output.artifact.update or {}
+            for k, v in tool_state_update.items():
+                if k == self.messages_key:
+                    raise ValueError(
+                        "Cannot return state updates for the messages key."
+                    )
+
+                # one way to relax this constraint would be to wrap each tool
+                # in a ToolNode and allow reducers to handle colliding state updates
+                if k in combined_state_updates:
+                    raise ValueError(
+                        f"Received multiple state updates for the key: {k}"
+                    )
+
+                combined_state_updates[k] = v
+
+        if output_type == "list" and combined_state_updates:
+            raise ValueError(
+                "Cannot return state updates for a list input to ToolNode."
+            )
+
+        return (
+            outputs
+            if output_type == "list"
+            # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
+            else {self.messages_key: list(outputs), **combined_state_updates}
+        )
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
