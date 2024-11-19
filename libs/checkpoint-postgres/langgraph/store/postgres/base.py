@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -18,12 +19,6 @@ from typing import (
 )
 
 import orjson
-from psycopg import BaseConnection, Connection, Cursor
-from psycopg.errors import UndefinedTable
-from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
-from typing_extensions import TypedDict
-
 from langgraph.store.base import (
     BaseStore,
     GetOp,
@@ -34,6 +29,12 @@ from langgraph.store.base import (
     Result,
     SearchOp,
 )
+from psycopg import BaseConnection, Capabilities, Connection, Cursor, Pipeline
+from psycopg.errors import UndefinedTable
+from psycopg.rows import DictRow, dict_row
+from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
+from typing_extensions import TypedDict
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
 ]
 
 C = TypeVar("C", bound=BaseConnection)
+Conn = Union[Connection[DictRow], ConnectionPool[Connection[DictRow]]]
 
 
 class BasePostgresStore(Generic[C]):
@@ -180,7 +182,7 @@ class BasePostgresStore(Generic[C]):
                                 (SELECT STRING_AGG(part, '.' ORDER BY idx)
                                  FROM (
                                      SELECT part, ROW_NUMBER() OVER () AS idx
-                                     FROM UNNEST(REGEXP_SPLIT_TO_ARRAY(prefix, '\.')) AS part
+                                     FROM UNNEST(REGEXP_SPLIT_TO_ARRAY(prefix, '\\.')) AS part
                                      LIMIT %s::integer
                                  ) subquery
                                 )
@@ -219,50 +221,66 @@ class BasePostgresStore(Generic[C]):
         return queries
 
 
-class PostgresStore(BaseStore, BasePostgresStore[Connection]):
+@contextmanager
+def _get_connection(conn: Conn) -> Iterator[Connection[DictRow]]:
+    if isinstance(conn, Connection):
+        yield conn
+    elif isinstance(conn, ConnectionPool):
+        with conn.connection() as conn:
+            yield conn
+    else:
+        raise TypeError(f"Invalid connection type: {type(conn)}")
+
+
+class PostgresStore(BaseStore, BasePostgresStore[Conn]):
     __slots__ = ("_deserializer",)
 
     def __init__(
         self,
-        conn: Connection[Any],
+        conn: Conn,
+        pipe: Optional[Pipeline] = None,
         *,
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
     ) -> None:
         super().__init__()
+        if isinstance(conn, ConnectionPool) and pipe is not None:
+            raise ValueError(
+                "Pipeline should be used only with a single Connection, not ConnectionPool."
+            )
         self._deserializer = deserializer
         self.conn = conn
+        self.pipe = pipe
+        self.lock = threading.Lock()
+        self.supports_pipeline = Capabilities().has_pipeline()
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
-        with self.conn.pipeline():
-            if GetOp in grouped_ops:
-                self._batch_get_ops(
-                    cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results
-                )
+        if GetOp in grouped_ops:
+            self._batch_get_ops(
+                cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results
+            )
 
-            if PutOp in grouped_ops:
-                self._batch_put_ops(
-                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp])
-                )
+        if PutOp in grouped_ops:
+            self._batch_put_ops(cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp]))
 
-            if SearchOp in grouped_ops:
-                self._batch_search_ops(
-                    cast(Sequence[tuple[int, SearchOp]], grouped_ops[SearchOp]),
-                    results,
-                )
+        if SearchOp in grouped_ops:
+            self._batch_search_ops(
+                cast(Sequence[tuple[int, SearchOp]], grouped_ops[SearchOp]),
+                results,
+            )
 
-            if ListNamespacesOp in grouped_ops:
-                self._batch_list_namespaces_ops(
-                    cast(
-                        Sequence[tuple[int, ListNamespacesOp]],
-                        grouped_ops[ListNamespacesOp],
-                    ),
-                    results,
-                )
+        if ListNamespacesOp in grouped_ops:
+            self._batch_list_namespaces_ops(
+                cast(
+                    Sequence[tuple[int, ListNamespacesOp]],
+                    grouped_ops[ListNamespacesOp],
+                ),
+                results,
+            )
 
         return results
 
@@ -274,23 +292,20 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
         get_ops: Sequence[tuple[int, GetOp]],
         results: list[Result],
     ) -> None:
-        cursors = []
         for query, params, namespace, items in self._get_batch_GET_ops_queries(get_ops):
-            cur = self.conn.cursor(binary=True)
-            cur.execute(query, params)
-            cursors.append((cur, namespace, items))
+            with self._cursor() as cur:
+                cur.execute(query, params)
 
-        for cur, namespace, items in cursors:
-            rows = cast(list[Row], cur.fetchall())
-            key_to_row = {row["key"]: row for row in rows}
-            for idx, key in items:
-                row = key_to_row.get(key)
-                if row:
-                    results[idx] = _row_to_item(
-                        namespace, row, loader=self._deserializer
-                    )
-                else:
-                    results[idx] = None
+                rows = cast(list[Row], cur.fetchall())
+                key_to_row = {row["key"]: row for row in rows}
+                for idx, key in items:
+                    row = key_to_row.get(key)
+                    if row:
+                        results[idx] = _row_to_item(
+                            namespace, row, loader=self._deserializer
+                        )
+                    else:
+                        results[idx] = None
 
     def _batch_put_ops(
         self,
@@ -298,8 +313,8 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
     ) -> None:
         queries = self._get_batch_PUT_queries(put_ops)
         for query, params in queries:
-            cur = self.conn.cursor(binary=True)
-            cur.execute(query, params)
+            with self._cursor() as cur:
+                cur.execute(query, params)
 
     def _batch_search_ops(
         self,
@@ -307,22 +322,19 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
         results: list[Result],
     ) -> None:
         queries = self._get_batch_search_queries(search_ops)
-        cursors: list[tuple[Cursor[Any], int]] = []
 
         for (query, params), (idx, _) in zip(queries, search_ops):
-            cur = self.conn.cursor(binary=True)
-            cur.execute(query, params)
-            cursors.append((cur, idx))
+            with self._cursor() as cur:
+                cur.execute(query, params)
 
-        for cur, idx in cursors:
-            rows = cast(list[Row], cur.fetchall())
-            items = [
-                _row_to_item(
-                    _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
-                )
-                for row in rows
-            ]
-            results[idx] = items
+                rows = cast(list[Row], cur.fetchall())
+                items = [
+                    _row_to_item(
+                        _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
+                    )
+                    for row in rows
+                ]
+                results[idx] = items
 
     def _batch_list_namespaces_ops(
         self,
@@ -330,16 +342,13 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
         results: list[Result],
     ) -> None:
         queries = self._get_batch_list_namespaces_queries(list_ops)
-        cursors: list[tuple[Cursor[Any], int]] = []
         for (query, params), (idx, _) in zip(queries, list_ops):
-            cur = self.conn.cursor(binary=True)
-            cur.execute(query, params)
-            cursors.append((cur, idx))
+            with self._cursor() as cur:
+                cur.execute(query, params)
 
-        for cur, idx in cursors:
-            rows = cast(list[dict], cur.fetchall())
-            namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
-            results[idx] = namespaces
+                rows = cast(list[dict], cur.fetchall())
+                namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
+                results[idx] = namespaces
 
     @classmethod
     @contextmanager
@@ -367,7 +376,7 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time the store is used.
         """
-        with self.conn.cursor(binary=True) as cur:
+        with self._cursor() as cur:
             try:
                 cur.execute("SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1")
                 row = cast(dict, cur.fetchone())
@@ -376,7 +385,6 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
                 else:
                     version = row["v"]
             except UndefinedTable:
-                self.conn.rollback()
                 version = -1
                 # Create store_migrations table if it doesn't exist
                 cur.execute(
@@ -391,6 +399,44 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
             ):
                 cur.execute(migration)
                 cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+
+    @contextmanager
+    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+        """Create a database cursor as a context manager.
+
+        Args:
+            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+                Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
+                If pipeline mode is not supported, will fall back to using transaction context manager.
+        """
+        with _get_connection(self.conn) as conn:
+            if self.pipe:
+                # a connection in pipeline mode can be used concurrently
+                # in multiple threads/coroutines, but only one cursor can be
+                # used at a time
+                try:
+                    with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                        yield cur
+                finally:
+                    if pipeline:
+                        self.pipe.sync()
+            elif pipeline:
+                # a connection not in pipeline mode can only be used by one
+                # thread/coroutine at a time, so we acquire a lock
+                if self.supports_pipeline:
+                    with self.lock, conn.pipeline(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+                else:
+                    # Use connection's transaction context manager when pipeline mode not supported
+                    with self.lock, conn.transaction(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+            else:
+                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    yield cur
 
 
 class Row(TypedDict):
