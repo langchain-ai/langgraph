@@ -285,9 +285,11 @@ def _build(
             subp_exec(
                 "docker",
                 "pull",
-                f"{base_image}:{config_json['node_version']}"
-                if config_json.get("node_version")
-                else f"{base_image}:{config_json['python_version']}",
+                (
+                    f"{base_image}:{config_json['node_version']}"
+                    if config_json.get("node_version")
+                    else f"{base_image}:{config_json['python_version']}"
+                ),
                 verbose=True,
             )
         )
@@ -443,9 +445,11 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
             langgraph_cli.config.config_to_docker(
                 config,
                 config_json,
-                "langchain/langgraphjs-api"
-                if config_json.get("node_version")
-                else "langchain/langgraph-api",
+                (
+                    "langchain/langgraphjs-api"
+                    if config_json.get("node_version")
+                    else "langchain/langgraph-api"
+                ),
             )
         )
     secho("✅ Created: Dockerfile", fg="green")
@@ -523,6 +527,81 @@ def new(path: Optional[str], template: Optional[str]) -> None:
     return create_new(path, template)
 
 
+@click.option("--host", default="127.0.0.1", help="Host to bind the server to")
+@click.option("--port", default=2024, type=int, help="Port to bind the server to")
+@click.option("--no-reload", is_flag=True, help="Disable auto-reload")
+@click.option(
+    "--config",
+    type=click.Path(exists=True),
+    default="langgraph.json",
+    help="Path to configuration file",
+)
+@click.option(
+    "--n-jobs-per-worker",
+    default=None,
+    type=int,
+    help="Number of jobs per worker. Default is None (meaning 10)",
+)
+@click.option(
+    "--no-browser",
+    is_flag=True,
+    help="Disable automatic browser opening",
+)
+@click.option(
+    "--debug-port",
+    default=None,
+    type=int,
+    help="Port for debugger to listen on (default: none)",
+)
+@cli.command("dev", help="🏃‍♀️‍➡️ Run LangGraph API server in development mode.")
+@log_command
+def dev(
+    host: str,
+    port: int,
+    no_reload: bool,
+    config: str,
+    n_jobs_per_worker: Optional[int],
+    no_browser: bool,
+    debug_port: Optional[int],
+):
+    """CLI entrypoint for running the LangGraph API server."""
+    try:
+        from langgraph_api.cli import run_server
+    except ImportError:
+        try:
+            import pkg_resources
+
+            pkg_resources.require("langgraph-api-inmem")
+        except (ImportError, pkg_resources.DistributionNotFound):
+            raise click.UsageError(
+                "Required package 'langgraph-api-inmem' is not installed.\n"
+                "Please install it with:\n\n"
+                "    pip install langgraph-api-inmem\n\n"
+                "If you're developing locally, you can install it in development mode:\n"
+                "    pip install -e ."
+            ) from None
+        raise click.UsageError(
+            "Could not import run_server. This likely means your installation is incomplete.\n"
+            "Please ensure both langgraph-cli and langgraph-api-inmem are installed correctly."
+        ) from None
+
+    import json
+
+    with open(config, encoding="utf-8") as f:
+        config_data = json.load(f)
+
+    graphs = config_data.get("graphs", {})
+    run_server(
+        host,
+        port,
+        not no_reload,
+        graphs,
+        n_jobs_per_worker=n_jobs_per_worker,
+        open_browser=not no_browser,
+        debug_port=debug_port,
+    )
+
+
 def prepare_args_and_stdin(
     *,
     capabilities: DockerCapabilities,
@@ -556,9 +635,11 @@ def prepare_args_and_stdin(
         config_path,
         config,
         watch=watch,
-        base_image="langchain/langgraphjs-api"
-        if config.get("node_version")
-        else "langchain/langgraph-api",
+        base_image=(
+            "langchain/langgraphjs-api"
+            if config.get("node_version")
+            else "langchain/langgraph-api"
+        ),
     )
     return args, stdin
 
@@ -585,9 +666,11 @@ def prepare(
             subp_exec(
                 "docker",
                 "pull",
-                f"langchain/langgraphjs-api:{config['node_version']}"
-                if config.get("node_version")
-                else f"langchain/langgraph-api:{config['python_version']}",
+                (
+                    f"langchain/langgraphjs-api:{config['node_version']}"
+                    if config.get("node_version")
+                    else f"langchain/langgraph-api:{config['python_version']}"
+                ),
                 verbose=verbose,
             )
         )
