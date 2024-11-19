@@ -391,6 +391,59 @@ tests = ["cloudpickle", "hypothesis", "mypy (>=1.11.1)", "pympler", "pytest (>=4
 tests-mypy = ["mypy (>=1.11.1)", "pytest-mypy-plugins"]
 
 [[package]]
+name = "autogen"
+version = "0.3.2"
+description = "A programming framework for agentic AI"
+optional = false
+python-versions = "<3.13,>=3.8"
+files = [
+    {file = "autogen-0.3.2-py3-none-any.whl", hash = "sha256:e37a9df0ad84cde3429ec63298b8e9eb4e6306a28eec2627171e14b9a61ea64d"},
+    {file = "autogen-0.3.2.tar.gz", hash = "sha256:9f8a1170ac2e5a1fc9efc3cfa6e23261dd014db97b17c8c416f97ee14951bc7b"},
+]
+
+[package.dependencies]
+diskcache = "*"
+docker = "*"
+flaml = "*"
+numpy = ">=1.17.0,<2"
+openai = ">=1.3"
+packaging = "*"
+pydantic = ">=1.10,<2.6.0 || >2.6.0,<3"
+python-dotenv = "*"
+termcolor = "*"
+tiktoken = "*"
+
+[package.extras]
+anthropic = ["anthropic (>=0.23.1)"]
+autobuild = ["chromadb", "huggingface-hub", "pysqlite3", "sentence-transformers"]
+bedrock = ["boto3 (>=1.34.149)"]
+blendsearch = ["flaml[blendsearch]"]
+cerebras = ["cerebras-cloud-sdk (>=1.0.0)"]
+cohere = ["cohere (>=5.5.8)"]
+cosmosdb = ["azure-cosmos (>=4.2.0)"]
+gemini = ["google-auth", "google-cloud-aiplatform", "google-generativeai (>=0.5,<1)", "pillow", "pydantic"]
+graph = ["matplotlib", "networkx"]
+graph-rag-falkor-db = ["graphrag-sdk"]
+groq = ["groq (>=0.9.0)"]
+jupyter-executor = ["ipykernel (>=6.29.0)", "jupyter-client (>=8.6.0)", "jupyter-kernel-gateway", "requests", "websocket-client"]
+lmm = ["pillow", "replicate"]
+long-context = ["llmlingua (<0.3)"]
+mathchat = ["pydantic (==1.10.9)", "sympy", "wolframalpha"]
+mistral = ["mistralai (>=1.0.1)"]
+ollama = ["fix-busted-json (>=0.0.18)", "ollama (>=0.3.3)"]
+redis = ["redis"]
+retrievechat = ["beautifulsoup4", "chromadb (==0.5.3)", "ipython", "markdownify", "protobuf (==4.25.3)", "pypdf", "sentence-transformers"]
+retrievechat-mongodb = ["beautifulsoup4", "chromadb (==0.5.3)", "ipython", "markdownify", "protobuf (==4.25.3)", "pymongo (>=4.0.0)", "pypdf", "sentence-transformers"]
+retrievechat-pgvector = ["beautifulsoup4", "chromadb (==0.5.3)", "ipython", "markdownify", "pgvector (>=0.2.5)", "protobuf (==4.25.3)", "psycopg (>=3.1.18)", "pypdf", "sentence-transformers"]
+retrievechat-qdrant = ["beautifulsoup4", "chromadb (==0.5.3)", "fastembed (>=0.3.1)", "ipython", "markdownify", "protobuf (==4.25.3)", "pypdf", "qdrant-client", "sentence-transformers"]
+teachable = ["chromadb"]
+test = ["ipykernel", "nbconvert", "nbformat", "pandas", "pre-commit", "pytest (>=6.1.1,<8)", "pytest-asyncio", "pytest-cov (>=5)"]
+together = ["together (>=1.2)"]
+types = ["ipykernel (>=6.29.0)", "jupyter-client (>=8.6.0)", "jupyter-kernel-gateway", "mypy (==1.9.0)", "pytest (>=6.1.1,<8)", "requests", "websocket-client"]
+websockets = ["websockets (>=12.0,<13)"]
+websurfer = ["beautifulsoup4", "markdownify", "pathvalidate", "pdfminer.six"]
+
+[[package]]
 name = "babel"
 version = "2.16.0"
 description = "Internationalization utilities"
@@ -5064,55 +5117,6 @@ files = [
 pyasn1 = ">=0.4.6,<0.7.0"
 
 [[package]]
-name = "pyautogen"
-version = "0.2.35"
-description = "Enabling Next-Gen LLM Applications via Multi-Agent Conversation Framework"
-optional = false
-python-versions = "<3.13,>=3.8"
-files = [
-    {file = "pyautogen-0.2.35-py3-none-any.whl", hash = "sha256:cf7853ca66518474aab546530ebce0c5585e1556d404c15d7100b4f67364f522"},
-    {file = "pyautogen-0.2.35.tar.gz", hash = "sha256:7442e0bbe8810678a08a701a645d5734f887ccc223b2d21cd95bf68be29872a1"},
-]
-
-[package.dependencies]
-diskcache = "*"
-docker = "*"
-flaml = "*"
-numpy = ">=1.17.0,<2"
-openai = ">=1.3"
-packaging = "*"
-pydantic = ">=1.10,<2.6.0 || >2.6.0,<3"
-python-dotenv = "*"
-termcolor = "*"
-tiktoken = "*"
-
-[package.extras]
-anthropic = ["anthropic (>=0.23.1)"]
-autobuild = ["chromadb", "huggingface-hub", "pysqlite3", "sentence-transformers"]
-blendsearch = ["flaml[blendsearch]"]
-cohere = ["cohere (>=5.5.8)"]
-cosmosdb = ["azure-cosmos (>=4.2.0)"]
-gemini = ["google-auth", "google-cloud-aiplatform", "google-generativeai (>=0.5,<1)", "pillow", "pydantic"]
-graph = ["matplotlib", "networkx"]
-groq = ["groq (>=0.9.0)"]
-jupyter-executor = ["ipykernel (>=6.29.0)", "jupyter-client (>=8.6.0)", "jupyter-kernel-gateway", "requests", "websocket-client"]
-lmm = ["pillow", "replicate"]
-long-context = ["llmlingua (<0.3)"]
-mathchat = ["pydantic (==1.10.9)", "sympy", "wolframalpha"]
-mistral = ["mistralai (>=1.0.1)"]
-redis = ["redis"]
-retrievechat = ["beautifulsoup4", "chromadb", "ipython", "markdownify", "protobuf (==4.25.3)", "pypdf", "sentence-transformers"]
-retrievechat-mongodb = ["beautifulsoup4", "chromadb", "ipython", "markdownify", "protobuf (==4.25.3)", "pymongo (>=4.0.0)", "pypdf", "sentence-transformers"]
-retrievechat-pgvector = ["beautifulsoup4", "chromadb", "ipython", "markdownify", "pgvector (>=0.2.5)", "protobuf (==4.25.3)", "psycopg (>=3.1.18)", "pypdf", "sentence-transformers"]
-retrievechat-qdrant = ["beautifulsoup4", "chromadb", "fastembed (>=0.3.1)", "ipython", "markdownify", "protobuf (==4.25.3)", "pypdf", "qdrant-client", "sentence-transformers"]
-teachable = ["chromadb"]
-test = ["ipykernel", "nbconvert", "nbformat", "pandas", "pre-commit", "pytest (>=6.1.1,<8)", "pytest-asyncio", "pytest-cov (>=5)"]
-together = ["together (>=1.2)"]
-types = ["ipykernel (>=6.29.0)", "jupyter-client (>=8.6.0)", "jupyter-kernel-gateway", "mypy (==1.9.0)", "pytest (>=6.1.1,<8)", "requests", "websocket-client"]
-websockets = ["websockets (>=12.0,<13)"]
-websurfer = ["beautifulsoup4", "markdownify", "pathvalidate", "pdfminer.six"]
-
-[[package]]
 name = "pycparser"
 version = "2.22"
 description = "C parser in Python"
@@ -7472,4 +7476,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "fb3f32c3d25cae43d47e6e2234609ef850647c0fc72e8f3ddf68aae2441219e4"
+content-hash = "776ee42630769f08e3896338f18ec81830166695d32d2208dc31dedb22d3b22d"
