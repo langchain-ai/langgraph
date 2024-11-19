@@ -54,6 +54,7 @@ motor = "^3.5.1"
 grandalf = "^0.8"
 pyppeteer = "^2.0.0"
 networkx = "^3.3"
+pyautogen = { version = "^0.2.0", python = "<3.13,>=3.8" }
 
 [tool.poetry.group.test]
 optional = true
