@@ -1,14 +1,12 @@
 {
   "name": "@langchain/langgraph-sdk",
-  "version": "0.0.16",
+  "version": "0.0.25",
   "description": "Client library for interacting with the LangGraph API",
   "type": "module",
   "packageManager": "yarn@1.22.19",
   "scripts": {
-    "clean": "rm -rf dist/ && node scripts/create-entrypoints.js clean",
-    "build": "yarn clean && yarn build:esm && yarn build:cjs && node scripts/create-entrypoints.js",
-    "build:esm": "rm -f src/package.json && tsc --outDir dist/ && rm -rf dist/tests dist/**/tests",
-    "build:cjs": "echo '{}' > src/package.json && tsc --outDir dist-cjs/ -p tsconfig.cjs.json && node scripts/move-cjs-to-dist.js && rm -r dist-cjs src/package.json",
+    "clean": "rm -rf dist/ dist-cjs/",
+    "build": "yarn clean && yarn lc_build --create-entrypoints --pre --tree-shaking",
     "prepublish": "yarn run build",
     "format": "prettier --write src",
     "lint": "prettier --check src && tsc --noEmit"
@@ -22,6 +20,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@langchain/scripts": "^0.1.4",
     "@tsconfig/recommended": "^1.0.2",
     "@types/node": "^20.12.12",
     "@types/uuid": "^9.0.1",
@@ -54,13 +53,13 @@
   },
   "files": [
     "dist/",
-    "client.cjs",
-    "client.js",
-    "client.d.ts",
-    "client.d.cts",
     "index.cjs",
     "index.js",
     "index.d.ts",
-    "index.d.cts"
+    "index.d.cts",
+    "client.cjs",
+    "client.js",
+    "client.d.ts",
+    "client.d.cts"
   ]
 }

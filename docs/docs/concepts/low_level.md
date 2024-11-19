@@ -20,7 +20,7 @@ A super-step can be considered a single iteration over the graph nodes. Nodes th
 
 ### StateGraph
 
-The `StateGraph` class is the main graph class to uses. This is parameterized by a user defined `State` object.
+The `StateGraph` class is the main graph class to use. This is parameterized by a user defined `State` object.
 
 ### MessageGraph
 
@@ -52,12 +52,12 @@ By default, the graph will have the same input and output schemas. If you want t
 
 Typically, all graph nodes communicate with a single schema. This means that they will read and write to the same state channels. But, there are cases where we want more control over this:
 
-* Internal nodes can pass information that is not required in the graph's input / output.
-* We may also want to use different input / output schemas for the graph. The output might, for example, only contain a single relevant output key.
+- Internal nodes can pass information that is not required in the graph's input / output.
+- We may also want to use different input / output schemas for the graph. The output might, for example, only contain a single relevant output key.
 
-It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail.  
+It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`. See [this notebook](../how-tos/pass_private_state.ipynb) for more detail.
 
-It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains *all* keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
+It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains _all_ keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this notebook](../how-tos/input_output_schema.ipynb) for more detail.
 
 Let's look at an example:
 
@@ -101,11 +101,12 @@ graph = builder.compile()
 graph.invoke({"user_input":"My"})
 {'graph_output': 'My name is Lance'}
 ```
+
 There are two subtle and important points to note here:
 
-1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node *can write to any state channel in the graph state.* The graph state is the union of of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
+1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node _can write to any state channel in the graph state._ The graph state is the union of of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
 
-2. We initialize the graph with `StateGraph(OverallState,input=InputState,output=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because *nodes can also declare additional state channels* as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
+2. We initialize the graph with `StateGraph(OverallState,input=InputState,output=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because _nodes can also declare additional state channels_ as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
 
 ### Reducers
 
@@ -323,7 +324,7 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 ## Persistence
 
-LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the 
+LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the
 appropriate `get` and `update` methods. For more details, see the [persistence conceptual guide](./persistence.md).
 
 ## Threads
@@ -390,7 +391,7 @@ Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-li
 
 It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
 
-You **MUST** use a [checkpoiner](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
+You **MUST** use a [checkpointer](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
 
 In order to resume execution, you can just invoke your graph with `None` as the input.
 
@@ -414,6 +415,108 @@ def my_node(state: State) -> State:
         raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
 
     return state
+```
+
+## Subgraphs
+
+A subgraph is a [graph](#graphs) that is used as a [node](#nodes) in another graph. This is nothing more than the age-old concept of encapsulation, applied to LangGraph. Some reasons for using subgraphs are:
+
+- building [multi-agent systems](./multi_agent.md)
+
+- when you want to reuse a set of nodes in multiple graphs, which maybe share some state, you can define them once in a subgraph and then use them in multiple parent graphs
+
+- when you want different teams to work on different parts of the graph independently, you can define each part as a subgraph, and as long as the subgraph interface (the input and output schemas) is respected, the parent graph can be built without knowing any details of the subgraph
+
+There are two ways to add subgraphs to a parent graph:
+
+- add a node with the compiled subgraph: this is useful when the parent graph and the subgraph share state keys and you don't need to transform state on the way in or out
+
+```python
+builder.add_node("subgraph", subgraph_builder.compile())
+```
+
+- add a node with a function that invokes the subgraph: this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
+
+```python
+subgraph = subgraph_builder.compile()
+
+def call_subgraph(state: State):
+    return subgraph.invoke({"subgraph_key": state["parent_key"]})
+
+builder.add_node("subgraph", call_subgraph)
+```
+
+Let's take a look at examples for each.
+
+### As a compiled graph
+
+The simplest way to create subgraph nodes is by using a [compiled subgraph](#compiling-your-graph) directly. When doing so, it is **important** that the parent graph and the subgraph [state schemas](#state) share at least one key which they can use to communicate. If your graph and subgraph do not share any keys, you should use write a function [invoking the subgraph](#as-a-function) instead.
+
+!!! Note
+    If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
+
+```python
+from langgraph.graph import START, StateGraph
+from typing import TypedDict
+
+class State(TypedDict):
+    foo: str
+
+class SubgraphState(TypedDict):
+    foo: str  # note that this key is shared with the parent graph state
+    bar: str
+
+# Define subgraph
+def subgraph_node(state: SubgraphState):
+    # note that this subgraph node can communicate with the parent graph via the shared "foo" key
+    return {"foo": state["foo"] + "bar"}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node)
+...
+subgraph = subgraph_builder.compile()
+
+# Define parent graph
+builder = StateGraph(State)
+builder.add_node("subgraph", subgraph)
+...
+graph = builder.compile()
+```
+
+### As a function
+
+You might want to define a subgraph with a completely different schema. In this case, you can create a node function that invokes the subgraph. This function will need to [transform](../how-tos/subgraph-transform-state.ipynb) the input (parent) state to the subgraph state before invoking the subgraph, and transform the results back to the parent state before returning the state update from the node.
+
+```python
+class State(TypedDict):
+    foo: str
+
+class SubgraphState(TypedDict):
+    # note that none of these keys are shared with the parent graph state
+    bar: str
+    baz: str
+
+# Define subgraph
+def subgraph_node(state: SubgraphState):
+    return {"bar": state["bar"] + "baz"}
+
+subgraph_builder = StateGraph(SubgraphState)
+subgraph_builder.add_node(subgraph_node)
+...
+subgraph = subgraph_builder.compile()
+
+# Define parent graph
+def node(state: State):
+    # transform the state to the subgraph state
+    response = subgraph.invoke({"bar": state["foo"]})
+    # transform response back to the parent state
+    return {"foo": response["bar"]}
+
+builder = StateGraph(State)
+# note that we are using `node` function instead of a compiled subgraph
+builder.add_node(node)
+...
+graph = builder.compile()
 ```
 
 ## Visualization

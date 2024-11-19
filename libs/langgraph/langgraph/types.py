@@ -1,18 +1,24 @@
+import dataclasses
+import sys
 from collections import deque
-from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Generic,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
+    cast,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
@@ -41,6 +47,11 @@ StreamWriter = Callable[[Any], None]
 """Callable that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using stream_mode="custom"."""
+
+if sys.version_info >= (3, 10):
+    _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
+else:
+    _DC_KWARGS = {"frozen": True}
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -99,16 +110,18 @@ class CachePolicy(NamedTuple):
     pass
 
 
-@dataclass
+@dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
     value: Any
+    resumable: bool = False
+    ns: Optional[Sequence[str]] = None
     when: Literal["during"] = "during"
 
 
 class PregelTask(NamedTuple):
     id: str
     name: str
-    path: tuple[Union[str, int], ...]
+    path: tuple[Union[str, int, tuple], ...]
     error: Optional[Exception] = None
     interrupts: tuple[Interrupt, ...] = ()
     state: Union[None, RunnableConfig, "StateSnapshot"] = None
@@ -125,7 +138,7 @@ class PregelExecutableTask(NamedTuple):
     retry_policy: Optional[RetryPolicy]
     cache_policy: Optional[CachePolicy]
     id: str
-    path: tuple[Union[str, int], ...]
+    path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
 
 
@@ -219,6 +232,27 @@ class Send:
         )
 
 
+N = TypeVar("N", bound=Hashable)
+
+
+@dataclasses.dataclass(**_DC_KWARGS)
+class Command(Generic[N]):
+    """One or more commands to update the graph's state and send messages to nodes."""
+
+    update: Optional[dict[str, Any]] = None
+    send: Union[Send, Sequence[Send]] = ()
+    resume: Optional[Union[Any, dict[str, Any]]] = None
+
+    def __repr__(self) -> str:
+        # get all non-None values
+        contents = ", ".join(
+            f"{key}={value!r}"
+            for key, value in dataclasses.asdict(self).items()
+            if value
+        )
+        return f"Command({contents})"
+
+
 StreamChunk = tuple[tuple[str, ...], str, Any]
 
 
@@ -227,14 +261,14 @@ class StreamProtocol:
 
     modes: set[StreamMode]
 
-    __call__: Callable[[StreamChunk], None]
+    __call__: Callable[[Self, StreamChunk], None]
 
     def __init__(
         self,
         __call__: Callable[[StreamChunk], None],
         modes: set[StreamMode],
     ) -> None:
-        self.__call__ = __call__
+        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
         self.modes = modes
 
 
@@ -259,3 +293,28 @@ class LoopProtocol:
         self.store = store
         self.step = step
         self.stop = stop
+
+
+def interrupt(value: Any) -> Any:
+    from langgraph.constants import (
+        CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_RESUME_VALUE,
+        MISSING,
+        NS_SEP,
+    )
+    from langgraph.errors import GraphInterrupt
+    from langgraph.utils.config import get_configurable
+
+    conf = get_configurable()
+    if (resume := conf.get(CONFIG_KEY_RESUME_VALUE, MISSING)) and resume is not MISSING:
+        return resume
+    else:
+        raise GraphInterrupt(
+            (
+                Interrupt(
+                    value=value,
+                    resumable=True,
+                    ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                ),
+            )
+        )

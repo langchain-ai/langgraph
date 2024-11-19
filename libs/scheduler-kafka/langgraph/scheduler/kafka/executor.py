@@ -8,6 +8,7 @@ from contextlib import (
 )
 from functools import partial
 from typing import Any, Optional, Sequence
+from uuid import UUID
 
 import orjson
 from langchain_core.runnables import RunnableConfig
@@ -37,7 +38,7 @@ from langgraph.scheduler.kafka.types import (
     Sendable,
     Topics,
 )
-from langgraph.types import LoopProtocol, RetryPolicy
+from langgraph.types import LoopProtocol, PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 
@@ -191,12 +192,13 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 step=saved.metadata["step"] + 1,
                 stop=saved.metadata["step"] + 2,
             ),
-        ) as (channels, managed), AsyncBackgroundExecutor() as submit:
+        ) as (channels, managed), AsyncBackgroundExecutor(msg["config"]) as submit:
             if task := await asyncio.to_thread(
                 prepare_single_task,
                 msg["task"]["path"],
                 msg["task"]["id"],
                 checkpoint=saved.checkpoint,
+                pending_writes=saved.pending_writes or [],
                 processes=graph.nodes,
                 channels=channels,
                 managed=managed,
@@ -210,13 +212,14 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 runner = PregelRunner(
                     submit=submit,
                     put_writes=partial(self._put_writes, submit, msg["config"]),
+                    schedule_task=self._schedule_task,
                 )
                 async for _ in runner.atick([task], reraise=False):
                     pass
             else:
                 # task was not found
                 await self.graph.checkpointer.aput_writes(
-                    msg["config"], [(ERROR, TaskNotFound())]
+                    msg["config"], [(ERROR, TaskNotFound())], str(UUID(int=0))
                 )
         # notify orchestrator
         fut = await self.producer.send(
@@ -237,6 +240,14 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
             ),
         )
         await fut
+
+    def _schedule_task(
+        self,
+        task: PregelExecutableTask,
+        idx: int,
+    ) -> None:
+        # will be scheduled by orchestrator when executor finishes
+        pass
 
     def _put_writes(
         self,
@@ -399,6 +410,7 @@ class KafkaExecutor(AbstractContextManager):
                 msg["task"]["path"],
                 msg["task"]["id"],
                 checkpoint=saved.checkpoint,
+                pending_writes=saved.pending_writes or [],
                 processes=graph.nodes,
                 channels=channels,
                 managed=managed,
@@ -411,13 +423,14 @@ class KafkaExecutor(AbstractContextManager):
                 runner = PregelRunner(
                     submit=submit,
                     put_writes=partial(self._put_writes, submit, msg["config"]),
+                    schedule_task=self._schedule_task,
                 )
                 for _ in runner.tick([task], reraise=False):
                     pass
             else:
                 # task was not found
                 self.graph.checkpointer.put_writes(
-                    msg["config"], [(ERROR, TaskNotFound())]
+                    msg["config"], [(ERROR, TaskNotFound())], str(UUID(int=0))
                 )
         # notify orchestrator
         fut = self.producer.send(
@@ -438,6 +451,14 @@ class KafkaExecutor(AbstractContextManager):
             ),
         )
         fut.result()
+
+    def _schedule_task(
+        self,
+        task: PregelExecutableTask,
+        idx: int,
+    ) -> None:
+        # will be scheduled by orchestrator when executor finishes
+        pass
 
     def _put_writes(
         self,

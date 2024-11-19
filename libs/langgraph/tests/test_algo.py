@@ -11,13 +11,21 @@ def test_prepare_next_tasks() -> None:
     with ChannelsManager({}, checkpoint, config) as (channels, managed):
         assert (
             prepare_next_tasks(
-                checkpoint, processes, channels, managed, config, 0, for_execution=False
+                checkpoint,
+                {},
+                processes,
+                channels,
+                managed,
+                config,
+                0,
+                for_execution=False,
             )
             == {}
         )
         assert (
             prepare_next_tasks(
                 checkpoint,
+                {},
                 processes,
                 channels,
                 managed,

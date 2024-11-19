@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import Connection, Cursor, Pipeline
+from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
@@ -52,6 +52,7 @@ class PostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
+        self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
     @contextmanager
@@ -287,7 +288,7 @@ class PostgresSaver(BasePostgresSaver):
             >>> DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
             >>> with PostgresSaver.from_conn_string(DB_URI) as memory:
             >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
-            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "data": {"key": "value"}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
             >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
             >>> print(saved_config)
             {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
@@ -365,6 +366,13 @@ class PostgresSaver(BasePostgresSaver):
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+        """Create a database cursor as a context manager.
+
+        Args:
+            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+                Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
+                If pipeline mode is not supported, will fall back to using transaction context manager.
+        """
         with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -379,10 +387,17 @@ class PostgresSaver(BasePostgresSaver):
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
-                with self.lock, conn.pipeline(), conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
-                    yield cur
+                if self.supports_pipeline:
+                    with self.lock, conn.pipeline(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+                else:
+                    # Use connection's transaction context manager when pipeline mode not supported
+                    with self.lock, conn.transaction(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
             else:
                 with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur

@@ -103,15 +103,15 @@ Parallel processing is vital for efficient multi-agent systems and complex tasks
 
 For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduce.ipynb).
 
-### Sub-graphs
+### Subgraphs
 
-Sub-graphs are essential for managing complex agent architectures, particularly in multi-agent systems. They allow:
+[Subgraphs](./low_level.md#subgraphs) are essential for managing complex agent architectures, particularly in [multi-agent systems](./multi_agent.md). They allow:
 
 - Isolated state management for individual agents
 - Hierarchical organization of agent teams
 - Controlled communication between agents and the main system
 
-Sub-graphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [sub-graph tutorial](../how-tos/subgraph.ipynb).
+Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.ipynb).
 
 ### Reflection
 

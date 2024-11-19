@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
@@ -6,11 +7,31 @@ from langgraph.types import Interrupt
 # EmptyChannelError re-exported for backwards compatibility
 
 
+class ErrorCode(Enum):
+    GRAPH_RECURSION_LIMIT = "GRAPH_RECURSION_LIMIT"
+    INVALID_CONCURRENT_GRAPH_UPDATE = "INVALID_CONCURRENT_GRAPH_UPDATE"
+    INVALID_GRAPH_NODE_RETURN_VALUE = "INVALID_GRAPH_NODE_RETURN_VALUE"
+    MULTIPLE_SUBGRAPHS = "MULTIPLE_SUBGRAPHS"
+    INVALID_CHAT_HISTORY = "INVALID_CHAT_HISTORY"
+
+
+def create_error_message(*, message: str, error_code: ErrorCode) -> str:
+    return (
+        f"{message}\n"
+        "For troubleshooting, visit: https://python.langchain.com/docs/"
+        f"troubleshooting/errors/{error_code.value}"
+    )
+
+
 class GraphRecursionError(RecursionError):
     """Raised when the graph has exhausted the maximum number of steps.
 
     This prevents infinite loops. To increase the maximum number of steps,
     run your graph with a config specifying a higher `recursion_limit`.
+
+    Troubleshooting Guides:
+
+    - [GRAPH_RECURSION_LIMIT](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_LIMIT)
 
     Examples:
 
@@ -26,7 +47,13 @@ class GraphRecursionError(RecursionError):
 
 
 class InvalidUpdateError(Exception):
-    """Raised when attempting to update a channel with an invalid set of updates."""
+    """Raised when attempting to update a channel with an invalid set of updates.
+
+    Troubleshooting Guides:
+
+    - [INVALID_CONCURRENT_GRAPH_UPDATE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE)
+    - [INVALID_GRAPH_NODE_RETURN_VALUE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE)
+    """
 
     pass
 
@@ -43,7 +70,7 @@ class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution."""
 
     def __init__(self, value: Any) -> None:
-        super().__init__([Interrupt(value)])
+        super().__init__([Interrupt(value=value)])
 
 
 class GraphDelegate(Exception):
@@ -72,7 +99,12 @@ class CheckpointNotLatest(Exception):
 
 
 class MultipleSubgraphsError(Exception):
-    """Raised when multiple subgraphs are called inside the same node."""
+    """Raised when multiple subgraphs are called inside the same node.
+
+    Troubleshooting guides:
+
+    - [MULTIPLE_SUBGRAPHS](https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS)
+    """
 
     pass
 

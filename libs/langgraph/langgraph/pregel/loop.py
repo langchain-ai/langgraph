@@ -1,6 +1,6 @@
 import asyncio
 import concurrent.futures
-from collections import deque
+from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
 from types import TracebackType
 from typing import (
@@ -52,6 +52,9 @@ from langgraph.constants import (
     INPUT,
     INTERRUPT,
     NS_SEP,
+    NULL_TASK_ID,
+    PUSH,
+    RESUME,
     SCHEDULED,
     TAG_HIDDEN,
 )
@@ -74,6 +77,7 @@ from langgraph.pregel.algo import (
     apply_writes,
     increment,
     prepare_next_tasks,
+    prepare_single_task,
     should_interrupt,
 )
 from langgraph.pregel.debug import (
@@ -90,6 +94,7 @@ from langgraph.pregel.executor import (
     Submit,
 )
 from langgraph.pregel.io import (
+    map_command,
     map_input,
     map_output_updates,
     map_output_values,
@@ -100,7 +105,13 @@ from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
-from langgraph.types import All, LoopProtocol, PregelExecutableTask, StreamProtocol
+from langgraph.types import (
+    All,
+    Command,
+    LoopProtocol,
+    PregelExecutableTask,
+    StreamProtocol,
+)
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
@@ -116,7 +127,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     def __call__(value: StreamChunk) -> None:
         for stream in streams:
             if value[1] in stream.modes:
-                stream(value)  # type: ignore
+                stream(value)
 
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
@@ -130,6 +141,9 @@ class PregelLoop(LoopProtocol):
     stream_keys: Union[str, Sequence[str]]
     skip_done_tasks: bool
     is_nested: bool
+    manager: Union[None, AsyncParentRunManager, ParentRunManager]
+    interrupt_after: Union[All, Sequence[str]]
+    interrupt_before: Union[All, Sequence[str]]
 
     checkpointer_get_next_version: GetNextVersion
     checkpointer_put_writes: Optional[
@@ -162,6 +176,7 @@ class PregelLoop(LoopProtocol):
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
     tasks: dict[str, PregelExecutableTask]
+    to_interrupt: list[PregelExecutableTask]
     output: Union[None, dict[str, Any], Any] = None
 
     # public
@@ -178,6 +193,9 @@ class PregelLoop(LoopProtocol):
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]],
         stream_keys: Union[str, Sequence[str]],
+        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
+        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
+        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
@@ -194,6 +212,9 @@ class PregelLoop(LoopProtocol):
         self.specs = specs
         self.output_keys = output_keys
         self.stream_keys = stream_keys
+        self.interrupt_after = interrupt_after
+        self.interrupt_before = interrupt_before
+        self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
         self.skip_done_tasks = (
             CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -209,7 +230,11 @@ class PregelLoop(LoopProtocol):
             )
         if check_subgraphs and self.is_nested and self.checkpointer is not None:
             if self.config[CONF][CONFIG_KEY_CHECKPOINT_NS] in _SEEN_CHECKPOINT_NS:
-                raise MultipleSubgraphsError
+                raise MultipleSubgraphsError(
+                    "Multiple subgraphs called inside the same node\n\n"
+                    "Troubleshooting URL: https://python.langchain.com/docs"
+                    "/troubleshooting/errors/MULTIPLE_SUBGRAPHS/"
+                )
             else:
                 _SEEN_CHECKPOINT_NS.add(self.config[CONF][CONFIG_KEY_CHECKPOINT_NS])
         if (
@@ -257,15 +282,60 @@ class PregelLoop(LoopProtocol):
                 task_id,
             )
         # output writes
-        self._output_writes(task_id, writes)
+        if hasattr(self, "tasks"):
+            self._output_writes(task_id, writes)
+
+    def accept_push(
+        self, task: PregelExecutableTask, write_idx: int
+    ) -> Optional[PregelExecutableTask]:
+        """Accept a PUSH from a task, potentially returning a new task to start."""
+        # don't start if an earlier PUSH has already triggered an interrupt
+        if self.to_interrupt:
+            return
+        # don't start if we should interrupt *after* the original task
+        if should_interrupt(self.checkpoint, self.interrupt_after, [task]):
+            self.to_interrupt.append(task)
+            return
+        if pushed := cast(
+            Optional[PregelExecutableTask],
+            prepare_single_task(
+                (PUSH, task.path, write_idx, task.id),
+                None,
+                checkpoint=self.checkpoint,
+                pending_writes=[(task.id, *w) for w in task.writes],
+                processes=self.nodes,
+                channels=self.channels,
+                managed=self.managed,
+                config=self.config,
+                step=self.step,
+                for_execution=True,
+                store=self.store,
+                checkpointer=self.checkpointer,
+                manager=self.manager,
+            ),
+        ):
+            # don't start if we should interrupt *before* the new task
+            if should_interrupt(self.checkpoint, self.interrupt_before, [pushed]):
+                self.to_interrupt.append(pushed)
+                return
+            # produce debug output
+            self._emit("debug", map_debug_tasks, self.step, [pushed])
+            # debug flag
+            if self.debug:
+                print_step_tasks(self.step, [pushed])
+            # save the new task
+            self.tasks[pushed.id] = pushed
+            # match any pending writes to the new task
+            if self.skip_done_tasks:
+                self._match_writes({pushed.id: pushed})
+            # return the new task, to be started, if not run before
+            if not pushed.writes:
+                return pushed
 
     def tick(
         self,
         *,
         input_keys: Union[str, Sequence[str]],
-        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
-        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
-        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
         Returns True if more iterations are needed."""
@@ -274,6 +344,10 @@ class PregelLoop(LoopProtocol):
 
         if self.input not in (INPUT_DONE, INPUT_RESUMING):
             self._first(input_keys=input_keys)
+        elif self.to_interrupt:
+            # if we need to interrupt, do so
+            self.status = "interrupt_before"
+            raise GraphInterrupt()
         elif all(task.writes for task in self.tasks.values()):
             writes = [w for t in self.tasks.values() for w in t.writes]
             # debug flag
@@ -281,9 +355,11 @@ class PregelLoop(LoopProtocol):
                 print_step_writes(
                     self.step,
                     writes,
-                    [self.stream_keys]
-                    if isinstance(self.stream_keys, str)
-                    else self.stream_keys,
+                    (
+                        [self.stream_keys]
+                        if isinstance(self.stream_keys, str)
+                        else self.stream_keys
+                    ),
                 )
             # all tasks have finished
             mv_writes = apply_writes(
@@ -301,6 +377,8 @@ class PregelLoop(LoopProtocol):
             )
             # clear pending writes
             self.checkpoint_pending_writes.clear()
+            # "not skip_done_tasks" only applies to first tick after resuming
+            self.skip_done_tasks = True
             # save checkpoint
             self._put_checkpoint(
                 {
@@ -314,7 +392,9 @@ class PregelLoop(LoopProtocol):
                 }
             )
             # after execution, check if we should interrupt
-            if should_interrupt(self.checkpoint, interrupt_after, self.tasks.values()):
+            if should_interrupt(
+                self.checkpoint, self.interrupt_after, self.tasks.values()
+            ):
                 self.status = "interrupt_after"
                 raise GraphInterrupt()
         else:
@@ -325,19 +405,33 @@ class PregelLoop(LoopProtocol):
             self.status = "out_of_steps"
             return False
 
+        # apply NULL writes
+        if null_writes := [
+            w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
+        ]:
+            mv_writes = apply_writes(
+                self.checkpoint,
+                self.channels,
+                [PregelTaskWrites((), INPUT, null_writes, [])],
+                self.checkpointer_get_next_version,
+            )
+            for key, values in mv_writes.items():
+                self._update_mv(key, values)
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
+            self.checkpoint_pending_writes,
             self.nodes,
             self.channels,
             self.managed,
             self.config,
             self.step,
             for_execution=True,
-            manager=manager,
+            manager=self.manager,
             store=self.store,
             checkpointer=self.checkpointer,
         )
+        self.to_interrupt = []
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
@@ -375,36 +469,16 @@ class PregelLoop(LoopProtocol):
 
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
-            for tid, k, v in self.checkpoint_pending_writes:
-                if k in (ERROR, INTERRUPT):
-                    continue
-                if task := self.tasks.get(tid):
-                    if k == SCHEDULED:
-                        if v == max(
-                            self.checkpoint["versions_seen"]
-                            .get(INTERRUPT, {})
-                            .values(),
-                            default=None,
-                        ):
-                            self.tasks[tid] = task._replace(scheduled=True)
-                    else:
-                        task.writes.append((k, v))
-            # print output for any tasks we applied previous writes to
-            for task in self.tasks.values():
-                if task.writes:
-                    self._output_writes(task.id, task.writes, cached=True)
+            self._match_writes(self.tasks)
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks.values()):
-            return self.tick(
-                input_keys=input_keys,
-                interrupt_after=interrupt_after,
-                interrupt_before=interrupt_before,
-                manager=manager,
-            )
+            return self.tick(input_keys=input_keys)
 
         # before execution, check if we should interrupt
-        if should_interrupt(self.checkpoint, interrupt_before, self.tasks.values()):
+        if should_interrupt(
+            self.checkpoint, self.interrupt_before, self.tasks.values()
+        ):
             self.status = "interrupt_before"
             raise GraphInterrupt()
 
@@ -415,9 +489,28 @@ class PregelLoop(LoopProtocol):
         if self.debug:
             print_step_tasks(self.step, list(self.tasks.values()))
 
+        # print output for any tasks we applied previous writes to
+        for task in self.tasks.values():
+            if task.writes:
+                self._output_writes(task.id, task.writes, cached=True)
+
         return True
 
     # private
+
+    def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
+        for tid, k, v in self.checkpoint_pending_writes:
+            if k in (ERROR, INTERRUPT, RESUME):
+                continue
+            if task := tasks.get(tid):
+                if k == SCHEDULED:
+                    if v == max(
+                        self.checkpoint["versions_seen"].get(INTERRUPT, {}).values(),
+                        default=None,
+                    ):
+                        self.tasks[tid] = task._replace(scheduled=True)
+                else:
+                    task.writes.append((k, v))
 
     def _first(self, *, input_keys: Union[str, Sequence[str]]) -> None:
         # resuming from previous checkpoint requires
@@ -439,8 +532,20 @@ class PregelLoop(LoopProtocol):
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
             )
+        # map command to writes
+        elif isinstance(self.input, Command):
+            writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
+            # group writes by task ID
+            for tid, c, v in map_command(self.input):
+                writes[tid].append((c, v))
+            if not writes:
+                raise EmptyInputError("Received empty Command input")
+            # save writes
+            for tid, ws in writes.items():
+                self.put_writes(tid, ws)
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # TODO shouldn't these writes be passed to put_writes too?
             # check if we should delegate (used by subgraphs in distributed mode)
             if self.config[CONF].get(CONFIG_KEY_DELEGATE):
                 raise GraphDelegate(
@@ -454,6 +559,7 @@ class PregelLoop(LoopProtocol):
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
+                self.checkpoint_pending_writes,
                 self.nodes,
                 self.channels,
                 self.managed,
@@ -468,7 +574,10 @@ class PregelLoop(LoopProtocol):
             mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
-                [*discard_tasks.values(), PregelTaskWrites(INPUT, input_writes, [])],
+                [
+                    *discard_tasks.values(),
+                    PregelTaskWrites((), INPUT, input_writes, []),
+                ],
                 self.checkpointer_get_next_version,
             )
             assert not mv_writes, "Can't write to SharedValues in graph input"
@@ -485,6 +594,8 @@ class PregelLoop(LoopProtocol):
             )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+        for k, v in self.config["metadata"].items():
+            metadata.setdefault(k, v)  # type: ignore
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
@@ -493,9 +604,11 @@ class PregelLoop(LoopProtocol):
             print_step_checkpoint(
                 metadata,
                 self.channels,
-                [self.stream_keys]
-                if isinstance(self.stream_keys, str)
-                else self.stream_keys,
+                (
+                    [self.stream_keys]
+                    if isinstance(self.stream_keys, str)
+                    else self.stream_keys
+                ),
             )
         # create new checkpoint
         self.checkpoint = create_checkpoint(self.checkpoint, self.channels, self.step)
@@ -560,11 +673,33 @@ class PregelLoop(LoopProtocol):
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
         if suppress:
-            # suppress interrupt
+            # emit one last "values" event, with pending writes applied
+            if (
+                hasattr(self, "tasks")
+                and self.checkpoint_pending_writes
+                and any(task.writes for task in self.tasks.values())
+            ):
+                mv_writes = apply_writes(
+                    self.checkpoint,
+                    self.channels,
+                    self.tasks.values(),
+                    self.checkpointer_get_next_version,
+                )
+                for key, values in mv_writes.items():
+                    self._update_mv(key, values)
+                self._emit(
+                    "values",
+                    map_output_values,
+                    self.output_keys,
+                    [w for t in self.tasks.values() for w in t.writes],
+                    self.channels,
+                )
+            # emit INTERRUPT event
             self._emit(
                 "updates",
                 lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]),
             )
+            # suppress interrupt
             return True
 
     def _emit(
@@ -579,7 +714,7 @@ class PregelLoop(LoopProtocol):
         if mode not in self.stream.modes:
             return
         for v in values(*args, **kwargs):
-            self.stream((self.checkpoint_ns, mode, v))  # type: ignore
+            self.stream((self.checkpoint_ns, mode, v))
 
     def _output_writes(
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
@@ -618,6 +753,9 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
+        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
+        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         check_subgraphs: bool = True,
@@ -633,7 +771,10 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             specs=specs,
             output_keys=output_keys,
             stream_keys=stream_keys,
+            interrupt_after=interrupt_after,
+            interrupt_before=interrupt_before,
             check_subgraphs=check_subgraphs,
+            manager=manager,
             debug=debug,
         )
         self.stack = ExitStack()
@@ -744,6 +885,9 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
+        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
+        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         check_subgraphs: bool = True,
@@ -759,7 +903,10 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             specs=specs,
             output_keys=output_keys,
             stream_keys=stream_keys,
+            interrupt_after=interrupt_after,
+            interrupt_before=interrupt_before,
             check_subgraphs=check_subgraphs,
+            manager=manager,
             debug=debug,
         )
         self.stack = AsyncExitStack()
@@ -839,7 +986,9 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             else []
         )
 
-        self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
+        self.submit = await self.stack.enter_async_context(
+            AsyncBackgroundExecutor(self.config)
+        )
         self.channels, self.managed = await self.stack.enter_async_context(
             AsyncChannelsManager(self.specs, self.checkpoint, self)
         )
