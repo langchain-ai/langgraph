@@ -1,13 +1,11 @@
-# How to test a LangGraph app locally
+# Get started with LangGraph Platform
 
-This guide assumes you have a LangGraph app correctly set up with a proper configuration file and a corresponding compiled graph, and that you have a proper LangChain API key.
+!!! note "Requirements"
 
-Testing locally ensures that there are no errors or conflicts with Python dependencies and confirms that the configuration file is specified correctly.
+    - [Docker](https://docs.docker.com/get-docker/)
+    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/) >= 0.1.54
 
-## Setup
-
-Install the proper packages:
-
+## Install the LangGraph CLI
 
 === "pip" 
     ```bash
@@ -18,15 +16,55 @@ Install the proper packages:
     brew install langgraph-cli
     ```
 
-Ensure you have an API key, which you can create from the [LangSmith UI](https://smith.langchain.com) (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
+## Create a LangGraph App
 
-```python
-LANGSMITH_API_KEY = *********
+Create a new app from the `react-agent` template. This template is a simple agent that can be flexibly extended to many tools.
+
+=== "Python Server"
+
+    ```shell
+    langgraph new path/to/your/app --template react-agent-python 
+    ```
+
+=== "Node Server"
+
+    ```shell
+    langgraph new path/to/your/app --template react-agent-js
+    ```
+
+!!! tip "Templates"
+
+    Use `langgraph new` to get an interactive menu of available templates.
+
+## Create a `.env` file
+
+You will find a `.env.example` in the root of your new LangGraph app. Create
+a `.env` file in the root of your new LangGraph app and copy the contents of the `.env.example` file into it, filling in the necessary API keys:
+
+```bash
+LANGSMITH_API_KEY=lsv2...
+ANTHROPIC_API_KEY=sk-
+TAVILY_API_KEY=tvly-...
+OPENAI_API_KEY=sk-...
 ```
 
-## Start the API server
+<details><summary>Get API Keys</summary>
+    <ul>
+        <li> <b>LANGSMITH_API_KEY</b>: Go to the <a href="https://smith.langchain.com/settings">LangSmith Settings page</a>. Then clck <b>Create API Key</b>.
+        </li>
+        <li>
+            <b>ANTHROPIC_API_KEY</b>: Get an API key from <a href="https://www.anthropic.com/api">Anthropic</a>.
+        </li>
+        <li>
+            <b>OPENAI_API_KEY</b>: Get an API key from <a href="https://openai.com/">OpenAI</a>.
+        </li>
+        <li>
+            <b>TAVILY_API_KEY</b>: Get an API key on the <a href="https://tavily.com/">Tavily website</a>.
+        </li>
+    </ul>
+</details>
 
-Once you have installed the CLI, you can run the following command to start the API server for local testing:
+## Launch LangGraph Server
 
 ```shell
 langgraph up
@@ -34,159 +72,149 @@ langgraph up
 
 This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
 
-```shell
-Ready!
-- API: http://localhost:8123
-2024-06-26 19:20:41,056:INFO:uvicorn.access 127.0.0.1:44138 - "GET /ok HTTP/1.1" 200
-```
+>    Ready!
+> 
+>    - API: [http://localhost:8123](http://localhost:8123/)
+>     
+>    - Docs: http://localhost:8123/docs
+>     
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
 
-### Interact with the server
+## LangGraph Studio Web UI
 
-We can now interact with the API server using the LangGraph SDK. First, we need to start our client, select our assistant (in this case a graph we called "agent", make sure to select the proper assistant you wish to test).
+Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph up` command.
 
-You can either initialize by passing authentication or by setting an environment variable.
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
 
-#### Initialize with authentication
+!!! warning "Safari Compatibility"
+    
+    Currently, LangGraph Studio Web does not support Safari when running a server locally.
 
-=== "Python"
+
+## Use the API
+
+=== "Python SDK (Async)"
+
+    **Install the LangGraph Python SDK**
+
+    ```shell
+    pip install langgraph-sdk
+    ```
+
+    **Send a message to the assistant (threadless run)**
 
     ```python
     from langgraph_sdk import get_client
 
-    # only pass the url argument to get_client() if you changed the default port when calling langgraph up
-    client = get_client(url=<DEPLOYMENT_URL>,api_key=<LANGSMITH_API_KEY>)
-    # Using the graph deployed with the name "agent"
-    assistant_id = "agent"
-    thread = await client.threads.create()
-    ```
+    client = get_client(url="http://localhost:8123")
 
-=== "Javascript"
-
-    ```js
-    import { Client } from "@langchain/langgraph-sdk";
-
-    // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <LANGSMITH_API_KEY> });
-    // Using the graph deployed with the name "agent"
-    const assistantId = "agent";
-    const thread = await client.threads.create();
-    ```
-
-=== "CURL"
-
-    ```bash
-    curl --request POST \
-      --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
-      --header 'x-api-key: <LANGSMITH_API_KEY>'
-    ```
-  
-
-#### Initialize with environment variables
-
-If you have a `LANGSMITH_API_KEY` set in your environment, you do not need to explicitly pass authentication to the client
-
-=== "Python"
-
-    ```python
-    from langgraph_sdk import get_client
-
-    # only pass the url argument to get_client() if you changed the default port when calling langgraph up
-    client = get_client()
-    # Using the graph deployed with the name "agent"
-    assistant_id = "agent"
-    thread = await client.threads.create()
-    ```
-
-=== "Javascript"
-
-    ```js
-    import { Client } from "@langchain/langgraph-sdk";
-
-    // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client();
-    // Using the graph deployed with the name "agent"
-    const assistantId = "agent";
-    const thread = await client.threads.create();
-    ```
-
-=== "CURL"
-
-    ```bash
-    curl --request POST \
-      --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
-    ```
-
-Now we can invoke our graph to ensure it is working. Make sure to change the input to match the proper schema for your graph. 
-
-=== "Python"
-
-    ```python
-    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     async for chunk in client.runs.stream(
-        thread["thread_id"],
-        assistant_id,
-        input=input,
+        None,  # Threadless run
+        "agent", # Name of assistant. Defined in langgraph.json.
+        input={
+            "messages": [{
+                "role": "human",
+                "content": "What is LangGraph?",
+            }],
+        },
         stream_mode="updates",
     ):
         print(f"Receiving new event of type: {chunk.event}...")
         print(chunk.data)
         print("\n\n")
     ```
-=== "Javascript"
+
+=== "Python SDK (Sync)"
+
+    **Install the LangGraph Python SDK**
+
+    ```shell
+    pip install langgraph-sdk
+    ```
+
+    **Send a message to the assistant (threadless run)**
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="http://localhost:8123")
+
+    for chunk in client.runs.stream(
+        None,  # Threadless run
+        "agent", # Name of assistant. Defined in langgraph.json.
+        input={
+            "messages": [{
+                "role": "human",
+                "content": "What is LangGraph?",
+            }],
+        },
+        stream_mode="updates",
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+        print("\n\n")
+    ```
+
+=== "Javascript SDK"
+
+    **Install the LangGraph JS SDK**
+
+    ```shell
+    npm install @langchain/langgraph-sdk
+    ```
+
+    **Send a message to the assistant (threadless run)**
 
     ```js
-    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf"}] }
+    const { Client } = await import("@langchain/langgraph-sdk");
+
+    // only set the apiUrl if you changed the default port when calling langgraph up
+    const client = new Client({ apiUrl: "http://localhost:8123"});
 
     const streamResponse = client.runs.stream(
-      thread["thread_id"],
-      assistantId,
-      {
-        input: input,
-        streamMode: "updates",
-      }
+        null, // Threadless run
+        "agent", // Assistant ID
+        {
+            input: {
+                "messages": [
+                    { "role": "user", "content": "What is LangGraph?"}
+                ]
+            },
+            streamMode: "messages",
+        }
     );
+
     for await (const chunk of streamResponse) {
-      console.log(`Receiving new event of type: ${chunk.event}...`);
-      console.log(chunk.data);
-      console.log("\n\n");
+        console.log(`Receiving new event of type: ${chunk.event}...`);
+        console.log(JSON.stringify(chunk.data));
+        console.log("\n\n");
     }
     ```
 
-=== "CURL"
+=== "Rest API"
 
     ```bash
-    curl --request POST \
-     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
-     --header 'Content-Type: application/json' \
-     --data "{
-       \"assistant_id\": \"agent\",
-       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf\"}]},
-       \"stream_mode\": [
-         \"events\"
-       ]
-     }" | \
-     sed 's/\r$//' | \
-     awk '
-     /^event:/ {
-         if (data_content != "") {
-             print data_content "\n"
-         }
-         sub(/^event: /, "Receiving event of type: ", $0)
-         printf "%s...\n", $0
-         data_content = ""
-     }
-     /^data:/ {
-         sub(/^data: /, "", $0)
-         data_content = $0
-     }
-     END {
-         if (data_content != "") {
-             print data_content "\n"
-         }
-     }
-     ' 
+    curl -s --request POST \
+        --url "http://localhost:8123/runs/stream" \
+        --header 'Content-Type: application/json' \
+        --data "{
+            \"assistant_id\": \"agent\",
+            \"input\": {
+                \"messages\": [
+                    {
+                        \"role\": \"human\",
+                        \"content\": \"What is LangGraph?\"
+                    }
+                ]
+            },
+            \"stream_mode\": \"updates\"
+        }" 
     ```
 
-If your graph works correctly, you should see your graph output displayed in the console. Of course, there are many more ways you might need to test your graph, for a full list of commands you can send with the SDK, see the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/) and [JS/TS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/) references.
+## Related
+
+There are many more things you can do with LangGraph Platform. For more information, see:
+
+* [LangGraph Server API](../../cloud/reference/api/api_ref.html)
+* [Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref/)
+* [JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref/)
