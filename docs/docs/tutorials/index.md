@@ -6,25 +6,28 @@ title: Tutorials
 
 # Tutorials
 
-Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through building various language agents and applications.
+New to LangGraph or LLM app development? Read this material to get up and running building your first applications.
 
-## Quick Start
+## Get Started 🚀
 
-Learn the basics of LangGraph through a comprehensive quick start in which you will build an agent from scratch.
+- [LangGraph Quickstart](introduction.ipynb): Start with the basics and get hands-on experience by building a chatbot with LangGraph from scratch. In this tutorial, we will build a chatbot that can use tools and keep track of conversation history. We will also leverage LangGraph features to add human-in-the-loop capabilities to the chatbot and see how time-travel works.
 
-- [Quick Start](introduction.ipynb): In this tutorial, you will build a support chatbot using LangGraph.
-- [LangGraph Cloud Quick Start](../cloud/quick_start.md): In this tutorial, you will build and deploy an agent to LangGraph Cloud.
+### LangGraph Platform
 
-## Use cases
+LangGraph Platform helps deploy LangGraph apps to production. The following tutorials will help you get started with LangGraph Platform:
 
-Learn from example implementations of graphs designed for specific scenarios and that implement common design patterns.
+- [LangGraph Server Quickstart](langgraph-platform/local-server.md): In this quickstart, we will create a sample LangGraph app from a pre-built template and launch it locally.
+- [LangGraph Cloud QuickStart](../cloud/quick_start.md): In this quickstart, we will deploy a LangGraph app using LangGraph Cloud.
+
+## Use cases 🛠️
+
+Explore practical implementations tailored for specific scenarios:
 
 ### Chatbots
 
-- [Customer Support](customer-support/customer-support.ipynb): Build a customer support chatbot to manage flights, hotel reservations, car rentals, and other tasks
-- [Prompt Generation from User Requirements](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot
-- [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Build a code analysis and generation assistant
-
+- [Customer Support](customer-support/customer-support.ipynb): Build a multi-functional support bot for flights, hotels, and car rentals.
+- [Prompt Generation from User Requirements](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot.
+- [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Build a code analysis and generation assistant.
 
 ### RAG
 
