@@ -94,10 +94,8 @@ nav:
       - Quick Start:
         - Quick Start: tutorials#quick-start
         - tutorials/introduction.ipynb
-      - LangGraph Platform:
-          - LangGraph Platform: tutorials#langgraph-platform
-          - langgraph-platform/local-server.md
-          - cloud/quick_start.md
+        - langgraph-platform/local-server.md
+        - cloud/quick_start.md
       - Chatbots:
           - Chatbots: tutorials#chatbots
           - tutorials/customer-support/customer-support.ipynb
