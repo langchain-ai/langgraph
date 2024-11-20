@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional, Sequence, Union
+from typing import Any, Iterator, Optional, Sequence
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -17,21 +17,9 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
-
-Conn = Union[Connection[DictRow], ConnectionPool[Connection[DictRow]]]
-
-
-@contextmanager
-def _get_connection(conn: Conn) -> Iterator[Connection[DictRow]]:
-    if isinstance(conn, Connection):
-        yield conn
-    elif isinstance(conn, ConnectionPool):
-        with conn.connection() as conn:
-            yield conn
-    else:
-        raise TypeError(f"Invalid connection type: {type(conn)}")
 
 
 class PostgresSaver(BasePostgresSaver):
@@ -39,7 +27,7 @@ class PostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: Conn,
+        conn: _internal.Conn,
         pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
@@ -373,7 +361,7 @@ class PostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        with _get_connection(self.conn) as conn:
+        with _internal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be

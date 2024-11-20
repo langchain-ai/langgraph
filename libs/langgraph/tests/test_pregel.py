@@ -1,5 +1,6 @@
 import enum
 import json
+import logging
 import operator
 import re
 import time
@@ -67,16 +68,9 @@ from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInt
 from langgraph.graph import END, Graph, GraphCommand, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
-from langgraph.prebuilt.chat_agent_executor import (
-    create_tool_calling_executor,
-)
+from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import (
-    Channel,
-    GraphRecursionError,
-    Pregel,
-    StateSnapshot,
-)
+from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
@@ -103,6 +97,8 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # define these objects to avoid importing langchain_core.agents
@@ -6628,11 +6624,7 @@ def test_message_graph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import (
-        AIMessage,
-        BaseMessage,
-        HumanMessage,
-    )
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
 
@@ -13937,50 +13929,75 @@ def test_store_injected(
 
     doc_id = str(uuid.uuid4())
     doc = {"some-key": "this-is-a-val"}
-
-    def node(input: State, config: RunnableConfig, store: BaseStore):
-        assert isinstance(store, BaseStore)
-        store.put(
-            ("foo", "bar"),
-            doc_id,
-            {
-                **doc,
-                "from_thread": config["configurable"]["thread_id"],
-                "some_val": input["count"],
-            },
-        )
-        return {"count": 1}
-
-    builder = StateGraph(State)
-    builder.add_node("node", node)
-    builder.add_edge("__start__", "node")
-    graph = builder.compile(store=the_store, checkpointer=checkpointer)
-
+    uid = uuid.uuid4().hex
+    namespace = (f"foo-{uid}", "bar")
     thread_1 = str(uuid.uuid4())
-    result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
-    assert result == {"count": 1}
-    returned_doc = the_store.get(("foo", "bar"), doc_id).value
-    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-    assert len(the_store.search(("foo", "bar"))) == 1
-
-    # Check update on existing thread
-    result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
-    assert result == {"count": 2}
-    returned_doc = the_store.get(("foo", "bar"), doc_id).value
-    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
-    assert len(the_store.search(("foo", "bar"))) == 1
-
     thread_2 = str(uuid.uuid4())
 
+    class Node:
+        def __init__(self, i: int | None = None):
+            self.i = i
+
+        def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):
+            assert isinstance(store, BaseStore)
+            store.put(
+                namespace
+                if self.i is not None
+                and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                else (f"foo_{self.i}", "bar"),
+                doc_id,
+                {
+                    **doc,
+                    "from_thread": config["configurable"]["thread_id"],
+                    "some_val": inputs["count"],
+                },
+            )
+            return {"count": 1}
+
+    builder = StateGraph(State)
+    builder.add_node("node", Node())
+    builder.add_edge("__start__", "node")
+    N = 500
+    M = 1
+    if "duckdb" in store_name:
+        logger.warning(
+            "DuckDB store implementation has a known issue that does not"
+            " support concurrent writes, so we're reducing the test scope"
+        )
+        N = M = 1
+
+    for i in range(N):
+        builder.add_node(f"node_{i}", Node(i))
+        builder.add_edge("__start__", f"node_{i}")
+
+    graph = builder.compile(store=the_store, checkpointer=checkpointer)
+
+    results = graph.batch(
+        [{"count": 0}] * M,
+        ([{"configurable": {"thread_id": str(uuid.uuid4())}}] * (M - 1))
+        + [{"configurable": {"thread_id": thread_1}}],
+    )
+    result = results[-1]
+    assert result == {"count": N + 1}
+    returned_doc = the_store.get(namespace, doc_id).value
+    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
+    assert len(the_store.search(namespace)) == 1
+    # Check results after another turn of the same thread
+    result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
+    assert result == {"count": (N + 1) * 2}
+    returned_doc = the_store.get(namespace, doc_id).value
+    assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
+    assert len(the_store.search(namespace)) == 1
+
     result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
-    assert result == {"count": 1}
-    returned_doc = the_store.get(("foo", "bar"), doc_id).value
+    assert result == {"count": N + 1}
+    returned_doc = the_store.get(namespace, doc_id).value
     assert returned_doc == {
         **doc,
         "from_thread": thread_2,
         "some_val": 0,
     }  # Overwrites the whole doc
-    assert len(the_store.search(("foo", "bar"))) == 1  # still overwriting the same one
+    assert len(the_store.search(namespace)) == 1  # still overwriting the same one
 
 
 def test_enum_node_names():

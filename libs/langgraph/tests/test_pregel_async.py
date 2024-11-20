@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import operator
 import random
 import re
@@ -99,6 +100,8 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+
+logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.anyio
 
@@ -12272,60 +12275,89 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
 
     doc_id = str(uuid.uuid4())
     doc = {"some-key": "this-is-a-val"}
+    uid = uuid.uuid4().hex
+    namespace = (f"foo-{uid}", "bar")
+    thread_1 = str(uuid.uuid4())
+    thread_2 = str(uuid.uuid4())
 
-    async def node(input: State, config: RunnableConfig, store: BaseStore):
-        assert isinstance(store, BaseStore)
-        await store.aput(
-            ("foo", "bar"),
-            doc_id,
-            {
-                **doc,
-                "from_thread": config["configurable"]["thread_id"],
-                "some_val": input["count"],
-            },
-        )
-        return {"count": 1}
+    class Node:
+        def __init__(self, i: int | None = None):
+            self.i = i
+
+        async def __call__(
+            self, inputs: State, config: RunnableConfig, store: BaseStore
+        ):
+            assert isinstance(store, BaseStore)
+            await store.aput(
+                namespace
+                if self.i is not None
+                and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                else (f"foo_{self.i}", "bar"),
+                doc_id,
+                {
+                    **doc,
+                    "from_thread": config["configurable"]["thread_id"],
+                    "some_val": inputs["count"],
+                },
+            )
+            return {"count": 1}
 
     builder = StateGraph(State)
-    builder.add_node("node", node)
+    builder.add_node("node", Node())
     builder.add_edge("__start__", "node")
+
+    N = 500
+    M = 1
+    if "duckdb" in store_name:
+        logger.warning(
+            "DuckDB store implementation has a known issue that does not"
+            " support concurrent writes, so we're reducing the test scope"
+        )
+        N = M = 1
+
+    for i in range(N):
+        builder.add_node(f"node_{i}", Node(i))
+        builder.add_edge("__start__", f"node_{i}")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer, awith_store(
         store_name
     ) as the_store:
         graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
-        thread_1 = str(uuid.uuid4())
-        result = await graph.ainvoke(
-            {"count": 0}, {"configurable": {"thread_id": thread_1}}
+        # Test batch operations with multiple threads
+        results = await graph.abatch(
+            [{"count": 0}] * M,
+            ([{"configurable": {"thread_id": str(uuid.uuid4())}}] * (M - 1))
+            + [{"configurable": {"thread_id": thread_1}}],
         )
-        assert result == {"count": 1}
-        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        result = results[-1]
+        assert result == {"count": N + 1}
+        returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-        assert len((await the_store.asearch(("foo", "bar")))) == 1
+        assert len((await the_store.asearch(namespace))) == 1
 
-        # Check update on existing thread
+        # Check results after another turn of the same thread
         result = await graph.ainvoke(
             {"count": 0}, {"configurable": {"thread_id": thread_1}}
         )
-        assert result == {"count": 2}
-        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
-        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
-        assert len((await the_store.asearch(("foo", "bar")))) == 1
+        assert result == {"count": (N + 1) * 2}
+        returned_doc = (await the_store.aget(namespace, doc_id)).value
+        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
+        assert len((await the_store.asearch(namespace))) == 1
 
-        thread_2 = str(uuid.uuid4())
-
+        # Test with a different thread
         result = await graph.ainvoke(
             {"count": 0}, {"configurable": {"thread_id": thread_2}}
         )
-        assert result == {"count": 1}
-        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert result == {"count": N + 1}
+        returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {
             **doc,
             "from_thread": thread_2,
             "some_val": 0,
         }  # Overwrites the whole doc
         assert (
-            len((await the_store.asearch(("foo", "bar")))) == 1
+            len((await the_store.asearch(namespace))) == 1
         )  # still overwriting the same one
 
 

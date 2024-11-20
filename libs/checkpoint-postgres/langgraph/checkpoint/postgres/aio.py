@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Sequence
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -17,23 +17,9 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
-
-Conn = Union[AsyncConnection[DictRow], AsyncConnectionPool[AsyncConnection[DictRow]]]
-
-
-@asynccontextmanager
-async def _get_connection(
-    conn: Conn,
-) -> AsyncIterator[AsyncConnection[DictRow]]:
-    if isinstance(conn, AsyncConnection):
-        yield conn
-    elif isinstance(conn, AsyncConnectionPool):
-        async with conn.connection() as conn:
-            yield conn
-    else:
-        raise TypeError(f"Invalid connection type: {type(conn)}")
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
@@ -41,7 +27,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: Conn,
+        conn: _ainternal.Conn,
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
@@ -331,7 +317,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        async with _get_connection(self.conn) as conn:
+        async with _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
