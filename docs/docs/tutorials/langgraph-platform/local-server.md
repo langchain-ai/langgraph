@@ -69,7 +69,7 @@ OPENAI_API_KEY=sk-...
 ## 🚀 Launch LangGraph Server
 
 ```shell
-langgraph up
+langgraph dev
 ```
 
 This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
@@ -224,7 +224,7 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 ### 🌐 Deploy to LangGraph Cloud
 
-- **[LangGraph Cloud QuickStart](../../cloud/quick_start.md)**: Learn how to deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Cloud QuickStart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
 
 ### 📚 Learn More about LangGraph Platform
 
@@ -238,5 +238,5 @@ Expand your knowledge with these resources:
 Access detailed documentation for development and API usage:
 
 - **[LangGraph Server API Reference](../../cloud/reference/api/api_ref.html)**: Explore the LangGraph Server API documentation.  
-- **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md)**: Get detailed guidance on the Python SDK.  
-- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Learn how to use the JavaScript/TypeScript SDK.
+- **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md)**: Explore the Python SDK API Reference.
+- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the Python SDK API Reference.
