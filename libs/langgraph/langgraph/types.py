@@ -398,5 +398,4 @@ def acall(
     fut = impl(func, *args, **kwargs)
     if isinstance(fut, concurrent.futures.Future):
         fut = asyncio.wrap_future(fut)
-    fut.cancel
     return fut

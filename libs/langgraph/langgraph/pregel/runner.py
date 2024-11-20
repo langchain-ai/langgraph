@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import threading
 import time
 from functools import partial
 from typing import (
@@ -66,18 +67,26 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
+        locks: dict[str, threading.Lock] = {}
+
         def writer(
             task: PregelExecutableTask,
             writes: Sequence[tuple[str, Any]],
             *,
             calls: Optional[Sequence[Call]] = None,
         ) -> Sequence[Optional[concurrent.futures.Future]]:
-            prev_length = len(task.writes)
-            # delegate to the underlying writer
-            task.config[CONF][CONFIG_KEY_SEND](writes)
-            # confirm no other concurrent writes were added
-            # TODO could use a lock here instead, if writes can come from many threads
-            assert len(task.writes) == prev_length + len(writes)
+            if all(w[0] != PUSH for w in writes):
+                return task.config[CONF][CONFIG_KEY_SEND](writes)
+
+            if task.id not in locks:
+                locks[task.id] = threading.Lock()
+            with locks[task.id]:
+                prev_length = len(task.writes)
+                # delegate to the underlying writer
+                task.config[CONF][CONFIG_KEY_SEND](writes)
+                # confirm no other concurrent writes were added
+                assert len(task.writes) == prev_length + len(writes)
+            # schedule PUSH tasks, collect futures
             rtn: dict[int, Optional[concurrent.futures.Future]] = {}
             for idx, w in enumerate(writes, start=prev_length):
                 # bail if not a PUSH write
@@ -100,7 +109,6 @@ class PregelRunner:
                         rtn[idx - prev_length] = fut
                     elif next_task.writes:
                         # if it already ran, return the result
-                        # TODO we could also set the result for non-RETURN writes
                         fut = concurrent.futures.Future()
                         if val := next(v for c, v in next_task.writes if c == RETURN):
                             fut.set_result(val)
@@ -212,7 +220,6 @@ class PregelRunner:
                 del fut, task
             # maybe stop other tasks
             if _should_stop_others(done):
-                print("stopping others")
                 break
             # give control back to the caller
             yield
@@ -231,24 +238,31 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
+        locks: dict[str, threading.Lock] = {}
+
         def writer(
             task: PregelExecutableTask,
             writes: Sequence[tuple[str, Any]],
             *,
             calls: Optional[Sequence[Call]] = None,
         ) -> Sequence[Optional[asyncio.Future]]:
-            prev_length = len(task.writes)
-            # delegate to the underlying writer
-            task.config[CONF][CONFIG_KEY_SEND](writes)
-            # confirm no other concurrent writes were added
-            # TODO could use a lock here instead, if writes can come from many threads
-            assert len(task.writes) == prev_length + len(writes)
+            if all(w[0] != PUSH for w in writes):
+                return task.config[CONF][CONFIG_KEY_SEND](writes)
+
+            if task.id not in locks:
+                locks[task.id] = threading.Lock()
+            with locks[task.id]:
+                prev_length = len(task.writes)
+                # delegate to the underlying writer
+                task.config[CONF][CONFIG_KEY_SEND](writes)
+                # confirm no other concurrent writes were added
+                assert len(task.writes) == prev_length + len(writes)
+            # schedule PUSH tasks, collect futures
             rtn: dict[int, Optional[asyncio.Future]] = {}
             for idx, w in enumerate(writes, start=prev_length):
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
-                # TODO apply changes from sync version
                 # schedule the next task, if the callback returns one
                 if next_task := self.schedule_task(
                     task,
@@ -257,29 +271,51 @@ class PregelRunner:
                 ):
                     # if the parent task was retried,
                     # the next task might already be running
-                    if any(
-                        t == next_task.id for t in futures.values() if t is not None
-                    ):
-                        continue
-                    # schedule the next task
-                    fut = cast(
-                        asyncio.Future,
-                        self.submit(
-                            arun_with_retry,
-                            next_task,
-                            retry_policy,
-                            stream=self.use_astream,
-                            configurable={
-                                CONFIG_KEY_SEND: partial(writer, next_task),
-                                CONFIG_KEY_CALL: partial(call, next_task),
-                            },
-                            __name__=t.name,
-                            __cancel_on_exit__=True,
-                            __reraise_on_exit__=reraise,
+                    if fut := next(
+                        (
+                            f
+                            for f, t in futures.items()
+                            if t is not None and t == next_task.id
                         ),
-                    )
-                    futures[fut] = next_task
-                    rtn[idx - prev_length] = fut
+                        None,
+                    ):
+                        # if the parent task was retried,
+                        # the next task might already be running
+                        rtn[idx - prev_length] = fut
+                    elif next_task.writes:
+                        # if it already ran, return the result
+                        fut = asyncio.Future()
+                        if val := next(v for c, v in next_task.writes if c == RETURN):
+                            fut.set_result(val)
+                        elif exc := next(v for c, v in next_task.writes if c == ERROR):
+                            fut.set_exception(
+                                exc
+                                if isinstance(exc, BaseException)
+                                else Exception(exc)
+                            )
+                        else:
+                            fut.set_result(None)
+                        rtn[idx - prev_length] = fut
+                    else:
+                        # schedule the next task
+                        fut = cast(
+                            asyncio.Future,
+                            self.submit(
+                                arun_with_retry,
+                                next_task,
+                                retry_policy,
+                                stream=self.use_astream,
+                                configurable={
+                                    CONFIG_KEY_SEND: partial(writer, next_task),
+                                    CONFIG_KEY_CALL: partial(call, next_task),
+                                },
+                                __name__=t.name,
+                                __cancel_on_exit__=True,
+                                __reraise_on_exit__=reraise,
+                            ),
+                        )
+                        futures[fut] = next_task
+                        rtn[idx - prev_length] = fut
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(
@@ -294,6 +330,7 @@ class PregelRunner:
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
         futures: dict[asyncio.Future, Optional[PregelExecutableTask]] = {}
+        done_futures: set[asyncio.Future] = set()
         # give control back to the caller
         yield
         # fast path if single task with no waiter and no timeout
@@ -312,7 +349,12 @@ class PregelRunner:
                 self.commit(t, None)
             except Exception as exc:
                 self.commit(t, exc)
-                if reraise:
+                if reraise and futures:
+                    # will be re-raised after futures are done
+                    fut: asyncio.Future = loop.create_future()
+                    fut.set_exception(exc)
+                    done_futures.add(fut)
+                elif reraise:
                     raise
             if not futures:  # maybe `t` schuduled another task
                 return
@@ -342,7 +384,6 @@ class PregelRunner:
                         ),
                     )
                 ] = t
-        done_futures: set[asyncio.Future] = set()
         end_time = timeout + loop.time() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = await asyncio.wait(
