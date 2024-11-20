@@ -168,7 +168,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                 rfile = resolved / "requirements.txt"
                 pip_reqs.append(
                     (
-                        rfile.relative_to(config_path.parent),
+                        pathlib.PurePosixPath(rfile.relative_to(config_path.parent)),
                         f"{container_path}/requirements.txt",
                     )
                 )
