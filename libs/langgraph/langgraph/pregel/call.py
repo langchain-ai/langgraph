@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import types
 from typing import Any, Callable, Optional
@@ -111,7 +112,9 @@ def get_runnable_for_func(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE[func]
     elif not _lookup_module_and_qualname(func):
         return RunnableSeq(
-            RunnableCallable(func, trace=False),
+            RunnableCallable(None, func, trace=False)
+            if asyncio.iscoroutinefunction(func)
+            else RunnableCallable(func, trace=False),
             ChannelWrite([ChannelWriteEntry(RETURN)]),
             name=func.__name__,
         )
@@ -119,7 +122,9 @@ def get_runnable_for_func(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE.setdefault(
             func,
             RunnableSeq(
-                RunnableCallable(func, trace=False),
+                RunnableCallable(None, func, trace=False)
+                if asyncio.iscoroutinefunction(func)
+                else RunnableCallable(func, trace=False),
                 ChannelWrite([ChannelWriteEntry(RETURN)]),
                 name=func.__name__,
             ),
