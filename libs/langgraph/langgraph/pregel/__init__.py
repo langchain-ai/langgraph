@@ -1806,12 +1806,16 @@ class Pregel(PregelProtocol):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put_nowait)
+                    StreamMessagesHandler(
+                        partial(aioloop.call_soon_threadsafe, stream.put_nowait)
+                    )
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put_nowait(
-                    ((), "custom", c)
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
+                    lambda c: aioloop.call_soon_threadsafe(
+                        stream.put_nowait, ((), "custom", c)
+                    )
                 )
             async with AsyncPregelLoop(
                 input,
@@ -1838,7 +1842,10 @@ class Pregel(PregelProtocol):
                 )
                 # enable subgraph streaming
                 if subgraphs:
-                    loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
+                    loop.config[CONF][CONFIG_KEY_STREAM] = StreamProtocol(
+                        partial(aioloop.call_soon_threadsafe, stream.put_nowait),
+                        stream_modes,
+                    )
                 # enable concurrent streaming
                 if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
 
