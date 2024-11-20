@@ -6,6 +6,8 @@ from typing import NamedTuple, Optional, TypedDict, Union
 
 import click
 
+SUPPORTED_NODE_VERSIONS = ("20",)
+
 
 class Config(TypedDict):
     python_version: str
@@ -37,10 +39,13 @@ def validate_config(config: Config) -> Config:
     )
 
     if config.get("node_version"):
-        if config["node_version"] not in ("20",):
+        if config["node_version"] not in SUPPORTED_NODE_VERSIONS:
+            supported = ", ".join(
+                f'`node_version: "{v}"`' for v in SUPPORTED_NODE_VERSIONS
+            )
             raise click.UsageError(
                 f"Unsupported Node.js version: {config['node_version']}. "
-                "Currently only `node_version: \"20\"` is supported."
+                f"Only supported versions are {supported}."
             )
 
     if config.get("python_version"):
@@ -64,6 +69,45 @@ def validate_config(config: Config) -> Config:
             "Add at least one graph to 'graphs' dictionary."
         )
     return config
+
+
+def validate_config_file(config_path: pathlib.Path) -> Config:
+    with open(config_path) as f:
+        config = json.load(f)
+    validated = validate_config(config)
+    # Enforce the package.json doesn't enforce an
+    # incompatible Node.js version
+    if validated.get("node_version"):
+        package_json_path = config_path.parent / "package.json"
+        if package_json_path.is_file():
+            try:
+                with open(package_json_path) as f:
+                    package_json = json.load(f)
+                    if "engines" in package_json:
+                        engines = package_json["engines"]
+                        if any(engine != "node" for engine in engines.keys()):
+                            raise click.UsageError(
+                                "Only 'node' engine is supported in package.json engines."
+                                f" Got engines: {list(engines.keys())}"
+                            )
+                        if engines:
+                            node_version = engines["node"]
+                            if node_version not in SUPPORTED_NODE_VERSIONS:
+                                supported = ", ".join(
+                                    f'"{v}"' for v in SUPPORTED_NODE_VERSIONS
+                                )
+                                raise click.UsageError(
+                                    f"Node.js version in package.json engines must exactly match one of {supported} (major version only), "
+                                    f"got '{node_version}'. Minor/patch versions (like '20.x.y') are not supported to prevent "
+                                    "deployment issues when new Node.js versions are released."
+                                )
+
+            except json.JSONDecodeError:
+                raise click.UsageError(
+                    "Invalid package.json found in langgraph "
+                    f"config directory {package_json_path}: file is not valid JSON"
+                ) from None
+    return validated
 
 
 class LocalDeps(NamedTuple):
