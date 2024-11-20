@@ -248,6 +248,7 @@ class PregelRunner:
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
+                # TODO apply changes from sync version
                 # schedule the next task, if the callback returns one
                 if next_task := self.schedule_task(
                     task,
