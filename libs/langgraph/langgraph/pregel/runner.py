@@ -130,7 +130,9 @@ class PregelRunner:
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(
-            task, func: str | Callable[[Any], Union[Awaitable[Any], Any]], input: Any
+            task: PregelExecutableTask,
+            func: Callable[[Any], Union[Awaitable[Any], Any]],
+            input: Any,
         ) -> concurrent.futures.Future[Any]:
             (fut,) = writer(task, [(PUSH, None)], calls=[Call(func, input)])
             assert fut is not None, "writer did not return a future for call"
@@ -158,7 +160,7 @@ class PregelRunner:
                 self.commit(t, exc)
                 if reraise and futures:
                     # will be re-raised after futures are done
-                    fut = concurrent.futures.Future()
+                    fut: concurrent.futures.Future = concurrent.futures.Future()
                     fut.set_exception(exc)
                     done_futures.add(fut)
                 elif reraise:
@@ -259,25 +261,30 @@ class PregelRunner:
                     ):
                         continue
                     # schedule the next task
-                    fut = self.submit(
-                        arun_with_retry,
-                        next_task,
-                        retry_policy,
-                        stream=self.use_astream,
-                        configurable={
-                            CONFIG_KEY_SEND: partial(writer, next_task),
-                            CONFIG_KEY_CALL: partial(call, next_task),
-                        },
-                        __name__=t.name,
-                        __cancel_on_exit__=True,
-                        __reraise_on_exit__=reraise,
+                    fut = cast(
+                        asyncio.Future,
+                        self.submit(
+                            arun_with_retry,
+                            next_task,
+                            retry_policy,
+                            stream=self.use_astream,
+                            configurable={
+                                CONFIG_KEY_SEND: partial(writer, next_task),
+                                CONFIG_KEY_CALL: partial(call, next_task),
+                            },
+                            __name__=t.name,
+                            __cancel_on_exit__=True,
+                            __reraise_on_exit__=reraise,
+                        ),
                     )
-                    futures[cast(asyncio.Future, fut)] = next_task
+                    futures[fut] = next_task
                     rtn[idx - prev_length] = fut
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(
-            task, func: str | Callable[[Any], Union[Awaitable[Any], Any]], input: Any
+            task: PregelExecutableTask,
+            func: Callable[[Any], Union[Awaitable[Any], Any]],
+            input: Any,
         ) -> asyncio.Future[Any]:
             (fut,) = writer(task, [(PUSH, None)], calls=[Call(func, input)])
             assert fut is not None, "writer did not return a future for call"

@@ -1,5 +1,6 @@
 import sys
 import types
+from typing import Any, Callable, Optional
 
 from langgraph.constants import RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
@@ -11,7 +12,7 @@ https://github.com/cloudpipe/cloudpickle/blob/6220b0ce83ffee5e47e06770a1ee38ca9e
 """
 
 
-def _getattribute(obj, name):
+def _getattribute(obj: Any, name: str) -> Any:
     for subpath in name.split("."):
         if subpath == "<locals>":
             raise AttributeError(
@@ -27,7 +28,7 @@ def _getattribute(obj, name):
     return obj, parent
 
 
-def _whichmodule(obj, name):
+def _whichmodule(obj: Any, name: str) -> Optional[str]:
     """Find the module an object belongs to.
 
     This function differs from ``pickle.whichmodule`` in two ways:
@@ -61,7 +62,9 @@ def _whichmodule(obj, name):
     return None
 
 
-def _lookup_module_and_qualname(obj, name=None):
+def _lookup_module_and_qualname(
+    obj: Any, name: Optional[str] = None
+) -> Optional[tuple[types.ModuleType, str]]:
     if name is None:
         name = getattr(obj, "__qualname__", None)
     if name is None:  # pragma: no cover
@@ -69,6 +72,8 @@ def _lookup_module_and_qualname(obj, name=None):
         # needed anymore. However we keep the __name__ introspection in case
         # users of cloudpickle rely on this old behavior for unknown reasons.
         name = getattr(obj, "__name__", None)
+    if name is None:
+        return None
 
     module_name = _whichmodule(obj, name)
 
@@ -101,9 +106,7 @@ def _lookup_module_and_qualname(obj, name=None):
     return module, name
 
 
-def get_runnable_for_func(
-    func: types.FunctionType,
-) -> RunnableSeq:
+def get_runnable_for_func(func: Callable[..., Any]) -> RunnableSeq:
     if func in CACHE:
         return CACHE[func]
     elif not _lookup_module_and_qualname(func):
@@ -123,4 +126,4 @@ def get_runnable_for_func(
         )
 
 
-CACHE: dict[types.FunctionType, RunnableCallable] = {}
+CACHE: dict[Callable[..., Any], RunnableSeq] = {}

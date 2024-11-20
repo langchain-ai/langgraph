@@ -62,6 +62,7 @@ from langgraph.constants import (
     START,
 )
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
+from langgraph.func import imp, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
@@ -2645,6 +2646,50 @@ async def test_send_sequences(checkpointer_name: str) -> None:
             "3",
             "3.1",
         ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_imp_task(checkpointer_name: str) -> None:
+    mapper_calls = 0
+
+    @task()
+    async def mapper(input: str) -> str:
+        nonlocal mapper_calls
+        mapper_calls += 1
+        return input * 2
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @imp(checkpointer=checkpointer)
+        async def graph(input: list[str]) -> list[str]:
+            futures = [mapper(i) for i in input]
+            mapped = await asyncio.gather(*futures)
+            answer = interrupt("question")
+            return [m + answer for m in mapped]
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert [c async for c in graph.astream(["0", "1"], thread1)] == [
+            # TODO make test not depend on order of execution (which is not guaranteed)
+            {"mapper": "00"},
+            {"mapper": "11"},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="question",
+                        resumable=True,
+                        ns=[AnyStr("graph:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        assert mapper_calls == 2
+
+        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+            "00answer",
+            "11answer",
+        ]
+        assert mapper_calls == 2
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)

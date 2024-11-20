@@ -102,10 +102,10 @@ class PregelTaskWrites(NamedTuple):
 class Call:
     __slots__ = ("func", "input")
 
-    func: str | Callable
+    func: Callable
     input: Any
 
-    def __init__(self, func: str | Callable, input: Any) -> None:
+    def __init__(self, func: Callable, input: Any) -> None:
         self.func = func
         self.input = input
 
@@ -451,7 +451,7 @@ def prepare_next_tasks(
 
 
 def prepare_single_task(
-    task_path: tuple[Union[str, int, tuple], ...],
+    task_path: tuple[Any, ...],
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
@@ -474,10 +474,10 @@ def prepare_single_task(
 
     if task_path[0] == PUSH and isinstance(task_path[-1], Call):
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
-        task_path_t = cast(tuple[str, tuple, int, str, Optional[Call]], task_path)
+        task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
         call = task_path_t[-1]
-        proc = get_runnable_for_func(call.func)
-        name = proc.name
+        proc_ = get_runnable_for_func(call.func)
+        name = proc_.name
         if name is None:
             raise ValueError("`call` functions must have a `__name__` attribute")
         # create task id
@@ -507,7 +507,7 @@ def prepare_single_task(
             return PregelExecutableTask(
                 name,
                 call.input,
-                proc,
+                proc_,
                 writes,
                 patch_config(
                     merge_configs(config, {"metadata": metadata}),
@@ -586,14 +586,14 @@ def prepare_single_task(
         elif len(task_path) >= 4:
             # new PUSH tasks, executed in superstep n
             # (PUSH, parent task path, idx of PUSH write, id of parent task)
-            task_path_t = cast(tuple[str, tuple, int, str], task_path)
-            writes_for_path = [w for w in pending_writes if w[0] == task_path_t[3]]
-            if task_path_t[2] >= len(writes_for_path):
+            task_path_tt = cast(tuple[str, tuple, int, str], task_path)
+            writes_for_path = [w for w in pending_writes if w[0] == task_path_tt[3]]
+            if task_path_tt[2] >= len(writes_for_path):
                 logger.warning(
                     f"Ignoring invalid write index {task_path[2]} in pending writes"
                 )
                 return
-            packet = writes_for_path[task_path_t[2]][2]
+            packet = writes_for_path[task_path_tt[2]][2]
             if packet is None:
                 return
             if not isinstance(packet, Send):
@@ -638,7 +638,7 @@ def prepare_single_task(
             if node := proc.node:
                 if proc.metadata:
                     metadata.update(proc.metadata)
-                writes: deque[tuple[str, Any]] = deque()
+                writes = deque()
                 return PregelExecutableTask(
                     packet.node,
                     packet.arg,

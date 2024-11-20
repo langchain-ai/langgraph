@@ -7,7 +7,6 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    Coroutine,
     Optional,
     ParamSpec,
     TypeVar,
@@ -33,22 +32,20 @@ T = TypeVar("T")
 @overload
 def task(
     *, retry: Optional[RetryPolicy] = None
-) -> Callable[
-    [Callable[P, Coroutine[None, None, T]]], Callable[P, asyncio.Future[T]]
-]: ...
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]]: ...
 
 
 @overload
-def task(
+def task(  # type: ignore[overload-cannot-match]
     *, retry: Optional[RetryPolicy] = None
 ) -> Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]]: ...
 
 
 def task(
     *, retry: Optional[RetryPolicy] = None
-) -> Callable[
-    [Callable[P, Union[T, Awaitable[T]]]],
-    Callable[P, Union[concurrent.futures.Future[T], asyncio.Future[T]]],
+) -> Union[
+    Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]],
+    Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
 ]:
     def _task(func: Callable[P, T]) -> Callable[P, concurrent.futures.Future[T]]:
         if asyncio.iscoroutinefunction(func):
@@ -64,7 +61,7 @@ def imp(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     store: Optional[BaseStore] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
-    def _imp(func: types.FunctionType):
+    def _imp(func: types.FunctionType) -> Pregel:
         return Pregel(
             nodes={
                 func.__name__: PregelNode(
@@ -74,7 +71,7 @@ def imp(
                     writers=[ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])],
                 )
             },
-            channels={START: EphemeralValue(Any, START), END: LastValue(Any, END)},
+            channels={START: EphemeralValue(Any), END: LastValue(Any, END)},
             input_channels=START,
             output_channels=END,
             stream_mode="updates",
