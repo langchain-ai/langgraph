@@ -30,7 +30,7 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 - [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs. 
 - [FAQ](faq.md): Frequently asked questions about LangGraph.
 
-## LangGraph Platform 
+## LangGraph Platform
 
 LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework.
 
