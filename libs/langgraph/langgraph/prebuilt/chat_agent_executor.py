@@ -742,11 +742,11 @@ def make_agent_node(
     tools: Union[Sequence[BaseTool], ToolNode],
     *,
     state_schema: StateSchemaType,
-    input_processor: Callable[[dict], dict] = None,
-    output_processor: Callable[[dict], dict] = None,
+    input_processor: Optional[Callable[[dict], dict]] = None,
+    output_processor: Optional[Callable[[dict], dict]] = None,
     state_modifier: Optional[StateModifier] = None,
-    interrupt_before: Optional[Sequence[str]] = None,
-    interrupt_after: Optional[Sequence[str]] = None,
+    interrupt_before: Optional[list[str]] = None,
+    interrupt_after: Optional[list[str]] = None,
 ) -> Callable[[AgentRouterState], GraphCommand]:
     """Create an agent node that calls the language model and tools.
 
@@ -791,9 +791,12 @@ def make_agent_node(
         interrupt_after=interrupt_after,
     )
 
+    tools_list = (
+        list(tools.tools_by_name.values()) if isinstance(tools, ToolNode) else tools
+    )
     destinations = [
         tool.goto
-        for tool in tools
+        for tool in tools_list
         if isinstance(tool, HandoffTool) and tool.goto is not None
     ]
 
@@ -802,13 +805,15 @@ def make_agent_node(
         # process the input state before passing it to the agent. this can be used to:
         # (1) control how much information is passed to the agent (e.g. only last message vs full message history)
         # (2) remap state keys to match the agent's expected input schema
-        inputs = input_processor(state) if input_processor else state
+        inputs = input_processor(state) if input_processor is not None else state
         response = agent.invoke(inputs)
         last_message = response["messages"][-1]
         # process the output from the agent before returning it to the next agent. this can be used to:
         # (1) control how much information is passed to the next agent (e.g. only last message vs full message history)
         # (2) remap state keys to match the next agent's expected input schema
-        outputs = output_processor(response) if output_processor else response
+        outputs = (
+            output_processor(response) if output_processor is not None else response
+        )
         # Check if the last message from the agent is a tool message with an artifact.
         # NOTE: this expects the handoff tools to have return_direct = True
         if isinstance(last_message, ToolMessage) and isinstance(

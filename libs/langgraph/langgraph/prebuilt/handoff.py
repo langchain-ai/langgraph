@@ -1,5 +1,5 @@
 from functools import wraps
-from typing import Callable, Literal, Optional, Union
+from typing import Any, Callable, Literal, Optional, Union
 
 from langchain_core.tools import StructuredTool
 
@@ -60,9 +60,9 @@ def handoff(
         )
 
     if tool_message is not None:
-        command = GraphCommand(goto=goto)
+        command: GraphCommand = GraphCommand(goto=goto)
 
-        def func():
+        def func() -> tuple[str, GraphCommand]:
             return tool_message, command
 
         return HandoffTool.from_function(
@@ -77,13 +77,15 @@ def handoff(
         )
     else:
 
-        def decorator(func):
+        def decorator(
+            func: Callable[..., tuple[str, dict]],
+        ) -> Callable[..., tuple[str, GraphCommand]]:
             @wraps(func)
-            def wrapped_func(*args, **kwargs):
+            def wrapped_func(*args: Any, **kwargs: Any) -> tuple[str, GraphCommand]:
                 # Call the original function which returns (message, state_update)
                 message, state_update = func(*args, **kwargs)
                 # Create command with both goto and state update
-                command = GraphCommand(goto=goto, update=state_update)
+                command: GraphCommand = GraphCommand(goto=goto, update=state_update)
                 return message, command
 
             # Create and return the tool
