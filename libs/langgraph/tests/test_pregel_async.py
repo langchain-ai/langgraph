@@ -62,7 +62,7 @@ from langgraph.constants import (
     START,
 )
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
-from langgraph.func import imp, task
+from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
@@ -2659,7 +2659,7 @@ async def test_imp_task(checkpointer_name: str) -> None:
             mapper_calls += 1
             return str(input) * 2
 
-        @imp(checkpointer=checkpointer)
+        @entrypoint(checkpointer=checkpointer)
         async def graph(input: list[int]) -> list[str]:
             futures = [mapper(i) for i in input]
             mapped = await asyncio.gather(*futures)
@@ -2706,7 +2706,7 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         def baz(state: dict) -> dict:
             return {"a": state["a"] + "baz", "c": "something else"}
 
-        @imp(checkpointer=checkpointer)
+        @entrypoint(checkpointer=checkpointer)
         def graph(state: dict) -> dict:
             fut_foo = foo(state)
             fut_bar = bar(fut_foo.result())
@@ -2738,7 +2738,7 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         async def baz(state: dict) -> dict:
             return {"a": state["a"] + "baz", "c": "something else"}
 
-        @imp(checkpointer=checkpointer)
+        @entrypoint(checkpointer=checkpointer)
         async def graph(state: dict) -> dict:
             fut_foo = foo(state)
             fut_bar = bar(await fut_foo)

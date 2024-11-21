@@ -65,7 +65,7 @@ from langgraph.constants import (
     START,
 )
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
-from langgraph.func import imp, task
+from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
@@ -1982,7 +1982,7 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         time.sleep(input / 100)
         return str(input) * 2
 
-    @imp(checkpointer=checkpointer)
+    @entrypoint(checkpointer=checkpointer)
     def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
@@ -2031,7 +2031,7 @@ def test_imp_stream_order(
     def baz(state: dict) -> dict:
         return {"a": state["a"] + "baz", "c": "something else"}
 
-    @imp(checkpointer=checkpointer)
+    @entrypoint(checkpointer=checkpointer)
     def graph(state: dict) -> dict:
         fut_foo = foo(state)
         fut_bar = bar(fut_foo.result())

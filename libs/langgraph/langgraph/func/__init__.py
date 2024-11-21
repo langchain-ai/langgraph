@@ -53,7 +53,7 @@ def task(
     return _task
 
 
-def imp(
+def entrypoint(
     *,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     store: Optional[BaseStore] = None,
