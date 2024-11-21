@@ -1,4 +1,3 @@
-import json
 import pathlib
 import shutil
 import sys
@@ -45,7 +44,7 @@ OPT_CONFIG = click.option(
     - "graphs": mapping from graph ID to path where the compiled graph is defined, i.e. ./your_package/your_file.py:variable, where
         "variable" is an instance of langgraph.graph.graph.CompiledGraph
     - "env": (optional) path to .env file or a mapping from environment variable to its value
-    - "python_version": (optional) 3.11 or 3.12. Defaults to 3.11
+    - "python_version": (optional) 3.11, 3.12, or 3.13. Defaults to 3.11
     - "pip_config_file": (optional) path to pip config file
     - "dockerfile_lines": (optional) array of additional lines to add to Dockerfile following the import from parent image
 
@@ -354,8 +353,7 @@ def build(
     with Runner() as runner, Progress(message="Pulling...") as set:
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
-        with open(config) as f:
-            config_json = langgraph_cli.config.validate_config(json.load(f))
+        config_json = langgraph_cli.config.validate_config_file(config)
         _build(
             runner, set, config, config_json, base_image, pull, tag, docker_build_args
         )
@@ -435,8 +433,7 @@ tests
 def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -> None:
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
-    with open(config, encoding="utf-8") as f:
-        config_json = langgraph_cli.config.validate_config(json.load(f))
+    config_json = langgraph_cli.config.validate_config_file(config)
     secho("✅ Configuration validated!", fg="green")
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
@@ -527,39 +524,55 @@ def new(path: Optional[str], template: Optional[str]) -> None:
     return create_new(path, template)
 
 
-@click.option("--host", default="127.0.0.1", help="Host to bind the server to")
-@click.option("--port", default=2024, type=int, help="Port to bind the server to")
-@click.option("--no-reload", is_flag=True, help="Disable auto-reload")
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    help="Network interface to bind the development server to. Default 127.0.0.1 is recommended for security. Only use 0.0.0.0 in trusted networks",
+)
+@click.option(
+    "--port",
+    default=2024,
+    type=int,
+    help="Port number to bind the development server to. Example: langgraph dev --port 8000",
+)
+@click.option(
+    "--no-reload",
+    is_flag=True,
+    help="Disable automatic reloading when code changes are detected",
+)
 @click.option(
     "--config",
     type=click.Path(exists=True),
     default="langgraph.json",
-    help="Path to configuration file",
+    help="Path to configuration file declaring dependencies, graphs and environment variables",
 )
 @click.option(
     "--n-jobs-per-worker",
     default=None,
     type=int,
-    help="Number of jobs per worker. Default is None (meaning 10)",
+    help="Maximum number of concurrent jobs each worker process can handle. Default: 10",
 )
 @click.option(
     "--no-browser",
     is_flag=True,
-    help="Disable automatic browser opening",
+    help="Skip automatically opening the browser when the server starts",
 )
 @click.option(
     "--debug-port",
     default=None,
     type=int,
-    help="Port for debugger to listen on (default: none)",
+    help="Enable remote debugging by listening on specified port. Requires debugpy to be installed",
 )
-@cli.command("dev", help="🏃‍♀️‍➡️ Run LangGraph API server in development mode.")
+@cli.command(
+    "dev",
+    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
+)
 @log_command
 def dev(
     host: str,
     port: int,
     no_reload: bool,
-    config: str,
+    config: pathlib.Path,
     n_jobs_per_worker: Optional[int],
     no_browser: bool,
     debug_port: Optional[int],
@@ -576,21 +589,18 @@ def dev(
             raise click.UsageError(
                 "Required package 'langgraph-api-inmem' is not installed.\n"
                 "Please install it with:\n\n"
-                "    pip install langgraph-api-inmem\n\n"
-                "If you're developing locally, you can install it in development mode:\n"
+                '    pip install -U "langgraph-cli[inmem]"\n\n'
+                "If you're developing the langgraph-cli package locally, you can install in development mode:\n"
                 "    pip install -e ."
             ) from None
         raise click.UsageError(
             "Could not import run_server. This likely means your installation is incomplete.\n"
-            "Please ensure both langgraph-cli and langgraph-api-inmem are installed correctly."
+            "Please ensure langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
         ) from None
 
-    import json
+    config_json = langgraph_cli.config.validate_config_file(config)
 
-    with open(config, encoding="utf-8") as f:
-        config_data = json.load(f)
-
-    graphs = config_data.get("graphs", {})
+    graphs = config_json.get("graphs", {})
     run_server(
         host,
         port,
@@ -658,8 +668,7 @@ def prepare(
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ):
-    with open(config_path) as f:
-        config = langgraph_cli.config.validate_config(json.load(f))
+    config_json = langgraph_cli.config.validate_config_file(config_path)
     # pull latest images
     if pull:
         runner.run(
@@ -667,9 +676,9 @@ def prepare(
                 "docker",
                 "pull",
                 (
-                    f"langchain/langgraphjs-api:{config['node_version']}"
-                    if config.get("node_version")
-                    else f"langchain/langgraph-api:{config['python_version']}"
+                    f"langchain/langgraphjs-api:{config_json['node_version']}"
+                    if config_json.get("node_version")
+                    else f"langchain/langgraph-api:{config_json['python_version']}"
                 ),
                 verbose=verbose,
             )
@@ -678,7 +687,7 @@ def prepare(
     args, stdin = prepare_args_and_stdin(
         capabilities=capabilities,
         config_path=config_path,
-        config=config,
+        config=config_json,
         docker_compose=docker_compose,
         port=port,
         watch=watch,

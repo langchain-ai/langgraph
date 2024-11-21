@@ -18,7 +18,7 @@ from langchain_core.outputs import ChatGenerationChunk, LLMResult
 from langchain_core.tracers._streaming import T, _StreamingCallbackHandler
 
 from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
-from langgraph.pregel.loop import StreamChunk
+from langgraph.types import StreamChunk
 
 Meta = tuple[tuple[str, ...], dict[str, Any]]
 
