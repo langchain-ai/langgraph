@@ -42,6 +42,9 @@ def test_validate_config():
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
+    expected_config["python_version"] = "3.13"
+    actual_config = validate_config(expected_config)
+    assert actual_config == expected_config
 
     # check wrong python version raises
     with pytest.raises(click.UsageError):
@@ -60,6 +63,22 @@ def test_validate_config():
     # check missing graphs key raises
     with pytest.raises(click.UsageError):
         validate_config({"python_version": "3.9", "dependencies": ["."]})
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "3.11.0"})
+    assert "Invalid Python version format" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "3"})
+    assert "Invalid Python version format" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "abc.def"})
+    assert "Invalid Python version format" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "3.10"})
+    assert "Minimum required version" in str(exc_info.value)
 
 
 # config_to_docker
