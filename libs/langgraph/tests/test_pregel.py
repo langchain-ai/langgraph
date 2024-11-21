@@ -2046,6 +2046,8 @@ def test_imp_stream_order(
         {"graph": {"a": "0foobarbaz", "c": "something else"}},
     ]
 
+    assert graph.get_state(thread1).values == {"a": "0foobarbaz", "c": "something else"}
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_dedupe_on_resume(

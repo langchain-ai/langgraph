@@ -71,6 +71,7 @@ def entrypoint(
             channels={START: EphemeralValue(Any), END: LastValue(Any, END)},
             input_channels=START,
             output_channels=END,
+            stream_channels=END,
             stream_mode="updates",
             checkpointer=checkpointer,
             store=store,
