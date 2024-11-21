@@ -1,11 +1,8 @@
-from __future__ import annotations
-
 import asyncio
 import inspect
 import json
 from copy import copy
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -35,14 +32,12 @@ from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import get_all_basemodel_annotations
+from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphInterrupt
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
-
-if TYPE_CHECKING:
-    from pydantic import BaseModel
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
