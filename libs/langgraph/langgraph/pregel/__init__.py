@@ -541,11 +541,6 @@ class Pregel(PregelProtocol):
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
-            print(
-                "next_tasks",
-                [(t.id, t.name, t.input, bool(t.writes)) for t in next_tasks.values()],
-            )
-            print("pending_writes", saved.pending_writes)
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
