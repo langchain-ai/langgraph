@@ -4,7 +4,6 @@ This is a quick start guide to help you get a LangGraph app up and running local
 
 !!! info "Requirements"
 
-    - [Docker](https://docs.docker.com/get-docker/): Please install Docker before proceeding.
     - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli[inmem] >= 0.1.58
 
 ## Install the LangGraph CLI
@@ -76,6 +75,14 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 >    - Docs: http://localhost:8123/docs
 >     
 >    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+
+
+!!! note "In-Memory Mode"
+
+    The `langgraph dev` command starts LangGraph Server in an in-memory mode. This mode is suitable for development and testing purposes. For production use, you should deploy LangGraph Server with access to a persistent storage backend.
+
+    If you want to test your application with a persistent storage backend, you can use the `langgraph up` command instead of `langgraph dev`. You will
+    need to have `docker` installed on your machine to use this command.
 
 ## LangGraph Studio Web UI
 
