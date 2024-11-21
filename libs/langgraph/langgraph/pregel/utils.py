@@ -48,7 +48,7 @@ def find_subgraph_pregel(candidate: Runnable) -> Optional[Runnable]:
                     nl.__self__ if hasattr(nl, "__self__") else nl
                     for nl in get_function_nonlocals(c.func)
                 )
-            if c.afunc is not None:
+            elif c.afunc is not None:
                 candidates.extend(
                     nl.__self__ if hasattr(nl, "__self__") else nl
                     for nl in get_function_nonlocals(c.afunc)

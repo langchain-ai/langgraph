@@ -103,6 +103,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 - [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
+- [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
 
 ### Prebuilt ReAct Agent
 
@@ -141,6 +142,7 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+- [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
 
 ### Deployment
 
@@ -149,6 +151,7 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 - [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 - [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
 - [How to interact with the deployment using RemoteGraph](./use-remote-graph.md) 
+ 
 ### Assistants
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.
@@ -163,7 +166,7 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 ### Runs
 
-LangGraph Cloud supports multiple types of runs besides streaming runs.
+LangGraph Platform supports multiple types of runs besides streaming runs.
 
 - [How to run an agent in the background](../cloud/how-tos/background_run.md)
 - [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
@@ -183,7 +186,7 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 
 ### Human-in-the-loop
 
-When creating complex graphs, leaving every decision up to the LLM can be dangerous, especially when the decisions involve invoking certain tools or accessing specific documents. To remedy this, LangGraph allows you to insert human-in-the-loop behavior to ensure your graph does not have undesired outcomes. Read more about the different ways you can add human-in-the-loop capabilities to your LangGraph Cloud projects in these how-to guides:
+When designing complex graphs, relying entirely on the LLM for decision-making can be risky, particularly when it involves tools that interact with files, APIs, or databases. These interactions may lead to unintended data access or modifications, depending on the use case. To mitigate these risks, LangGraph allows you to integrate human-in-the-loop behavior, ensuring your LLM applications operate as intended without undesirable outcomes.
 
 - [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
 - [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
@@ -193,7 +196,7 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 
 ### Double-texting
 
-Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways. The following how-to guides provide information on the various options LangGraph Cloud gives you for dealing with double-texting:
+Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways. 
 
 - [How to use the interrupt option](../cloud/how-tos/interrupt_concurrent.md)
 - [How to use the rollback option](../cloud/how-tos/rollback_concurrent.md)

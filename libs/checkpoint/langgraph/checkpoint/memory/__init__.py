@@ -372,7 +372,7 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved writes' timestamp.
         """
         thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"]["checkpoint_id"]
         outer_key = (thread_id, checkpoint_ns, checkpoint_id)
         outer_writes_ = self.writes.get(outer_key)
