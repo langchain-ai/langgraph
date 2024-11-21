@@ -24,6 +24,10 @@ async def clear_test_db(conn: AsyncConnection[DictRow]) -> None:
         await conn.execute("DELETE FROM checkpoint_blobs")
         await conn.execute("DELETE FROM checkpoint_writes")
         await conn.execute("DELETE FROM checkpoint_migrations")
+    except UndefinedTable:
+        pass
+    try:
         await conn.execute("DELETE FROM store_migrations")
+        await conn.execute("DELETE FROM store")
     except UndefinedTable:
         pass

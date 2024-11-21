@@ -25,12 +25,8 @@ from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.postgres import (
-    _ainternal as _ainternal,
-)
-from langgraph.checkpoint.postgres import (
-    _internal as _pg_internal,
-)
+from langgraph.checkpoint.postgres import _ainternal as _ainternal
+from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
     GetOp,
@@ -95,9 +91,14 @@ class BasePostgresStore(Generic[C]):
         self,
         put_ops: Sequence[tuple[int, PutOp]],
     ) -> list[tuple[str, Sequence]]:
+        # Last-write wins
+        dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
+        for _, op in put_ops:
+            dedupped_ops[(op.namespace, op.key)] = op
+
         inserts: list[PutOp] = []
         deletes: list[PutOp] = []
-        for _, op in put_ops:
+        for op in dedupped_ops.values():
             if op.value is None:
                 deletes.append(op)
             else:
@@ -117,23 +118,15 @@ class BasePostgresStore(Generic[C]):
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
         if inserts:
-            dedupped_inserts = {
-                (_namespace_to_text(op.namespace), op.key): (
-                    op.namespace,
-                    op.key,
-                    op.value,
-                )
-                for op in inserts
-            }
             values = []
             insertion_params = []
-            for namespace, key, value in dedupped_inserts.values():
+            for op in inserts:
                 values.append("(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
                 insertion_params.extend(
                     [
-                        _namespace_to_text(namespace),
-                        key,
-                        Jsonb(value),
+                        _namespace_to_text(op.namespace),
+                        op.key,
+                        Jsonb(op.value),
                     ]
                 )
             values_str = ",".join(values)
@@ -323,11 +316,6 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results, cur
                 )
 
-            if PutOp in grouped_ops:
-                self._batch_put_ops(
-                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp]), cur
-                )
-
             if SearchOp in grouped_ops:
                 self._batch_search_ops(
                     cast(Sequence[tuple[int, SearchOp]], grouped_ops[SearchOp]),
@@ -343,6 +331,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     ),
                     results,
                     cur,
+                )
+            if PutOp in grouped_ops:
+                self._batch_put_ops(
+                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp]), cur
                 )
 
         return results
@@ -387,7 +379,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
             results[idx] = [
-                _row_to_item((), row, loader=self._deserializer) for row in rows
+                _row_to_item(
+                    _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
+                )
+                for row in rows
             ]
 
     def _batch_list_namespaces_ops(

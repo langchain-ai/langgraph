@@ -76,12 +76,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         conn: AsyncConnection[DictRow],
     ) -> None:
         async with self._cursor(conn, pipeline=True) as cur:
-            if PutOp in grouped_ops:
-                await self._batch_put_ops(
-                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp]),
-                    cur,
-                )
-
             if GetOp in grouped_ops:
                 await self._batch_get_ops(
                     cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]),
@@ -103,6 +97,12 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                         grouped_ops[ListNamespacesOp],
                     ),
                     results,
+                    cur,
+                )
+
+            if PutOp in grouped_ops:
+                await self._batch_put_ops(
+                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp]),
                     cur,
                 )
 
