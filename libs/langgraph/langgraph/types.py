@@ -372,12 +372,14 @@ T = TypeVar("T")
 
 
 def call(
-    func: str | Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    func: str | Callable[P, T],
+    *args: P.args,
+    retry: Optional[RetryPolicy] = None,
 ) -> concurrent.futures.Future[T]:
     from langgraph.constants import CONFIG_KEY_CALL
     from langgraph.utils.config import get_configurable
 
     conf = get_configurable()
     impl = conf[CONFIG_KEY_CALL]
-    fut = impl(func, *args, **kwargs)
+    fut = impl(func, *args, retry=retry)
     return fut

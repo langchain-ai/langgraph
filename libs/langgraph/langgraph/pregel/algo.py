@@ -65,7 +65,13 @@ from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.store.base import BaseStore
-from langgraph.types import All, LoopProtocol, PregelExecutableTask, PregelTask
+from langgraph.types import (
+    All,
+    LoopProtocol,
+    PregelExecutableTask,
+    PregelTask,
+    RetryPolicy,
+)
 from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
@@ -100,14 +106,18 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input")
+    __slots__ = ("func", "input", "retry")
 
     func: Callable
     input: Any
+    retry: Optional[RetryPolicy]
 
-    def __init__(self, func: Callable, input: Any) -> None:
+    def __init__(
+        self, func: Callable, input: Any, *, retry: Optional[RetryPolicy]
+    ) -> None:
         self.func = func
         self.input = input
+        self.retry = retry
 
 
 def should_interrupt(
@@ -545,7 +555,7 @@ def prepare_single_task(
                     },
                 ),
                 triggers,
-                None,
+                call.retry,
                 None,
                 task_id,
                 task_path[:3],

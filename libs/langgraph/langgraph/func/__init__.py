@@ -48,7 +48,7 @@ def task(
     Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
 ]:
     def _task(func: Callable[P, T]) -> Callable[P, concurrent.futures.Future[T]]:
-        return update_wrapper(partial(call, func), func)
+        return update_wrapper(partial(call, func, retry=retry), func)
 
     return _task
 
