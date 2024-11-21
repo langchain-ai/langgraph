@@ -5,18 +5,13 @@ This is a quick start guide to help you get a LangGraph app up and running local
 !!! info "Requirements"
 
     - [Docker](https://docs.docker.com/get-docker/): Please install Docker before proceeding.
-    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli >= 0.1.54.
+    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli[inmem] >= 0.1.58
 
 ## Install the LangGraph CLI
 
-=== "pip" 
-    ```bash
-    pip install -U langgraph-cli
-    ```
-=== "Homebrew (macOS only)"
-    ```bash
-    brew install langgraph-cli
-    ```
+```bash
+pip install "langgraph-cli[inmem]==0.1.58" python-dot-env
+```
 
 ## 🌱 Create a LangGraph App
 
