@@ -248,7 +248,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                 rfile = resolved / "requirements.txt"
                 pip_reqs.append(
                     (
-                        rfile.relative_to(config_path.parent),
+                        pathlib.PurePosixPath(rfile.relative_to(config_path.parent)),
                         f"{container_path}/requirements.txt",
                     )
                 )
@@ -275,12 +275,12 @@ def _update_graph_paths(
             else:
                 for path in local_deps.real_pkgs:
                     if resolved.is_relative_to(path):
-                        module_str = f"/deps/{path.name}/{resolved.relative_to(path)}"
+                        module_str = f"/deps/{path.name}/{pathlib.PurePosixPath(resolved.relative_to(path))}"
                         break
                 else:
                     for faux_pkg, (_, destpath) in local_deps.faux_pkgs.items():
                         if resolved.is_relative_to(faux_pkg):
-                            module_str = f"{destpath}/{resolved.relative_to(faux_pkg)}"
+                            module_str = f"{destpath}/{pathlib.PurePosixPath(resolved.relative_to(faux_pkg))}"
                             break
                     else:
                         raise ValueError(
