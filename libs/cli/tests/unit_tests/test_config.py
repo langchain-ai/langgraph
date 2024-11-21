@@ -108,13 +108,13 @@ def test_validate_config_file():
         package_json["engines"]["node"] = "20.18"
         with open(tmpdir_path / "package.json", "w") as f:
             json.dump(package_json, f)
-        with pytest.raises(click.UsageError, match='must exactly match one of "20"'):
+        with pytest.raises(click.UsageError, match="Use major version only"):
             validate_config_file(config_path)
 
         package_json["engines"] = {"node": "18"}
         with open(tmpdir_path / "package.json", "w") as f:
             json.dump(package_json, f)
-        with pytest.raises(click.UsageError, match='must exactly match one of "20"'):
+        with pytest.raises(click.UsageError, match="must be >= 20"):
             validate_config_file(config_path)
 
         package_json["engines"] = {"node": "20", "deno": "1.0"}

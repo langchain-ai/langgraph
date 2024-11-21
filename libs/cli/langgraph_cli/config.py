@@ -6,7 +6,8 @@ from typing import NamedTuple, Optional, TypedDict, Union
 
 import click
 
-SUPPORTED_NODE_VERSIONS = ("20",)
+MIN_NODE_VERSION = "20"
+MIN_PYTHON_VERSION = "3.11"
 
 
 class Config(TypedDict):
@@ -19,9 +20,6 @@ class Config(TypedDict):
     env: Union[dict[str, str], str]
 
 
-MIN_PYTHON_VERSION = "3.11"
-
-
 def _parse_version(version_str: str) -> tuple[int, int]:
     """Parse a version string into a tuple of (major, minor)."""
     try:
@@ -29,6 +27,19 @@ def _parse_version(version_str: str) -> tuple[int, int]:
         return (major, minor)
     except ValueError:
         raise click.UsageError(f"Invalid version format: {version_str}") from None
+
+
+def _parse_node_version(version_str: str) -> int:
+    """Parse a Node.js version string into a major version number."""
+    try:
+        if "." in version_str:
+            raise ValueError("Node.js version must be major version only")
+        return int(version_str)
+    except ValueError:
+        raise click.UsageError(
+            f"Invalid Node.js version format: {version_str}. "
+            "Use major version only (e.g., '20')."
+        ) from None
 
 
 def validate_config(config: Config) -> Config:
@@ -51,14 +62,17 @@ def validate_config(config: Config) -> Config:
     )
 
     if config.get("node_version"):
-        if config["node_version"] not in SUPPORTED_NODE_VERSIONS:
-            supported = ", ".join(
-                f'`node_version: "{v}"`' for v in SUPPORTED_NODE_VERSIONS
-            )
-            raise click.UsageError(
-                f"Unsupported Node.js version: {config['node_version']}. "
-                f"Only supported versions are {supported}."
-            )
+        node_version = config["node_version"]
+        try:
+            major = _parse_node_version(node_version)
+            min_major = _parse_node_version(MIN_NODE_VERSION)
+            if major < min_major:
+                raise click.UsageError(
+                    f"Node.js version {node_version} is not supported. "
+                    f"Minimum required version is {MIN_NODE_VERSION}."
+                )
+        except ValueError as e:
+            raise click.UsageError(str(e)) from None
 
     if config.get("python_version"):
         pyversion = config["python_version"]
@@ -111,15 +125,18 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
                             )
                         if engines:
                             node_version = engines["node"]
-                            if node_version not in SUPPORTED_NODE_VERSIONS:
-                                supported = ", ".join(
-                                    f'"{v}"' for v in SUPPORTED_NODE_VERSIONS
-                                )
-                                raise click.UsageError(
-                                    f"Node.js version in package.json engines must exactly match one of {supported} (major version only), "
-                                    f"got '{node_version}'. Minor/patch versions (like '20.x.y') are not supported to prevent "
-                                    "deployment issues when new Node.js versions are released."
-                                )
+                            try:
+                                major = _parse_node_version(node_version)
+                                min_major = _parse_node_version(MIN_NODE_VERSION)
+                                if major < min_major:
+                                    raise click.UsageError(
+                                        f"Node.js version in package.json engines must be >= {MIN_NODE_VERSION} "
+                                        f"(major version only), got '{node_version}'. Minor/patch versions "
+                                        "(like '20.x.y') are not supported to prevent deployment issues "
+                                        "when new Node.js versions are released."
+                                    )
+                            except ValueError as e:
+                                raise click.UsageError(str(e)) from None
 
             except json.JSONDecodeError:
                 raise click.UsageError(
