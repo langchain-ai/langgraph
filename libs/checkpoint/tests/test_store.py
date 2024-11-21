@@ -314,7 +314,7 @@ async def test_cannot_put_empty_namespace() -> None:
     assert store.get(("langgraph", "foo"), "bar") is None
 
     class MockAsyncBatchedStore(AsyncBatchedBaseStore):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self._store = InMemoryStore()
 
@@ -340,13 +340,17 @@ async def test_cannot_put_empty_namespace() -> None:
         await async_store.aput(("langgraph", "foo"), "bar", doc)
 
     await async_store.aput(("foo", "langgraph", "foo"), "bar", doc)
-    assert (await async_store.aget(("foo", "langgraph", "foo"), "bar")).value == doc
+    val = await async_store.aget(("foo", "langgraph", "foo"), "bar")
+    assert val is not None
+    assert val.value == doc
     assert (await async_store.asearch(("foo", "langgraph", "foo")))[0].value == doc
     await async_store.adelete(("foo", "langgraph", "foo"), "bar")
     assert (await async_store.aget(("foo", "langgraph", "foo"), "bar")) is None
 
     await async_store.abatch([PutOp(("valid", "namespace"), "key", doc)])
-    assert (await async_store.aget(("valid", "namespace"), "key")).value == doc
+    val = await async_store.aget(("valid", "namespace"), "key")
+    assert val is not None
+    assert val.value == doc
     assert (await async_store.asearch(("valid", "namespace")))[0].value == doc
     await async_store.adelete(("valid", "namespace"), "key")
     assert (await async_store.aget(("valid", "namespace"), "key")) is None

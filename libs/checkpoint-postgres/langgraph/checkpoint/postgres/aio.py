@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Iterator, Optional, Sequence, Union
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
@@ -55,6 +55,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
+        self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
     @asynccontextmanager
@@ -323,6 +324,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
     async def _cursor(
         self, *, pipeline: bool = False
     ) -> AsyncIterator[AsyncCursor[DictRow]]:
+        """Create a database cursor as a context manager.
+
+        Args:
+            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+                Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
+                If pipeline mode is not supported, will fall back to using transaction context manager.
+        """
         async with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -337,10 +345,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
-                async with self.lock, conn.pipeline(), conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
-                    yield cur
+                if self.supports_pipeline:
+                    async with self.lock, conn.pipeline(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+                else:
+                    # Use connection's transaction context manager when pipeline mode not supported
+                    async with self.lock, conn.transaction(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
             else:
                 async with self.lock, conn.cursor(
                     binary=True, row_factory=dict_row

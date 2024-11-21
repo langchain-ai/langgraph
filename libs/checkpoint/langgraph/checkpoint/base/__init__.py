@@ -39,12 +39,13 @@ PendingWrite = Tuple[str, str, Any]
 class CheckpointMetadata(TypedDict, total=False):
     """Metadata associated with a checkpoint."""
 
-    source: Literal["input", "loop", "update"]
+    source: Literal["input", "loop", "update", "fork"]
     """The source of the checkpoint.
 
     - "input": The checkpoint was created from an input to invoke/stream/batch.
     - "loop": The checkpoint was created from inside the pregel loop.
     - "update": The checkpoint was created from a manual state update.
+    - "fork": The checkpoint was created as a copy of another checkpoint.
     """
     step: int
     """The step number of the checkpoint.

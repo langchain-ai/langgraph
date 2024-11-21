@@ -194,6 +194,14 @@ def map_debug_checkpoint(
                 else {
                     "id": t.id,
                     "name": t.name,
+                    "result": t.result,
+                    "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
+                }
+                if t.result
+                else {
+                    "id": t.id,
+                    "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
                     "state": t.state,
                 }

@@ -159,7 +159,7 @@ You must pass these when invoking the graph as part of the `configurable` portio
 # {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
 
 config = {"configurable": {"thread_id": "1"}}
-graph.invoke(inputs, config=config)
+graph.invoke(None, config=config)
 ```
 
 Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).

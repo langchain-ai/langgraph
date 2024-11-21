@@ -65,6 +65,7 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
+    END,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -106,6 +107,7 @@ from langgraph.types import (
     Checkpointer,
     LoopProtocol,
     StateSnapshot,
+    StreamChunk,
     StreamMode,
 )
 from langgraph.utils.config import (
@@ -901,8 +903,8 @@ class Pregel(PregelProtocol):
             checkpoint,
             LoopProtocol(config=config, step=step + 1, stop=step + 2),
         ) as (channels, managed):
-            # no values, just clear all tasks
-            if values is None and as_node is None:
+            # no values as END, just clear all tasks
+            if values is None and as_node == END:
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
@@ -948,6 +950,42 @@ class Pregel(PregelProtocol):
                         "source": "update",
                         "step": step + 1,
                         "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # no values, copy checkpoint
+            if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1144,7 +1182,7 @@ class Pregel(PregelProtocol):
             managed,
         ):
             # no values, just clear all tasks
-            if values is None and as_node is None:
+            if values is None and as_node == END:
                 if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
@@ -1190,6 +1228,42 @@ class Pregel(PregelProtocol):
                         "source": "update",
                         "step": step + 1,
                         "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # no values, copy checkpoint
+            if values is None and as_node is None:
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1679,6 +1753,10 @@ class Pregel(PregelProtocol):
 
         stream = AsyncQueue()
         aioloop = asyncio.get_running_loop()
+        stream_put = cast(
+            Callable[[StreamChunk], None],
+            partial(aioloop.call_soon_threadsafe, stream.put_nowait),
+        )
 
         def output() -> Iterator:
             while True:
@@ -1733,12 +1811,14 @@ class Pregel(PregelProtocol):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put_nowait)
+                    StreamMessagesHandler(stream_put)
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put_nowait(
-                    ((), "custom", c)
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
+                    lambda c: aioloop.call_soon_threadsafe(
+                        stream.put_nowait, ((), "custom", c)
+                    )
                 )
             async with AsyncPregelLoop(
                 input,
@@ -1765,7 +1845,9 @@ class Pregel(PregelProtocol):
                 )
                 # enable subgraph streaming
                 if subgraphs:
-                    loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
+                    loop.config[CONF][CONFIG_KEY_STREAM] = StreamProtocol(
+                        stream_put, stream_modes
+                    )
                 # enable concurrent streaming
                 if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
 
