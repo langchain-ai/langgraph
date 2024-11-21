@@ -23,7 +23,7 @@ from langgraph.pregel.call import get_runnable_for_func
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, acall, call
+from langgraph.types import RetryPolicy, call
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -48,10 +48,7 @@ def task(
     Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
 ]:
     def _task(func: Callable[P, T]) -> Callable[P, concurrent.futures.Future[T]]:
-        if asyncio.iscoroutinefunction(func):
-            return update_wrapper(partial(acall, func), func)
-        else:
-            return update_wrapper(partial(call, func), func)
+        return update_wrapper(partial(call, func), func)
 
     return _task
 

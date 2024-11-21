@@ -1976,21 +1976,21 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
     mapper_calls = 0
 
     @task()
-    def mapper(input: str) -> str:
+    def mapper(input: int) -> str:
         nonlocal mapper_calls
         mapper_calls += 1
-        return input * 2
+        time.sleep(input / 100)
+        return str(input) * 2
 
     @imp(checkpointer=checkpointer)
-    def graph(input: list[str]) -> list[str]:
+    def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
         answer = interrupt("question")
         return [m + answer for m in mapped]
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream(["0", "1"], thread1)] == [
-        # TODO make test not depend on order of execution (which is not guaranteed)
+    assert [*graph.stream([0, 1], thread1)] == [
         {"mapper": "00"},
         {"mapper": "11"},
         {
@@ -2011,6 +2011,40 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         "11answer",
     ]
     assert mapper_calls == 2
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_imp_stream_order(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    @task()
+    def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo", "b": "bar"}
+
+    @task()
+    def bar(state: dict) -> dict:
+        return {"a": state["a"] + state["b"], "c": "bark"}
+
+    @task()
+    def baz(state: dict) -> dict:
+        return {"a": state["a"] + "baz", "c": "something else"}
+
+    @imp(checkpointer=checkpointer)
+    def graph(state: dict) -> dict:
+        fut_foo = foo(state)
+        fut_bar = bar(fut_foo.result())
+        fut_baz = baz(fut_bar.result())
+        return fut_baz.result()
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert [c for c in graph.stream({"a": "0"}, thread1)] == [
+        {"foo": {"a": "0foo", "b": "bar"}},
+        {"bar": {"a": "0foobar", "c": "bark"}},
+        {"baz": {"a": "0foobarbaz", "c": "something else"}},
+        {"graph": {"a": "0foobarbaz", "c": "something else"}},
+    ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

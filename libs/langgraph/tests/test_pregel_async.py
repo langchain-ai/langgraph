@@ -2650,26 +2650,24 @@ async def test_send_sequences(checkpointer_name: str) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task(checkpointer_name: str) -> None:
-    mapper_calls = 0
-
-    @task()
-    async def mapper(input: str) -> str:
-        nonlocal mapper_calls
-        mapper_calls += 1
-        return input * 2
-
     async with awith_checkpointer(checkpointer_name) as checkpointer:
+        mapper_calls = 0
+
+        @task()
+        async def mapper(input: int) -> str:
+            nonlocal mapper_calls
+            mapper_calls += 1
+            return str(input) * 2
 
         @imp(checkpointer=checkpointer)
-        async def graph(input: list[str]) -> list[str]:
+        async def graph(input: list[int]) -> list[str]:
             futures = [mapper(i) for i in input]
             mapped = await asyncio.gather(*futures)
             answer = interrupt("question")
             return [m + answer for m in mapped]
 
         thread1 = {"configurable": {"thread_id": "1"}}
-        assert [c async for c in graph.astream(["0", "1"], thread1)] == [
-            # TODO make test not depend on order of execution (which is not guaranteed)
+        assert [c async for c in graph.astream([0, 1], thread1)] == [
             {"mapper": "00"},
             {"mapper": "11"},
             {
@@ -2690,6 +2688,70 @@ async def test_imp_task(checkpointer_name: str) -> None:
             "11answer",
         ]
         assert mapper_calls == 2
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_imp_sync_from_async(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @task()
+        def foo(state: dict) -> dict:
+            return {"a": state["a"] + "foo", "b": "bar"}
+
+        @task()
+        def bar(state: dict) -> dict:
+            return {"a": state["a"] + state["b"], "c": "bark"}
+
+        @task()
+        def baz(state: dict) -> dict:
+            return {"a": state["a"] + "baz", "c": "something else"}
+
+        @imp(checkpointer=checkpointer)
+        def graph(state: dict) -> dict:
+            fut_foo = foo(state)
+            fut_bar = bar(fut_foo.result())
+            fut_baz = baz(fut_bar.result())
+            return fut_baz.result()
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert [c async for c in graph.astream({"a": "0"}, thread1)] == [
+            {"foo": {"a": "0foo", "b": "bar"}},
+            {"bar": {"a": "0foobar", "c": "bark"}},
+            {"baz": {"a": "0foobarbaz", "c": "something else"}},
+            {"graph": {"a": "0foobarbaz", "c": "something else"}},
+        ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_imp_stream_order(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @task()
+        async def foo(state: dict) -> dict:
+            return {"a": state["a"] + "foo", "b": "bar"}
+
+        @task()
+        async def bar(state: dict) -> dict:
+            return {"a": state["a"] + state["b"], "c": "bark"}
+
+        @task()
+        async def baz(state: dict) -> dict:
+            return {"a": state["a"] + "baz", "c": "something else"}
+
+        @imp(checkpointer=checkpointer)
+        async def graph(state: dict) -> dict:
+            fut_foo = foo(state)
+            fut_bar = bar(await fut_foo)
+            fut_baz = baz(await fut_bar)
+            return await fut_baz
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert [c async for c in graph.astream({"a": "0"}, thread1)] == [
+            {"foo": {"a": "0foo", "b": "bar"}},
+            {"bar": {"a": "0foobar", "c": "bark"}},
+            {"baz": {"a": "0foobarbaz", "c": "something else"}},
+            {"graph": {"a": "0foobarbaz", "c": "something else"}},
+        ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)

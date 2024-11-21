@@ -34,6 +34,7 @@ from langgraph.pregel.algo import Call
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
 from langgraph.types import PregelExecutableTask, RetryPolicy
+from langgraph.utils.future import chain_future
 
 
 class PregelRunner:
@@ -133,6 +134,7 @@ class PregelRunner:
                             },
                             __reraise_on_exit__=reraise,
                         )
+                        fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
                         rtn[idx - prev_length] = fut
             return [rtn.get(i) for i in range(len(writes))]
@@ -165,7 +167,7 @@ class PregelRunner:
                 )
                 self.commit(t, None)
             except Exception as exc:
-                self.commit(t, exc)
+                self.commit(t, None, exc)
                 if reraise and futures:
                     # will be re-raised after futures are done
                     fut: concurrent.futures.Future = concurrent.futures.Future()
@@ -183,18 +185,18 @@ class PregelRunner:
         # yield updates/debug output as each task finishes
         for t in tasks:
             if not t.writes:
-                futures[
-                    self.submit(
-                        run_with_retry,
-                        t,
-                        retry_policy,
-                        configurable={
-                            CONFIG_KEY_SEND: partial(writer, t),
-                            CONFIG_KEY_CALL: partial(call, t),
-                        },
-                        __reraise_on_exit__=reraise,
-                    )
-                ] = t
+                fut = self.submit(
+                    run_with_retry,
+                    t,
+                    retry_policy,
+                    configurable={
+                        CONFIG_KEY_SEND: partial(writer, t),
+                        CONFIG_KEY_CALL: partial(call, t),
+                    },
+                    __reraise_on_exit__=reraise,
+                )
+                fut.add_done_callback(partial(self.commit, t))
+                futures[fut] = t
         end_time = timeout + time.monotonic() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = concurrent.futures.wait(
@@ -213,8 +215,6 @@ class PregelRunner:
                 else:
                     # store for panic check
                     done_futures.add(fut)
-                    # task finished, commit writes
-                    self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -264,11 +264,8 @@ class PregelRunner:
                 if w[0] != PUSH:
                     continue
                 # schedule the next task, if the callback returns one
-                if next_task := self.schedule_task(
-                    task,
-                    idx,
-                    calls[idx - prev_length] if calls is not None else None,
-                ):
+                wcall = calls[idx - prev_length] if calls is not None else None
+                if next_task := self.schedule_task(task, idx, wcall):
                     # if the parent task was retried,
                     # the next task might already be running
                     if fut := next(
@@ -314,6 +311,7 @@ class PregelRunner:
                                 __reraise_on_exit__=reraise,
                             ),
                         )
+                        fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
                         rtn[idx - prev_length] = fut
             return [rtn.get(i) for i in range(len(writes))]
@@ -322,10 +320,15 @@ class PregelRunner:
             task: PregelExecutableTask,
             func: Callable[[Any], Union[Awaitable[Any], Any]],
             input: Any,
-        ) -> asyncio.Future[Any]:
+        ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
             (fut,) = writer(task, [(PUSH, None)], calls=[Call(func, input)])
             assert fut is not None, "writer did not return a future for call"
-            return fut
+            if asyncio.iscoroutinefunction(func):
+                return fut
+            # adapted from asyncio.run_coroutine_threadsafe
+            sfut = concurrent.futures.Future()
+            loop.call_soon_threadsafe(chain_future, fut, sfut)
+            return sfut
 
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
@@ -348,7 +351,7 @@ class PregelRunner:
                 )
                 self.commit(t, None)
             except Exception as exc:
-                self.commit(t, exc)
+                self.commit(t, None, exc)
                 if reraise and futures:
                     # will be re-raised after futures are done
                     fut: asyncio.Future = loop.create_future()
@@ -366,24 +369,24 @@ class PregelRunner:
         # yield updates/debug output as each task finishes
         for t in tasks:
             if not t.writes:
-                futures[
-                    cast(
-                        asyncio.Future,
-                        self.submit(
-                            arun_with_retry,
-                            t,
-                            retry_policy,
-                            stream=self.use_astream,
-                            configurable={
-                                CONFIG_KEY_SEND: partial(writer, t),
-                                CONFIG_KEY_CALL: partial(call, t),
-                            },
-                            __name__=t.name,
-                            __cancel_on_exit__=True,
-                            __reraise_on_exit__=reraise,
-                        ),
-                    )
-                ] = t
+                fut = cast(
+                    asyncio.Future,
+                    self.submit(
+                        arun_with_retry,
+                        t,
+                        retry_policy,
+                        stream=self.use_astream,
+                        configurable={
+                            CONFIG_KEY_SEND: partial(writer, t),
+                            CONFIG_KEY_CALL: partial(call, t),
+                        },
+                        __name__=t.name,
+                        __cancel_on_exit__=True,
+                        __reraise_on_exit__=reraise,
+                    ),
+                )
+                fut.add_done_callback(partial(self.commit, t))
+                futures[fut] = t
         end_time = timeout + loop.time() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = await asyncio.wait(
@@ -402,8 +405,6 @@ class PregelRunner:
                 else:
                     # store for panic check
                     done_futures.add(fut)
-                    # task finished, commit writes
-                    self.commit(task, _exception(fut))
             else:
                 # remove references to loop vars
                 del fut, task
@@ -423,8 +424,13 @@ class PregelRunner:
         )
 
     def commit(
-        self, task: PregelExecutableTask, exception: Optional[BaseException]
+        self,
+        task: PregelExecutableTask,
+        fut: Union[None, concurrent.futures.Future[Any], asyncio.Future[Any]],
+        exception: Optional[BaseException] = None,
     ) -> None:
+        if fut is not None:
+            exception = _exception(fut)
         if exception:
             if isinstance(exception, GraphInterrupt):
                 # save interrupt to checkpointer

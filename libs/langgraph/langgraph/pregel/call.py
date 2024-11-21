@@ -1,11 +1,10 @@
-import asyncio
 import sys
 import types
 from typing import Any, Callable, Optional
 
 from langgraph.constants import RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.utils.runnable import RunnableCallable, RunnableSeq
+from langgraph.utils.runnable import RunnableSeq, coerce_to_runnable
 
 """
 Utilities borrowed from cloudpickle.
@@ -110,25 +109,15 @@ def _lookup_module_and_qualname(
 def get_runnable_for_func(func: Callable[..., Any]) -> RunnableSeq:
     if func in CACHE:
         return CACHE[func]
-    elif not _lookup_module_and_qualname(func):
-        return RunnableSeq(
-            RunnableCallable(None, func, trace=False)
-            if asyncio.iscoroutinefunction(func)
-            else RunnableCallable(func, trace=False),
+    else:
+        seq = RunnableSeq(
+            coerce_to_runnable(func, name=None, trace=False),
             ChannelWrite([ChannelWriteEntry(RETURN)]),
             name=func.__name__,
         )
-    else:
-        return CACHE.setdefault(
-            func,
-            RunnableSeq(
-                RunnableCallable(None, func, trace=False)
-                if asyncio.iscoroutinefunction(func)
-                else RunnableCallable(func, trace=False),
-                ChannelWrite([ChannelWriteEntry(RETURN)]),
-                name=func.__name__,
-            ),
-        )
+        if not _lookup_module_and_qualname(func):
+            return seq
+        return CACHE.setdefault(func, seq)
 
 
 CACHE: dict[Callable[..., Any], RunnableSeq] = {}
