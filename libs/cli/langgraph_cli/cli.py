@@ -609,6 +609,7 @@ def dev(
         n_jobs_per_worker=n_jobs_per_worker,
         open_browser=not no_browser,
         debug_port=debug_port,
+        env=config_json.get("env", None),
     )
 
 
