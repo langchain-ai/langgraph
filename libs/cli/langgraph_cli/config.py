@@ -1,5 +1,4 @@
 import json
-import os
 import pathlib
 import textwrap
 from typing import NamedTuple, Optional, TypedDict, Union
@@ -192,66 +191,76 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
         resolved = config_path.parent / local_dep
 
         # validate local dependency
-        if not resolved.exists():
-            raise FileNotFoundError(f"Could not find local dependency: {resolved}")
-        elif not resolved.is_dir():
-            raise NotADirectoryError(
-                f"Local dependency must be a directory: {resolved}"
-            )
-        elif not resolved.is_relative_to(config_path.parent):
-            raise ValueError(
-                f"Local dependency '{resolved}' must be a subdirectory of '{config_path.parent}'"
-            )
-
-        # if it's installable, add it to local_pkgs
-        # otherwise, add it to faux_pkgs, and create a pyproject.toml
-        files = os.listdir(resolved)
-        if "pyproject.toml" in files:
-            real_pkgs[resolved] = local_dep
-            if local_dep == ".":
-                working_dir = f"/deps/{resolved.name}"
-        elif "setup.py" in files:
-            real_pkgs[resolved] = local_dep
-            if local_dep == ".":
-                working_dir = f"/deps/{resolved.name}"
-        else:
-            if any(file == "__init__.py" for file in files):
-                # flat layout
-                if "-" in resolved.name:
-                    raise ValueError(
-                        f"Package name '{resolved.name}' contains a hyphen. "
-                        "Rename the directory to use it as flat-layout package."
-                    )
-                check_reserved(resolved.name, local_dep)
-                container_path = f"/deps/__outer_{resolved.name}/{resolved.name}"
-            else:
-                # src layout
-                container_path = f"/deps/__outer_{resolved.name}/src"
-                for file in files:
-                    rfile = resolved / file
-                    if (
-                        rfile.is_dir()
-                        and file != "__pycache__"
-                        and not file.startswith(".")
-                    ):
-                        try:
-                            for subfile in os.listdir(rfile):
-                                if subfile.endswith(".py"):
-                                    check_reserved(file, local_dep)
-                                    break
-                        except PermissionError:
-                            pass
-            faux_pkgs[resolved] = (local_dep, container_path)
-            if local_dep == ".":
-                working_dir = container_path
-            if "requirements.txt" in files:
-                rfile = resolved / "requirements.txt"
-                pip_reqs.append(
-                    (
-                        pathlib.PurePosixPath(rfile.relative_to(config_path.parent)),
-                        f"{container_path}/requirements.txt",
-                    )
+        try:
+            if not resolved.exists():
+                raise FileNotFoundError(f"Could not find local dependency: {resolved}")
+            elif not resolved.is_dir():
+                raise NotADirectoryError(
+                    f"Local dependency must be a directory: {resolved}"
                 )
+            elif not resolved.is_relative_to(config_path.parent):
+                raise ValueError(
+                    f"Local dependency '{resolved}' must be a subdirectory of '{config_path.parent}'"
+                )
+
+            # if it's installable, add it to local_pkgs
+            # otherwise, add it to faux_pkgs, and create a pyproject.toml
+            try:
+                files = list(resolved.iterdir())
+                file_names = [f.name for f in files]
+            except (PermissionError, OSError) as e:
+                raise click.UsageError(
+                    f"Cannot access directory {resolved}: {str(e)}"
+                ) from None
+
+            if "pyproject.toml" in file_names:
+                real_pkgs[resolved] = local_dep
+                if local_dep == ".":
+                    working_dir = f"/deps/{resolved.name}"
+            elif "setup.py" in file_names:
+                real_pkgs[resolved] = local_dep
+                if local_dep == ".":
+                    working_dir = f"/deps/{resolved.name}"
+            else:
+                if any(file == "__init__.py" for file in file_names):
+                    # flat layout
+                    if "-" in resolved.name:
+                        raise ValueError(
+                            f"Package name '{resolved.name}' contains a hyphen. "
+                            "Rename the directory to use it as flat-layout package."
+                        )
+                    check_reserved(resolved.name, local_dep)
+                    container_path = f"/deps/__outer_{resolved.name}/{resolved.name}"
+                else:
+                    # src layout
+                    container_path = f"/deps/__outer_{resolved.name}/src"
+                    for file in files:
+                        if (
+                            file.is_dir()
+                            and file.name != "__pycache__"
+                            and not file.name.startswith(".")
+                        ):
+                            try:
+                                subfiles = list(file.iterdir())
+                                if any(f.name.endswith(".py") for f in subfiles):
+                                    check_reserved(file.name, local_dep)
+                            except (PermissionError, OSError):
+                                continue
+                faux_pkgs[resolved] = (local_dep, container_path)
+                if local_dep == ".":
+                    working_dir = container_path
+                if "requirements.txt" in file_names:
+                    rfile = resolved / "requirements.txt"
+                    pip_reqs.append(
+                        (
+                            pathlib.PurePosixPath(
+                                rfile.relative_to(config_path.parent)
+                            ),
+                            f"{container_path}/requirements.txt",
+                        )
+                    )
+        except (PermissionError, OSError) as e:
+            raise click.UsageError(f"Cannot access path {resolved}: {str(e)}") from e
 
     return LocalDeps(pip_reqs, real_pkgs, faux_pkgs, working_dir)
 
@@ -313,17 +322,17 @@ def python_config_to_docker(config_path: pathlib.Path, config: Config, base_imag
 
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:
-        pip_reqs_str = os.linesep.join(
+        pip_reqs_str = "\n".join(
             f"ADD {reqpath} {destpath}" for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f'{os.linesep}RUN {pip_install} {" ".join("-r " + r for _,r in local_deps.pip_reqs)}'
-
+        pip_reqs_str += (
+            f'\nRUN {pip_install} {" ".join("-r " + r for _,r in local_deps.pip_reqs)}'
+        )
     else:
         pip_reqs_str = ""
-
     # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#package-data
     # https://til.simonwillison.net/python/pyproject
-    faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
+    faux_pkgs_str = "\n\n".join(
         f"""ADD {relpath} {destpath}
 RUN set -ex && \\
     for line in '[project]' \\
@@ -335,12 +344,12 @@ RUN set -ex && \\
     done"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
-    local_pkgs_str = os.linesep.join(
+    local_pkgs_str = "\n".join(
         f"ADD {relpath} /deps/{fullpath.name}"
         for fullpath, relpath in local_deps.real_pkgs.items()
     )
 
-    installs = f"{os.linesep}{os.linesep}".join(
+    installs = "\n\n".join(
         filter(
             None,
             [
@@ -352,10 +361,11 @@ RUN set -ex && \\
             ],
         )
     )
-
+    _workdir = f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""
+    dockerfile_lines = "\n".join(config["dockerfile_lines"])
     return f"""FROM {base_image}:{config['python_version']}
 
-{os.linesep.join(config["dockerfile_lines"])}
+{dockerfile_lines}
 
 {installs}
 
@@ -363,7 +373,7 @@ RUN {pip_install} -e /deps/*
 
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
-{f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
+{_workdir}"""
 
 
 def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
@@ -390,10 +400,10 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "npm ci"
     else:
         install_cmd = "npm i"
-
+    dockerfile_lines = "\n".join(config["dockerfile_lines"])
     return f"""FROM {base_image}:{config['node_version']}
 
-{os.linesep.join(config["dockerfile_lines"])}
+{dockerfile_lines}
 
 ADD . {faux_path}
 

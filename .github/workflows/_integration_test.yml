@@ -14,7 +14,7 @@ jobs:
         python-version:
           - "3.10"
           - "3.11"
-    name: "CLI integration test"
+    name: "CLI integration test (Linux)"
     defaults:
       run:
         working-directory: libs/cli
@@ -72,3 +72,61 @@ jobs:
         run: |
           langgraph build -t langgraph-test-e
   
+  windows-build:
+    runs-on: windows-latest
+    name: "CLI integration test (Windows)"
+    defaults:
+      run:
+        working-directory: libs/cli
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "libs/cli/**"
+      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
+        if: steps.changed-files.outputs.all
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.11"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: integration-test-cli-windows
+      - name: Setup env
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples
+        run: cp .env.example .env
+      - name: Install cli globally
+        if: steps.changed-files.outputs.all
+        run: pip install -e .
+      - name: Build and test service A
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples
+        run: |
+          langgraph build -t langgraph-test-a  --base-image "langchain/langgraph-trial"
+          cp .env.example .envg
+          timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
+      - name: Build and test service B
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graphs
+        run: |
+          langgraph build -t langgraph-test-b  --base-image "langchain/langgraph-trial"
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-b
+      - name: Build and test service C
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graphs_reqs_a
+        run: |
+          langgraph build -t langgraph-test-c  --base-image "langchain/langgraph-trial"
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-c
+      - name: Build and test service D
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graphs_reqs_b
+        run: |
+          langgraph build -t langgraph-test-d  --base-image "langchain/langgraph-trial"
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-d
+      - name: Build JS service
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/js-examples
+        run: |
+          langgraph build -t langgraph-test-e
