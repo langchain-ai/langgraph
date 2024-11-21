@@ -107,6 +107,7 @@ from langgraph.types import (
     Checkpointer,
     LoopProtocol,
     StateSnapshot,
+    StreamChunk,
     StreamMode,
 )
 from langgraph.utils.config import (
@@ -1752,6 +1753,10 @@ class Pregel(PregelProtocol):
 
         stream = AsyncQueue()
         aioloop = asyncio.get_running_loop()
+        stream_put = cast(
+            Callable[[StreamChunk], None],
+            partial(aioloop.call_soon_threadsafe, stream.put_nowait),
+        )
 
         def output() -> Iterator:
             while True:
@@ -1806,12 +1811,14 @@ class Pregel(PregelProtocol):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put_nowait)
+                    StreamMessagesHandler(stream_put)
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put_nowait(
-                    ((), "custom", c)
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
+                    lambda c: aioloop.call_soon_threadsafe(
+                        stream.put_nowait, ((), "custom", c)
+                    )
                 )
             async with AsyncPregelLoop(
                 input,
@@ -1838,7 +1845,9 @@ class Pregel(PregelProtocol):
                 )
                 # enable subgraph streaming
                 if subgraphs:
-                    loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
+                    loop.config[CONF][CONFIG_KEY_STREAM] = StreamProtocol(
+                        stream_put, stream_modes
+                    )
                 # enable concurrent streaming
                 if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
 
