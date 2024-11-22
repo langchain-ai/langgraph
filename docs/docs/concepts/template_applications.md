@@ -4,8 +4,18 @@ Templates are open source reference applications designed to help you get starte
 
 You can create an application from a template using the LangGraph CLI.
 
+!!! info "Requirements"
 
-## Available templates
+    - Python >= 3.11
+    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli[inmem] >= 0.1.58
+
+## Install the LangGraph CLI
+
+```bash
+pip install "langgraph-cli[inmem]==0.1.58" python-dotenv
+```
+
+## Available Templates
 
 | Template                  | Description                                                                              | Python                                                           | JS/TS                                                               |
 |---------------------------|------------------------------------------------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------|
@@ -16,24 +26,37 @@ You can create an application from a template using the LangGraph CLI.
 | **Data-Enrichment Agent** | An agent that performs web searches and organizes its findings into a structured format. | [Repo](https://github.com/langchain-ai/data-enrichment)          | [Repo](https://github.com/langchain-ai/data-enrichment-js)          |
 
 
-
 ## 🌱 Create a LangGraph App
 
-To create a new app from a template, use the `langgraph new` command. This command will create a new directory with the specified template.
-
-```shell
-
-This is a quick start guide to help you get a LangGraph app up and running locally.
-
-!!! info "Requirements"
-
-    - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli[inmem] >= 0.1.58
-
-## Install the LangGraph CLI
+To create a new app from a template, use the `langgraph new` command.
 
 ```bash
-pip install "langgraph-cli[inmem]==0.1.58" python-dot-env
+langgraph new
 ```
 
+## Next Steps
 
+Review the `README.md` file in the root of your new LangGraph app for more information about the template and how to customize it.
 
+After configuring the app properly and adding your API keys, you can start the app using the LangGraph CLI:
+
+```bash
+langgraph dev 
+```
+
+See the following guides for more information on how to deploy your app:
+
+- **[Launch Local LangGraph Server](../tutorials/langgraph-platform/local-server.md)**: This quick start guide shows how to start a LangGraph Server locally for the **ReAct Agent** template. The steps are similar for other templates.
+- **[Deploy to LangGraph Cloud](../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
+ 
+### LangGraph Framework
+
+- **[LangGraph Concepts](../../concepts)**: Learn the foundational concepts of LangGraph.
+- **[LangGraph How-to Guides](../../how-tos)**: Guides for common tasks with LangGraph.
+
+### 📚 Learn More about LangGraph Platform
+
+Expand your knowledge with these resources:
+
+- **[LangGraph Platform Concepts](../concepts/index.md#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.
+- **[LangGraph Platform How-to Guides](../how-tos/index.md#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
