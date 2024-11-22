@@ -7,7 +7,7 @@
 
 ## Versions
 
-There are two versions of the self hosted deployment: [Self-Hosted Enterprise](./deployment_options.md#self-hosted-enterprise) and [Self-Hosted Lite](./deployment_options.md#self-hosted-lite).
+There are two versions of the self-hosted deployment: [Self-Hosted Enterprise](./deployment_options.md#self-hosted-enterprise) and [Self-Hosted Lite](./deployment_options.md#self-hosted-lite).
 
 ### Self-Hosted Lite
 
@@ -33,6 +33,10 @@ To use the Self-Hosted Enterprise version, you must acquire a license key that y
 - Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
 For step-by-step instructions, see [How to set up a self-hosted deployment of LangGraph](../how-tos/deploy-self-hosted.md).
+
+## Helm Chart
+
+If you would like to deploy LangGraph Cloud on Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
 
 ## Related
 
