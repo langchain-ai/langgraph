@@ -6,7 +6,8 @@
 
 Templates are open source reference applications designed to help you get started quickly when building with LangGraph. They provide working examples of common agentic workflows that can be customized to your needs.
 
-Templates can be accessed via [LangGraph Studio (macOS only)](langgraph_studio.md), or cloned directly from Github. You can download LangGraph Studio and see available templates [here](https://studio.langchain.com/).
+You can create an application from a template using the LangGraph CLI.
+
 
 ## Available templates
 
