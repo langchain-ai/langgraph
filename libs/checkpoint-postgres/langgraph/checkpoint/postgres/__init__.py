@@ -73,9 +73,9 @@ class PostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 with conn.pipeline() as pipe:
-                    yield PostgresSaver(conn, pipe)
+                    yield cls(conn, pipe)
             else:
-                yield PostgresSaver(conn)
+                yield cls(conn)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
