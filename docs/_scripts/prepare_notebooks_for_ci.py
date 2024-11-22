@@ -36,10 +36,11 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb",
     # this loads a massive dataset from gcp
     "docs/docs/tutorials/usaco/usaco.ipynb",
+    # TODO: figure out why autogen notebook is not runnable (they are just hanging. possible due to code execution?)
+    "docs/docs/how-tos/autogen-integration.ipynb",
     # TODO: need to update these notebooks to make sure they are runnable in CI
     "docs/docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
     "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
-    "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",  # taking a very long time to run
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
     "docs/docs/how-tos/map-reduce.ipynb"  # flakiness from structured output, only when running with VCR

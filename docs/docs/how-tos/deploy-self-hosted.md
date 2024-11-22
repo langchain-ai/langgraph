@@ -17,14 +17,18 @@ You will need to do the following:
 2. Build a docker image with the [LangGraph Server](../concepts/langgraph_server.md) using the [LangGraph CLI](../concepts/langgraph_cli.md).
 3. Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
+## Helm Chart
+
+If you would like to deploy LangGraph Cloud on Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+
 ## Environment Variables
 
 You will eventually need to pass in the following environment variables to the LangGraph Deploy server:
 
 - `REDIS_URI`: Connection details to a Redis instance. Redis will be used as a pub-sub broker to enable streaming real time output from background runs.
 - `DATABASE_URI`: Postgres connection details. Postgres will be used to store assistants, threads, runs, persist thread state and long term memory, and to manage the state of the background task queue with 'exactly once' semantics.
-- `LANGSMITH_API_KEY`: (If using [Self-Hosted Lite]) LangSmith API key. This will be used to authenticate ONCE at server start up.
-- `LANGGRAPH_CLOUD_LICENSE_KEY`: (If using Self-Hosted Enterprise) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
+- `LANGSMITH_API_KEY`: (If using [Self-Hosted Lite](../concepts/deployment_options.md#self-hosted-lite)) LangSmith API key. This will be used to authenticate ONCE at server start up.
+- `LANGGRAPH_CLOUD_LICENSE_KEY`: (If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise)) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
 
 
 ## Build the Docker Image
@@ -70,7 +74,7 @@ If you want to run this quickly without setting up a separate Redis and Postgres
     * You need to replace `my-image` with the name of the image you built in the previous step (from `langgraph build`).
     and you should provide appropriate values for `REDIS_URI`, `DATABASE_URI`, and `LANGSMITH_API_KEY`.
     * If your application requires additional environment variables, you can pass them in a similar way.
-    * If using Self-Hosted Enterprise, you must provide `LANGGRAPH_CLOUD_LICENSE_KEY` as an additional environment variable.
+    * If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise, you must provide `LANGGRAPH_CLOUD_LICENSE_KEY` as an additional environment variable.
 
 
 ### Using Docker Compose

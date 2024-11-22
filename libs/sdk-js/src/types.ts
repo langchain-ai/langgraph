@@ -29,10 +29,19 @@ export interface Send {
 }
 
 export interface Command {
+  /**
+   * An object to update the thread state with.
+   */
   update?: Record<string, unknown>;
 
+  /**
+   * The value to return from an `interrupt` function call.
+   */
   resume?: unknown;
 
+  /**
+   * A single, or array of `Send` commands to trigger nodes.
+   */
   send?: Send | Send[];
 }
 

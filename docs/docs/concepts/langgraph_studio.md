@@ -35,6 +35,16 @@ While in Beta, LangGraph Studio is available for free to all [LangSmith](https:/
 
 If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
 
+### Development server
+
+LangGraph CLI also contains a command for running an in-memory development server that can be used to connect a local LangGraph app with the studio.
+See [instructions here](../cloud/reference/cli.md#dev) for more information.
+
+The way this works is that it runs inside your local environment.
+It will spin up an in-memory, development server to deploy the graph.
+You can then connect to the studio via the Cloud hosted version of LangGraph Platform.
+To be clear, the web studio will connect to your locally running server - your agent is still running locally and never leaves your device.
+
 ## Studio FAQs
 
 ### Why is my project failing to start?
