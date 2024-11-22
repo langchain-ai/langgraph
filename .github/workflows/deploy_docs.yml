@@ -88,7 +88,7 @@ jobs:
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
-              --check-links-ignore "http://localhost\.com.*" \
+              --check-links-ignore "http://localhost:8123/.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
               --check-links-ignore "https://python\.langchain\.com/.*" \
               --check-links-ignore "https://openai\.com/.*" \
@@ -105,7 +105,7 @@ jobs:
               echo "Running link check on HTML files matching changed notebook files..."
               poetry run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
-                --check-links-ignore "http://localhost\.com.*" \
+                --check-links-ignore "http://localhost:8123/.*" \
                 --check-links-ignore "https://x.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
