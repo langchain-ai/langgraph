@@ -51,8 +51,8 @@ See the following guides for more information on how to deploy your app:
  
 ### LangGraph Framework
 
-- **[LangGraph Concepts](../../concepts)**: Learn the foundational concepts of LangGraph.
-- **[LangGraph How-to Guides](../../how-tos)**: Guides for common tasks with LangGraph.
+- **[LangGraph Concepts](../concepts)**: Learn the foundational concepts of LangGraph.
+- **[LangGraph How-to Guides](../how-tos)**: Guides for common tasks with LangGraph.
 
 ### 📚 Learn More about LangGraph Platform
 
