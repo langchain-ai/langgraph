@@ -1,4 +1,5 @@
 import inspect
+import operator
 import warnings
 from dataclasses import dataclass, field
 from typing import Annotated as Annotated2
@@ -318,3 +319,38 @@ def test__get_node_name() -> None:
 
     # class method
     assert _get_node_name(MyClass().class_method) == "class_method"
+
+
+def test_input_schema_conditional_edge():
+    class OverallState(TypedDict):
+        foo: Annotated[int, operator.add]
+        bar: str
+
+    class PrivateState(TypedDict):
+        baz: str
+
+    builder = StateGraph(OverallState)
+
+    def node_1(state: OverallState):
+        return {"foo": 1, "baz": "bar"}
+
+    def node_2(state: PrivateState):
+        return {"foo": 1, "bar": state["baz"]}
+
+    def node_3(state: OverallState):
+        return {"foo": 1}
+
+    def router(state: OverallState):
+        if state["foo"] == 2:
+            return "node_3"
+        else:
+            return "__end__"
+
+    builder.add_node(node_1)
+    builder.add_node(node_2)
+    builder.add_node(node_3)
+    builder.add_conditional_edges("node_2", router)
+    builder.add_edge("__start__", "node_1")
+    builder.add_edge("node_1", "node_2")
+    graph = builder.compile()
+    assert graph.invoke({"foo": 0}) == {"foo": 3, "bar": "bar"}

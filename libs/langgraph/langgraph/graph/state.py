@@ -760,12 +760,37 @@ class CompiledStateGraph(CompiledGraph):
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
 
+        # detect branch input schema
+        input = None
+
+        # detect input schema annotation in the branch callable
+        try:
+            if (
+                isinstance(branch.path, RunnableCallable)
+                and (
+                    isfunction(branch.path.func)
+                    or ismethod(getattr(branch.path.func, "__call__", None))
+                )
+                and (
+                    hints := get_type_hints(getattr(branch.path.func, "__call__"))
+                    or get_type_hints(branch.path.func)
+                )
+            ):
+                first_parameter_name = next(
+                    iter(
+                        inspect.signature(
+                            cast(FunctionType, branch.path.func)
+                        ).parameters.keys()
+                    )
+                )
+                if input_hint := hints.get(first_parameter_name):
+                    if isinstance(input_hint, type) and get_type_hints(input_hint):
+                        input = input_hint
+        except (TypeError, StopIteration):
+            pass
+
+        schema = input or self.builder.schema
         # attach branch publisher
-        schema = (
-            self.builder.nodes[start].input
-            if start in self.builder.nodes
-            else self.builder.schema
-        )
         self.nodes[start] |= branch.run(
             branch_writer,
             _get_state_reader(self.builder, schema) if with_reader else None,
