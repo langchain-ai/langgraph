@@ -13935,7 +13935,7 @@ def test_store_injected(
     thread_2 = str(uuid.uuid4())
 
     class Node:
-        def __init__(self, i: int | None = None):
+        def __init__(self, i: Optional[int] = None):
             self.i = i
 
         def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):

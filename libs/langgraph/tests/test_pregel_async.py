@@ -12281,7 +12281,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
     thread_2 = str(uuid.uuid4())
 
     class Node:
-        def __init__(self, i: int | None = None):
+        def __init__(self, i: Optional[int] = None):
             self.i = i
 
         async def __call__(
