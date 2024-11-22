@@ -17,6 +17,10 @@ You will need to do the following:
 2. Build a docker image with the [LangGraph Server](../concepts/langgraph_server.md) using the [LangGraph CLI](../concepts/langgraph_cli.md).
 3. Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
+## Helm Chart
+
+If you would like to deploy LangGraph Cloud on Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+
 ## Environment Variables
 
 You will eventually need to pass in the following environment variables to the LangGraph Deploy server:
@@ -70,7 +74,7 @@ If you want to run this quickly without setting up a separate Redis and Postgres
     * You need to replace `my-image` with the name of the image you built in the previous step (from `langgraph build`).
     and you should provide appropriate values for `REDIS_URI`, `DATABASE_URI`, and `LANGSMITH_API_KEY`.
     * If your application requires additional environment variables, you can pass them in a similar way.
-    * If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise), you must provide `LANGGRAPH_CLOUD_LICENSE_KEY` as an additional environment variable.
+    * If using [Self-Hosted Enterprise](../concepts/deployment_options.md#-selfhosted-enterprise), you must provide `LANGGRAPH_CLOUD_LICENSE_KEY` as an additional environment variable.
 
 
 ### Using Docker Compose
