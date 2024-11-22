@@ -74,7 +74,7 @@ If you want to run this quickly without setting up a separate Redis and Postgres
     * You need to replace `my-image` with the name of the image you built in the previous step (from `langgraph build`).
     and you should provide appropriate values for `REDIS_URI`, `DATABASE_URI`, and `LANGSMITH_API_KEY`.
     * If your application requires additional environment variables, you can pass them in a similar way.
-    * If using [Self-Hosted Enterprise](../concepts/deployment_options.md#-selfhosted-enterprise), you must provide `LANGGRAPH_CLOUD_LICENSE_KEY` as an additional environment variable.
+    * If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise, you must provide `LANGGRAPH_CLOUD_LICENSE_KEY` as an additional environment variable.
 
 
 ### Using Docker Compose
