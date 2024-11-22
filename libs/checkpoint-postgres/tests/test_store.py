@@ -21,10 +21,14 @@ from langgraph.store.postgres import PostgresStore
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
 def store(request) -> PostgresStore:
     database = f"test_{uuid4().hex[:16]}"
-    uri_base = DEFAULT_URI.rsplit("/", 2)[
-        0
-    ]  # Get everything before /postgres?sslmode=disable
-    conn_string = f"{uri_base}/{database}?sslmode=disable"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+
+    conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
 
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
