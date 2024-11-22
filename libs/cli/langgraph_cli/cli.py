@@ -189,7 +189,6 @@ def up(
     click.secho(
         """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Cloud closed beta.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
-        fg="red",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
         capabilities = langgraph_cli.docker.check_capabilities(runner)
