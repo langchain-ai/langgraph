@@ -256,7 +256,7 @@ class Command(Generic[N]):
         )
         return f"Command({contents})"
 
-    PARENT = ClassVar[PARENT] = "__parent__"
+    PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
