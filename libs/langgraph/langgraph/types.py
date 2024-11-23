@@ -5,6 +5,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    ClassVar,
     Generic,
     Hashable,
     Literal,
@@ -140,6 +141,7 @@ class PregelExecutableTask(NamedTuple):
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
+    writers: Sequence[Runnable] = ()
 
 
 class StateSnapshot(NamedTuple):
@@ -233,12 +235,14 @@ class Send:
 
 
 N = TypeVar("N", bound=Hashable)
+PARENT = Literal["__parent__"]
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Command(Generic[N]):
     """One or more commands to update the graph's state and send messages to nodes."""
 
+    graph: Optional[Union[PARENT, str]] = None
     update: Optional[dict[str, Any]] = None
     send: Union[Send, Sequence[Send]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
@@ -251,6 +255,8 @@ class Command(Generic[N]):
             if value
         )
         return f"Command({contents})"
+
+    PARENT = ClassVar[PARENT] = "__parent__"
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]

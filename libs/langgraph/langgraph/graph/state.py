@@ -37,7 +37,12 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.constants import EMPTY_SEQ, NS_END, NS_SEP, SELF, TAG_HIDDEN
-from langgraph.errors import ErrorCode, InvalidUpdateError, create_error_message
+from langgraph.errors import (
+    ErrorCode,
+    InvalidUpdateError,
+    ParentCommand,
+    create_error_message,
+)
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -623,6 +628,8 @@ class CompiledStateGraph(CompiledGraph):
 
         def _get_root(input: Any) -> Any:
             if isinstance(input, Command):
+                if input.graph == Command.PARENT:
+                    return SKIP_WRITE
                 return input.update
             else:
                 return input
@@ -640,6 +647,8 @@ class CompiledStateGraph(CompiledGraph):
                     )
                 return input.get(key, SKIP_WRITE)
             elif isinstance(input, Command):
+                if input.graph == Command.PARENT:
+                    return SKIP_WRITE
                 return _get_state_key(input.update, key=key)
             elif get_type_hints(type(input)):
                 value = getattr(input, key, SKIP_WRITE)
@@ -822,6 +831,8 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
         return [value]
     if not isinstance(value, GraphCommand):
         return EMPTY_SEQ
+    if value.graph == Command.PARENT:
+        raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
     if isinstance(value.goto, str):
         rtn.append(value.goto)
@@ -839,6 +850,8 @@ async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
         return [value]
     if not isinstance(value, GraphCommand):
         return EMPTY_SEQ
+    if value.graph == Command.PARENT:
+        raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
     if isinstance(value.goto, str):
         rtn.append(value.goto)
