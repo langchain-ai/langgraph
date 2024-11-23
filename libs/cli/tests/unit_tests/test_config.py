@@ -212,7 +212,7 @@ WORKDIR /deps/__outer_unit_tests/unit_tests\
 
 def test_config_to_docker_invalid_inputs():
     # test missing local dependencies
-    with pytest.raises(UsageError):
+    with pytest.raises(click.UsageError):
         graphs = {"agent": "tests/unit_tests/agent.py:graph"}
         config_to_docker(
             PATH_TO_CONFIG,
@@ -221,7 +221,7 @@ def test_config_to_docker_invalid_inputs():
         )
 
     # test missing local module
-    with pytest.raises(UsageError):
+    with pytest.raises(click.UsageError):
         graphs = {"agent": "./missing_agent.py:graph"}
         config_to_docker(
             PATH_TO_CONFIG,
