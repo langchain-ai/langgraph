@@ -235,14 +235,13 @@ class Send:
 
 
 N = TypeVar("N", bound=Hashable)
-PARENT = Literal["__parent__"]
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Command(Generic[N]):
     """One or more commands to update the graph's state and send messages to nodes."""
 
-    graph: Optional[Union[PARENT, str]] = None
+    graph: Optional[str] = None
     update: Optional[dict[str, Any]] = None
     send: Union[Send, Sequence[Send]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
