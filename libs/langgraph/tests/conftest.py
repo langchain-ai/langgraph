@@ -309,8 +309,7 @@ async def _store_postgres_aio_pool():
     try:
         async with AsyncPostgresStore.from_conn_string(
             DEFAULT_POSTGRES_URI + database,
-            use_pool=True,
-            max_size=10,
+            pool_config={"max_size": 10},
         ) as store:
             await store.setup()
             yield store
@@ -373,10 +372,9 @@ def store_postgres_pool():
         conn.execute(f"CREATE DATABASE {database}")
     try:
         # yield store
-        with ConnectionPool(
-            DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
-        ) as pool:
-            store = PostgresStore(pool)
+        with PostgresStore.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, pool_config={"max_size": 10}
+        ) as store:
             store.setup()
             yield store
     finally:

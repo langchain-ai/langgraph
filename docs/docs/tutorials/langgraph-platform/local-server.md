@@ -4,12 +4,13 @@ This is a quick start guide to help you get a LangGraph app up and running local
 
 !!! info "Requirements"
 
+    - Python >= 3.11
     - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli[inmem] >= 0.1.58
 
 ## Install the LangGraph CLI
 
 ```bash
-pip install "langgraph-cli[inmem]==0.1.58" python-dot-env
+pip install "langgraph-cli[inmem]==0.1.58" python-dotenv
 ```
 
 ## 🌱 Create a LangGraph App
@@ -31,6 +32,14 @@ Create a new app from the `react-agent` template. This template is a simple agen
 !!! tip "Additional Templates"
 
     If you use `langgraph new` without specifying a template, you will be presented with an interactive menu that will allow you to choose from a list of available templates.
+
+## Install Dependencies
+
+In the root of your new LangGraph app, install the dependencies:
+
+```shell
+pip install .
+```
 
 ## Create a `.env` file
 

@@ -3,20 +3,15 @@ import json
 import logging
 import threading
 from collections import defaultdict
+from collections.abc import Awaitable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     Any,
-    Awaitable,
     Callable,
     Generic,
-    Iterable,
-    Iterator,
-    List,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -28,6 +23,7 @@ from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.postgres import _ainternal as _ainternal
@@ -175,6 +171,31 @@ CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors
 ]
 
 C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
+
+
+class PoolConfig(TypedDict, total=False):
+    """Connection pool settings for PostgreSQL connections.
+
+    Controls connection lifecycle and resource utilization:
+    - Small pools (1-5) suit low-concurrency workloads
+    - Larger pools handle concurrent requests but consume more resources
+    - Setting max_size prevents resource exhaustion under load
+    """
+
+    min_size: int
+    """Minimum number of connections maintained in the pool. Defaults to 1."""
+
+    max_size: Optional[int]
+    """Maximum number of connections allowed in the pool. None means unlimited."""
+
+    kwargs: dict
+    """Additional connection arguments passed to each connection in the pool.
+    
+    Default kwargs set automatically:
+    - autocommit: True
+    - prepare_threshold: 0
+    - row_factory: dict_row
+    """
 
 
 class BasePostgresStore(Generic[C]):
@@ -459,6 +480,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         conn_string: str,
         *,
         pipeline: bool = False,
+        pool_config: Optional[PoolConfig] = None,
         embedding: Optional[EmbeddingConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
@@ -466,19 +488,41 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         Args:
             conn_string (str): The Postgres connection info string.
             pipeline (bool): whether to use Pipeline
+            pool_config (Optional[PoolArgs]): Configuration for the connection pool.
+                If provided, will create a connection pool and use it instead of a single connection.
+                This overrides the `pipeline` argument.
             embedding (Optional[EmbeddingConfig]): The embedding config.
 
         Returns:
             PostgresStore: A new PostgresStore instance.
         """
-        with Connection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            if pipeline:
-                with conn.pipeline() as pipe:
-                    yield cls(conn, pipe=pipe, embedding=embedding)
-            else:
-                yield cls(conn, embedding=embedding)
+        if pool_config is not None:
+            pc = pool_config.copy()
+            with cast(
+                ConnectionPool[Connection[DictRow]],
+                ConnectionPool(
+                    conn_string,
+                    min_size=pc.pop("min_size", 1),
+                    max_size=pc.pop("max_size", None),
+                    kwargs={
+                        "autocommit": True,
+                        "prepare_threshold": 0,
+                        "row_factory": dict_row,
+                        **(pc.pop("kwargs", None) or {}),
+                    },
+                    **cast(dict, pc),
+                ),
+            ) as pool:
+                yield cls(conn=pool, embedding=embedding)
+        else:
+            with Connection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
+                if pipeline:
+                    with conn.pipeline() as pipe:
+                        yield cls(conn, pipe=pipe, embedding=embedding)
+                else:
+                    yield cls(conn, embedding=embedding)
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
@@ -504,14 +548,18 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
-                    with self.lock, conn.pipeline(), conn.cursor(
-                        binary=True, row_factory=dict_row
-                    ) as cur:
+                    with (
+                        self.lock,
+                        conn.pipeline(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
                 else:
-                    with self.lock, conn.transaction(), conn.cursor(
-                        binary=True, row_factory=dict_row
-                    ) as cur:
+                    with (
+                        self.lock,
+                        conn.transaction(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
             else:
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
@@ -617,7 +665,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         for (idx, _), (query, params) in zip(search_ops, queries):
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
-            items = [
+            results[idx] = [
                 _row_to_item(
                     _decode_ns_bytes(row["prefix"]),
                     row,
@@ -626,7 +674,6 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 )
                 for row in rows
             ]
-            results[idx] = items
 
     def _batch_list_namespaces_ops(
         self,
@@ -726,7 +773,7 @@ def _row_to_item(
     row: Row,
     *,
     loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
-    cls: Union[Type[SearchItem], Type[Item]] = Item,
+    cls: Union[type[SearchItem], type[Item]] = Item,
 ) -> Union[Item, SearchItem]:
     """Convert a row from the database into an Item.
 
@@ -796,7 +843,7 @@ def _tokenize_path(path: str) -> list[str]:
         return []
 
     tokens = []
-    current: List[str] = []
+    current: list[str] = []
     i = 0
     while i < len(path):
         char = path[i]
