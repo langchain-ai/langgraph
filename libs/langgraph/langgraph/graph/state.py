@@ -627,13 +627,16 @@ class CompiledStateGraph(CompiledGraph):
             else:
                 return input
 
+        # to avoid name collision below
+        node_key = key
+
         def _get_state_key(input: Union[None, dict, Any], *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif isinstance(input, dict):
                 if all(k not in output_keys for k in input):
                     raise InvalidUpdateError(
-                        f"Expected node {key} to update at least one of {output_keys}, got {input}"
+                        f"Expected node {node_key} to update at least one of {output_keys}, got {input}"
                     )
                 return input.get(key, SKIP_WRITE)
             elif isinstance(input, Command):

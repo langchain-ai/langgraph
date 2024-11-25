@@ -110,13 +110,13 @@ from langgraph.types import (
     Command,
     LoopProtocol,
     PregelExecutableTask,
+    StreamChunk,
     StreamProtocol,
 )
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")
-StreamChunk = tuple[tuple[str, ...], str, Any]
 
 INPUT_DONE = object()
 INPUT_RESUMING = object()
