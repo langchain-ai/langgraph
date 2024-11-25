@@ -42,9 +42,8 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
                 yield store
         elif request.param == "pool":
             async with AsyncPostgresStore.from_conn_string(
-                conn_string, use_pool=True, max_size=10
+                conn_string, pool_config={"min_size": 1, "max_size": 10}
             ) as store:
-                await store.setup()
                 yield store
         else:  # default
             async with AsyncPostgresStore.from_conn_string(conn_string) as store:

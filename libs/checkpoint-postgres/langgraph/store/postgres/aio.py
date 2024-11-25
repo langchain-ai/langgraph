@@ -23,6 +23,7 @@ from langgraph.store.base import GetOp, ListNamespacesOp, Op, PutOp, Result, Sea
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.postgres.base import (
     BasePostgresStore,
+    PoolConfig,
     Row,
     _decode_ns_bytes,
     _group_ops,
@@ -212,34 +213,35 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         conn_string: str,
         *,
         pipeline: bool = False,
-        min_size: int = 1,
-        max_size: Optional[int] = None,
-        use_pool: bool = False,
+        pool_config: Optional[PoolConfig] = None,
     ) -> AsyncIterator["AsyncPostgresStore"]:
         """Create a new AsyncPostgresStore instance from a connection string.
 
         Args:
             conn_string (str): The Postgres connection info string.
             pipeline (bool): Whether to use AsyncPipeline (only for single connections)
-            min_size (int): Minimum number of connections when using a pool
-            max_size (Optional[int]): Maximum number of connections when using a pool
-            use_pool (bool): Whether to use a connection pool
+            pool_config (Optional[PoolConfig]): Configuration for the connection pool.
+                If provided, will create a connection pool and use it instead of a single connection.
+                This overrides the `pipeline` argument.
 
         Returns:
             AsyncPostgresStore: A new AsyncPostgresStore instance.
         """
-        if use_pool:
+        if pool_config is not None:
+            pc = pool_config.copy()
             async with cast(
                 AsyncConnectionPool[AsyncConnection[DictRow]],
                 AsyncConnectionPool(
                     conn_string,
-                    min_size=min_size,
-                    max_size=max_size,
+                    min_size=pc.pop("min_size", 1),
+                    max_size=pc.pop("max_size", None),
                     kwargs={
                         "autocommit": True,
                         "prepare_threshold": 0,
                         "row_factory": dict_row,
+                        **(pc.pop("kwargs", None) or {}),
                     },
+                    **cast(dict, pc),
                 ),
             ) as pool:
                 yield cls(conn=pool)

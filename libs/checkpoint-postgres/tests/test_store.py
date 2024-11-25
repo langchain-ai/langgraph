@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 from conftest import DEFAULT_URI  # type: ignore
 from psycopg import Connection
-from psycopg_pool import ConnectionPool
 
 from langgraph.store.base import (
     GetOp,
@@ -41,10 +40,9 @@ def store(request) -> PostgresStore:
             with PostgresStore.from_conn_string(conn_string, pipeline=True) as store:
                 yield store
         elif request.param == "pool":
-            with ConnectionPool(
-                conn_string, max_size=10, kwargs={"autocommit": True}
-            ) as pool:
-                store = PostgresStore(pool)
+            with PostgresStore.from_conn_string(
+                conn_string, pool_config={"min_size": 1, "max_size": 10}
+            ) as store:
                 yield store
         else:  # default
             with PostgresStore.from_conn_string(conn_string) as store:

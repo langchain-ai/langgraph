@@ -23,6 +23,7 @@ from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.postgres import _ainternal as _ainternal
@@ -60,6 +61,31 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
 ]
 
 C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
+
+
+class PoolConfig(TypedDict, total=False):
+    """Connection pool settings for PostgreSQL connections.
+
+    Controls connection lifecycle and resource utilization:
+    - Small pools (1-5) suit low-concurrency workloads
+    - Larger pools handle concurrent requests but consume more resources
+    - Setting max_size prevents resource exhaustion under load
+    """
+
+    min_size: int
+    """Minimum number of connections maintained in the pool. Defaults to 1."""
+
+    max_size: Optional[int]
+    """Maximum number of connections allowed in the pool. None means unlimited."""
+
+    kwargs: dict
+    """Additional connection arguments passed to each connection in the pool.
+    
+    Default kwargs set automatically:
+    - autocommit: True
+    - prepare_threshold: 0
+    - row_factory: dict_row
+    """
 
 
 class BasePostgresStore(Generic[C]):
@@ -249,25 +275,50 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        pool_config: Optional[PoolConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
 
         Args:
             conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use Pipeline
-
+            pipeline (bool): whether to use Pipeline (only for single connections)
+            pool_config (Optional[PoolArgs]): Configuration for the connection pool.
+                If provided, will create a connection pool and use it instead of a single connection.
+                This overrides the `pipeline` argument.
         Returns:
             PostgresStore: A new PostgresStore instance.
         """
-        with Connection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            if pipeline:
-                with conn.pipeline() as pipe:
-                    yield cls(conn, pipe=pipe)
-            else:
-                yield cls(conn)
+        if pool_config is not None:
+            pc = pool_config.copy()
+            with cast(
+                ConnectionPool[Connection[DictRow]],
+                ConnectionPool(
+                    conn_string,
+                    min_size=pc.pop("min_size", 1),
+                    max_size=pc.pop("max_size", None),
+                    kwargs={
+                        "autocommit": True,
+                        "prepare_threshold": 0,
+                        "row_factory": dict_row,
+                        **(pc.pop("kwargs", None) or {}),
+                    },
+                    **cast(dict, pc),
+                ),
+            ) as pool:
+                yield cls(conn=pool)
+        else:
+            with Connection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
+                if pipeline:
+                    with conn.pipeline() as pipe:
+                        yield cls(conn, pipe=pipe)
+                else:
+                    yield cls(conn)
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
