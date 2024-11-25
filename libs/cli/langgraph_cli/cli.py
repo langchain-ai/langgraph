@@ -1,3 +1,4 @@
+import os
 import pathlib
 import shutil
 import sys
@@ -598,6 +599,8 @@ def dev(
         ) from None
 
     config_json = langgraph_cli.config.validate_config_file(config)
+    cwd = os.getcwd()
+    sys.path.insert(0, cwd)
 
     graphs = config_json.get("graphs", {})
     run_server(
