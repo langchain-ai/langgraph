@@ -1,114 +1,76 @@
 # type: ignore
+import sys
 import uuid
-from datetime import datetime
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from typing import AsyncIterator
 
 import pytest
 from conftest import DEFAULT_URI  # type: ignore
+from psycopg import AsyncConnection
 
 from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
 from langgraph.store.postgres import AsyncPostgresStore
 
 
-class MockAsyncCursor:
-    def __init__(self, fetch_result: Any) -> None:
-        self.fetch_result = fetch_result
-        self.execute = AsyncMock()
-        self.fetchall = AsyncMock(return_value=self.fetch_result)
+@pytest.fixture(scope="function", params=["default", "pipe", "pool"])
+async def store(request) -> AsyncIterator[AsyncPostgresStore]:
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
 
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
 
-class MockAsyncConnection:
-    def __init__(self) -> None:
-        self.cursor = MagicMock()
-        self.pipeline = MagicMock(
-            return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock())
-        )
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
 
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+            await store.setup()
 
-@pytest.fixture
-def mock_connection() -> MockAsyncConnection:
-    return MockAsyncConnection()
-
-
-@pytest.fixture
-async def store(mock_connection: MockAsyncConnection) -> AsyncPostgresStore:
-    return AsyncPostgresStore(mock_connection)
+        if request.param == "pipe":
+            async with AsyncPostgresStore.from_conn_string(
+                conn_string, pipeline=True
+            ) as store:
+                yield store
+        elif request.param == "pool":
+            async with AsyncPostgresStore.from_conn_string(
+                conn_string, pool_config={"min_size": 1, "max_size": 10}
+            ) as store:
+                yield store
+        else:  # default
+            async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+                yield store
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
 
 
 async def test_abatch_order(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_get_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-            {
-                "key": "key2",
-                "value": '{"data": "value2"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.bar",
-            },
-        ]
-    )
-    mock_search_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-        ]
-    )
-    mock_list_namespaces_cursor = MockAsyncCursor(
-        [
-            {"truncated_prefix": b"\x01test"},
-        ]
-    )
-
-    failures = []
-
-    def cursor_side_effect(binary: bool = False) -> Any:
-        cursor = MagicMock()
-
-        async def execute_side_effect(query: str, *params: Any) -> None:
-            # My super sophisticated database.
-            if "SELECT prefix, key," in query:
-                cursor.fetchall = mock_search_cursor.fetchall
-            elif "SELECT DISTINCT ON (truncated_prefix)" in query:
-                cursor.fetchall = mock_list_namespaces_cursor.fetchall
-            elif "WHERE prefix = %s AND key" in query:
-                cursor.fetchall = mock_get_cursor.fetchall
-            elif "INSERT INTO " in query:
-                pass
-            else:
-                e = ValueError(f"Unmatched query: {query}")
-                failures.append(e)
-                raise e
-
-        cursor.execute = AsyncMock(side_effect=execute_side_effect)
-        return cursor
-
-    mock_connection.cursor.side_effect = cursor_side_effect  # type: ignore
+    # Setup test data
+    await store.aput(("test", "foo"), "key1", {"data": "value1"})
+    await store.aput(("test", "bar"), "key2", {"data": "value2"})
 
     ops = [
-        GetOp(namespace=("test",), key="key1"),
-        PutOp(namespace=("test",), key="key2", value={"data": "value2"}),
+        GetOp(namespace=("test", "foo"), key="key1"),
+        PutOp(namespace=("test", "bar"), key="key2", value={"data": "value2"}),
         SearchOp(
             namespace_prefix=("test",), filter={"data": "value1"}, limit=10, offset=0
         ),
         ListNamespacesOp(match_conditions=None, max_depth=None, limit=10, offset=0),
         GetOp(namespace=("test",), key="key3"),
     ]
+
     results = await store.abatch(ops)
-    assert not failures
     assert len(results) == 5
     assert isinstance(results[0], Item)
     assert isinstance(results[0].value, dict)
@@ -118,27 +80,29 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
     assert isinstance(results[2], list)
     assert len(results[2]) == 1
     assert isinstance(results[3], list)
-    assert results[3] == [("test",)]
+    assert ("test", "foo") in results[3] and ("test", "bar") in results[3]
     assert results[4] is None
 
     ops_reordered = [
         SearchOp(namespace_prefix=("test",), filter=None, limit=5, offset=0),
-        GetOp(namespace=("test",), key="key2"),
+        GetOp(namespace=("test", "bar"), key="key2"),
         ListNamespacesOp(match_conditions=None, max_depth=None, limit=5, offset=0),
         PutOp(namespace=("test",), key="key3", value={"data": "value3"}),
-        GetOp(namespace=("test",), key="key1"),
+        GetOp(namespace=("test", "foo"), key="key1"),
     ]
 
     results_reordered = await store.abatch(ops_reordered)
-    assert not failures
     assert len(results_reordered) == 5
     assert isinstance(results_reordered[0], list)
-    assert len(results_reordered[0]) == 1
+    assert len(results_reordered[0]) == 2
     assert isinstance(results_reordered[1], Item)
     assert results_reordered[1].value == {"data": "value2"}
     assert results_reordered[1].key == "key2"
     assert isinstance(results_reordered[2], list)
-    assert results_reordered[2] == [("test",)]
+    assert ("test", "foo") in results_reordered[2] and (
+        "test",
+        "bar",
+    ) in results_reordered[2]
     assert results_reordered[3] is None
     assert isinstance(results_reordered[4], Item)
     assert results_reordered[4].value == {"data": "value1"}
@@ -146,26 +110,9 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
 
 
 async def test_batch_get_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-            {
-                "key": "key2",
-                "value": '{"data": "value2"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.bar",
-            },
-        ]
-    )
-    mock_connection.cursor.return_value = mock_cursor
+    # Setup test data
+    await store.aput(("test",), "key1", {"data": "value1"})
+    await store.aput(("test",), "key2", {"data": "value2"})
 
     ops = [
         GetOp(namespace=("test",), key="key1"),
@@ -184,10 +131,6 @@ async def test_batch_get_ops(store: AsyncPostgresStore) -> None:
 
 
 async def test_batch_put_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor([])
-    mock_connection.cursor.return_value = mock_cursor
-
     ops = [
         PutOp(namespace=("test",), key="key1", value={"data": "value1"}),
         PutOp(namespace=("test",), key="key2", value={"data": "value2"}),
@@ -198,30 +141,16 @@ async def test_batch_put_ops(store: AsyncPostgresStore) -> None:
 
     assert len(results) == 3
     assert all(result is None for result in results)
-    assert mock_cursor.execute.call_count == 2
+
+    # Verify the puts worked
+    items = await store.asearch(["test"], limit=10)
+    assert len(items) == 2  # key3 had None value so wasn't stored
 
 
 async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-            {
-                "key": "key2",
-                "value": '{"data": "value2"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.bar",
-            },
-        ]
-    )
-    mock_connection.cursor.return_value = mock_cursor
+    # Setup test data
+    await store.aput(("test", "foo"), "key1", {"data": "value1"})
+    await store.aput(("test", "bar"), "key2", {"data": "value2"})
 
     ops = [
         SearchOp(
@@ -233,29 +162,23 @@ async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
     results = await store.abatch(ops)
 
     assert len(results) == 2
-    assert len(results[0]) == 2
-    assert len(results[1]) == 2
+    assert len(results[0]) == 1  # Filtered results
+    assert len(results[1]) == 2  # All results
 
 
 async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor(
-        [
-            {"truncated_prefix": b"\x01test.namespace1"},
-            {"truncated_prefix": b"\x01test.namespace2"},
-        ]
-    )
-    mock_connection.cursor.return_value = mock_cursor
+    # Setup test data
+    await store.aput(("test", "namespace1"), "key1", {"data": "value1"})
+    await store.aput(("test", "namespace2"), "key2", {"data": "value2"})
 
     ops = [ListNamespacesOp(match_conditions=None, max_depth=None, limit=10, offset=0)]
 
     results = await store.abatch(ops)
 
     assert len(results) == 1
-    assert results[0] == [("test", "namespace1"), ("test", "namespace2")]
-
-
-# The following use the actual DB connection
+    assert len(results[0]) == 2
+    assert ("test", "namespace1") in results[0]
+    assert ("test", "namespace2") in results[0]
 
 
 class TestAsyncPostgresStore:
