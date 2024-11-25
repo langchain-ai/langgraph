@@ -6,6 +6,7 @@ from typing import AsyncIterator
 import pytest
 from conftest import DEFAULT_URI  # type: ignore
 from psycopg import AsyncConnection
+from test_store import CharacterEmbeddings
 
 from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
 from langgraph.store.postgres import AsyncPostgresStore
@@ -182,272 +183,179 @@ async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
     assert ("test", "namespace2") in results[0]
 
 
-class TestAsyncPostgresStore:
-    @pytest.fixture(autouse=True)
-    async def setup(self) -> None:
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
+@pytest.fixture
+async def vector_store(
+    fake_embeddings: CharacterEmbeddings,
+) -> AsyncIterator[AsyncPostgresStore]:
+    """Create a store with vector search enabled."""
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
+
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
+
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(
+            conn_string,
+            embedding={"dims": fake_embeddings.dims, "embed": fake_embeddings},
+        ) as store:
             await store.setup()
+            yield store
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
 
-    async def test_basic_store_ops(self) -> None:
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
-            namespace = ("test", "documents")
-            item_id = "doc1"
-            item_value = {"title": "Test Document", "content": "Hello, World!"}
 
-            await store.aput(namespace, item_id, item_value)
-            item = await store.aget(namespace, item_id)
+async def test_vector_store_initialization(
+    vector_store: AsyncPostgresStore, fake_embeddings: CharacterEmbeddings
+) -> None:
+    """Test store initialization with embedding config."""
+    assert vector_store.embedding_config is not None
+    assert vector_store.embedding_config["dims"] == fake_embeddings.dims
+    assert vector_store.embedding_config["embed"] == fake_embeddings
 
-            assert item
-            assert item.namespace == namespace
-            assert item.key == item_id
-            assert item.value == item_value
 
-            updated_value = {
-                "title": "Updated Test Document",
-                "content": "Hello, LangGraph!",
-            }
-            await store.aput(namespace, item_id, updated_value)
-            updated_item = await store.aget(namespace, item_id)
+async def test_vector_insert_with_auto_embedding(
+    vector_store: AsyncPostgresStore,
+) -> None:
+    """Test inserting items that get auto-embedded."""
+    docs = [
+        ("doc1", {"text": "short text"}),
+        ("doc2", {"text": "longer text document"}),
+        ("doc3", {"text": "longest text document here"}),
+        ("doc4", {"description": "text in description field"}),
+        ("doc5", {"content": "text in content field"}),
+        ("doc6", {"body": "text in body field"}),
+    ]
 
-            assert updated_item.value == updated_value
-            assert updated_item.updated_at > item.updated_at
-            different_namespace = ("test", "other_documents")
-            item_in_different_namespace = await store.aget(different_namespace, item_id)
-            assert item_in_different_namespace is None
+    for key, value in docs:
+        await vector_store.aput(("test",), key, value)
 
-            new_item_id = "doc2"
-            new_item_value = {"title": "Another Document", "content": "Greetings!"}
-            await store.aput(namespace, new_item_id, new_item_value)
+    results = await vector_store.asearch(("test",), query="long text")
+    assert len(results) > 0
 
-            search_results = await store.asearch(["test"], limit=10)
-            items = search_results
-            assert len(items) == 2
-            assert any(item.key == item_id for item in items)
-            assert any(item.key == new_item_id for item in items)
+    doc_order = [r.key for r in results]
+    assert "doc2" in doc_order
+    assert "doc3" in doc_order
 
-            namespaces = await store.alist_namespaces(prefix=["test"])
-            assert ("test", "documents") in namespaces
 
-            await store.adelete(namespace, item_id)
-            await store.adelete(namespace, new_item_id)
-            deleted_item = await store.aget(namespace, item_id)
-            assert deleted_item is None
+async def test_vector_update_with_embedding(vector_store: AsyncPostgresStore) -> None:
+    """Test that updating items properly updates their embeddings."""
+    await vector_store.aput(("test",), "doc1", {"text": "initial text about cats"})
+    await vector_store.aput(("test",), "doc2", {"text": "something about dogs"})
+    await vector_store.aput(("test",), "doc3", {"text": "text about birds"})
 
-            deleted_item = await store.aget(namespace, new_item_id)
-            assert deleted_item is None
+    results_initial = await vector_store.asearch(("test",), query="cats")
+    assert len(results_initial) > 0
+    assert results_initial[0].key == "doc1"
+    initial_score = results_initial[0].response_metadata["score"]
 
-            empty_search_results = await store.asearch(["test"], limit=10)
-            assert len(empty_search_results) == 0
+    await vector_store.aput(("test",), "doc1", {"text": "new text about dogs"})
 
-    async def test_list_namespaces(self) -> None:
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
-            test_pref = str(uuid.uuid4())
-            test_namespaces = [
-                (test_pref, "test", "documents", "public", test_pref),
-                (test_pref, "test", "documents", "private", test_pref),
-                (test_pref, "test", "images", "public", test_pref),
-                (test_pref, "test", "images", "private", test_pref),
-                (test_pref, "prod", "documents", "public", test_pref),
-                (
-                    test_pref,
-                    "prod",
-                    "documents",
-                    "some",
-                    "nesting",
-                    "public",
-                    test_pref,
-                ),
-                (test_pref, "prod", "documents", "private", test_pref),
-            ]
+    results_after = await vector_store.asearch(("test",), query="cats")
+    after_score = next(
+        (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
+    )
+    assert after_score < initial_score
 
-            for namespace in test_namespaces:
-                await store.aput(namespace, "dummy", {"content": "dummy"})
+    results_new = await vector_store.asearch(("test",), query="dogs")
+    for r in results_new:
+        if r.key == "doc1":
+            assert r.response_metadata["score"] > after_score
 
-            prefix_result = await store.alist_namespaces(prefix=[test_pref, "test"])
-            assert len(prefix_result) == 4
-            assert all([ns[1] == "test" for ns in prefix_result])
 
-            specific_prefix_result = await store.alist_namespaces(
-                prefix=[test_pref, "test", "documents"]
-            )
-            assert len(specific_prefix_result) == 2
-            assert all(
-                [ns[1:3] == ("test", "documents") for ns in specific_prefix_result]
-            )
+async def test_vector_search_with_filters(vector_store: AsyncPostgresStore) -> None:
+    """Test combining vector search with filters."""
+    docs = [
+        ("doc1", {"text": "red apple", "color": "red", "score": 4.5}),
+        ("doc2", {"text": "red car", "color": "red", "score": 3.0}),
+        ("doc3", {"text": "green apple", "color": "green", "score": 4.0}),
+        ("doc4", {"text": "blue car", "color": "blue", "score": 3.5}),
+    ]
 
-            suffix_result = await store.alist_namespaces(suffix=["public", test_pref])
-            assert len(suffix_result) == 4
-            assert all(ns[-2] == "public" for ns in suffix_result)
+    for key, value in docs:
+        await vector_store.aput(("test",), key, value)
 
-            prefix_suffix_result = await store.alist_namespaces(
-                prefix=[test_pref, "test"], suffix=["public", test_pref]
-            )
-            assert len(prefix_suffix_result) == 2
-            assert all(
-                ns[1] == "test" and ns[-2] == "public" for ns in prefix_suffix_result
-            )
+    results = await vector_store.asearch(
+        ("test",), query="apple", filter={"color": "red"}
+    )
+    assert len(results) == 2
+    assert results[0].key == "doc1"
 
-            wildcard_prefix_result = await store.alist_namespaces(
-                prefix=[test_pref, "*", "documents"]
-            )
-            assert len(wildcard_prefix_result) == 5
-            assert all(ns[2] == "documents" for ns in wildcard_prefix_result)
+    results = await vector_store.asearch(
+        ("test",), query="car", filter={"color": "red"}
+    )
+    assert len(results) == 2
+    assert results[0].key == "doc2"
 
-            wildcard_suffix_result = await store.alist_namespaces(
-                suffix=["*", "public", test_pref]
-            )
-            assert len(wildcard_suffix_result) == 4
-            assert all(ns[-2] == "public" for ns in wildcard_suffix_result)
-            wildcard_single = await store.alist_namespaces(
-                suffix=["some", "*", "public", test_pref]
-            )
-            assert len(wildcard_single) == 1
-            assert wildcard_single[0] == (
-                test_pref,
-                "prod",
-                "documents",
-                "some",
-                "nesting",
-                "public",
-                test_pref,
-            )
+    results = await vector_store.asearch(
+        ("test",), query="bbbbluuu", filter={"score": {"$gt": 3.2}}
+    )
+    assert len(results) == 3
+    assert results[0].key == "doc4"
 
-            max_depth_result = await store.alist_namespaces(max_depth=3)
-            assert all([len(ns) <= 3 for ns in max_depth_result])
-            max_depth_result = await store.alist_namespaces(
-                max_depth=4, prefix=[test_pref, "*", "documents"]
-            )
-            assert (
-                len(set(tuple(res) for res in max_depth_result))
-                == len(max_depth_result)
-                == 5
-            )
+    results = await vector_store.asearch(
+        ("test",), query="apple", filter={"score": {"$gte": 4.0}, "color": "green"}
+    )
+    assert len(results) == 1
+    assert results[0].key == "doc3"
 
-            limit_result = await store.alist_namespaces(prefix=[test_pref], limit=3)
-            assert len(limit_result) == 3
 
-            offset_result = await store.alist_namespaces(prefix=[test_pref], offset=3)
-            assert len(offset_result) == len(test_namespaces) - 3
+async def test_vector_search_pagination(vector_store: AsyncPostgresStore) -> None:
+    """Test pagination with vector search."""
+    for i in range(5):
+        await vector_store.aput(
+            ("test",), f"doc{i}", {"text": f"test document number {i}"}
+        )
 
-            empty_prefix_result = await store.alist_namespaces(prefix=[test_pref])
-            assert len(empty_prefix_result) == len(test_namespaces)
-            assert set(tuple(ns) for ns in empty_prefix_result) == set(
-                tuple(ns) for ns in test_namespaces
-            )
+    results_page1 = await vector_store.asearch(("test",), query="test", limit=2)
+    results_page2 = await vector_store.asearch(
+        ("test",), query="test", limit=2, offset=2
+    )
 
-            for namespace in test_namespaces:
-                await store.adelete(namespace, "dummy")
+    assert len(results_page1) == 2
+    assert len(results_page2) == 2
+    assert results_page1[0].key != results_page2[0].key
 
-    async def test_search(self):
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
-            test_namespaces = [
-                ("test_search", "documents", "user1"),
-                ("test_search", "documents", "user2"),
-                ("test_search", "reports", "department1"),
-                ("test_search", "reports", "department2"),
-            ]
-            test_items = [
-                {"title": "Doc 1", "author": "John Doe", "tags": ["important"]},
-                {"title": "Doc 2", "author": "Jane Smith", "tags": ["draft"]},
-                {"title": "Report A", "author": "John Doe", "tags": ["final"]},
-                {"title": "Report B", "author": "Alice Johnson", "tags": ["draft"]},
-            ]
-            empty = await store.asearch(
-                (
-                    "scoped",
-                    "assistant_id",
-                    "shared",
-                    "6c5356f6-63ab-4158-868d-cd9fd14c736e",
-                ),
-                limit=10,
-                offset=0,
-            )
-            assert len(empty) == 0
+    all_results = await vector_store.asearch(("test",), query="test", limit=10)
+    assert len(all_results) == 5
 
-            for namespace, item in zip(test_namespaces, test_items):
-                await store.aput(namespace, f"item_{namespace[-1]}", item)
 
-            docs_result = await store.asearch(["test_search", "documents"])
-            assert len(docs_result) == 2
-            assert all([item.namespace[1] == "documents" for item in docs_result]), [
-                item.namespace for item in docs_result
-            ]
+async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> None:
+    """Test edge cases in vector search."""
+    await vector_store.aput(("test",), "doc1", {"text": "test document"})
 
-            reports_result = await store.asearch(["test_search", "reports"])
-            assert len(reports_result) == 2
-            assert all(item.namespace[1] == "reports" for item in reports_result)
+    perfect_match = await vector_store.asearch(("test",), query="text test document")
+    perfect_score = perfect_match[0].response_metadata["score"]
 
-            limited_result = await store.asearch(["test_search"], limit=2)
-            assert len(limited_result) == 2
-            offset_result = await store.asearch(["test_search"])
-            assert len(offset_result) == 4
+    results = await vector_store.asearch(("test",), query="")
+    assert len(results) == 1
+    assert "score" not in results[0].response_metadata
 
-            offset_result = await store.asearch(["test_search"], offset=2)
-            assert len(offset_result) == 2
-            assert all(item not in limited_result for item in offset_result)
+    results = await vector_store.asearch(("test",), query=None)
+    assert len(results) == 1
+    assert "score" not in results[0].response_metadata
 
-            john_doe_result = await store.asearch(
-                ["test_search"], filter={"author": "John Doe"}
-            )
-            assert len(john_doe_result) == 2
-            assert all(item.value["author"] == "John Doe" for item in john_doe_result)
+    long_query = "foo " * 100
+    results = await vector_store.asearch(("test",), query=long_query)
+    assert len(results) == 1
+    assert results[0].response_metadata["score"] < perfect_score
 
-            draft_result = await store.asearch(
-                ["test_search"], filter={"tags": ["draft"]}
-            )
-            assert len(draft_result) == 2
-            assert all("draft" in item.value["tags"] for item in draft_result)
-
-            page1 = await store.asearch(["test_search"], limit=2, offset=0)
-            page2 = await store.asearch(["test_search"], limit=2, offset=2)
-            all_items = page1 + page2
-            assert len(all_items) == 4
-            assert len(set(item.key for item in all_items)) == 4
-            empty = await store.asearch(
-                (
-                    "scoped",
-                    "assistant_id",
-                    "shared",
-                    "again",
-                    "maybe",
-                    "some-long",
-                    "6be5cb0e-2eb4-42e6-bb6b-fba3c269db25",
-                ),
-                limit=10,
-                offset=0,
-            )
-            assert len(empty) == 0
-
-            # Test with a namespace beginning with a number (like a UUID)
-            uuid_namespace = (str(uuid.uuid4()), "documents")
-            uuid_item_id = "uuid_doc"
-            uuid_item_value = {
-                "title": "UUID Document",
-                "content": "This document has a UUID namespace.",
-            }
-
-            # Insert the item with the UUID namespace
-            await store.aput(uuid_namespace, uuid_item_id, uuid_item_value)
-
-            # Retrieve the item to verify it was stored correctly
-            retrieved_item = await store.aget(uuid_namespace, uuid_item_id)
-            assert retrieved_item is not None
-            assert retrieved_item.namespace == uuid_namespace
-            assert retrieved_item.key == uuid_item_id
-            assert retrieved_item.value == uuid_item_value
-
-            # Search for the item using the UUID namespace
-            search_result = await store.asearch([uuid_namespace[0]])
-            assert len(search_result) == 1
-            assert search_result[0].key == uuid_item_id
-            assert search_result[0].value == uuid_item_value
-
-            # Clean up: delete the item with the UUID namespace
-            await store.adelete(uuid_namespace, uuid_item_id)
-
-            # Verify the item was deleted
-            deleted_item = await store.aget(uuid_namespace, uuid_item_id)
-            assert deleted_item is None
-
-            for namespace in test_namespaces:
-                await store.adelete(namespace, f"item_{namespace[-1]}")
+    special_query = "test!@#$%^&*()"
+    results = await vector_store.asearch(("test",), query=special_query)
+    assert len(results) == 1
+    assert results[0].response_metadata["score"] < perfect_score

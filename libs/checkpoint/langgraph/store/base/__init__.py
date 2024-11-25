@@ -6,7 +6,7 @@ scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, Union, cast
+from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
 
 
 class Item:
@@ -73,6 +73,52 @@ class Item:
         }
 
 
+class ResponseMetadata(TypedDict, total=False):
+    """Additional metadata about the response/result."""
+
+    score: float
+    """Relevance/similarity score if from a ranked operation."""
+
+
+class SearchItem(Item):
+    """Represents a result item with additional response metadata."""
+
+    __slots__ = "response_metadata"
+
+    def __init__(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        created_at: datetime,
+        updated_at: datetime,
+        response_metadata: Optional[ResponseMetadata] = None,
+    ) -> None:
+        """Initialize a result item.
+
+        Args:
+            namespace: Hierarchical path to the item.
+            key: Unique identifier within the namespace.
+            value: The stored value.
+            created_at: When the item was first created.
+            updated_at: When the item was last updated.
+            response_metadata: Optional metadata about the response/result.
+        """
+        super().__init__(
+            value=value,
+            key=key,
+            namespace=namespace,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+        self.response_metadata = response_metadata or {}
+
+    def dict(self) -> dict:
+        result = super().dict()
+        result["response_metadata"] = self.response_metadata
+        return result
+
+
 class GetOp(NamedTuple):
     """Operation to retrieve an item by namespace and key."""
 
@@ -93,6 +139,8 @@ class SearchOp(NamedTuple):
     """Maximum number of items to return."""
     offset: int = 0
     """Number of items to skip before returning results."""
+    query: Optional[str] = None
+    """The search query for natural language search."""
 
 
 class PutOp(NamedTuple):
@@ -231,6 +279,7 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
@@ -239,6 +288,7 @@ class BaseStore(ABC):
 
         Args:
             namespace_prefix: Hierarchical path prefix to search within.
+            query: Optional query for natural language search.
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
@@ -246,7 +296,7 @@ class BaseStore(ABC):
         Returns:
             List of items matching the search criteria.
         """
-        return self.batch([SearchOp(namespace_prefix, filter, limit, offset)])[0]
+        return self.batch([SearchOp(namespace_prefix, filter, limit, offset, query)])[0]
 
     def put(self, namespace: tuple[str, ...], key: str, value: dict[str, Any]) -> None:
         """Store or update an item.
@@ -336,6 +386,7 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
@@ -344,6 +395,7 @@ class BaseStore(ABC):
 
         Args:
             namespace_prefix: Hierarchical path prefix to search within.
+            query: Optional query for natural language search.
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
@@ -351,9 +403,11 @@ class BaseStore(ABC):
         Returns:
             List of items matching the search criteria.
         """
-        return (await self.abatch([SearchOp(namespace_prefix, filter, limit, offset)]))[
-            0
-        ]
+        return (
+            await self.abatch(
+                [SearchOp(namespace_prefix, filter, limit, offset, query)]
+            )
+        )[0]
 
     async def aput(
         self, namespace: tuple[str, ...], key: str, value: dict[str, Any]

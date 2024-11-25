@@ -4,6 +4,7 @@ import pytest
 from psycopg import AsyncConnection
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
+from utils import CharacterEmbeddings  # type: ignore
 
 DEFAULT_URI = "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
 
@@ -31,3 +32,8 @@ async def clear_test_db(conn: AsyncConnection[DictRow]) -> None:
         await conn.execute("DELETE FROM store")
     except UndefinedTable:
         pass
+
+
+@pytest.fixture
+def fake_embeddings() -> CharacterEmbeddings:
+    return CharacterEmbeddings()

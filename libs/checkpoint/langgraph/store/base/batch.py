@@ -40,12 +40,13 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
     ) -> list[Item]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset)
+        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
         return await fut
 
     async def aput(
