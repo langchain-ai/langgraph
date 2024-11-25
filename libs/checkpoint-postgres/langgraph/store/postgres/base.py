@@ -3,19 +3,10 @@ import json
 import logging
 import threading
 from collections import defaultdict
-from collections.abc import Awaitable, Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime
-from typing import (
-    Any,
-    Callable,
-    Generic,
-    Optional,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import Any, Callable, Generic, NamedTuple, Optional, TypeVar, Union, cast
 
 import orjson
 from langchain_core.embeddings import Embeddings
@@ -69,55 +60,17 @@ class EmbeddingConfig(TypedDict, total=False):
     """
 
 
-@dataclass
-class Migration:
+class Migration(NamedTuple):
     """A database migration with optional conditions and parameters."""
 
     sql: str
     condition: Optional[Callable[[Any], bool]] = None
-    acondition: Optional[Callable[[Any], Awaitable[bool]]] = None
     params: Optional[dict[str, Any]] = None
 
 
-def check_vector_available(store: Any) -> bool:
+def _embedding_requested(store: Any) -> bool:
     """Check if vector operations are available in the database."""
-    if store.embedding_config is None:
-        # Need the dims to initialize the table
-        return False
-    try:
-        with store._cursor() as cur:
-            cur.execute(
-                """
-                SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
-            """
-            )
-            result = bool(cur.fetchone())
-            if not result:
-                logger.warning("Vector extension is not available in the database.")
-            return result
-    except Exception as e:
-        logger.warning(f"Failed to check vector extension availability: {e}")
-        return False
-
-
-async def acheck_vector_available(store: Any) -> bool:
-    if store.embedding_config is None:
-        # Need the dims to initialize the table
-        return False
-    try:
-        async with store._cursor() as cur:
-            await cur.execute(
-                """
-                SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
-            """
-            )
-            result = bool(await cur.fetchone())
-            if not result:
-                logger.warning("Vector extension is not available in the database.")
-            return result
-    except Exception as e:
-        logger.warning(f"Failed to check vector extension availability: {e}")
-        return False
+    return bool(store.embedding_config)
 
 
 MIGRATIONS: Sequence[Union[str, Migration]] = [
@@ -140,8 +93,7 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
         """
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
-        condition=check_vector_available,
-        acondition=acheck_vector_available,
+        condition=_embedding_requested,
     ),
     Migration(
         """
@@ -156,8 +108,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE CASCADE
 );
 """,
-        condition=check_vector_available,
-        acondition=acheck_vector_available,
+        condition=_embedding_requested,
         params={"dims": lambda store: store.embedding_config["dims"]},
     ),
     Migration(
@@ -165,8 +116,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
 CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
     USING ivfflat (embedding vector_cosine_ops);
 """,
-        condition=check_vector_available,
-        acondition=acheck_vector_available,
+        condition=_embedding_requested,
     ),
 ]
 
@@ -714,7 +664,6 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     )
                 """
                 )
-
             for v, migration in enumerate(
                 self.MIGRATIONS[version + 1 :], start=version + 1
             ):
@@ -730,25 +679,12 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                             k: v(self) if v is not None and callable(v) else v
                             for k, v in migration.params.items()
                         }
-                        try:
-                            sql = sql % params
-                        except Exception as e:
-                            logger.warning(f"Failed to format migration {v}: {e}")
-                            if migration.condition == check_vector_available:
-                                self.embedding_config = None
-                            continue
+                        sql = sql % params
+                cur.execute(sql)
+                cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
 
-                try:
-                    cur.execute(sql)
-                    cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
-                except Exception as e:
-                    logger.warning(f"Failed to run migration {v}: {e}")
-                    if (
-                        not isinstance(migration, str)
-                        and migration.condition == check_vector_available
-                    ):
-                        self.embedding_config = None
-                    continue
+        if self.pipe:
+            self.pipe.sync()
 
 
 class Row(TypedDict):

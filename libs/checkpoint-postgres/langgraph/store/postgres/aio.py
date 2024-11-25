@@ -2,13 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
-from typing import (
-    Any,
-    Callable,
-    Optional,
-    Union,
-    cast,
-)
+from typing import Any, Callable, Optional, Union, cast
 
 import orjson
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -35,7 +29,6 @@ from langgraph.store.postgres.base import (
     _decode_ns_bytes,
     _group_ops,
     _row_to_item,
-    check_vector_available,
 )
 
 logger = logging.getLogger(__name__)
@@ -344,7 +337,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 if isinstance(migration, str):
                     sql = migration
                 else:
-                    if migration.acondition and not (await migration.acondition(self)):
+                    if migration.condition and not migration.condition(self):
                         continue
 
                     sql = migration.sql
@@ -353,24 +346,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                             k: v(self) if v is not None and callable(v) else v
                             for k, v in migration.params.items()
                         }
-                        try:
-                            sql = sql % params
-                        except Exception as e:
-                            logger.warning(f"Failed to format migration {v}: {e}")
-                            if migration.condition == check_vector_available:
-                                self.embedding_config = None
-                            continue
+                        sql = sql % params
 
-                try:
-                    await cur.execute(sql)
-                    await cur.execute(
-                        "INSERT INTO store_migrations (v) VALUES (%s)", (v,)
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to run migration {v}: {e}")
-                    if (
-                        not isinstance(migration, str)
-                        and migration.condition == check_vector_available
-                    ):
-                        self.embedding_config = None
-                    continue
+                await cur.execute(sql)
+                await cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+
+            if self.pipe:
+                await self.pipe.sync()
