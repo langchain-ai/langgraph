@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import time
+from dataclasses import replace
 from functools import partial
 from typing import Any, Callable, Optional, Sequence
 
@@ -10,9 +11,10 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    NS_SEP,
 )
-from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphInterrupt
-from langgraph.types import PregelExecutableTask, RetryPolicy
+from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphBubbleUp, ParentCommand
+from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,21 @@ def run_with_retry(
             task.proc.invoke(task.input, config)
             # if successful, end
             break
-        except GraphInterrupt:
+        except ParentCommand as exc:
+            ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
+            cmd = exc.args[0]
+            if cmd.graph == ns:
+                # this command is for the current graph, handle it
+                for w in task.writers:
+                    w.invoke(cmd, config)
+                break
+            elif cmd.graph == Command.PARENT:
+                # this command is for the parent graph, assign it to the parent
+                parent_ns = NS_SEP.join(ns.split(NS_SEP)[:-1])
+                exc.args = (replace(cmd, graph=parent_ns),)
+            # bubble up
+            raise
+        except GraphBubbleUp:
             # if interrupted, end
             raise
         except Exception as exc:
@@ -118,7 +134,21 @@ async def arun_with_retry(
                 await task.proc.ainvoke(task.input, config)
             # if successful, end
             break
-        except GraphInterrupt:
+        except ParentCommand as exc:
+            ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
+            cmd = exc.args[0]
+            if cmd.graph == ns:
+                # this command is for the current graph, handle it
+                for w in task.writers:
+                    w.invoke(cmd, config)
+                break
+            elif cmd.graph == Command.PARENT:
+                # this command is for the parent graph, assign it to the parent
+                parent_ns = NS_SEP.join(ns.split(NS_SEP)[:-1])
+                exc.args = (replace(cmd, graph=parent_ns),)
+            # bubble up
+            raise
+        except GraphBubbleUp:
             # if interrupted, end
             raise
         except Exception as exc:

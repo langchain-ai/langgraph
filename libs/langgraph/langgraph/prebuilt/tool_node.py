@@ -37,7 +37,7 @@ from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import get_all_basemodel_annotations
 from typing_extensions import Annotated, get_args, get_origin
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.utils.runnable import RunnableCallable
 
@@ -275,7 +275,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphInterrupt as e:
+        except GraphBubbleUp as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -316,7 +316,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphInterrupt as e:
+        except GraphBubbleUp as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
