@@ -600,7 +600,12 @@ def dev(
 
     config_json = langgraph_cli.config.validate_config_file(config)
     cwd = os.getcwd()
-    sys.path.insert(0, cwd)
+    sys.path.append(cwd)
+    dependencies = config_json.get("dependencies", [])
+    for dep in dependencies:
+        dep_path = pathlib.Path(cwd) / dep
+        if dep_path.is_dir() and dep_path.exists():
+            sys.path.append(str(dep_path))
 
     graphs = config_json.get("graphs", {})
     run_server(
