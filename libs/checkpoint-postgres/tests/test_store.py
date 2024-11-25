@@ -4,10 +4,14 @@ import json
 from uuid import uuid4
 
 import pytest
-from conftest import DEFAULT_URI  # type: ignore
+from conftest import (
+    DEFAULT_URI,  # type: ignore
+    INDEX_TYPES,
+    VECTOR_TYPES,
+    CharacterEmbeddings,
+)
 from langchain_core.embeddings import Embeddings
 from psycopg import Connection
-from utils import CharacterEmbeddings
 
 from langgraph.store.base import (
     GetOp,
@@ -346,8 +350,21 @@ class TestPostgresStore:
                 store.delete(namespace, key)
 
 
-@pytest.fixture
-def vector_store(fake_embeddings: Embeddings) -> PostgresStore:
+@pytest.fixture(
+    scope="function",
+    params=[
+        (index_type, vector_type, distance_type)
+        for index_type in INDEX_TYPES
+        for vector_type in VECTOR_TYPES
+        for distance_type in (
+            (["hamming"] if index_type == "ivfflat" else ["hamming", "jaccard"])
+            if vector_type == "bit"
+            else ["l2", "inner_product", "cosine"]
+        )
+    ],
+    ids=lambda p: f"{p[0]}_{p[1]}_{p[2]}",
+)
+def vector_store(request, fake_embeddings: Embeddings) -> PostgresStore:
     """Create a store with vector search enabled."""
     database = f"test_{uuid4().hex[:16]}"
     uri_parts = DEFAULT_URI.split("/")
@@ -360,12 +377,23 @@ def vector_store(fake_embeddings: Embeddings) -> PostgresStore:
     conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
 
+    index_type, vector_type, distance_type = request.param
+    embedding_config = {
+        "dims": fake_embeddings.dims,
+        "embed": fake_embeddings,
+        "index_config": {
+            "kind": index_type,
+            "vector_type": vector_type,
+        },
+        "distance_type": distance_type,
+    }
+
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {database}")
     try:
         with PostgresStore.from_conn_string(
             conn_string,
-            embedding={"dims": fake_embeddings.dims, "embed": fake_embeddings},
+            embedding=embedding_config,
         ) as store:
             store.setup()
             yield store
@@ -408,24 +436,24 @@ def test_vector_insert_with_auto_embedding(vector_store: PostgresStore) -> None:
 
 def test_vector_update_with_embedding(vector_store: PostgresStore) -> None:
     """Test that updating items properly updates their embeddings."""
-    vector_store.put(("test",), "doc1", {"text": "initial text about cats"})
+    vector_store.put(("test",), "doc1", {"text": "zany zebra Xerxes"})
     vector_store.put(("test",), "doc2", {"text": "something about dogs"})
     vector_store.put(("test",), "doc3", {"text": "text about birds"})
 
-    results_initial = vector_store.search(("test",), query="cats")
+    results_initial = vector_store.search(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
     initial_score = results_initial[0].response_metadata["score"]
 
     vector_store.put(("test",), "doc1", {"text": "new text about dogs"})
 
-    results_after = vector_store.search(("test",), query="cats")
+    results_after = vector_store.search(("test",), query="Zany Xerxes")
     after_score = next(
         (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
     )
     assert after_score < initial_score
 
-    results_new = vector_store.search(("test",), query="dogs")
+    results_new = vector_store.search(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
             assert r.response_metadata["score"] > after_score

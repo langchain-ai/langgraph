@@ -6,7 +6,11 @@ scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
+from typing import ( Any, Iterable, Literal, NamedTuple,
+                    Optional, TypedDict, Union, cast)
+
+from langchain_core.embeddings import Embeddings
+from langgraph.store.base._embed import AEmbeddingsFunc, EmbeddingsFunc, ensure_embeddings
 
 
 class Item:
@@ -229,6 +233,38 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
         )
 
 
+class EmbeddingConfig(TypedDict, total=False):
+    """Configuration for vector embeddings in PostgreSQL store."""
+
+    dims: int
+    """Number of dimensions in the embedding vectors.
+    
+    Common embedding models have the following dimensions:
+        - OpenAI text-embedding-3-large: 256, 1024, or 3072
+        - OpenAI text-embedding-3-small: 512 or 1536
+        - OpenAI text-embedding-ada-002: 1536
+        - Cohere embed-english-v3.0: 1024
+        - Cohere embed-english-light-v3.0: 384
+        - Cohere embed-multilingual-v3.0: 1024
+        - Cohere embed-multilingual-light-v3.0: 384
+    """
+
+    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
+    """Optional function to generate embeddings from text."""
+    aembed: Optional[AEmbeddingsFunc]
+    """Optional asynchronous function to generate embeddings from text.
+    
+    Provide for asynchronous embedding generation if you do not provide
+    an Embeddings object.
+    """
+
+    text_fields: Optional[list[str]]
+    """Fields to extract text from for embedding generation.
+    
+    Defaults to ["__root__"], which embeds the json object as a whole.
+    """
+
+
 class BaseStore(ABC):
     """Abstract base class for persistent key-value stores.
 
@@ -298,7 +334,13 @@ class BaseStore(ABC):
         """
         return self.batch([SearchOp(namespace_prefix, filter, limit, offset, query)])[0]
 
-    def put(self, namespace: tuple[str, ...], key: str, value: dict[str, Any]) -> None:
+    def put(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        index: Optional[bool] = None,
+    ) -> None:
         """Store or update an item.
 
         Args:
@@ -410,7 +452,11 @@ class BaseStore(ABC):
         )[0]
 
     async def aput(
-        self, namespace: tuple[str, ...], key: str, value: dict[str, Any]
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        index: Optional[bool] = None,
     ) -> None:
         """Asynchronously store or update an item.
 
@@ -481,3 +527,18 @@ class BaseStore(ABC):
             offset=offset,
         )
         return (await self.abatch([op]))[0]
+
+__all__ = [
+    "BaseStore",
+    "Item",
+    "Op",
+    "PutOp",
+    "GetOp",
+    "SearchOp",
+    "ListNamespacesOp",
+    "MatchCondition",
+    "NameSpacePath",
+    "NamespaceMatchType",
+    "Embeddings",
+    "ensure_embeddings",
+]

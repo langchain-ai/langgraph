@@ -4,9 +4,14 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
-from conftest import DEFAULT_URI  # type: ignore
+from conftest import (
+    DEFAULT_URI,  # type: ignore
+    INDEX_TYPES,
+    VECTOR_TYPES,
+    CharacterEmbeddings,
+)
+from langchain_core.embeddings import Embeddings
 from psycopg import AsyncConnection
-from test_store import CharacterEmbeddings
 
 from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
 from langgraph.store.postgres import AsyncPostgresStore
@@ -182,8 +187,22 @@ async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
     assert ("test", "namespace2") in results[0]
 
 
-@pytest.fixture
+@pytest.fixture(
+    scope="function",
+    params=[
+        (index_type, vector_type, distance_type)
+        for index_type in INDEX_TYPES
+        for vector_type in VECTOR_TYPES
+        for distance_type in (
+            (["hamming"] if index_type == "ivfflat" else ["hamming", "jaccard"])
+            if vector_type == "bit"
+            else ["l2", "inner_product", "cosine"]
+        )
+    ],
+    ids=lambda p: f"{p[0]}_{p[1]}_{p[2]}",
+)
 async def vector_store(
+    request,
     fake_embeddings: CharacterEmbeddings,
 ) -> AsyncIterator[AsyncPostgresStore]:
     """Create a store with vector search enabled."""
@@ -201,6 +220,17 @@ async def vector_store(
     conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
 
+    index_type, vector_type, distance_type = request.param
+    embedding_config = {
+        "dims": fake_embeddings.dims,
+        "embed": fake_embeddings,
+        "index_config": {
+            "kind": index_type,
+            "vector_type": vector_type,
+        },
+        "distance_type": distance_type,
+    }
+
     async with await AsyncConnection.connect(
         admin_conn_string, autocommit=True
     ) as conn:
@@ -208,7 +238,7 @@ async def vector_store(
     try:
         async with AsyncPostgresStore.from_conn_string(
             conn_string,
-            embedding={"dims": fake_embeddings.dims, "embed": fake_embeddings},
+            embedding=embedding_config,
         ) as store:
             await store.setup()
             yield store
@@ -225,7 +255,8 @@ async def test_vector_store_initialization(
     """Test store initialization with embedding config."""
     assert vector_store.embedding_config is not None
     assert vector_store.embedding_config["dims"] == fake_embeddings.dims
-    assert vector_store.embedding_config["embed"] == fake_embeddings
+    if isinstance(vector_store.embedding_config["embed"], Embeddings):
+        assert vector_store.embedding_config["embed"] == fake_embeddings
 
 
 async def test_vector_insert_with_auto_embedding(
@@ -254,24 +285,24 @@ async def test_vector_insert_with_auto_embedding(
 
 async def test_vector_update_with_embedding(vector_store: AsyncPostgresStore) -> None:
     """Test that updating items properly updates their embeddings."""
-    await vector_store.aput(("test",), "doc1", {"text": "initial text about cats"})
+    await vector_store.aput(("test",), "doc1", {"text": "zany zebra Xerxes"})
     await vector_store.aput(("test",), "doc2", {"text": "something about dogs"})
     await vector_store.aput(("test",), "doc3", {"text": "text about birds"})
 
-    results_initial = await vector_store.asearch(("test",), query="cats")
+    results_initial = await vector_store.asearch(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
     initial_score = results_initial[0].response_metadata["score"]
 
     await vector_store.aput(("test",), "doc1", {"text": "new text about dogs"})
 
-    results_after = await vector_store.asearch(("test",), query="cats")
+    results_after = await vector_store.asearch(("test",), query="Zany Xerxes")
     after_score = next(
         (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
     )
     assert after_score < initial_score
 
-    results_new = await vector_store.asearch(("test",), query="dogs")
+    results_new = await vector_store.asearch(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
             assert r.response_metadata["score"] > after_score

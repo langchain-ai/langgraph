@@ -36,4 +36,8 @@ async def clear_test_db(conn: AsyncConnection[DictRow]) -> None:
 
 @pytest.fixture
 def fake_embeddings() -> CharacterEmbeddings:
-    return CharacterEmbeddings()
+    return CharacterEmbeddings(dims=500)
+
+
+INDEX_TYPES = ["hnsw", "ivfflat"]
+VECTOR_TYPES = ["vector", "halfvec"]

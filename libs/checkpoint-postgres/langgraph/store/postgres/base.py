@@ -6,10 +6,20 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Callable, Generic, NamedTuple, Optional, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generic,
+    Literal,
+    NamedTuple,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import orjson
-from langchain_core.embeddings import Embeddings
 from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
@@ -21,6 +31,7 @@ from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
+    EmbeddingConfig,
     GetOp,
     Item,
     ListNamespacesOp,
@@ -29,35 +40,13 @@ from langgraph.store.base import (
     Result,
     SearchItem,
     SearchOp,
+    ensure_embeddings,
 )
 
+if TYPE_CHECKING:
+    from langchain_core.embeddings import Embeddings
+
 logger = logging.getLogger(__name__)
-
-
-class EmbeddingConfig(TypedDict, total=False):
-    """Configuration for vector embeddings in PostgreSQL store."""
-
-    dims: int
-    """Number of dimensions in the embedding vectors.
-    
-    Common embedding models have the following dimensions:
-        - OpenAI text-embedding-3-large: 256, 1024, or 3072
-        - OpenAI text-embedding-3-small: 512 or 1536
-        - OpenAI text-embedding-ada-002: 1536
-        - Cohere embed-english-v3.0: 1024
-        - Cohere embed-english-light-v3.0: 384
-        - Cohere embed-multilingual-v3.0: 1024
-        - Cohere embed-multilingual-light-v3.0: 384
-    """
-
-    embed: Embeddings
-    """Optional function to generate embeddings from text."""
-
-    text_fields: Optional[list[str]]
-    """Fields to extract text from for embedding generation.
-    
-    Defaults to ["__root__"], which embeds the json object as a whole.
-    """
 
 
 class Migration(NamedTuple):
@@ -71,6 +60,48 @@ class Migration(NamedTuple):
 def _embedding_requested(store: Any) -> bool:
     """Check if vector operations are available in the database."""
     return bool(store.embedding_config)
+
+
+def _get_vector_type_ops(store: Any) -> str:
+    """Get the vector type operator class based on config."""
+    if not store.embedding_config:
+        return "vector_cosine_ops"
+
+    config = cast(PostgresEmbeddingConfig, store.embedding_config)
+    index_config = config.get(
+        "index_config", BasePostgresStore._get_default_index_config()
+    )
+    vector_type = index_config.get("vector_type", "vector")
+    distance_type = config.get("distance_type", "cosine")
+
+    # For regular vectors
+    type_prefix = {"vector": "vector", "halfvec": "halfvec"}[vector_type]
+
+    if distance_type not in ("l2", "inner_product", "cosine"):
+        raise ValueError(
+            f"Vector type {vector_type} only supports 'l2', 'inner_product', or 'cosine' distance, got {distance_type}"
+        )
+
+    distance_suffix = {
+        "l2": "l2_ops",
+        "inner_product": "ip_ops",
+        "cosine": "cosine_ops",
+    }[distance_type]
+
+    return f"{type_prefix}_{distance_suffix}"
+
+
+def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
+    """Get the index type and configuration based on config."""
+    if not store.embedding_config:
+        return "hnsw", {}
+
+    config = cast(PostgresEmbeddingConfig, store.embedding_config)
+    default_config = BasePostgresStore._get_default_index_config()
+    index_config = config.get("index_config", default_config).copy()
+    kind = index_config.pop("kind", "hnsw")
+    index_config.pop("vector_type", None)
+    return kind, index_config
 
 
 MIGRATIONS: Sequence[Union[str, Migration]] = [
@@ -101,7 +132,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     prefix text NOT NULL,
     key text NOT NULL,
     field_name text NOT NULL,
-    embedding vector(%(dims)s),
+    embedding %(vector_type)s(%(dims)s),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (prefix, key, field_name),
@@ -109,16 +140,35 @@ CREATE TABLE IF NOT EXISTS store_vectors (
 );
 """,
         condition=_embedding_requested,
-        params={"dims": lambda store: store.embedding_config["dims"]},
+        params={
+            "dims": lambda store: store.embedding_config["dims"],
+            "vector_type": lambda store: (
+                cast(PostgresEmbeddingConfig, store.embedding_config)
+                .get("index_config", {})
+                .get("vector_type", "vector")
+            ),
+        },
     ),
     Migration(
         """
 CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
-    USING ivfflat (embedding vector_cosine_ops);
+    USING %(index_type)s (embedding %(ops)s)%(index_params)s;
 """,
         condition=_embedding_requested,
+        params={
+            "index_type": lambda store: _get_index_params(store)[0],
+            "ops": lambda store: _get_vector_type_ops(store),
+            "index_params": lambda store: (
+                " WITH ("
+                + ", ".join(f"{k}={v}" for k, v in _get_index_params(store)[1].items())
+                + ")"
+                if _get_index_params(store)[1]
+                else ""
+            ),
+        },
     ),
 ]
+
 
 C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
 
@@ -148,11 +198,76 @@ class PoolConfig(TypedDict, total=False):
     """
 
 
+class IndexConfig(TypedDict, total=False):
+    """Configuration for vector index in PostgreSQL store."""
+
+    kind: Literal["hnsw", "ivfflat"]
+    """Type of index to use: 'hnsw' for Hierarchical Navigable Small World, or 'ivfflat' for Inverted File Flat."""
+    vector_type: Literal["vector", "halfvec"]
+    """Type of vector storage to use.
+    Options:
+    - 'vector': Regular vectors (default)
+    - 'halfvec': Half-precision vectors for reduced memory usage
+    """
+
+
+class HNSWConfig(IndexConfig, total=False):
+    """Configuration for HNSW (Hierarchical Navigable Small World) index."""
+
+    kind: Literal["hnsw"]  # type: ignore[misc]
+    m: int
+    """Maximum number of connections per layer. Default is 16."""
+    ef_construction: int
+    """Size of dynamic candidate list for index construction. Default is 64."""
+
+
+class IVFFlatConfig(IndexConfig, total=False):
+    """IVFFlat index divides vectors into lists, and then searches a subset of those lists that are closest to the query vector. It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff).
+
+    Three keys to achieving good recall are:
+    1. Create the index after the table has some data
+    2. Choose an appropriate number of lists - a good place to start is rows / 1000 for up to 1M rows and sqrt(rows) for over 1M rows
+    3. When querying, specify an appropriate number of probes (higher is better for recall, lower is better for speed) - a good place to start is sqrt(lists)
+    """
+
+    kind: Literal["ivfflat"]  # type: ignore[misc]
+    nlist: int
+    """Number of inverted lists (clusters) for IVF index.
+    
+    Determines the number of clusters used in the index structure.
+    Higher values can improve search speed but increase index size and build time.
+    Typically set to the square root of the number of vectors in the index.
+    """
+
+
+class PostgresEmbeddingConfig(EmbeddingConfig, total=False):
+    """Configuration for vector embeddings in PostgreSQL store with pgvector-specific options.
+
+    Extends EmbeddingConfig with additional configuration for pgvector index and vector types.
+    """
+
+    index_config: Union[HNSWConfig, IVFFlatConfig]
+    """Specific configuration for the chosen index type (HNSW or IVF Flat)."""
+    distance_type: Literal["l2", "inner_product", "cosine"]
+    """Distance metric to use for vector similarity search:
+    - 'l2': Euclidean distance
+    - 'inner_product': Dot product
+    - 'cosine': Cosine similarity
+    """
+
+
 class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
-    embedding_config: Optional[EmbeddingConfig]
+    embedding_config: Optional[PostgresEmbeddingConfig]
+
+    @staticmethod
+    def _get_default_index_config() -> IndexConfig:
+        return HNSWConfig(
+            kind="hnsw",
+            vector_type="vector",
+        )
 
     def _get_batch_GET_ops_queries(
         self,
@@ -234,7 +349,6 @@ class BasePostgresStore(Generic[C]):
                     text_fields = [text_fields]
                 elif text_fields is None:
                     text_fields = ["__root__"]
-
                 for op in inserts:
                     value = op.value
                     ns = _namespace_to_text(op.namespace)
@@ -292,9 +406,26 @@ class BasePostgresStore(Generic[C]):
             if op.query and self.embedding_config:
                 needs_vector_search = True
                 embedding_requests.append((idx, op.query))
-                base_query = """
+
+                _, score_expr = _get_distance_operator(self)
+                vector_type = (
+                    cast(PostgresEmbeddingConfig, self.embedding_config)
+                    .get("index_config", self._get_default_index_config())
+                    .get("vector_type", "vector")
+                )
+
+                # For hamming distance, we need the vector dimension for normalization
+                if (
+                    vector_type == "bit"
+                    and self.embedding_config.get("distance_type") == "hamming"
+                ):
+                    score_expr = score_expr % ("%s", self.embedding_config["dims"])
+                else:
+                    score_expr = score_expr % ("%s", vector_type)
+
+                base_query = f"""
                     SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at,
-                           1 - (sv.embedding <=> %s::vector) as score
+                           {score_expr} as score
                     FROM store s
                     JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                     WHERE s.prefix LIKE %s
@@ -412,7 +543,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
-        embedding: Optional[EmbeddingConfig] = None,
+        embedding: Optional[PostgresEmbeddingConfig] = None,
     ) -> None:
         super().__init__()
         self._deserializer = deserializer
@@ -421,6 +552,13 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.supports_pipeline = Capabilities().has_pipeline()
         self.lock = threading.Lock()
         self.embedding_config = embedding
+        if self.embedding_config:
+            self.embeddings: Optional[Embeddings] = ensure_embeddings(
+                self.embedding_config.get("embed"),
+                aembed=self.embedding_config.get("aembed"),
+            )
+        else:
+            self.embeddings = None
         # TODO: Coerce embedding regular functions
 
     @classmethod
@@ -431,7 +569,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         *,
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
-        embedding: Optional[EmbeddingConfig] = None,
+        embedding: Optional[PostgresEmbeddingConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
 
@@ -441,7 +579,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             pool_config (Optional[PoolArgs]): Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
-            embedding (Optional[EmbeddingConfig]): The embedding config.
+            embedding (Optional[PostgresEmbeddingConfig]): The embedding config.
 
         Returns:
             PostgresStore: A new PostgresStore instance.
@@ -574,19 +712,20 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
     ) -> None:
         queries, embedding_request = self._prepare_batch_PUT_queries(put_ops)
         if embedding_request:
-            if self.embedding_config is None:
+            if self.embeddings is None:
                 # Should not get here since the embedding config is required
                 # to return an embedding_request above
                 raise ValueError(
                     "Embedding configuration is required for vector operations "
                     f"(for semantic search). "
-                    f"Please provide an EmbeddingConfig when initializing the {self.__class__.__name__}."
+                    f"Please provide an Embeddings when initializing the {self.__class__.__name__}."
                 )
             query, txt_params = embedding_request
             # Update the params to replace the raw text with the vectors
-            vectors = self.embedding_config["embed"].embed_documents(
+            vectors = self.embeddings.embed_documents(
                 [param[-1] for param in txt_params]
             )
+
             queries.extend(
                 [
                     (query, (ns, key, value, vector))
@@ -605,8 +744,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
     ) -> None:
         queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
 
-        if embedding_requests and self.embedding_config:
-            embeddings = self.embedding_config["embed"].embed_documents(
+        if embedding_requests and self.embeddings:
+            embeddings = self.embeddings.embed_documents(
                 [query for _, query in embedding_requests]
             )
             for (idx, _), embedding in zip(embedding_requests, embeddings):
@@ -818,7 +957,7 @@ def _tokenize_path(path: str) -> list[str]:
             tokens.append("".join(field_chars))
             continue
 
-        elif char == ".":
+        elif char == ".":  # Handle regular field
             if current:
                 tokens.append("".join(current))
                 current = []
@@ -918,3 +1057,19 @@ def _extract_text_by_path(obj: Any, path: str) -> list[str]:
 
     tokens = _tokenize_path(path)
     return _extract_from_obj(obj, tokens, 0)
+
+
+def _get_distance_operator(store: Any) -> tuple[str, str]:
+    """Get the distance operator and score expression based on config."""
+    if not store.embedding_config:
+        return "<=>", "1 - (sv.embedding <=> %s::vector)"
+
+    config = cast(PostgresEmbeddingConfig, store.embedding_config)
+    distance_type = config.get("distance_type", "cosine")
+
+    if distance_type == "l2":
+        return "<->", "1 - (sv.embedding <-> %s::%s)"
+    elif distance_type == "inner_product":
+        return "<#>", "-(sv.embedding <#> %s::%s)"
+    else:  # cosine
+        return "<=>", "1 - (sv.embedding <=> %s::%s)"
