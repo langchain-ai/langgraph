@@ -21,6 +21,8 @@ from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
+Conn = _ainternal.Conn  # For backward compatibility
+
 
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
@@ -457,3 +459,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id), self.loop
         ).result()
+
+
+__all__ = ["AsyncPostgresSaver", "Conn"]
