@@ -350,6 +350,8 @@ class BasePostgresStore(Generic[C]):
                 elif text_fields is None:
                     text_fields = ["__root__"]
                 for op in inserts:
+                    if op.index is False:
+                        continue
                     value = op.value
                     ns = _namespace_to_text(op.namespace)
                     k = op.key

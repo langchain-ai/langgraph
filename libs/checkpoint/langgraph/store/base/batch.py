@@ -57,10 +57,11 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
+        index: Optional[bool] = None,
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, key, value)
+        self._aqueue[fut] = PutOp(namespace, key, value, index)
         return await fut
 
     async def adelete(

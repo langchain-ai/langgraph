@@ -307,6 +307,15 @@ async def test_vector_update_with_embedding(vector_store: AsyncPostgresStore) ->
         if r.key == "doc1":
             assert r.response_metadata["score"] > after_score
 
+    # Don't index this one
+    await vector_store.aput(
+        ("test",), "doc4", {"text": "new text about dogs"}, index=False
+    )
+    results_new = await vector_store.asearch(
+        ("test",), query="new text about dogs", limit=3
+    )
+    assert not any(r.key == "doc4" for r in results_new)
+
 
 async def test_vector_search_with_filters(vector_store: AsyncPostgresStore) -> None:
     """Test combining vector search with filters."""

@@ -176,6 +176,12 @@ class PutOp(NamedTuple):
       - Values can be of any serializable type
     - If None, it indicates that the item should be deleted
     """
+    index: Optional[bool] = None
+    """Whether to index the item (if supported by the store).
+    
+    Defaults to True if the store supports indexing. This will embed the document
+    so it can be queried using search.
+    """
 
 
 NameSpacePath = tuple[Union[str, Literal["*"]], ...]
@@ -351,9 +357,11 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
+            index: Whether to index the item (if supported by the store).
+                Defaults to True if the store supports indexing.
         """
         _validate_namespace(namespace)
-        self.batch([PutOp(namespace, key, value)])
+        self.batch([PutOp(namespace, key, value, index=index)])
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -468,9 +476,11 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
+            index: Whether to index the item (if supported by the store).
+                Defaults to True if the store supports indexing.
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value)])
+        await self.abatch([PutOp(namespace, key, value, index)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
