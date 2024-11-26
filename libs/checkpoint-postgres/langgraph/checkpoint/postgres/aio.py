@@ -1,6 +1,7 @@
 import asyncio
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Iterator, Optional, Sequence
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -338,20 +339,25 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
-                    async with self.lock, conn.pipeline(), conn.cursor(
-                        binary=True, row_factory=dict_row
-                    ) as cur:
+                    async with (
+                        self.lock,
+                        conn.pipeline(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
-                    async with self.lock, conn.transaction(), conn.cursor(
-                        binary=True, row_factory=dict_row
-                    ) as cur:
+                    async with (
+                        self.lock,
+                        conn.transaction(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
             else:
-                async with self.lock, conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
+                async with (
+                    self.lock,
+                    conn.cursor(binary=True, row_factory=dict_row) as cur,
+                ):
                     yield cur
 
     def list(
@@ -380,7 +386,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),
+                    anext(aiter_),  # noqa: F821
                     self.loop,
                 ).result()
             except StopAsyncIteration:
