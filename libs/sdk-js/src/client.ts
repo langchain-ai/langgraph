@@ -33,6 +33,7 @@ import {
   OnConflictBehavior,
 } from "./types.js";
 import { mergeSignals } from "./utils/signals.js";
+import { getEnvironmentVariable } from "./utils/env.js";
 
 /**
  * Get the API key from the environment.
@@ -53,7 +54,7 @@ export function getApiKey(apiKey?: string): string | undefined {
   const prefixes = ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"];
 
   for (const prefix of prefixes) {
-    const envKey = process.env[`${prefix}_API_KEY`];
+    const envKey = getEnvironmentVariable(`${prefix}_API_KEY`);
     if (envKey) {
       // Remove surrounding quotes
       return envKey.trim().replace(/^["']|["']$/g, "");
