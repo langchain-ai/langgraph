@@ -167,7 +167,7 @@ export interface Thread<ValuesType = DefaultValues> {
   values: ValuesType;
 
   /** Interrupts which were thrown in this thread */
-  interrupts: {} | { [id: string]: Array<Interrupt> };
+  interrupts: Record<string, Array<Interrupt>>;
 }
 
 export interface Cron {
