@@ -10,6 +10,18 @@ from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
 
 
+class MockAsyncBatchedStore(AsyncBatchedBaseStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self._store = InMemoryStore()
+
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
+        return self._store.batch(ops)
+
+    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
+        return self._store.batch(ops)
+
+
 async def test_async_batch_store(mocker: MockerFixture) -> None:
     abatch = mocker.stub()
 
@@ -313,17 +325,6 @@ async def test_cannot_put_empty_namespace() -> None:
     store.delete(("langgraph", "foo"), "bar")
     assert store.get(("langgraph", "foo"), "bar") is None
 
-    class MockAsyncBatchedStore(AsyncBatchedBaseStore):
-        def __init__(self) -> None:
-            super().__init__()
-            self._store = InMemoryStore()
-
-        def batch(self, ops: Iterable[Op]) -> list[Result]:
-            return self._store.batch(ops)
-
-        async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-            return self._store.batch(ops)
-
     async_store = MockAsyncBatchedStore()
     doc = {"foo": "bar"}
 
@@ -354,3 +355,68 @@ async def test_cannot_put_empty_namespace() -> None:
     assert (await async_store.asearch(("valid", "namespace")))[0].value == doc
     await async_store.adelete(("valid", "namespace"), "key")
     assert (await async_store.aget(("valid", "namespace"), "key")) is None
+
+
+async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:
+    abatch = mocker.spy(InMemoryStore, "batch")
+    store = MockAsyncBatchedStore()
+
+    same_doc = {"value": "same"}
+    diff_doc = {"value": "different"}
+    await asyncio.gather(
+        store.aput(namespace=("test",), key="same", value=same_doc),
+        store.aput(namespace=("test",), key="different", value=diff_doc),
+    )
+    abatch.reset_mock()
+
+    results = await asyncio.gather(
+        store.aget(namespace=("test",), key="same"),
+        store.aget(namespace=("test",), key="same"),
+        store.aget(namespace=("test",), key="different"),
+    )
+
+    assert len(results) == 3
+    assert results[0] == results[1]
+    assert results[0] != results[2]
+    assert results[0].value == same_doc  # type: ignore
+    assert results[2].value == diff_doc  # type: ignore
+    assert len(abatch.call_args_list) == 1
+    ops = list(abatch.call_args_list[0].args[1])
+    assert len(ops) == 2
+    assert GetOp(("test",), "same") in ops
+    assert GetOp(("test",), "different") in ops
+
+    abatch.reset_mock()
+
+    doc1 = {"value": 1}
+    doc2 = {"value": 2}
+    results = await asyncio.gather(
+        store.aput(namespace=("test",), key="key", value=doc1),
+        store.aput(namespace=("test",), key="key", value=doc2),
+    )
+    assert len(abatch.call_args_list) == 1
+    ops = list(abatch.call_args_list[0].args[1])
+    assert len(ops) == 1
+    assert ops[0] == PutOp(("test",), "key", doc2)
+    assert len(results) == 2
+    assert all(result is None for result in results)
+
+    result = await store.aget(namespace=("test",), key="key")
+    assert result is not None
+    assert result.value == doc2
+
+    abatch.reset_mock()
+
+    results = await asyncio.gather(
+        store.asearch(("test",), filter={"value": 2}),
+        store.asearch(("test",), filter={"value": 2}),
+    )
+    assert len(abatch.call_args_list) == 1
+    ops = list(abatch.call_args_list[0].args[1])
+    assert len(ops) == 1
+    assert len(results) == 2
+    assert results[0] == results[1]
+    assert len(results[0]) == 1
+    assert results[0][0].value == doc2
+
+    abatch.reset_mock()
