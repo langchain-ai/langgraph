@@ -6,11 +6,15 @@ scoped to user IDs, assistant IDs, or other arbitrary namespaces.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import ( Any, Iterable, Literal, NamedTuple,
-                    Optional, TypedDict, Union, cast)
+from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
 
 from langchain_core.embeddings import Embeddings
-from langgraph.store.base._embed import AEmbeddingsFunc, EmbeddingsFunc, ensure_embeddings
+
+from langgraph.store.base._embed import (
+    AEmbeddingsFunc,
+    EmbeddingsFunc,
+    ensure_embeddings,
+)
 
 
 class Item:
@@ -527,6 +531,7 @@ class BaseStore(ABC):
             offset=offset,
         )
         return (await self.abatch([op]))[0]
+
 
 __all__ = [
     "BaseStore",

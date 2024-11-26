@@ -7,8 +7,7 @@ asynchronous operations.
 """
 
 import asyncio
-from typing import (Any, Awaitable, Callable, List, Optional, Sequence,
-                    TypeGuard, Union)
+from typing import Any, Awaitable, Callable, List, Optional, Sequence, Union
 
 from langchain_core.embeddings import Embeddings
 
@@ -30,7 +29,7 @@ Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddi
 def ensure_embeddings(
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, None],
     *,
-    aembed: Optional[AEmbeddingsFunc] = None
+    aembed: Optional[AEmbeddingsFunc] = None,
 ) -> Embeddings:
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
@@ -180,14 +179,14 @@ class EmbeddingsLambda(Embeddings):
 
 def _is_async_callable(
     func: Any,
-) -> TypeGuard[Callable[..., Awaitable]]:
+) -> bool:
     """Check if a function is async.
-    
+
     This includes both async def functions and classes with async __call__ methods.
-    
+
     Args:
         func: Function or callable object to check.
-        
+
     Returns:
         True if the function is async, False otherwise.
     """
