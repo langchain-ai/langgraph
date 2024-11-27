@@ -59,11 +59,6 @@ class Migration(NamedTuple):
     params: Optional[dict[str, Any]] = None
 
 
-def _embedding_requested(store: Any) -> bool:
-    """Check if vector operations are available in the database."""
-    return bool(store.index_config)
-
-
 MIGRATIONS: Sequence[Union[str, Migration]] = [
     """
 CREATE TABLE IF NOT EXISTS store (
@@ -84,7 +79,7 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
         """
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
-        condition=_embedding_requested,
+        condition=lambda store: bool(store.index_config),
     ),
     Migration(
         """
@@ -99,7 +94,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE CASCADE
 );
 """,
-        condition=_embedding_requested,
+        condition=lambda store: bool(store.index_config),
         params={
             "dims": lambda store: store.index_config["dims"],
             "vector_type": lambda store: (
@@ -114,7 +109,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
 CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
     USING %(index_type)s (embedding %(ops)s)%(index_params)s;
 """,
-        condition=_embedding_requested,
+        condition=lambda store: bool(store.index_config),
         params={
             "index_type": lambda store: _get_index_params(store)[0],
             "ops": lambda store: _get_vector_type_ops(store),
