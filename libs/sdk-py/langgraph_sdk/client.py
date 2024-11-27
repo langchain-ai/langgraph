@@ -59,6 +59,7 @@ from langgraph_sdk.schema import (
     ThreadStatus,
     ThreadUpdateStateResponse,
 )
+from langgraph_sdk.sse import EventSource
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +293,7 @@ class HttpClient:
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            async for event in sse.aiter_sse():
+            async for event in EventSource(sse.response).aiter_sse():
                 yield StreamPart(
                     event.event, orjson.loads(event.data) if event.data else None
                 )
@@ -2426,7 +2427,7 @@ class SyncHttpClient:
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            for event in sse.iter_sse():
+            for event in EventSource(sse.response).iter_sse():
                 yield StreamPart(
                     event.event, orjson.loads(event.data) if event.data else None
                 )

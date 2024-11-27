@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import sys
 import time
 from dataclasses import replace
 from functools import partial
@@ -18,6 +19,7 @@ from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
 logger = logging.getLogger(__name__)
+SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
 def run_with_retry(
@@ -60,6 +62,8 @@ def run_with_retry(
             # if interrupted, end
             raise
         except Exception as exc:
+            if SUPPORTS_EXC_NOTES:
+                exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
             if retry_policy is None:
                 raise
             # increment attempts
@@ -152,6 +156,8 @@ async def arun_with_retry(
             # if interrupted, end
             raise
         except Exception as exc:
+            if SUPPORTS_EXC_NOTES:
+                exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
             if retry_policy is None:
                 raise
             # increment attempts

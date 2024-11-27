@@ -399,11 +399,11 @@ async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> Non
 
     results = await vector_store.asearch(("test",), query="")
     assert len(results) == 1
-    assert "score" not in results[0].response_metadata
+    assert results[0].score is None
 
     results = await vector_store.asearch(("test",), query=None)
     assert len(results) == 1
-    assert "score" not in results[0].response_metadata
+    assert results[0].score is None
 
     long_query = "foo " * 100
     results = await vector_store.asearch(("test",), query=long_query)
