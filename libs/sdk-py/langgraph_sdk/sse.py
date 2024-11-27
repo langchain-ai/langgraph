@@ -42,7 +42,7 @@ class BytesLineDecoder:
 
         if len(lines) == 1 and not trailing_newline:
             # No new lines, buffer the input and continue.
-            self.buffer.append(lines[0])
+            self.buffer.write(lines[0])
             return []
 
         if self.buffer:
