@@ -397,7 +397,6 @@ class Graph:
                     for node in self.nodes:
                         if node != start and node != branch.then:
                             all_targets.add(node)
-
         for name, spec in self.nodes.items():
             if spec.ends:
                 all_targets.update(spec.ends)
