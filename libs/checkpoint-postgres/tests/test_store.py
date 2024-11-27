@@ -5,12 +5,6 @@ from typing import Any, Optional
 from uuid import uuid4
 
 import pytest
-from conftest import (
-    DEFAULT_URI,  # type: ignore
-    INDEX_TYPES,
-    VECTOR_TYPES,
-    CharacterEmbeddings,
-)
 from langchain_core.embeddings import Embeddings
 from psycopg import Connection
 
@@ -23,6 +17,12 @@ from langgraph.store.base import (
     SearchOp,
 )
 from langgraph.store.postgres import PostgresStore
+from tests.conftest import (
+    DEFAULT_URI,
+    INDEX_TYPES,
+    VECTOR_TYPES,
+    CharacterEmbeddings,
+)
 
 
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
@@ -373,7 +373,7 @@ def _create_vector_store(
     index_config = {
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
-        "index_config": {
+        "db_index_config": {
             "kind": index_type,
             "vector_type": vector_type,
         },
@@ -386,7 +386,7 @@ def _create_vector_store(
     try:
         with PostgresStore.from_conn_string(
             conn_string,
-            embedding=index_config,
+            index=index_config,
         ) as store:
             store.setup()
             yield store
@@ -462,20 +462,18 @@ def test_vector_update_with_embedding(vector_store: PostgresStore) -> None:
     results_initial = vector_store.search(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
-    initial_score = results_initial[0].response_metadata["score"]
+    initial_score = results_initial[0].score
 
     vector_store.put(("test",), "doc1", {"text": "new text about dogs"})
 
     results_after = vector_store.search(("test",), query="Zany Xerxes")
-    after_score = next(
-        (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
-    )
+    after_score = next((r.score for r in results_after if r.key == "doc1"), 0.0)
     assert after_score < initial_score
 
     results_new = vector_store.search(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
-            assert r.response_metadata["score"] > after_score
+            assert r.score > after_score
 
     # Don't index this one
     vector_store.put(("test",), "doc4", {"text": "new text about dogs"}, index=False)
@@ -601,8 +599,8 @@ def test_embed_with_path_sync(
         results = store.search(("test",), query="xxx")
         assert len(results) == 2
         assert results[0].key != results[1].key
-        ascore = results[0].response_metadata["score"]
-        bscore = results[1].response_metadata["score"]
+        ascore = results[0].score
+        bscore = results[1].score
         assert ascore == pytest.approx(bscore, abs=1e-3)
 
         # ~Only match doc2
@@ -610,27 +608,21 @@ def test_embed_with_path_sync(
         assert len(results) == 2
         assert results[0].key != results[1].key
         assert results[0].key == "doc2"
-        assert (
-            results[0].response_metadata["score"]
-            > results[1].response_metadata["score"]
-        )
-        assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-3)
+        assert results[0].score > results[1].score
+        assert ascore == pytest.approx(results[0].score, abs=1e-3)
 
         # ~Only match doc1
         results = store.search(("test",), query="zzz")
         assert len(results) == 2
         assert results[0].key != results[1].key
         assert results[0].key == "doc1"
-        assert (
-            results[0].response_metadata["score"]
-            > results[1].response_metadata["score"]
-        )
-        assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-3)
+        assert results[0].score > results[1].score
+        assert ascore == pytest.approx(results[0].score, abs=1e-3)
 
         # Un-indexed - will have low results for both. Not zero (because we're projecting)
         # but less than the above.
         results = store.search(("test",), query="www")
         assert len(results) == 2
         assert results[0].key != results[1].key
-        assert results[0].response_metadata["score"] < ascore
-        assert results[1].response_metadata["score"] < ascore
+        assert results[0].score < ascore
+        assert results[1].score < ascore

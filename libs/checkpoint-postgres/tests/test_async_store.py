@@ -6,17 +6,17 @@ from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 import pytest
-from conftest import (
-    DEFAULT_URI,  # type: ignore
-    INDEX_TYPES,
-    VECTOR_TYPES,
-    CharacterEmbeddings,
-)
 from langchain_core.embeddings import Embeddings
 from psycopg import AsyncConnection
 
 from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
 from langgraph.store.postgres import AsyncPostgresStore
+from tests.conftest import (
+    DEFAULT_URI,
+    INDEX_TYPES,
+    VECTOR_TYPES,
+    CharacterEmbeddings,
+)
 
 
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
@@ -215,7 +215,7 @@ async def _create_vector_store(
     index_config = {
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
-        "index_config": {
+        "db_index_config": {
             "kind": index_type,
             "vector_type": vector_type,
         },
@@ -230,7 +230,7 @@ async def _create_vector_store(
     try:
         async with AsyncPostgresStore.from_conn_string(
             conn_string,
-            embedding=index_config,
+            index=index_config,
         ) as store:
             await store.setup()
             yield store
@@ -310,20 +310,18 @@ async def test_vector_update_with_embedding(vector_store: AsyncPostgresStore) ->
     results_initial = await vector_store.asearch(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
-    initial_score = results_initial[0].response_metadata["score"]
+    initial_score = results_initial[0].score
 
     await vector_store.aput(("test",), "doc1", {"text": "new text about dogs"})
 
     results_after = await vector_store.asearch(("test",), query="Zany Xerxes")
-    after_score = next(
-        (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
-    )
+    after_score = next((r.score for r in results_after if r.key == "doc1"), 0.0)
     assert after_score < initial_score
 
     results_new = await vector_store.asearch(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
-            assert r.response_metadata["score"] > after_score
+            assert r.score > after_score
 
     # Don't index this one
     await vector_store.aput(
@@ -397,7 +395,7 @@ async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> Non
     await vector_store.aput(("test",), "doc1", {"text": "test document"})
 
     perfect_match = await vector_store.asearch(("test",), query="text test document")
-    perfect_score = perfect_match[0].response_metadata["score"]
+    perfect_score = perfect_match[0].score
 
     results = await vector_store.asearch(("test",), query="")
     assert len(results) == 1
@@ -410,12 +408,12 @@ async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> Non
     long_query = "foo " * 100
     results = await vector_store.asearch(("test",), query=long_query)
     assert len(results) == 1
-    assert results[0].response_metadata["score"] < perfect_score
+    assert results[0].score < perfect_score
 
     special_query = "test!@#$%^&*()"
     results = await vector_store.asearch(("test",), query=special_query)
     assert len(results) == 1
-    assert results[0].response_metadata["score"] < perfect_score
+    assert results[0].score < perfect_score
 
 
 @pytest.mark.parametrize(
@@ -463,23 +461,20 @@ async def test_embed_with_path(
         results = await store.asearch(("test",), query="xxx")
         assert len(results) == 2
         assert results[0].key != results[1].key
-        ascore = results[0].response_metadata["score"]
-        bscore = results[1].response_metadata["score"]
+        ascore = results[0].score
+        bscore = results[1].score
         assert ascore == pytest.approx(bscore, abs=1e-3)
 
         results = await store.asearch(("test",), query="uuu")
         assert len(results) == 2
         assert results[0].key != results[1].key
         assert results[0].key == "doc2"
-        assert (
-            results[0].response_metadata["score"]
-            > results[1].response_metadata["score"]
-        )
-        assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-3)
+        assert results[0].score > results[1].score
+        assert ascore == pytest.approx(results[0].score, abs=1e-3)
 
         # Un-indexed - will have low results for both. Not zero (because we're projecting)
         # but less than the above.
         results = await store.asearch(("test",), query="www")
         assert len(results) == 2
-        assert results[0].response_metadata["score"] < ascore
-        assert results[1].response_metadata["score"] < ascore
+        assert results[0].score < ascore
+        assert results[1].score < ascore

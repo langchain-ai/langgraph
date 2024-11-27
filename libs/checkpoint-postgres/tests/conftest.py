@@ -5,7 +5,7 @@ from psycopg import AsyncConnection
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 
-from langgraph.store.base._embed_test_utils import CharacterEmbeddings
+from tests.embed_test_utils import CharacterEmbeddings
 
 DEFAULT_URI = "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
 

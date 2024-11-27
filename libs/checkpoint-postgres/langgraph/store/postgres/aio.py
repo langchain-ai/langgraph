@@ -23,7 +23,7 @@ from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.postgres.base import (
     BasePostgresStore,
     PoolConfig,
-    PostgresEmbeddingConfig,
+    PostgresIndexConfig,
     Row,
     _decode_ns_bytes,
     _ensure_index_config,
@@ -42,6 +42,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         "lock",
         "supports_pipeline",
         "index_config",
+        "embeddings",
     )
 
     def __init__(
@@ -52,7 +53,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
-        index: Optional[PostgresEmbeddingConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> None:
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
@@ -65,11 +66,9 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
         self.supports_pipeline = Capabilities().has_pipeline()
-        self.index_config = embedding
+        self.index_config = index
         if self.index_config:
-            self.embeddings, self.index_config = _ensure_index_config(
-                self.index_config
-            )
+            self.embeddings, self.index_config = _ensure_index_config(self.index_config)
 
         else:
             self.embeddings = None
@@ -98,7 +97,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         *,
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
-        embedding: Optional[PostgresEmbeddingConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> AsyncIterator["AsyncPostgresStore"]:
         """Create a new AsyncPostgresStore instance from a connection string.
 
@@ -108,7 +107,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             pool_config (Optional[PoolConfig]): Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
-            embedding (Optional[PostgresEmbeddingConfig]): The embedding config.
+            index (Optional[PostgresIndexConfig]): The embedding config.
 
         Returns:
             AsyncPostgresStore: A new AsyncPostgresStore instance.
@@ -130,16 +129,16 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool, embedding=embedding)
+                yield cls(conn=pool, index=index)
         else:
             async with await AsyncConnection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     async with conn.pipeline() as pipe:
-                        yield cls(conn=conn, pipe=pipe, embedding=embedding)
+                        yield cls(conn=conn, pipe=pipe, index=index)
                 else:
-                    yield cls(conn=conn, embedding=embedding)
+                    yield cls(conn=conn, index=index)
 
     async def setup(self) -> None:
         """Set up the store database asynchronously.

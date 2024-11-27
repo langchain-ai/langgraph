@@ -28,7 +28,7 @@ Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddi
 
 
 def ensure_embeddings(
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc],
+    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, None],
 ) -> Embeddings:
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
