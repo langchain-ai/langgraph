@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
@@ -18,12 +19,15 @@ from typing import (
 )
 
 import orjson
-from psycopg import BaseConnection, Connection, Cursor
+from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
-from psycopg.rows import dict_row
+from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 from typing_extensions import TypedDict
 
+from langgraph.checkpoint.postgres import _ainternal as _ainternal
+from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
     GetOp,
@@ -56,7 +60,32 @@ CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pa
 """,
 ]
 
-C = TypeVar("C", bound=BaseConnection)
+C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
+
+
+class PoolConfig(TypedDict, total=False):
+    """Connection pool settings for PostgreSQL connections.
+
+    Controls connection lifecycle and resource utilization:
+    - Small pools (1-5) suit low-concurrency workloads
+    - Larger pools handle concurrent requests but consume more resources
+    - Setting max_size prevents resource exhaustion under load
+    """
+
+    min_size: int
+    """Minimum number of connections maintained in the pool. Defaults to 1."""
+
+    max_size: Optional[int]
+    """Maximum number of connections allowed in the pool. None means unlimited."""
+
+    kwargs: dict
+    """Additional connection arguments passed to each connection in the pool.
+    
+    Default kwargs set automatically:
+    - autocommit: True
+    - prepare_threshold: 0
+    - row_factory: dict_row
+    """
 
 
 class BasePostgresStore(Generic[C]):
@@ -88,9 +117,14 @@ class BasePostgresStore(Generic[C]):
         self,
         put_ops: Sequence[tuple[int, PutOp]],
     ) -> list[tuple[str, Sequence]]:
+        # Last-write wins
+        dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
+        for _, op in put_ops:
+            dedupped_ops[(op.namespace, op.key)] = op
+
         inserts: list[PutOp] = []
         deletes: list[PutOp] = []
-        for _, op in put_ops:
+        for op in dedupped_ops.values():
             if op.value is None:
                 deletes.append(op)
             else:
@@ -219,13 +253,14 @@ class BasePostgresStore(Generic[C]):
         return queries
 
 
-class PostgresStore(BaseStore, BasePostgresStore[Connection]):
-    __slots__ = ("_deserializer",)
+class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
+    __slots__ = ("_deserializer", "pipe", "lock", "supports_pipeline")
 
     def __init__(
         self,
-        conn: Connection[Any],
+        conn: _pg_internal.Conn,
         *,
+        pipe: Optional[Pipeline] = None,
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
@@ -233,26 +268,110 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
         super().__init__()
         self._deserializer = deserializer
         self.conn = conn
+        self.pipe = pipe
+        self.supports_pipeline = Capabilities().has_pipeline()
+        self.lock = threading.Lock()
+
+    @classmethod
+    @contextmanager
+    def from_conn_string(
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        pool_config: Optional[PoolConfig] = None,
+    ) -> Iterator["PostgresStore"]:
+        """Create a new PostgresStore instance from a connection string.
+
+        Args:
+            conn_string (str): The Postgres connection info string.
+            pipeline (bool): whether to use Pipeline (only for single connections)
+            pool_config (Optional[PoolArgs]): Configuration for the connection pool.
+                If provided, will create a connection pool and use it instead of a single connection.
+                This overrides the `pipeline` argument.
+        Returns:
+            PostgresStore: A new PostgresStore instance.
+        """
+        if pool_config is not None:
+            pc = pool_config.copy()
+            with cast(
+                ConnectionPool[Connection[DictRow]],
+                ConnectionPool(
+                    conn_string,
+                    min_size=pc.pop("min_size", 1),
+                    max_size=pc.pop("max_size", None),
+                    kwargs={
+                        "autocommit": True,
+                        "prepare_threshold": 0,
+                        "row_factory": dict_row,
+                        **(pc.pop("kwargs", None) or {}),
+                    },
+                    **cast(dict, pc),
+                ),
+            ) as pool:
+                yield cls(conn=pool)
+        else:
+            with Connection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
+                if pipeline:
+                    with conn.pipeline() as pipe:
+                        yield cls(conn, pipe=pipe)
+                else:
+                    yield cls(conn)
+
+    @contextmanager
+    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+        """Create a database cursor as a context manager.
+
+        Args:
+            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+                Will be applied regardless of whether the PostgresStore instance was initialized with a pipeline.
+                If pipeline mode is not supported, will fall back to using transaction context manager.
+        """
+        with _pg_internal.get_connection(self.conn) as conn:
+            if self.pipe:
+                # a connection in pipeline mode can be used concurrently
+                # in multiple threads/coroutines, but only one cursor can be
+                # used at a time
+                try:
+                    with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                        yield cur
+                finally:
+                    if pipeline:
+                        self.pipe.sync()
+            elif pipeline:
+                # a connection not in pipeline mode can only be used by one
+                # thread/coroutine at a time, so we acquire a lock
+                if self.supports_pipeline:
+                    with self.lock, conn.pipeline(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+                else:
+                    with self.lock, conn.transaction(), conn.cursor(
+                        binary=True, row_factory=dict_row
+                    ) as cur:
+                        yield cur
+            else:
+                with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    yield cur
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
-        with self.conn.pipeline():
+        with self._cursor(pipeline=True) as cur:
             if GetOp in grouped_ops:
                 self._batch_get_ops(
-                    cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results
-                )
-
-            if PutOp in grouped_ops:
-                self._batch_put_ops(
-                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp])
+                    cast(Sequence[tuple[int, GetOp]], grouped_ops[GetOp]), results, cur
                 )
 
             if SearchOp in grouped_ops:
                 self._batch_search_ops(
                     cast(Sequence[tuple[int, SearchOp]], grouped_ops[SearchOp]),
                     results,
+                    cur,
                 )
 
             if ListNamespacesOp in grouped_ops:
@@ -262,25 +381,23 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
                         grouped_ops[ListNamespacesOp],
                     ),
                     results,
+                    cur,
+                )
+            if PutOp in grouped_ops:
+                self._batch_put_ops(
+                    cast(Sequence[tuple[int, PutOp]], grouped_ops[PutOp]), cur
                 )
 
         return results
-
-    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        return await asyncio.get_running_loop().run_in_executor(None, self.batch, ops)
 
     def _batch_get_ops(
         self,
         get_ops: Sequence[tuple[int, GetOp]],
         results: list[Result],
+        cur: Cursor[DictRow],
     ) -> None:
-        cursors = []
         for query, params, namespace, items in self._get_batch_GET_ops_queries(get_ops):
-            cur = self.conn.cursor(binary=True)
             cur.execute(query, params)
-            cursors.append((cur, namespace, items))
-
-        for cur, namespace, items in cursors:
             rows = cast(list[Row], cur.fetchall())
             key_to_row = {row["key"]: row for row in rows}
             for idx, key in items:
@@ -295,70 +412,44 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
     def _batch_put_ops(
         self,
         put_ops: Sequence[tuple[int, PutOp]],
+        cur: Cursor[DictRow],
     ) -> None:
         queries = self._get_batch_PUT_queries(put_ops)
         for query, params in queries:
-            cur = self.conn.cursor(binary=True)
             cur.execute(query, params)
 
     def _batch_search_ops(
         self,
         search_ops: Sequence[tuple[int, SearchOp]],
         results: list[Result],
+        cur: Cursor[DictRow],
     ) -> None:
-        queries = self._get_batch_search_queries(search_ops)
-        cursors: list[tuple[Cursor[Any], int]] = []
-
-        for (query, params), (idx, _) in zip(queries, search_ops):
-            cur = self.conn.cursor(binary=True)
+        for (query, params), (idx, _) in zip(
+            self._get_batch_search_queries(search_ops), search_ops
+        ):
             cur.execute(query, params)
-            cursors.append((cur, idx))
-
-        for cur, idx in cursors:
             rows = cast(list[Row], cur.fetchall())
-            items = [
+            results[idx] = [
                 _row_to_item(
                     _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
                 )
                 for row in rows
             ]
-            results[idx] = items
 
     def _batch_list_namespaces_ops(
         self,
         list_ops: Sequence[tuple[int, ListNamespacesOp]],
         results: list[Result],
+        cur: Cursor[DictRow],
     ) -> None:
-        queries = self._get_batch_list_namespaces_queries(list_ops)
-        cursors: list[tuple[Cursor[Any], int]] = []
-        for (query, params), (idx, _) in zip(queries, list_ops):
-            cur = self.conn.cursor(binary=True)
+        for (query, params), (idx, _) in zip(
+            self._get_batch_list_namespaces_queries(list_ops), list_ops
+        ):
             cur.execute(query, params)
-            cursors.append((cur, idx))
+            results[idx] = [_decode_ns_bytes(row["truncated_prefix"]) for row in cur]
 
-        for cur, idx in cursors:
-            rows = cast(list[dict], cur.fetchall())
-            namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]
-            results[idx] = namespaces
-
-    @classmethod
-    @contextmanager
-    def from_conn_string(
-        cls,
-        conn_string: str,
-    ) -> Iterator["PostgresStore"]:
-        """Create a new BasePostgresStore instance from a connection string.
-
-        Args:
-            conn_string (str): The Postgres connection info string.
-
-        Returns:
-            BasePostgresStore: A new BasePostgresStore instance.
-        """
-        with Connection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            yield cls(conn=conn)
+    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
+        return await asyncio.get_running_loop().run_in_executor(None, self.batch, ops)
 
     def setup(self) -> None:
         """Set up the store database.
@@ -367,7 +458,7 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time the store is used.
         """
-        with self.conn.cursor(binary=True) as cur:
+        with self._cursor() as cur:
             try:
                 cur.execute("SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1")
                 row = cast(dict, cur.fetchone())
@@ -376,9 +467,7 @@ class PostgresStore(BaseStore, BasePostgresStore[Connection]):
                 else:
                     version = row["v"]
             except UndefinedTable:
-                self.conn.rollback()
                 version = -1
-                # Create store_migrations table if it doesn't exist
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS store_migrations (

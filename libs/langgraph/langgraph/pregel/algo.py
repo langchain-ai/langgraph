@@ -602,6 +602,7 @@ def prepare_single_task(
                     None,
                     task_id,
                     task_path,
+                    writers=proc.flat_writers,
                 )
 
         else:
@@ -720,6 +721,7 @@ def prepare_single_task(
                         None,
                         task_id,
                         task_path,
+                        writers=proc.flat_writers,
                     )
             else:
                 return PregelTask(task_id, name, task_path)

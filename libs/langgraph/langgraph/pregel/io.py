@@ -15,6 +15,7 @@ from langgraph.constants import (
     TAG_HIDDEN,
     TASKS,
 )
+from langgraph.errors import InvalidUpdateError
 from langgraph.pregel.log import logger
 from langgraph.types import Command, PregelExecutableTask, Send
 
@@ -68,6 +69,8 @@ def map_command(
     cmd: Command,
 ) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+    if cmd.graph == Command.PARENT:
+        raise InvalidUpdateError("There is not parent graph")
     if cmd.send:
         if isinstance(cmd.send, (tuple, list)):
             sends = cmd.send

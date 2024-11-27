@@ -20,7 +20,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -68,7 +68,7 @@ class BackgroundExecutor(ContextManager):
     def done(self, task: concurrent.futures.Future) -> None:
         try:
             task.result()
-        except GraphInterrupt:
+        except GraphBubbleUp:
             # This exception is an interruption signal, not an error
             # so we don't want to re-raise it on exit
             self.tasks.pop(task)
@@ -155,7 +155,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
             if exc := task.exception():
                 # This exception is an interruption signal, not an error
                 # so we don't want to re-raise it on exit
-                if isinstance(exc, GraphInterrupt):
+                if isinstance(exc, GraphBubbleUp):
                     self.tasks.pop(task)
             else:
                 self.tasks.pop(task)
