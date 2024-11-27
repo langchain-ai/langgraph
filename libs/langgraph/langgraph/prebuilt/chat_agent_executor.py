@@ -212,6 +212,7 @@ def create_react_agent(
     Args:
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools, a ToolExecutor, or a ToolNode instance.
+            If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
