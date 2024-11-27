@@ -137,6 +137,16 @@ export interface AssistantGraph {
   }>;
 }
 
+/**
+ * An interrupt thrown inside a thread.
+ */
+export interface Interrupt {
+  value: unknown;
+  when: "during";
+  resumable: boolean;
+  ns?: string[];
+}
+
 export interface Thread<ValuesType = DefaultValues> {
   /** The ID of the thread. */
   thread_id: string;
@@ -155,6 +165,9 @@ export interface Thread<ValuesType = DefaultValues> {
 
   /** The current state of the thread. */
   values: ValuesType;
+
+  /** Interrupts which were thrown in this thread */
+  interrupts: Record<string, Array<Interrupt>>;
 }
 
 export interface Cron {
@@ -210,12 +223,7 @@ export interface ThreadTask {
   name: string;
   result?: unknown;
   error: Optional<string>;
-  interrupts: Array<{
-    value: unknown;
-    when: "during";
-    resumable: boolean;
-    ns?: string[];
-  }>;
+  interrupts: Array<Interrupt>;
   checkpoint: Optional<Checkpoint>;
   state: Optional<ThreadState>;
 }

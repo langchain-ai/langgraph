@@ -102,6 +102,9 @@ class FakeToolCallingModel(BaseChatModel):
         tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
+        if len(tools) == 0:
+            raise ValueError("Must provide at least one tool")
+
         tool_dicts = []
         for tool in tools:
             if not isinstance(tool, BaseTool):
