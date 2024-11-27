@@ -4,6 +4,7 @@ import PQueueMod from "p-queue";
 const STATUS_NO_RETRY = [
   400, // Bad Request
   401, // Unauthorized
+  402, // Payment required
   403, // Forbidden
   404, // Not Found
   405, // Method Not Allowed
