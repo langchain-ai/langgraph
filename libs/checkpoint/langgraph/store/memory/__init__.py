@@ -199,7 +199,7 @@ class InMemoryStore(BaseStore):
                 with cf.ThreadPoolExecutor() as executor:
                     futures = {
                         q: executor.submit(self.embeddings.embed_query, q)
-                        for q in queries
+                        for q in list(queries)
                     }
                     for query, future in futures.items():
                         queryinmem_store[query] = future.result()
@@ -215,7 +215,7 @@ class InMemoryStore(BaseStore):
             queries = {op.query for (op, _) in search_ops.values() if op.query}
 
             if queries:
-                coros = [self.embeddings.aembed_query(q) for q in queries]
+                coros = [self.embeddings.aembed_query(q) for q in list(queries)]
                 results = await asyncio.gather(*coros)
                 queryinmem_store = dict(zip(queries, results))
 
@@ -404,15 +404,15 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
     if _check_numpy():
         import numpy as np  # type: ignore
 
-        X = np.array(X) if not isinstance(X, np.ndarray) else X
-        Y = np.array(Y) if not isinstance(Y, np.ndarray) else Y
-        X_norm = np.linalg.norm(X)
-        Y_norm = np.linalg.norm(Y, axis=1)
+        X_arr = np.array(X) if not isinstance(X, np.ndarray) else X
+        Y_arr = np.array(Y) if not isinstance(Y, np.ndarray) else Y
+        X_norm = np.linalg.norm(X_arr)
+        Y_norm = np.linalg.norm(Y_arr, axis=1)
 
         # Avoid division by zero
         mask = Y_norm != 0
         similarities = np.zeros_like(Y_norm)
-        similarities[mask] = np.dot(Y[mask], X) / (Y_norm[mask] * X_norm)
+        similarities[mask] = np.dot(Y_arr[mask], X_arr) / (Y_norm[mask] * X_norm)
         return similarities.tolist()
 
     similarities = []

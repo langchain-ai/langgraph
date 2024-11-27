@@ -1,5 +1,7 @@
 # type: ignore
 
+from contextlib import contextmanager
+from typing import Any, Optional
 from uuid import uuid4
 
 import pytest
@@ -348,21 +350,14 @@ class TestPostgresStore:
                 store.delete(namespace, key)
 
 
-@pytest.fixture(
-    scope="function",
-    params=[
-        (index_type, vector_type, distance_type)
-        for index_type in INDEX_TYPES
-        for vector_type in VECTOR_TYPES
-        for distance_type in (
-            (["hamming"] if index_type == "ivfflat" else ["hamming", "jaccard"])
-            if vector_type == "bit"
-            else ["l2", "inner_product", "cosine"]
-        )
-    ],
-    ids=lambda p: f"{p[0]}_{p[1]}_{p[2]}",
-)
-def vector_store(request, fake_embeddings: Embeddings) -> PostgresStore:
+@contextmanager
+def _create_vector_store(
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+    fake_embeddings: Embeddings,
+    text_fields: Optional[list[str]] = None,
+) -> PostgresStore:
     """Create a store with vector search enabled."""
     database = f"test_{uuid4().hex[:16]}"
     uri_parts = DEFAULT_URI.split("/")
@@ -375,7 +370,6 @@ def vector_store(request, fake_embeddings: Embeddings) -> PostgresStore:
     conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
 
-    index_type, vector_type, distance_type = request.param
     embedding_config = {
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
@@ -384,6 +378,7 @@ def vector_store(request, fake_embeddings: Embeddings) -> PostgresStore:
             "vector_type": vector_type,
         },
         "distance_type": distance_type,
+        "text_fields": text_fields,
     }
 
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
@@ -398,6 +393,32 @@ def vector_store(request, fake_embeddings: Embeddings) -> PostgresStore:
     finally:
         with Connection.connect(admin_conn_string, autocommit=True) as conn:
             conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(
+    scope="function",
+    params=[
+        (index_type, vector_type, distance_type)
+        for index_type in INDEX_TYPES
+        for vector_type in VECTOR_TYPES
+        for distance_type in (
+            (["hamming"] if index_type == "ivfflat" else ["hamming", "jaccard"])
+            if vector_type == "bit"
+            else ["l2", "inner_product", "cosine"]
+        )
+    ],
+    ids=lambda p: f"{p[0]}_{p[1]}_{p[2]}",
+)
+def vector_store(
+    request,
+    fake_embeddings: Embeddings,
+) -> PostgresStore:
+    """Create a store with vector search enabled."""
+    index_type, vector_type, distance_type = request.param
+    with _create_vector_store(
+        index_type, vector_type, distance_type, fake_embeddings
+    ) as store:
+        yield store
 
 
 def test_vector_store_initialization(
@@ -533,3 +554,83 @@ def test_vector_search_edge_cases(vector_store: PostgresStore) -> None:
     special_query = "test!@#$%^&*()"
     results = vector_store.search(("test",), query=special_query)
     assert len(results) == 1
+
+
+@pytest.mark.parametrize(
+    "index_type,vector_type,distance_type",
+    [
+        ("ivfflat", "vector", "cosine"),
+        ("hnsw", "vector", "cosine"),
+        ("hnsw", "halfvec", "cosine"),
+        ("hnsw", "halfvec", "inner_product"),
+    ],
+)
+def test_embed_with_path_sync(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test vector search with specific text fields in Postgres store."""
+    with _create_vector_store(
+        index_type,
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key0", "key1", "key3"],
+    ) as store:
+        # This will have 2 vectors representing it
+        doc1 = {
+            # Omit key0 - check it doesn't raise an error
+            "key1": "xxx",
+            "key2": "yyy",
+            "key3": "zzz",
+        }
+        # This will have 3 vectors representing it
+        doc2 = {
+            "key0": "uuu",
+            "key1": "vvv",
+            "key2": "www",
+            "key3": "xxx",
+        }
+        store.put(("test",), "doc1", doc1)
+        store.put(("test",), "doc2", doc2)
+
+        # doc2.key3 and doc1.key1 both would have the highest score
+        results = store.search(("test",), query="xxx")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        ascore = results[0].response_metadata["score"]
+        bscore = results[1].response_metadata["score"]
+        assert ascore == pytest.approx(bscore, abs=1e-3)
+
+        # ~Only match doc2
+        results = store.search(("test",), query="uuu")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].key == "doc2"
+        assert (
+            results[0].response_metadata["score"]
+            > results[1].response_metadata["score"]
+        )
+        assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-3)
+
+        # ~Only match doc1
+        results = store.search(("test",), query="zzz")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].key == "doc1"
+        assert (
+            results[0].response_metadata["score"]
+            > results[1].response_metadata["score"]
+        )
+        assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-3)
+
+        # Un-indexed - will have low results for both. Not zero (because we're projecting)
+        # but less than the above.
+        results = store.search(("test",), query="www")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].response_metadata["score"] < ascore
+        assert results[1].response_metadata["score"] < ascore

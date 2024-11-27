@@ -2,6 +2,8 @@
 import sys
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any, Optional
 
 import pytest
 from conftest import (
@@ -187,6 +189,58 @@ async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
     assert ("test", "namespace2") in results[0]
 
 
+@asynccontextmanager
+async def _create_vector_store(
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+    fake_embeddings: CharacterEmbeddings,
+    text_fields: Optional[list[str]] = None,
+) -> AsyncIterator[AsyncPostgresStore]:
+    """Create a store with vector search enabled."""
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
+
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
+
+    embedding_config = {
+        "dims": fake_embeddings.dims,
+        "embed": fake_embeddings,
+        "index_config": {
+            "kind": index_type,
+            "vector_type": vector_type,
+        },
+        "distance_type": distance_type,
+        "text_fields": text_fields,
+    }
+
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(
+            conn_string,
+            embedding=embedding_config,
+        ) as store:
+            await store.setup()
+            yield store
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
 @pytest.fixture(
     scope="function",
     params=[
@@ -206,47 +260,11 @@ async def vector_store(
     fake_embeddings: CharacterEmbeddings,
 ) -> AsyncIterator[AsyncPostgresStore]:
     """Create a store with vector search enabled."""
-    if sys.version_info < (3, 10):
-        pytest.skip("Async Postgres tests require Python 3.10+")
-
-    database = f"test_{uuid.uuid4().hex[:16]}"
-    uri_parts = DEFAULT_URI.split("/")
-    uri_base = "/".join(uri_parts[:-1])
-    query_params = ""
-    if "?" in uri_parts[-1]:
-        db_name, query_params = uri_parts[-1].split("?", 1)
-        query_params = "?" + query_params
-
-    conn_string = f"{uri_base}/{database}{query_params}"
-    admin_conn_string = DEFAULT_URI
-
     index_type, vector_type, distance_type = request.param
-    embedding_config = {
-        "dims": fake_embeddings.dims,
-        "embed": fake_embeddings,
-        "index_config": {
-            "kind": index_type,
-            "vector_type": vector_type,
-        },
-        "distance_type": distance_type,
-    }
-
-    async with await AsyncConnection.connect(
-        admin_conn_string, autocommit=True
-    ) as conn:
-        await conn.execute(f"CREATE DATABASE {database}")
-    try:
-        async with AsyncPostgresStore.from_conn_string(
-            conn_string,
-            embedding=embedding_config,
-        ) as store:
-            await store.setup()
-            yield store
-    finally:
-        async with await AsyncConnection.connect(
-            admin_conn_string, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+    async with _create_vector_store(
+        index_type, vector_type, distance_type, fake_embeddings
+    ) as store:
+        yield store
 
 
 async def test_vector_store_initialization(
@@ -398,3 +416,70 @@ async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> Non
     results = await vector_store.asearch(("test",), query=special_query)
     assert len(results) == 1
     assert results[0].response_metadata["score"] < perfect_score
+
+
+@pytest.mark.parametrize(
+    "index_type,vector_type,distance_type",
+    [
+        ("ivfflat", "vector", "cosine"),
+        ("hnsw", "vector", "cosine"),
+        ("hnsw", "halfvec", "cosine"),
+        ("hnsw", "halfvec", "inner_product"),
+    ],
+)
+async def test_embed_with_path(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test vector search with specific text fields in Postgres store."""
+    async with _create_vector_store(
+        index_type,
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key0", "key1", "key3"],
+    ) as store:
+        # This will have 2 vectors representing it
+        doc1 = {
+            # Omit key0 - check it doesn't raise an error
+            "key1": "xxx",
+            "key2": "yyy",
+            "key3": "zzz",
+        }
+        # This will have 3 vectors representing it
+        doc2 = {
+            "key0": "uuu",
+            "key1": "vvv",
+            "key2": "www",
+            "key3": "xxx",
+        }
+        await store.aput(("test",), "doc1", doc1)
+        await store.aput(("test",), "doc2", doc2)
+
+        # doc2.key3 and doc1.key1 both would have the highest score
+        results = await store.asearch(("test",), query="xxx")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        ascore = results[0].response_metadata["score"]
+        bscore = results[1].response_metadata["score"]
+        assert ascore == pytest.approx(bscore, abs=1e-3)
+
+        results = await store.asearch(("test",), query="uuu")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].key == "doc2"
+        assert (
+            results[0].response_metadata["score"]
+            > results[1].response_metadata["score"]
+        )
+        assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-3)
+
+        # Un-indexed - will have low results for both. Not zero (because we're projecting)
+        # but less than the above.
+        results = await store.asearch(("test",), query="www")
+        assert len(results) == 2
+        assert results[0].response_metadata["score"] < ascore
+        assert results[1].response_metadata["score"] < ascore

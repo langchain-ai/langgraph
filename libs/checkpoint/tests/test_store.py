@@ -1,11 +1,20 @@
 import asyncio
+import json
 from datetime import datetime
 from typing import Any, Iterable
 
 import pytest
 from pytest_mock import MockerFixture
 
-from langgraph.store.base import GetOp, InvalidNamespaceError, Item, Op, PutOp, Result
+from langgraph.store.base import (
+    GetOp,
+    InvalidNamespaceError,
+    Item,
+    Op,
+    PutOp,
+    Result,
+    get_text_at_path,
+)
 from langgraph.store.base._embed_test_utils import CharacterEmbeddings
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
@@ -21,6 +30,74 @@ class MockAsyncBatchedStore(AsyncBatchedBaseStore):
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         return self._store.batch(ops)
+
+
+def test_get_text_at_path() -> None:
+    nested_data = {
+        "name": "test",
+        "info": {
+            "age": 25,
+            "tags": ["a", "b", "c"],
+            "metadata": {"created": "2024-01-01", "updated": "2024-01-02"},
+        },
+        "items": [
+            {"id": 1, "value": "first", "tags": ["x", "y"]},
+            {"id": 2, "value": "second", "tags": ["y", "z"]},
+            {"id": 3, "value": "third", "tags": ["z", "w"]},
+        ],
+        "empty": None,
+        "zeros": [0, 0.0, "0"],
+        "empty_list": [],
+        "empty_dict": {},
+    }
+
+    assert get_text_at_path(nested_data, "__root__") == [
+        json.dumps(nested_data, sort_keys=True)
+    ]
+
+    assert get_text_at_path(nested_data, "name") == ["test"]
+    assert get_text_at_path(nested_data, "info.age") == ["25"]
+
+    assert get_text_at_path(nested_data, "info.metadata.created") == ["2024-01-01"]
+
+    assert get_text_at_path(nested_data, "items[0].value") == ["first"]
+    assert get_text_at_path(nested_data, "items[-1].value") == ["third"]
+    assert get_text_at_path(nested_data, "items[1].tags[0]") == ["y"]
+
+    values = get_text_at_path(nested_data, "items[*].value")
+    assert set(values) == {"first", "second", "third"}
+
+    metadata_dates = get_text_at_path(nested_data, "info.metadata.*")
+    assert set(metadata_dates) == {"2024-01-01", "2024-01-02"}
+    name_and_age = get_text_at_path(nested_data, "{name,info.age}")
+    assert set(name_and_age) == {"test", "25"}
+
+    item_fields = get_text_at_path(nested_data, "items[*].{id,value}")
+    assert set(item_fields) == {"1", "2", "3", "first", "second", "third"}
+
+    all_tags = get_text_at_path(nested_data, "items[*].tags[*]")
+    assert set(all_tags) == {"x", "y", "z", "w"}
+
+    assert get_text_at_path(None, "any.path") == []
+    assert get_text_at_path({}, "any.path") == []
+    assert get_text_at_path(nested_data, "") == [
+        json.dumps(nested_data, sort_keys=True)
+    ]
+    assert get_text_at_path(nested_data, "nonexistent") == []
+    assert get_text_at_path(nested_data, "items[99].value") == []
+    assert get_text_at_path(nested_data, "items[*].nonexistent") == []
+
+    assert get_text_at_path(nested_data, "empty") == []
+    assert get_text_at_path(nested_data, "empty_list") == ["[]"]
+    assert get_text_at_path(nested_data, "empty_dict") == ["{}"]
+
+    zeros = get_text_at_path(nested_data, "zeros[*]")
+    assert set(zeros) == {"0", "0.0"}
+
+    assert get_text_at_path(nested_data, "items[].value") == []
+    assert get_text_at_path(nested_data, "items[abc].value") == []
+    assert get_text_at_path(nested_data, "{unclosed") == []
+    assert get_text_at_path(nested_data, "nested[{invalid}]") == []
 
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:
@@ -804,3 +881,53 @@ async def test_async_vector_search_edge_cases(
     special_query = "test!@#$%^&*()"
     results = await store.asearch(("test",), query=special_query)
     assert len(results) == 1
+
+
+async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
+    # Basi
+    store = InMemoryStore(
+        embedding_config={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            # Key 2 isn't included. Don't index it.
+            "text_fields": ["key0", "key1", "key3"],
+        }
+    )
+    # This will have 2 vectors representing it
+    doc1 = {
+        # Omit key0 - check it doesn't raise an error
+        "key1": "xxx",
+        "key2": "yyy",
+        "key3": "zzz",
+    }
+    # This will have 3 vectors representing it
+    doc2 = {
+        "key0": "uuu",
+        "key1": "vvv",
+        "key2": "www",
+        "key3": "xxx",
+    }
+    await store.aput(("test",), "doc1", doc1)
+    await store.aput(("test",), "doc2", doc2)
+
+    # doc2.key3 and doc1.key1 both would have the highest score
+    results = await store.asearch(("test",), query="xxx")
+    assert len(results) == 2
+    assert results[0].key != results[1].key
+    ascore = results[0].response_metadata["score"]
+    bscore = results[1].response_metadata["score"]
+    assert ascore == bscore
+
+    results = await store.asearch(("test",), query="uuu")
+    assert len(results) == 2
+    assert results[0].key != results[1].key
+    assert results[0].key == "doc2"
+    assert results[0].response_metadata["score"] > results[1].response_metadata["score"]
+    assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-5)
+
+    # Un-indexed - will have low results for both. Not zero (because we're projecting)
+    # but less than the above.
+    results = await store.asearch(("test",), query="www")
+    assert len(results) == 2
+    assert results[0].response_metadata["score"] < ascore
+    assert results[1].response_metadata["score"] < ascore

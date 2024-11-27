@@ -356,11 +356,13 @@ class BasePostgresStore(Generic[C]):
                     k = op.key
 
                     for path, tokenized_path in paths:
-                        for text in get_text_at_path(value, tokenized_path):
+                        texts = get_text_at_path(value, tokenized_path)
+                        for i, text in enumerate(texts):
+                            pathname = f"{path}.{i}" if len(texts) > 1 else path
                             vector_values.append(
                                 "(%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                             )
-                            embedding_request_params.append((ns, k, path, text))
+                            embedding_request_params.append((ns, k, pathname, text))
 
             values_str = ",".join(values)
             query = f"""
@@ -408,14 +410,13 @@ class BasePostgresStore(Generic[C]):
                 needs_vector_search = True
                 embedding_requests.append((idx, op.query))
 
-                _, score_expr = _get_distance_operator(self)
+                score_expr = _get_distance_operator(self)
                 vector_type = (
                     cast(PostgresEmbeddingConfig, self.embedding_config)
                     .get("index_config", self._get_default_index_config())
                     .get("vector_type", "vector")
                 )
 
-                # For hamming distance, we need the vector dimension for normalization
                 if (
                     vector_type == "bit"
                     and self.embedding_config.get("distance_type") == "hamming"
@@ -424,14 +425,31 @@ class BasePostgresStore(Generic[C]):
                 else:
                     score_expr = score_expr % ("%s", vector_type)
 
+                vectors_per_doc_estimate = self.embedding_config[
+                    "__estimated_num_vectors"
+                ]
+                expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
+
+                # Direct query with DISTINCT ON to get best score per document
                 base_query = f"""
-                    SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at,
-                           {score_expr} as score
-                    FROM store s
-                    JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
-                    WHERE s.prefix LIKE %s
+                    with scored as (
+                        SELECT DISTINCT ON (s.prefix, s.key)
+                            s.prefix, s.key, s.value, s.created_at, s.updated_at,
+                            {score_expr} as score
+                        FROM store s
+                        JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
+                        WHERE s.prefix LIKE %s
+                        ORDER BY s.prefix, s.key, score DESC
+                        LIMIT %s
+                    )
+
+                    SELECT * FROM scored
                 """
-                params = [None, f"{_namespace_to_text(op.namespace_prefix)}%"]
+                params = [
+                    None,  # Vector placeholder
+                    f"{_namespace_to_text(op.namespace_prefix)}%",
+                    expanded_limit,
+                ]
 
             if op.filter:
                 filter_conditions = []
@@ -448,14 +466,17 @@ class BasePostgresStore(Generic[C]):
                         params.extend([key, json.dumps(value)])
 
                 if filter_conditions:
-                    base_query += " AND " + " AND ".join(filter_conditions)
+                    if needs_vector_search:
+                        base_query += " WHERE " + " AND ".join(filter_conditions)
+                    else:
+                        base_query += " AND " + " AND ".join(filter_conditions)
 
-            order_by = (
-                "ORDER BY score DESC"
-                if needs_vector_search
-                else "ORDER BY updated_at DESC"
-            )
-            base_query += f" {order_by} LIMIT %s OFFSET %s"
+            if needs_vector_search:
+                base_query += " ORDER BY score DESC"
+            else:
+                base_query += " ORDER BY updated_at DESC"
+
+            base_query += " LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
             queries.append((base_query, params))
 
@@ -554,18 +575,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.lock = threading.Lock()
         self.embedding_config = embedding
         if self.embedding_config:
-            self.embedding_config = self.embedding_config.copy()
-            self.embedding_config["__tokenized_fields"] = [
-                (p, tokenize_path(p)) if p != "__root__" else (p, p)
-                for p in (self.embedding_config.get("text_fields") or ["__root__"])
-            ]
-            self.embeddings: Optional[Embeddings] = ensure_embeddings(
-                self.embedding_config.get("embed"),
-                aembed=self.embedding_config.get("aembed"),
+            self.embeddings, self.embedding_config = _ensure_embedding_config(
+                self.embedding_config
             )
         else:
             self.embeddings = None
-        # TODO: Coerce embedding regular functions
 
     @classmethod
     @contextmanager
@@ -732,11 +746,15 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 [param[-1] for param in txt_params]
             )
 
-            queries.extend(
-                [
-                    (query, (ns, key, value, vector))
-                    for (ns, key, value, _), vector in zip(txt_params, vectors)
-                ]
+            queries.append(
+                (
+                    query,
+                    [
+                        p
+                        for (ns, k, pathname, _), vector in zip(txt_params, vectors)
+                        for p in (ns, k, pathname, vector)
+                    ],
+                )
             )
 
         for query, params in queries:
@@ -824,9 +842,6 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                         sql = sql % params
                 cur.execute(sql)
                 cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
-
-        if self.pipe:
-            self.pipe.sync()
 
 
 class Row(TypedDict):
@@ -934,17 +949,44 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
     return tuple(namespace.split("."))
 
 
-def _get_distance_operator(store: Any) -> tuple[str, str]:
+def _get_distance_operator(store: Any) -> str:
     """Get the distance operator and score expression based on config."""
     if not store.embedding_config:
-        return "<=>", "1 - (sv.embedding <=> %s::vector)"
+        raise ValueError(
+            "Embedding configuration is required for vector operations "
+            f"(for semantic search). "
+            f"Please provide an Embeddings when initializing the {store.__class__.__name__}."
+        )
 
     config = cast(PostgresEmbeddingConfig, store.embedding_config)
     distance_type = config.get("distance_type", "cosine")
 
     if distance_type == "l2":
-        return "<->", "1 - (sv.embedding <-> %s::%s)"
+        return "1 - (sv.embedding <-> %s::%s)"
     elif distance_type == "inner_product":
-        return "<#>", "-(sv.embedding <#> %s::%s)"
+        return "-(sv.embedding <#> %s::%s)"
     else:  # cosine
-        return "<=>", "1 - (sv.embedding <=> %s::%s)"
+        return "1 - (sv.embedding <=> %s::%s)"
+
+
+def _ensure_embedding_config(
+    embedding_config: PostgresEmbeddingConfig,
+) -> tuple[Optional["Embeddings"], PostgresEmbeddingConfig]:
+    embedding_config = embedding_config.copy()
+    tokenized: list[tuple[str, Union[Literal["__root__"], list[str]]]] = []
+    tot = 0
+    for p in embedding_config.get("text_fields") or ["__root__"]:
+        if p == "__root__":
+            tokenized.append((p, "__root__"))
+            tot += 1
+        else:
+            toks = tokenize_path(p)
+            tokenized.append((p, toks))
+            tot += len(toks)
+    embedding_config["__tokenized_fields"] = tokenized
+    embedding_config["__estimated_num_vectors"] = tot
+    embeddings = ensure_embeddings(
+        embedding_config.get("embed"),
+        aembed=embedding_config.get("aembed"),
+    )
+    return embeddings, embedding_config
