@@ -179,7 +179,7 @@ def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
             - Multi-field selection: "{field1,field2}"
             - Nested paths in multi-field: "{field1,nested.field2}"
     """
-    if not path or path == "__root__":
+    if not path or path == "$":
         return [json.dumps(obj, sort_keys=True)]
 
     tokens = tokenize_path(path) if isinstance(path, str) else path

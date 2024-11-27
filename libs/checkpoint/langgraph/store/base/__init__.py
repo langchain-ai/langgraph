@@ -15,7 +15,7 @@ from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Unio
 
 from langchain_core.embeddings import Embeddings
 
-from langgraph.store.base._embed import (
+from langgraph.store.base.embed import (
     AEmbeddingsFunc,
     EmbeddingsFunc,
     ensure_embeddings,
@@ -88,17 +88,10 @@ class Item:
         }
 
 
-class ResponseMetadata(TypedDict, total=False):
-    """Additional metadata about the response/result."""
-
-    score: float
-    """Relevance/similarity score if from a ranked operation."""
-
-
 class SearchItem(Item):
     """Represents a result item with additional response metadata."""
 
-    __slots__ = "response_metadata"
+    __slots__ = ("score",)
 
     def __init__(
         self,
@@ -107,7 +100,7 @@ class SearchItem(Item):
         value: dict[str, Any],
         created_at: datetime,
         updated_at: datetime,
-        response_metadata: Optional[ResponseMetadata] = None,
+        score: Optional[float] = None,
     ) -> None:
         """Initialize a result item.
 
@@ -117,7 +110,7 @@ class SearchItem(Item):
             value: The stored value.
             created_at: When the item was first created.
             updated_at: When the item was last updated.
-            response_metadata: Optional metadata about the response/result.
+            score: Relevance/similarity score if from a ranked operation.
         """
         super().__init__(
             value=value,
@@ -126,11 +119,11 @@ class SearchItem(Item):
             created_at=created_at,
             updated_at=updated_at,
         )
-        self.response_metadata = response_metadata or {}
+        self.score = score
 
     def dict(self) -> dict:
         result = super().dict()
-        result["response_metadata"] = self.response_metadata
+        result["score"] = self.score
         return result
 
 
@@ -246,10 +239,10 @@ class IndexConfig(TypedDict, total=False):
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
     """Optional function to generate embeddings from text."""
 
-    text_fields: Optional[list[str]]
+    fields: Optional[list[str]]
     """Fields to extract text from for embedding generation.
     
-    Defaults to ["__root__"], which embeds the json object as a whole.
+    Defaults to the root ["$"], which embeds the json object as a whole.
     """
 
 

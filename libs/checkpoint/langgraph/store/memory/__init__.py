@@ -11,7 +11,7 @@ Examples:
 
     Vector search with embeddings:
         from langchain_openai import OpenAIEmbeddings
-        store = InMemoryStore(embedding_config={
+        store = InMemoryStore(index={
             "dims": 1536,
             "embed": OpenAIEmbeddings(model="text-embedding-3-small"),
         })
@@ -41,8 +41,8 @@ from langchain_core.embeddings import Embeddings
 
 from langgraph.store.base import (
     BaseStore,
-    IndexConfig,
     GetOp,
+    IndexConfig,
     Item,
     ListNamespacesOp,
     MatchCondition,
@@ -70,7 +70,7 @@ class InMemoryStore(BaseStore):
 
         Vector search with embeddings:
             from langchain_openai import OpenAIEmbeddings
-            store = InMemoryStore(embedding_config={
+            store = InMemoryStore(index={
                 "dims": 1536,
                 "embed": OpenAIEmbeddings(model="text-embedding-3-small"),
             })
@@ -95,32 +95,32 @@ class InMemoryStore(BaseStore):
 
     __slots__ = (
         "_data",
-        "embedding_config",
-        "inmem_store",
-        "embeddings",
         "_vectors",
+        "index_config",
+        "embeddings",
     )
 
-    def __init__(self, embedding_config: Optional[IndexConfig] = None) -> None:
+    def __init__(self, *, index: Optional[IndexConfig] = None) -> None:
+        # Both _data and _vectors are wrapped in the In-memory API
+        # Do not change their names
         self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
         # [ns][key][path]
-        self.inmem_store: dict[tuple[str, ...], dict[str, dict[str, list[float]]]] = (
+        self._vectors: dict[tuple[str, ...], dict[str, dict[str, list[float]]]] = (
             defaultdict(lambda: defaultdict(dict))
         )
-        self.embedding_config = embedding_config
-        if self.embedding_config:
-            self.embedding_config = self.embedding_config.copy()
+        self.index_config = index
+        if self.index_config:
+            self.index_config = self.index_config.copy()
             self.embeddings: Optional[Embeddings] = ensure_embeddings(
-                self.embedding_config.get("embed"),
-                aembed=self.embedding_config.get("aembed"),
+                self.index_config.get("embed"),
             )
-            self.embedding_config["__tokenized_fields"] = [
-                (p, tokenize_path(p)) if p != "__root__" else (p, p)
-                for p in (self.embedding_config.get("text_fields") or ["__root__"])
+            self.index_config["__tokenized_fields"] = [
+                (p, tokenize_path(p)) if p != "$" else (p, p)
+                for p in (self.index_config.get("fields") or ["$"])
             ]
 
         else:
-            self.embedding_config = None
+            self.index_config = None
             self.embeddings = None
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
@@ -132,7 +132,7 @@ class InMemoryStore(BaseStore):
             self._batch_search(search_ops, queryinmem_store, results)
 
         to_embed = self._extract_texts(put_ops)
-        if to_embed and self.embedding_config and self.embeddings:
+        if to_embed and self.index_config and self.embeddings:
             embeddings = self.embeddings.embed_documents(list(to_embed))
             self._insertinmem_store(to_embed, embeddings)
         self._apply_put_ops(put_ops)
@@ -147,7 +147,7 @@ class InMemoryStore(BaseStore):
             self._batch_search(search_ops, queryinmem_store, results)
 
         to_embed = self._extract_texts(put_ops)
-        if to_embed and self.embedding_config and self.embeddings:
+        if to_embed and self.index_config and self.embeddings:
             embeddings = await self.embeddings.aembed_documents(list(to_embed))
             self._insertinmem_store(to_embed, embeddings)
         self._apply_put_ops(put_ops)
@@ -179,9 +179,7 @@ class InMemoryStore(BaseStore):
 
             for key, item in self._data[namespace].items():
                 if filter_func(item):
-                    if op.query and (
-                        embeddings := self.inmem_store[namespace].get(key)
-                    ):
+                    if op.query and (embeddings := self._vectors[namespace].get(key)):
                         filtered.append((item, list(embeddings.values())))
                     else:
                         filtered.append((item, []))
@@ -192,7 +190,7 @@ class InMemoryStore(BaseStore):
         search_ops: dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]],
     ) -> dict[str, list[float]]:
         queryinmem_store = {}
-        if self.embedding_config and self.embeddings and search_ops:
+        if self.index_config and self.embeddings and search_ops:
             queries = {op.query for (op, _) in search_ops.values() if op.query}
 
             if queries:
@@ -211,7 +209,7 @@ class InMemoryStore(BaseStore):
         search_ops: dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]],
     ) -> dict[str, list[float]]:
         queryinmem_store = {}
-        if self.embedding_config and self.embeddings and search_ops:
+        if self.index_config and self.embeddings and search_ops:
             queries = {op.query for (op, _) in search_ops.values() if op.query}
 
             if queries:
@@ -266,7 +264,7 @@ class InMemoryStore(BaseStore):
                         value=item.value,
                         created_at=item.created_at,
                         updated_at=item.updated_at,
-                        response_metadata={"score": float(score)},
+                        score=float(score),
                     )
                     for score, item in kept
                 ]
@@ -315,7 +313,7 @@ class InMemoryStore(BaseStore):
         for (namespace, key), op in put_ops.items():
             if op.value is None:
                 self._data[namespace].pop(key, None)
-                self.inmem_store[namespace].pop(key, None)
+                self._vectors[namespace].pop(key, None)
             else:
                 self._data[namespace][key] = Item(
                     value=op.value,
@@ -328,12 +326,12 @@ class InMemoryStore(BaseStore):
     def _extract_texts(
         self, put_ops: dict[tuple[tuple[str, ...], str], PutOp]
     ) -> dict[str, list[tuple[tuple[str, ...], str, str]]]:
-        if put_ops and self.embedding_config and self.embeddings:
+        if put_ops and self.index_config and self.embeddings:
             to_embed = defaultdict(list)
 
             for op in put_ops.values():
                 if op.value is not None and op.index is not False:
-                    for path, field in self.embedding_config["__tokenized_fields"]:
+                    for path, field in self.index_config["__tokenized_fields"]:
                         texts = get_text_at_path(op.value, field)
                         if texts:
                             if len(texts) > 1:
@@ -361,7 +359,7 @@ class InMemoryStore(BaseStore):
                 f" match number of indices ({len(indices)})"
             )
         for embedding, (ns, key, path) in zip(embeddings, indices):
-            self.inmem_store[ns][key][path] = embedding
+            self._vectors[ns][key][path] = embedding
 
     def _handle_list_namespaces(self, op: ListNamespacesOp) -> list[tuple[str, ...]]:
         all_namespaces = list(
