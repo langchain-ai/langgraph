@@ -617,6 +617,7 @@ def dev(
         open_browser=not no_browser,
         debug_port=debug_port,
         env=config_json.get("env", None),
+        store=config_json.get("store", None),
     )
 
 
