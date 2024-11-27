@@ -164,7 +164,7 @@ def test_graph_validation() -> None:
     workflow = Graph()
     workflow.add_node("agent", logic)
     workflow.set_finish_point("agent")
-    with pytest.raises(ValueError, match="not reachable"):
+    with pytest.raises(ValueError, match="must have an entrypoint"):
         workflow.compile()
 
     workflow = Graph()
@@ -209,18 +209,6 @@ def test_graph_validation() -> None:
     workflow.add_node("agent", logic)
     workflow.add_node("tools", logic)
     with pytest.raises(ValueError, match="unknown"):  # extra is not defined
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.add_node("extra", logic)
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    with pytest.raises(
-        ValueError, match="Node `extra` is not reachable"
-    ):  # extra is not reachable
         workflow.compile()
 
     workflow = Graph()
@@ -278,6 +266,25 @@ def test_graph_validation() -> None:
 
     with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
         graph.invoke({"hello": "there"})
+
+
+def test_graph_validation_with_command() -> None:
+    class State(TypedDict):
+        foo: str
+        bar: str
+
+    def node_a(state: State):
+        return GraphCommand(goto="b", update={"foo": "bar"})
+
+    def node_b(state: State):
+        return GraphCommand(goto=END, update={"bar": "baz"})
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_edge(START, "a")
+    graph = builder.compile()
+    assert graph.invoke({"foo": ""}) == {"foo": "bar", "bar": "baz"}
 
 
 def test_checkpoint_errors() -> None:
