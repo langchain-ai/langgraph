@@ -41,7 +41,7 @@ from langchain_core.embeddings import Embeddings
 
 from langgraph.store.base import (
     BaseStore,
-    EmbeddingConfig,
+    IndexConfig,
     GetOp,
     Item,
     ListNamespacesOp,
@@ -101,7 +101,7 @@ class InMemoryStore(BaseStore):
         "_vectors",
     )
 
-    def __init__(self, embedding_config: Optional[EmbeddingConfig] = None) -> None:
+    def __init__(self, embedding_config: Optional[IndexConfig] = None) -> None:
         self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
         # [ns][key][path]
         self.inmem_store: dict[tuple[str, ...], dict[str, dict[str, list[float]]]] = (

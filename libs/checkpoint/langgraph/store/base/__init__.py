@@ -227,8 +227,8 @@ class InvalidNamespaceError(ValueError):
     """Provided namespace is invalid."""
 
 
-class EmbeddingConfig(TypedDict, total=False):
-    """Configuration for vector embeddings in PostgreSQL store."""
+class IndexConfig(TypedDict, total=False):
+    """Configuration for indexing documents for semantic search in the store."""
 
     dims: int
     """Number of dimensions in the embedding vectors.
@@ -245,12 +245,6 @@ class EmbeddingConfig(TypedDict, total=False):
 
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
     """Optional function to generate embeddings from text."""
-    aembed: Optional[AEmbeddingsFunc]
-    """Optional asynchronous function to generate embeddings from text.
-    
-    Provide for asynchronous embedding generation if you do not provide
-    an Embeddings object.
-    """
 
     text_fields: Optional[list[str]]
     """Fields to extract text from for embedding generation.

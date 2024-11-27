@@ -29,8 +29,6 @@ Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddi
 
 def ensure_embeddings(
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, None],
-    *,
-    aembed: Optional[AEmbeddingsFunc] = None,
 ) -> Embeddings:
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
@@ -42,9 +40,6 @@ def ensure_embeddings(
         embed: Either an existing Embeddings instance, or a function that converts
             text to embeddings. If the function is async, it will be used for both
             sync and async operations.
-        aembed: Optional async function for embeddings. If provided, it will be used
-            for async operations while the sync function is used for sync operations.
-            Must be None if embed is async.
 
     Returns:
         An Embeddings instance that wraps the provided function(s).
@@ -56,14 +51,12 @@ def ensure_embeddings(
         >>> embeddings = ensure_embeddings(my_embed_fn)
         >>> # Wrap an async function
         >>> embeddings = ensure_embeddings(my_async_fn)
-        >>> # Provide both sync and async implementations
-        >>> embeddings = ensure_embeddings(my_embed_fn, aembed=my_async_fn)
     """
-    if embed is None and aembed is None:
-        raise ValueError("embed or aembed must be provided")
+    if embed is None:
+        raise ValueError("embed must be provided")
     if isinstance(embed, Embeddings):
         return embed
-    return EmbeddingsLambda(embed, afunc=aembed)
+    return EmbeddingsLambda(embed)
 
 
 class EmbeddingsLambda(Embeddings):
@@ -97,18 +90,11 @@ class EmbeddingsLambda(Embeddings):
     def __init__(
         self,
         func: Union[EmbeddingsFunc, AEmbeddingsFunc, None],
-        afunc: Optional[AEmbeddingsFunc] = None,
     ) -> None:
         if _is_async_callable(func):
-            if afunc is not None:
-                raise ValueError(
-                    "afunc must be None if func is async. The async func will be used for both sync and async operations."
-                )
             self.afunc = func
         else:
             self.func = func
-            if afunc is not None:
-                self.afunc = afunc
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed a list of texts into vectors.
