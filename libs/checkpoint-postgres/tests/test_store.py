@@ -370,7 +370,7 @@ def _create_vector_store(
     conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
 
-    embedding_config = {
+    index_config = {
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
         "index_config": {
@@ -386,7 +386,7 @@ def _create_vector_store(
     try:
         with PostgresStore.from_conn_string(
             conn_string,
-            embedding=embedding_config,
+            embedding=index_config,
         ) as store:
             store.setup()
             yield store
@@ -426,9 +426,9 @@ def test_vector_store_initialization(
 ) -> None:
     """Test store initialization with embedding config."""
     # Store should be initialized with embedding config
-    assert vector_store.embedding_config is not None
-    assert vector_store.embedding_config["dims"] == fake_embeddings.dims
-    assert vector_store.embedding_config["embed"] == fake_embeddings
+    assert vector_store.index_config is not None
+    assert vector_store.index_config["dims"] == fake_embeddings.dims
+    assert vector_store.index_config["embed"] == fake_embeddings
 
 
 def test_vector_insert_with_auto_embedding(vector_store: PostgresStore) -> None:

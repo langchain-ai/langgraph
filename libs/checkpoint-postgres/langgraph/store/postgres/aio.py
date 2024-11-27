@@ -26,7 +26,7 @@ from langgraph.store.postgres.base import (
     PostgresEmbeddingConfig,
     Row,
     _decode_ns_bytes,
-    _ensure_embedding_config,
+    _ensure_index_config,
     _group_ops,
     _row_to_item,
     _row_to_search_item,
@@ -41,7 +41,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         "pipe",
         "lock",
         "supports_pipeline",
-        "embedding_config",
+        "index_config",
     )
 
     def __init__(
@@ -52,7 +52,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
-        embedding: Optional[PostgresEmbeddingConfig] = None,
+        index: Optional[PostgresEmbeddingConfig] = None,
     ) -> None:
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
@@ -65,10 +65,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
         self.supports_pipeline = Capabilities().has_pipeline()
-        self.embedding_config = embedding
-        if self.embedding_config:
-            self.embeddings, self.embedding_config = _ensure_embedding_config(
-                self.embedding_config
+        self.index_config = embedding
+        if self.index_config:
+            self.embeddings, self.index_config = _ensure_index_config(
+                self.index_config
             )
 
         else:

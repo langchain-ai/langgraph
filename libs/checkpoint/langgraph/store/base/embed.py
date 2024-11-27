@@ -49,7 +49,7 @@ def ensure_embeddings(
         ```python
         def my_embed_fn(texts):
             return [[0.1, 0.2] for _ in texts]
-        
+
         embeddings = ensure_embeddings(my_embed_fn)
         result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
         ```
@@ -58,7 +58,7 @@ def ensure_embeddings(
         ```python
         async def my_async_fn(texts):
             return [[0.1, 0.2] for _ in texts]
-        
+
         embeddings = ensure_embeddings(my_async_fn)
         result = await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
         ```
@@ -196,8 +196,8 @@ def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
 
     Args:
         obj: The object to extract text from
-        path: Either a path string or pre-tokenized path list. 
-        
+        path: Either a path string or pre-tokenized path list.
+
     !!! info "Path types handled"
         - Simple paths: "field1.field2"
         - Array indexing: "[0]", "[*]", "[-1]"

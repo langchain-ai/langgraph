@@ -212,7 +212,7 @@ async def _create_vector_store(
     conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
 
-    embedding_config = {
+    index_config = {
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
         "index_config": {
@@ -230,7 +230,7 @@ async def _create_vector_store(
     try:
         async with AsyncPostgresStore.from_conn_string(
             conn_string,
-            embedding=embedding_config,
+            embedding=index_config,
         ) as store:
             await store.setup()
             yield store
@@ -271,10 +271,10 @@ async def test_vector_store_initialization(
     vector_store: AsyncPostgresStore, fake_embeddings: CharacterEmbeddings
 ) -> None:
     """Test store initialization with embedding config."""
-    assert vector_store.embedding_config is not None
-    assert vector_store.embedding_config["dims"] == fake_embeddings.dims
-    if isinstance(vector_store.embedding_config["embed"], Embeddings):
-        assert vector_store.embedding_config["embed"] == fake_embeddings
+    assert vector_store.index_config is not None
+    assert vector_store.index_config["dims"] == fake_embeddings.dims
+    if isinstance(vector_store.index_config["embed"], Embeddings):
+        assert vector_store.index_config["embed"] == fake_embeddings
 
 
 async def test_vector_insert_with_auto_embedding(

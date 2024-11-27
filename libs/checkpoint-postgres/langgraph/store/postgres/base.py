@@ -31,7 +31,7 @@ from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
-    EmbeddingConfig,
+    IndexConfig,
     GetOp,
     Item,
     ListNamespacesOp,
@@ -61,49 +61,7 @@ class Migration(NamedTuple):
 
 def _embedding_requested(store: Any) -> bool:
     """Check if vector operations are available in the database."""
-    return bool(store.embedding_config)
-
-
-def _get_vector_type_ops(store: Any) -> str:
-    """Get the vector type operator class based on config."""
-    if not store.embedding_config:
-        return "vector_cosine_ops"
-
-    config = cast(PostgresEmbeddingConfig, store.embedding_config)
-    index_config = config.get(
-        "index_config", BasePostgresStore._get_default_index_config()
-    )
-    vector_type = index_config.get("vector_type", "vector")
-    distance_type = config.get("distance_type", "cosine")
-
-    # For regular vectors
-    type_prefix = {"vector": "vector", "halfvec": "halfvec"}[vector_type]
-
-    if distance_type not in ("l2", "inner_product", "cosine"):
-        raise ValueError(
-            f"Vector type {vector_type} only supports 'l2', 'inner_product', or 'cosine' distance, got {distance_type}"
-        )
-
-    distance_suffix = {
-        "l2": "l2_ops",
-        "inner_product": "ip_ops",
-        "cosine": "cosine_ops",
-    }[distance_type]
-
-    return f"{type_prefix}_{distance_suffix}"
-
-
-def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
-    """Get the index type and configuration based on config."""
-    if not store.embedding_config:
-        return "hnsw", {}
-
-    config = cast(PostgresEmbeddingConfig, store.embedding_config)
-    default_config = BasePostgresStore._get_default_index_config()
-    index_config = config.get("index_config", default_config).copy()
-    kind = index_config.pop("kind", "hnsw")
-    index_config.pop("vector_type", None)
-    return kind, index_config
+    return bool(store.index_config)
 
 
 MIGRATIONS: Sequence[Union[str, Migration]] = [
@@ -143,9 +101,9 @@ CREATE TABLE IF NOT EXISTS store_vectors (
 """,
         condition=_embedding_requested,
         params={
-            "dims": lambda store: store.embedding_config["dims"],
+            "dims": lambda store: store.index_config["dims"],
             "vector_type": lambda store: (
-                cast(PostgresEmbeddingConfig, store.embedding_config)
+                cast(PostgresEmbeddingConfig, store.index_config)
                 .get("index_config", {})
                 .get("vector_type", "vector")
             ),
@@ -242,7 +200,7 @@ class IVFFlatConfig(IndexConfig, total=False):
     """
 
 
-class PostgresEmbeddingConfig(EmbeddingConfig, total=False):
+class PostgresEmbeddingConfig(IndexConfig, total=False):
     """Configuration for vector embeddings in PostgreSQL store with pgvector-specific options.
 
     Extends EmbeddingConfig with additional configuration for pgvector index and vector types.
@@ -262,7 +220,7 @@ class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
-    embedding_config: Optional[PostgresEmbeddingConfig]
+    index_config: Optional[PostgresEmbeddingConfig]
 
     @staticmethod
     def _get_default_index_config() -> IndexConfig:
@@ -345,8 +303,8 @@ class BasePostgresStore(Generic[C]):
                 )
 
             # Then handle embeddings if configured
-            if self.embedding_config:
-                paths = self.embedding_config["__tokenized_fields"]
+            if self.index_config:
+                paths = self.index_config["__tokenized_fields"]
                 for op in inserts:
                     if op.index is False:
                         continue
@@ -405,26 +363,26 @@ class BasePostgresStore(Generic[C]):
             params: list = [f"{_namespace_to_text(op.namespace_prefix)}%"]
             needs_vector_search = False
 
-            if op.query and self.embedding_config:
+            if op.query and self.index_config:
                 needs_vector_search = True
                 embedding_requests.append((idx, op.query))
 
                 score_expr = _get_distance_operator(self)
                 vector_type = (
-                    cast(PostgresEmbeddingConfig, self.embedding_config)
+                    cast(PostgresEmbeddingConfig, self.index_config)
                     .get("index_config", self._get_default_index_config())
                     .get("vector_type", "vector")
                 )
 
                 if (
                     vector_type == "bit"
-                    and self.embedding_config.get("distance_type") == "hamming"
+                    and self.index_config.get("distance_type") == "hamming"
                 ):
-                    score_expr = score_expr % ("%s", self.embedding_config["dims"])
+                    score_expr = score_expr % ("%s", self.index_config["dims"])
                 else:
                     score_expr = score_expr % ("%s", vector_type)
 
-                vectors_per_doc_estimate = self.embedding_config[
+                vectors_per_doc_estimate = self.index_config[
                     "__estimated_num_vectors"
                 ]
                 expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
@@ -572,10 +530,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.pipe = pipe
         self.supports_pipeline = Capabilities().has_pipeline()
         self.lock = threading.Lock()
-        self.embedding_config = embedding
-        if self.embedding_config:
-            self.embeddings, self.embedding_config = _ensure_embedding_config(
-                self.embedding_config
+        self.index_config = embedding
+        if self.index_config:
+            self.embeddings, self.index_config = _ensure_index_config(
+                self.index_config
             )
         else:
             self.embeddings = None
@@ -851,6 +809,50 @@ class Row(TypedDict):
     updated_at: datetime
 
 
+# Private utilities
+
+
+def _get_vector_type_ops(store: Any) -> str:
+    """Get the vector type operator class based on config."""
+    if not store.index_config:
+        return "vector_cosine_ops"
+
+    config = cast(PostgresEmbeddingConfig, store.index_config)
+    index_config = config.get(
+        "index_config", BasePostgresStore._get_default_index_config()
+    )
+    vector_type = index_config.get("vector_type", "vector")
+    distance_type = config.get("distance_type", "cosine")
+
+    # For regular vectors
+    type_prefix = {"vector": "vector", "halfvec": "halfvec"}[vector_type]
+
+    if distance_type not in ("l2", "inner_product", "cosine"):
+        raise ValueError(
+            f"Vector type {vector_type} only supports 'l2', 'inner_product', or 'cosine' distance, got {distance_type}"
+        )
+
+    distance_suffix = {
+        "l2": "l2_ops",
+        "inner_product": "ip_ops",
+        "cosine": "cosine_ops",
+    }[distance_type]
+
+    return f"{type_prefix}_{distance_suffix}"
+
+
+def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
+    """Get the index type and configuration based on config."""
+    if not store.index_config:
+        return "hnsw", {}
+
+    config = cast(PostgresEmbeddingConfig, store.index_config)
+    default_config = BasePostgresStore._get_default_index_config()
+    index_config = config.get("index_config", default_config).copy()
+    kind = index_config.pop("kind", "hnsw")
+    index_config.pop("vector_type", None)
+    return kind, index_config
+
 def _namespace_to_text(
     namespace: tuple[str, ...], handle_wildcards: bool = False
 ) -> str:
@@ -950,14 +952,14 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
 
 def _get_distance_operator(store: Any) -> str:
     """Get the distance operator and score expression based on config."""
-    if not store.embedding_config:
+    if not store.index_config:
         raise ValueError(
             "Embedding configuration is required for vector operations "
             f"(for semantic search). "
             f"Please provide an Embeddings when initializing the {store.__class__.__name__}."
         )
 
-    config = cast(PostgresEmbeddingConfig, store.embedding_config)
+    config = cast(PostgresEmbeddingConfig, store.index_config)
     distance_type = config.get("distance_type", "cosine")
 
     if distance_type == "l2":
@@ -968,13 +970,13 @@ def _get_distance_operator(store: Any) -> str:
         return "1 - (sv.embedding <=> %s::%s)"
 
 
-def _ensure_embedding_config(
-    embedding_config: PostgresEmbeddingConfig,
+def _ensure_index_config(
+    index_config: PostgresEmbeddingConfig,
 ) -> tuple[Optional["Embeddings"], PostgresEmbeddingConfig]:
-    embedding_config = embedding_config.copy()
+    index_config = index_config.copy()
     tokenized: list[tuple[str, Union[Literal["__root__"], list[str]]]] = []
     tot = 0
-    for p in embedding_config.get("text_fields") or ["__root__"]:
+    for p in index_config.get("text_fields") or ["__root__"]:
         if p == "__root__":
             tokenized.append((p, "__root__"))
             tot += 1
@@ -982,10 +984,10 @@ def _ensure_embedding_config(
             toks = tokenize_path(p)
             tokenized.append((p, toks))
             tot += len(toks)
-    embedding_config["__tokenized_fields"] = tokenized
-    embedding_config["__estimated_num_vectors"] = tot
+    index_config["__tokenized_fields"] = tokenized
+    index_config["__estimated_num_vectors"] = tot
     embeddings = ensure_embeddings(
-        embedding_config.get("embed"),
-        aembed=embedding_config.get("aembed"),
+        index_config.get("embed"),
+        aembed=index_config.get("aembed"),
     )
-    return embeddings, embedding_config
+    return embeddings, index_config
