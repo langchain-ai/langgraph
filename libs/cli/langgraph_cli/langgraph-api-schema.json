@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LangGraph Configuration Schema",
+  "description": "Schema for LangGraph configuration file (langgraph.json)",
+  "type": "object",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["node_version", "graphs"],
+      "properties": {
+        "node_version": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "description": "Node.js major version number (e.g. '20'). Must be >= 20."
+        },
+        "dockerfile_lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional lines to add to the Dockerfile"
+        },
+        "graphs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[^:]+:[^:]+$",
+            "description": "Import string in format '<module>:<attribute>'"
+          },
+          "description": "Dictionary mapping graph IDs to import strings"
+        },
+        "env": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Environment variables as object or path to .env file"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["dependencies", "graphs"],
+      "properties": {
+        "python_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$",
+          "description": "Python version in 'major.minor' format (e.g. '3.11'). Must be >= 3.11."
+        },
+        "pip_config_file": {
+          "type": "string",
+          "description": "Path to pip configuration file"
+        },
+        "dockerfile_lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional lines to add to the Dockerfile"
+        },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "List of dependencies (PyPI packages or local paths)"
+        },
+        "graphs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[^:]+:[^:]+$",
+            "description": "Import string in format '<module>:<attribute>'"
+          },
+          "description": "Dictionary mapping graph IDs to import strings"
+        },
+        "env": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Environment variables as object or path to .env file"
+        }
+      }
+    }
+  ]
+}
