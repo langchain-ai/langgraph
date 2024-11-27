@@ -35,7 +35,9 @@ from langgraph.store.base import (
     ListNamespacesOp,
     Op,
     PutOp,
+    ResponseMetadata,
     Result,
+    SearchItem,
     SearchOp,
 )
 
@@ -344,14 +346,18 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
-                    with self.lock, conn.pipeline(), conn.cursor(
-                        binary=True, row_factory=dict_row
-                    ) as cur:
+                    with (
+                        self.lock,
+                        conn.pipeline(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
                 else:
-                    with self.lock, conn.transaction(), conn.cursor(
-                        binary=True, row_factory=dict_row
-                    ) as cur:
+                    with (
+                        self.lock,
+                        conn.transaction(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
             else:
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
@@ -430,7 +436,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
             results[idx] = [
-                _row_to_item(
+                _row_to_search_item(
                     _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
                 )
                 for row in rows
@@ -514,6 +520,32 @@ def _row_to_item(
         namespace=namespace,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+    )
+
+
+def _row_to_search_item(
+    namespace: tuple[str, ...],
+    row: Row,
+    *,
+    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
+) -> SearchItem:
+    """Convert a row from the database into an Item."""
+    loader = loader or _json_loads
+    val = row["value"]
+    response_metadata: Optional[ResponseMetadata] = (
+        {
+            "score": float(row["score"]),
+        }
+        if row.get("score") is not None
+        else None
+    )
+    return SearchItem(
+        value=val if isinstance(val, dict) else loader(val),
+        key=row["key"],
+        namespace=namespace,
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        response_metadata=response_metadata,
     )
 
 

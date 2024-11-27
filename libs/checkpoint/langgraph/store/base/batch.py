@@ -11,6 +11,7 @@ from langgraph.store.base import (
     NameSpacePath,
     Op,
     PutOp,
+    SearchItem,
     SearchOp,
     _validate_namespace,
 )
@@ -43,12 +44,13 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset)
+        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
         return await fut
 
     async def aput(
@@ -56,10 +58,11 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
+        index: Optional[bool] = None,
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, key, value)
+        self._aqueue[fut] = PutOp(namespace, key, value, index)
         return await fut
 
     async def adelete(
