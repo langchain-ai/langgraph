@@ -382,7 +382,9 @@ async def test_cannot_put_empty_namespace() -> None:
 
     await store.aput(("foo", "langgraph", "foo"), "bar", doc)
     assert (await store.aget(("foo", "langgraph", "foo"), "bar")).value == doc  # type: ignore[union-attr]
-    assert (await store.asearch(("foo", "langgraph", "foo")))[0].value == doc
+    assert (await store.asearch(("foo", "langgraph", "foo"), query="bar"))[
+        0
+    ].value == doc
     await store.adelete(("foo", "langgraph", "foo"), "bar")
     assert (await store.aget(("foo", "langgraph", "foo"), "bar")) is None
     store.put(("foo", "langgraph", "foo"), "bar", doc)

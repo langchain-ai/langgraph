@@ -232,7 +232,7 @@ class InMemoryStore(BaseStore):
             if not candidates:
                 results[i] = []
                 continue
-            if op.query:
+            if op.query and queryinmem_store:
                 query_embedding = queryinmem_store[op.query]
                 flat_items, flat_vectors = [], []
                 for item, vectors in candidates:
