@@ -1,12 +1,27 @@
 """Base classes and types for persistent key-value stores.
 
-Stores enable persistence and memory that can be shared across threads,
-scoped to user IDs, assistant IDs, or other arbitrary namespaces.
+Stores provide long-term memory that persists across threads and conversations.
+Supports hierarchical namespaces, key-value storage, and optional vector search.
+
+Core types:
+- BaseStore: Store interface with sync/async operations
+- Item: Stored key-value pairs with metadata
+- Op: Get/Put/Search/List operations
 """
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, Union, cast
+from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
+
+from langchain_core.embeddings import Embeddings
+
+from langgraph.store.base._embed import (
+    AEmbeddingsFunc,
+    EmbeddingsFunc,
+    ensure_embeddings,
+    get_text_at_path,
+    tokenize_path,
+)
 
 
 class Item:
@@ -73,6 +88,52 @@ class Item:
         }
 
 
+class ResponseMetadata(TypedDict, total=False):
+    """Additional metadata about the response/result."""
+
+    score: float
+    """Relevance/similarity score if from a ranked operation."""
+
+
+class SearchItem(Item):
+    """Represents a result item with additional response metadata."""
+
+    __slots__ = "response_metadata"
+
+    def __init__(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        created_at: datetime,
+        updated_at: datetime,
+        response_metadata: Optional[ResponseMetadata] = None,
+    ) -> None:
+        """Initialize a result item.
+
+        Args:
+            namespace: Hierarchical path to the item.
+            key: Unique identifier within the namespace.
+            value: The stored value.
+            created_at: When the item was first created.
+            updated_at: When the item was last updated.
+            response_metadata: Optional metadata about the response/result.
+        """
+        super().__init__(
+            value=value,
+            key=key,
+            namespace=namespace,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+        self.response_metadata = response_metadata or {}
+
+    def dict(self) -> dict:
+        result = super().dict()
+        result["response_metadata"] = self.response_metadata
+        return result
+
+
 class GetOp(NamedTuple):
     """Operation to retrieve an item by namespace and key."""
 
@@ -93,6 +154,8 @@ class SearchOp(NamedTuple):
     """Maximum number of items to return."""
     offset: int = 0
     """Number of items to skip before returning results."""
+    query: Optional[str] = None
+    """The search query for natural language search."""
 
 
 class PutOp(NamedTuple):
@@ -119,6 +182,12 @@ class PutOp(NamedTuple):
       - Keys are strings representing field names
       - Values can be of any serializable type
     - If None, it indicates that the item should be deleted
+    """
+    index: Optional[bool] = None  # type: ignore[assignment]
+    """Whether to index the item (if supported by the store).
+    
+    Defaults to True if the store supports indexing. This will embed the document
+    so it can be queried using search.
     """
 
 
@@ -151,34 +220,43 @@ class ListNamespacesOp(NamedTuple):
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
-Result = Union[Item, list[Item], list[tuple[str, ...]], None]
+Result = Union[Item, list[Item], list[SearchItem], list[tuple[str, ...]], None]
 
 
 class InvalidNamespaceError(ValueError):
     """Provided namespace is invalid."""
 
 
-def _validate_namespace(namespace: tuple[str, ...]) -> None:
-    if not namespace:
-        raise InvalidNamespaceError("Namespace cannot be empty.")
-    for label in namespace:
-        if not isinstance(label, str):
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
-                f" must be strings, but got {type(label).__name__}."
-            )
-        if "." in label:
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
-            )
-        elif not label:
-            raise InvalidNamespaceError(
-                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
-            )
-    if namespace[0] == "langgraph":
-        raise InvalidNamespaceError(
-            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
-        )
+class EmbeddingConfig(TypedDict, total=False):
+    """Configuration for vector embeddings in PostgreSQL store."""
+
+    dims: int
+    """Number of dimensions in the embedding vectors.
+    
+    Common embedding models have the following dimensions:
+        - OpenAI text-embedding-3-large: 256, 1024, or 3072
+        - OpenAI text-embedding-3-small: 512 or 1536
+        - OpenAI text-embedding-ada-002: 1536
+        - Cohere embed-english-v3.0: 1024
+        - Cohere embed-english-light-v3.0: 384
+        - Cohere embed-multilingual-v3.0: 1024
+        - Cohere embed-multilingual-light-v3.0: 384
+    """
+
+    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
+    """Optional function to generate embeddings from text."""
+    aembed: Optional[AEmbeddingsFunc]
+    """Optional asynchronous function to generate embeddings from text.
+    
+    Provide for asynchronous embedding generation if you do not provide
+    an Embeddings object.
+    """
+
+    text_fields: Optional[list[str]]
+    """Fields to extract text from for embedding generation.
+    
+    Defaults to ["__root__"], which embeds the json object as a whole.
+    """
 
 
 class BaseStore(ABC):
@@ -231,14 +309,16 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
         Args:
             namespace_prefix: Hierarchical path prefix to search within.
+            query: Optional query for natural language search.
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
@@ -246,18 +326,26 @@ class BaseStore(ABC):
         Returns:
             List of items matching the search criteria.
         """
-        return self.batch([SearchOp(namespace_prefix, filter, limit, offset)])[0]
+        return self.batch([SearchOp(namespace_prefix, filter, limit, offset, query)])[0]
 
-    def put(self, namespace: tuple[str, ...], key: str, value: dict[str, Any]) -> None:
+    def put(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        index: Optional[bool] = None,
+    ) -> None:
         """Store or update an item.
 
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
+            index: Whether to index the item (if supported by the store).
+                Defaults to True if the store supports indexing.
         """
         _validate_namespace(namespace)
-        self.batch([PutOp(namespace, key, value)])
+        self.batch([PutOp(namespace, key, value, index=index)])
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -336,14 +424,16 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
         Args:
             namespace_prefix: Hierarchical path prefix to search within.
+            query: Optional query for natural language search.
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
@@ -351,12 +441,18 @@ class BaseStore(ABC):
         Returns:
             List of items matching the search criteria.
         """
-        return (await self.abatch([SearchOp(namespace_prefix, filter, limit, offset)]))[
-            0
-        ]
+        return (
+            await self.abatch(
+                [SearchOp(namespace_prefix, filter, limit, offset, query)]
+            )
+        )[0]
 
     async def aput(
-        self, namespace: tuple[str, ...], key: str, value: dict[str, Any]
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        index: Optional[bool] = None,
     ) -> None:
         """Asynchronously store or update an item.
 
@@ -364,9 +460,11 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             value: Dictionary containing the item's data.
+            index: Whether to index the item (if supported by the store).
+                Defaults to True if the store supports indexing.
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value)])
+        await self.abatch([PutOp(namespace, key, value, index)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
@@ -427,3 +525,44 @@ class BaseStore(ABC):
             offset=offset,
         )
         return (await self.abatch([op]))[0]
+
+
+def _validate_namespace(namespace: tuple[str, ...]) -> None:
+    if not namespace:
+        raise InvalidNamespaceError("Namespace cannot be empty.")
+    for label in namespace:
+        if not isinstance(label, str):
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
+                f" must be strings, but got {type(label).__name__}."
+            )
+        if "." in label:
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
+            )
+        elif not label:
+            raise InvalidNamespaceError(
+                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
+            )
+    if namespace[0] == "langgraph":
+        raise InvalidNamespaceError(
+            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
+        )
+
+
+__all__ = [
+    "BaseStore",
+    "Item",
+    "Op",
+    "PutOp",
+    "GetOp",
+    "SearchOp",
+    "ListNamespacesOp",
+    "MatchCondition",
+    "NameSpacePath",
+    "NamespaceMatchType",
+    "Embeddings",
+    "ensure_embeddings",
+    "tokenize_path",
+    "get_text_at_path",
+]
