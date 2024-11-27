@@ -233,17 +233,21 @@ class InMemoryStore(BaseStore):
             if op.query and queryinmem_store:
                 query_embedding = queryinmem_store[op.query]
                 flat_items, flat_vectors = [], []
+                scoreless = []
                 for item, vectors in candidates:
                     for vector in vectors:
                         flat_items.append(item)
                         flat_vectors.append(vector)
+                    if not vectors:
+                        scoreless.append(item)
+
                 scores = _cosine_similarity(query_embedding, flat_vectors)
                 sorted_results = sorted(
                     zip(scores, flat_items), key=lambda x: x[0], reverse=True
                 )
                 # max pooling
                 seen: set[tuple[tuple[str, ...], str]] = set()
-                kept = []
+                kept: list[tuple[Optional[float], Item]] = []
                 for score, item in sorted_results:
                     key = (item.namespace, item.key)
                     if key in seen:
@@ -256,6 +260,12 @@ class InMemoryStore(BaseStore):
                         continue
 
                     kept.append((score, item))
+                if scoreless and len(kept) < op.limit:
+                    # Corner case: if we request more items than what we have embedded,
+                    # fill the rest with non-scored items
+                    kept.extend(
+                        (None, item) for item in scoreless[: op.limit - len(kept)]
+                    )
 
                 results[i] = [
                     SearchItem(
@@ -264,7 +274,7 @@ class InMemoryStore(BaseStore):
                         value=item.value,
                         created_at=item.created_at,
                         updated_at=item.updated_at,
-                        score=float(score),
+                        score=float(score) if score is not None else None,
                     )
                     for score, item in kept
                 ]
@@ -331,7 +341,11 @@ class InMemoryStore(BaseStore):
 
             for op in put_ops.values():
                 if op.value is not None and op.index is not False:
-                    for path, field in self.index_config["__tokenized_fields"]:
+                    if op.index is None:
+                        paths = self.index_config["__tokenized_fields"]
+                    else:
+                        paths = [(ix, tokenize_path(ix)) for ix in op.index]
+                    for path, field in paths:
                         texts = get_text_at_path(op.value, field)
                         if texts:
                             if len(texts) > 1:

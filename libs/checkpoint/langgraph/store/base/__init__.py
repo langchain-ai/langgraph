@@ -152,35 +152,80 @@ class SearchOp(NamedTuple):
 
 
 class PutOp(NamedTuple):
-    """Operation to store, update, or delete an item."""
+    """Operation to store, update, or delete an item in the store.
+
+    This class represents a single operation to modify the store's contents,
+    whether adding new items, updating existing ones, or removing them.
+    """
 
     namespace: tuple[str, ...]
-    """Hierarchical path for the item.
-    
-    Represented as a tuple of strings, allowing for nested categorization.
-    For example: ("documents", "user123")
+    """Hierarchical path that identifies the location of the item.
+
+    The namespace acts as a folder-like structure to organize items.
+    Each element in the tuple represents one level in the hierarchy.
+
+    Examples:
+        ("documents",) - Root level documents
+        ("documents", "user123") - User-specific documents
+        ("cache", "embeddings", "v1") - Nested cache structure
     """
 
     key: str
-    """Unique identifier for the document.
-    
-    Should be distinct within its namespace.
+    """Unique identifier for the item within its namespace.
+
+    The key must be unique within the specific namespace to avoid conflicts.
+    Together with the namespace, it forms a complete path to the item.
+
+    Example:
+        If namespace is ("documents", "user123") and key is "report1",
+        the full path would effectively be "documents/user123/report1"
     """
 
     value: Optional[dict[str, Any]]
-    """Data to be stored, or None to delete the item.
-    
+    """The data to store, or None to mark the item for deletion.
+
+    The value must be a dictionary with string keys and JSON-serializable values.
+    Setting this to None signals that the item should be deleted.
+
     Schema:
-    - Should be a dictionary where:
-      - Keys are strings representing field names
-      - Values can be of any serializable type
-    - If None, it indicates that the item should be deleted
+        {
+            "field1": "string value",
+            "field2": 123,
+            "nested": {"can": "contain", "any": "serializable data"}
+        }
     """
-    index: Optional[bool] = None  # type: ignore[assignment]
-    """Whether to index the item (if supported by the store).
-    
-    Defaults to True if the store supports indexing. This will embed the document
-    so it can be queried using search.
+
+    index: Optional[Union[Literal[False], list[str]]] = None  # type: ignore[assignment]
+    """Controls how the item's fields are indexed for search operations.
+
+    Indexing configuration determines how the item can be found through search:
+    - None (default): Uses the store's default indexing configuration (if provided)
+    - False: Disables indexing for this item
+    - list[str]: Specifies which json path fields to index for search
+
+    The item remains accessible through direct get() operations regardless of indexing.
+    When indexed, fields can be searched using natural language queries through
+    vector similarity search (if supported by the store implementation).
+
+    Path Syntax:
+        - Simple field access: "field"
+        - Nested fields: "parent.child.grandchild"
+        - Array indexing:
+          - Specific index: "array[0]"
+          - Last element: "array[-1]"
+          - All elements (each individually): "array[*]"
+
+    Examples:
+        None - Use store defaults
+        False - Don't index this item
+        [
+            "metadata.title",                    # Nested field access
+            "chapters[*].content",               # Index content from all chapters as separate vectors
+            "authors[0].name",                   # First author's name
+            "revisions[-1].changes",             # Most recent revision's changes
+            "sections[*].paragraphs[*].text",    # All text from all paragraphs in all sections
+            "metadata.tags[*]",                  # All tags in metadata
+        ]
     """
 
 
@@ -320,16 +365,43 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[bool] = None,
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
-        """Store or update an item.
+        """Store or update an item in the store.
 
         Args:
-            namespace: Hierarchical path for the item.
-            key: Unique identifier within the namespace.
-            value: Dictionary containing the item's data.
-            index: Whether to index the item (if supported by the store).
-                Defaults to True if the store supports indexing.
+            namespace: Hierarchical path for the item, represented as a tuple of strings.
+                Example: ("documents", "user123")
+            key: Unique identifier within the namespace. Together with namespace forms
+                the complete path to the item.
+            value: Dictionary containing the item's data. Must contain string keys
+                and JSON-serializable values.
+            index: Controls how the item's fields are indexed for search:
+                - None (default): Use store's default indexing configuration
+                - False: Disable indexing for this item
+                - list[str]: List of field paths to index, supporting:
+                    - Nested fields: "metadata.title"
+                    - Array access: "chapters[*].content" (each indexed separately)
+                    - Specific indices: "authors[0].name"
+
+        Note:
+            Indexing capabilities depend on your store implementation.
+            Some implementations may support only a subset of indexing features.
+
+        Examples:
+            # Simple storage without special indexing
+            store.put(("docs",), "report", {"title": "Annual Report"})
+
+            # Index specific fields for search
+            store.put(
+                ("docs",),
+                "report",
+                {
+                    "title": "Q4 Report",
+                    "chapters": [{"content": "..."}, {"content": "..."}]
+                },
+                index=["title", "chapters[*].content"]
+            )
         """
         _validate_namespace(namespace)
         self.batch([PutOp(namespace, key, value, index=index)])
@@ -439,19 +511,46 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[bool] = None,
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
-        """Asynchronously store or update an item.
+        """Asynchronously store or update an item in the store.
 
         Args:
-            namespace: Hierarchical path for the item.
-            key: Unique identifier within the namespace.
-            value: Dictionary containing the item's data.
-            index: Whether to index the item (if supported by the store).
-                Defaults to True if the store supports indexing.
+            namespace: Hierarchical path for the item, represented as a tuple of strings.
+                Example: ("documents", "user123")
+            key: Unique identifier within the namespace. Together with namespace forms
+                the complete path to the item.
+            value: Dictionary containing the item's data. Must contain string keys
+                and JSON-serializable values.
+            index: Controls how the item's fields are indexed for search:
+                - None (default): Use store's default indexing configuration
+                - False: Disable indexing for this item
+                - list[str]: List of field paths to index, supporting:
+                    - Nested fields: "metadata.title"
+                    - Array access: "chapters[*].content" (each indexed separately)
+                    - Specific indices: "authors[0].name"
+
+        Note:
+            Indexing capabilities depend on your store implementation.
+            Some implementations may support only a subset of indexing features.
+
+        Examples:
+            # Simple storage without special indexing
+            await store.aput(("docs",), "report", {"title": "Annual Report"})
+
+            # Index specific fields for search
+            await store.aput(
+                ("docs",),
+                "report",
+                {
+                    "title": "Q4 Report",
+                    "chapters": [{"content": "..."}, {"content": "..."}]
+                },
+                index=["title", "chapters[*].content"]
+            )
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value, index)])
+        await self.abatch([PutOp(namespace, key, value, index=index)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.

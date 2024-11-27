@@ -1,6 +1,6 @@
 import asyncio
 import weakref
-from typing import Any, Optional
+from typing import Any, Literal, Optional, Union
 
 from langgraph.store.base import (
     BaseStore,
@@ -58,7 +58,7 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[bool] = None,
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()

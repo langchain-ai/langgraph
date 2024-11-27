@@ -63,34 +63,41 @@ class EmbeddingsLambda(Embeddings):
     """Wrapper to convert embedding functions into LangChain's Embeddings interface.
 
     This class allows arbitrary embedding functions to be used with LangChain-compatible
-    tools. It supports both synchronous and asynchronous operations, and can be
-    initialized with either:
-    1. A synchronous function for both sync/async operations
-    2. An async function for both sync/async operations
-    3. Both sync and async functions for their respective operations
+    tools. It supports both synchronous and asynchronous operations, and can handle:
+    1. A synchronous function for sync operations (async operations will use sync function)
+    2. An async function for both sync/async operations (sync operations will raise an error)
 
     The embedding functions should convert text into fixed-dimensional vectors that
     capture the semantic meaning of the text.
 
     Args:
         func: Function that converts text to embeddings. Can be sync or async.
-            If async, it will be used for both sync and async operations.
-        afunc: Optional async function for embeddings. If provided, it will be used
-            for async operations while func is used for sync operations.
-            Must be None if func is async.
+            If async, it will be used for async operations, but sync operations
+            will raise an error. If sync, it will be used for both sync and async operations.
 
     Example:
+        >>> # With a sync function
         >>> def my_embed_fn(texts):
         ...     # Return 2D embeddings for each text
         ...     return [[0.1, 0.2] for _ in texts]
         >>> embeddings = EmbeddingsLambda(my_embed_fn)
         >>> result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
+        >>> await embeddings.aembed_query("hello")  # Also returns [0.1, 0.2]
+        >>>
+        >>> # With an async function
+        >>> async def my_async_fn(texts):
+        ...     return [[0.1, 0.2] for _ in texts]
+        >>> embeddings = EmbeddingsLambda(my_async_fn)
+        >>> await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
+        >>> # Note: embed_query() would raise an error
     """
 
     def __init__(
         self,
-        func: Union[EmbeddingsFunc, AEmbeddingsFunc, None],
+        func: Union[EmbeddingsFunc, AEmbeddingsFunc],
     ) -> None:
+        if func is None:
+            raise ValueError("func must be provided")
         if _is_async_callable(func):
             self.afunc = func
         else:
