@@ -42,6 +42,8 @@ from langgraph.store.base import (
     SearchItem,
     SearchOp,
     ensure_embeddings,
+    get_text_at_path,
+    tokenize_path,
 )
 
 if TYPE_CHECKING:
@@ -345,11 +347,7 @@ class BasePostgresStore(Generic[C]):
 
             # Then handle embeddings if configured
             if self.embedding_config:
-                text_fields = self.embedding_config.get("text_fields", ["__root__"])
-                if isinstance(text_fields, str):
-                    text_fields = [text_fields]
-                elif text_fields is None:
-                    text_fields = ["__root__"]
+                paths = self.embedding_config["__tokenized_fields"]
                 for op in inserts:
                     if op.index is False:
                         continue
@@ -357,12 +355,12 @@ class BasePostgresStore(Generic[C]):
                     ns = _namespace_to_text(op.namespace)
                     k = op.key
 
-                    for field in text_fields:
-                        for text in _extract_text_by_path(value, field):
+                    for path, tokenized_path in paths:
+                        for text in get_text_at_path(value, tokenized_path):
                             vector_values.append(
                                 "(%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                             )
-                            embedding_request_params.append((ns, k, field, text))
+                            embedding_request_params.append((ns, k, path, text))
 
             values_str = ",".join(values)
             query = f"""
@@ -556,6 +554,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.lock = threading.Lock()
         self.embedding_config = embedding
         if self.embedding_config:
+            self.embedding_config = self.embedding_config.copy()
+            self.embedding_config["__tokenized_fields"] = [
+                (p, tokenize_path(p)) if p != "__root__" else (p, p)
+                for p in (self.embedding_config.get("text_fields") or ["__root__"])
+            ]
             self.embeddings: Optional[Embeddings] = ensure_embeddings(
                 self.embedding_config.get("embed"),
                 aembed=self.embedding_config.get("aembed"),
@@ -929,160 +932,6 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
     if isinstance(namespace, bytes):
         namespace = namespace.decode()[1:]
     return tuple(namespace.split("."))
-
-
-def _tokenize_path(path: str) -> list[str]:
-    """Tokenize a path into components.
-
-    Handles:
-    - Simple paths: "field1.field2"
-    - Array indexing: "[0]", "[*]", "[-1]"
-    - Wildcards: "*"
-    - Multi-field selection: "{field1,field2}"
-    """
-    if not path:
-        return []
-
-    tokens = []
-    current: list[str] = []
-    i = 0
-    while i < len(path):
-        char = path[i]
-
-        if char == "[":  # Handle array index
-            if current:
-                tokens.append("".join(current))
-                current = []
-            bracket_count = 1
-            index_chars = ["["]
-            i += 1
-            while i < len(path) and bracket_count > 0:
-                if path[i] == "[":
-                    bracket_count += 1
-                elif path[i] == "]":
-                    bracket_count -= 1
-                index_chars.append(path[i])
-                i += 1
-            tokens.append("".join(index_chars))
-            continue
-
-        elif char == "{":  # Handle multi-field selection
-            if current:
-                tokens.append("".join(current))
-                current = []
-            brace_count = 1
-            field_chars = ["{"]
-            i += 1
-            while i < len(path) and brace_count > 0:
-                if path[i] == "{":
-                    brace_count += 1
-                elif path[i] == "}":
-                    brace_count -= 1
-                field_chars.append(path[i])
-                i += 1
-            tokens.append("".join(field_chars))
-            continue
-
-        elif char == ".":  # Handle regular field
-            if current:
-                tokens.append("".join(current))
-                current = []
-        else:
-            current.append(char)
-        i += 1
-
-    if current:
-        tokens.append("".join(current))
-
-    return tokens
-
-
-def _extract_text_by_path(obj: Any, path: str) -> list[str]:
-    """Extract text from an object using a path expression.
-
-    Supports:
-    - Simple paths: "field1.field2"
-    - Array indexing: "[0]", "[*]", "[-1]"
-    - Wildcards: "*"
-    - Multi-field selection: "{field1,field2}"
-    - Nested paths in multi-field: "{field1,nested.field2}"
-    """
-    if not path or path == "__root__":
-        return [json.dumps(obj, sort_keys=True)]
-
-    def _extract_from_obj(obj: Any, tokens: list[str], pos: int) -> list[str]:
-        if pos >= len(tokens):
-            if isinstance(obj, (str, int, float, bool)):
-                return [str(obj)]
-            elif obj is None:
-                return []
-            elif isinstance(obj, (list, dict)):
-                return [json.dumps(obj, sort_keys=True)]
-            return []
-
-        token = tokens[pos]
-        results = []
-
-        if token.startswith("[") and token.endswith("]"):
-            if not isinstance(obj, list):
-                return []
-
-            index = token[1:-1]
-            if index == "*":
-                for item in obj:
-                    results.extend(_extract_from_obj(item, tokens, pos + 1))
-            else:
-                try:
-                    idx = int(index)
-                    if idx < 0:
-                        idx = len(obj) + idx
-                    if 0 <= idx < len(obj):
-                        results.extend(_extract_from_obj(obj[idx], tokens, pos + 1))
-                except (ValueError, IndexError):
-                    return []
-
-        elif token.startswith("{") and token.endswith("}"):
-            if not isinstance(obj, dict):
-                return []
-
-            fields = [f.strip() for f in token[1:-1].split(",")]
-            for field in fields:
-                nested_tokens = _tokenize_path(field)
-                if nested_tokens:
-                    current_obj: Optional[dict] = obj
-                    for nested_token in nested_tokens:
-                        if (
-                            isinstance(current_obj, dict)
-                            and nested_token in current_obj
-                        ):
-                            current_obj = current_obj[nested_token]
-                        else:
-                            current_obj = None
-                            break
-                    if current_obj is not None:
-                        if isinstance(current_obj, (str, int, float, bool)):
-                            results.append(str(current_obj))
-                        elif isinstance(current_obj, (list, dict)):
-                            results.append(json.dumps(current_obj, sort_keys=True))
-
-        # Handle wildcard
-        elif token == "*":
-            if isinstance(obj, dict):
-                for value in obj.values():
-                    results.extend(_extract_from_obj(value, tokens, pos + 1))
-            elif isinstance(obj, list):
-                for item in obj:
-                    results.extend(_extract_from_obj(item, tokens, pos + 1))
-
-        # Handle regular field
-        else:
-            if isinstance(obj, dict) and token in obj:
-                results.extend(_extract_from_obj(obj[token], tokens, pos + 1))
-
-        return results
-
-    tokens = _tokenize_path(path)
-    return _extract_from_obj(obj, tokens, 0)
 
 
 def _get_distance_operator(store: Any) -> tuple[str, str]:

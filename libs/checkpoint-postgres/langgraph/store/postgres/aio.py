@@ -19,6 +19,7 @@ from langgraph.store.base import (
     Result,
     SearchOp,
     ensure_embeddings,
+    tokenize_path,
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.postgres.base import (
@@ -70,6 +71,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self.supports_pipeline = Capabilities().has_pipeline()
         self.embedding_config = embedding
         if self.embedding_config:
+            self.embedding_config = self.embedding_config.copy()
+            self.embedding_config["__tokenized_fields"] = [
+                (p, tokenize_path(p)) if p != "__root__" else (p, p)
+                for p in (self.embedding_config.get("text_fields") or ["__root__"])
+            ]
             self.embeddings: Optional[Embeddings] = ensure_embeddings(
                 self.embedding_config.get("embed"),
                 aembed=self.embedding_config.get("aembed"),
@@ -259,7 +265,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             else:
                 async with (
                     self.lock,
-                    conn.transaction(),
                     conn.cursor(binary=True) as cur,
                 ):
                     yield cur

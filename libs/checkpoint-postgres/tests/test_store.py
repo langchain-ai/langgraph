@@ -1,6 +1,5 @@
 # type: ignore
 
-import json
 from uuid import uuid4
 
 import pytest
@@ -22,7 +21,6 @@ from langgraph.store.base import (
     SearchOp,
 )
 from langgraph.store.postgres import PostgresStore
-from langgraph.store.postgres.base import _extract_text_by_path
 
 
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
@@ -535,71 +533,3 @@ def test_vector_search_edge_cases(vector_store: PostgresStore) -> None:
     special_query = "test!@#$%^&*()"
     results = vector_store.search(("test",), query=special_query)
     assert len(results) == 1
-
-
-def test_extract_text_by_path():
-    nested_data = {
-        "name": "test",
-        "info": {
-            "age": 25,
-            "tags": ["a", "b", "c"],
-            "metadata": {"created": "2024-01-01", "updated": "2024-01-02"},
-        },
-        "items": [
-            {"id": 1, "value": "first", "tags": ["x", "y"]},
-            {"id": 2, "value": "second", "tags": ["y", "z"]},
-            {"id": 3, "value": "third", "tags": ["z", "w"]},
-        ],
-        "empty": None,
-        "zeros": [0, 0.0, "0"],
-        "empty_list": [],
-        "empty_dict": {},
-    }
-
-    assert _extract_text_by_path(nested_data, "__root__") == [
-        json.dumps(nested_data, sort_keys=True)
-    ]
-
-    assert _extract_text_by_path(nested_data, "name") == ["test"]
-    assert _extract_text_by_path(nested_data, "info.age") == ["25"]
-
-    assert _extract_text_by_path(nested_data, "info.metadata.created") == ["2024-01-01"]
-
-    assert _extract_text_by_path(nested_data, "items[0].value") == ["first"]
-    assert _extract_text_by_path(nested_data, "items[-1].value") == ["third"]
-    assert _extract_text_by_path(nested_data, "items[1].tags[0]") == ["y"]
-
-    values = _extract_text_by_path(nested_data, "items[*].value")
-    assert set(values) == {"first", "second", "third"}
-
-    metadata_dates = _extract_text_by_path(nested_data, "info.metadata.*")
-    assert set(metadata_dates) == {"2024-01-01", "2024-01-02"}
-    name_and_age = _extract_text_by_path(nested_data, "{name,info.age}")
-    assert set(name_and_age) == {"test", "25"}
-
-    item_fields = _extract_text_by_path(nested_data, "items[*].{id,value}")
-    assert set(item_fields) == {"1", "2", "3", "first", "second", "third"}
-
-    all_tags = _extract_text_by_path(nested_data, "items[*].tags[*]")
-    assert set(all_tags) == {"x", "y", "z", "w"}
-
-    assert _extract_text_by_path(None, "any.path") == []
-    assert _extract_text_by_path({}, "any.path") == []
-    assert _extract_text_by_path(nested_data, "") == [
-        json.dumps(nested_data, sort_keys=True)
-    ]
-    assert _extract_text_by_path(nested_data, "nonexistent") == []
-    assert _extract_text_by_path(nested_data, "items[99].value") == []
-    assert _extract_text_by_path(nested_data, "items[*].nonexistent") == []
-
-    assert _extract_text_by_path(nested_data, "empty") == []
-    assert _extract_text_by_path(nested_data, "empty_list") == ["[]"]
-    assert _extract_text_by_path(nested_data, "empty_dict") == ["{}"]
-
-    zeros = _extract_text_by_path(nested_data, "zeros[*]")
-    assert set(zeros) == {"0", "0.0"}
-
-    assert _extract_text_by_path(nested_data, "items[].value") == []
-    assert _extract_text_by_path(nested_data, "items[abc].value") == []
-    assert _extract_text_by_path(nested_data, "{unclosed") == []
-    assert _extract_text_by_path(nested_data, "nested[{invalid}]") == []
