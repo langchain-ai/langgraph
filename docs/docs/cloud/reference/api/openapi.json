@@ -1557,8 +1557,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1905,8 +1908,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -2143,8 +2149,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
