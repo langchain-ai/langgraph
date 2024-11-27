@@ -31,8 +31,8 @@ from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
-    EmbeddingConfig,
     GetOp,
+    IndexConfig,
     Item,
     ListNamespacesOp,
     Op,
@@ -41,6 +41,8 @@ from langgraph.store.base import (
     SearchItem,
     SearchOp,
     ensure_embeddings,
+    get_text_at_path,
+    tokenize_path,
 )
 
 if TYPE_CHECKING:
@@ -59,49 +61,7 @@ class Migration(NamedTuple):
 
 def _embedding_requested(store: Any) -> bool:
     """Check if vector operations are available in the database."""
-    return bool(store.embedding_config)
-
-
-def _get_vector_type_ops(store: Any) -> str:
-    """Get the vector type operator class based on config."""
-    if not store.embedding_config:
-        return "vector_cosine_ops"
-
-    config = cast(PostgresEmbeddingConfig, store.embedding_config)
-    index_config = config.get(
-        "index_config", BasePostgresStore._get_default_index_config()
-    )
-    vector_type = index_config.get("vector_type", "vector")
-    distance_type = config.get("distance_type", "cosine")
-
-    # For regular vectors
-    type_prefix = {"vector": "vector", "halfvec": "halfvec"}[vector_type]
-
-    if distance_type not in ("l2", "inner_product", "cosine"):
-        raise ValueError(
-            f"Vector type {vector_type} only supports 'l2', 'inner_product', or 'cosine' distance, got {distance_type}"
-        )
-
-    distance_suffix = {
-        "l2": "l2_ops",
-        "inner_product": "ip_ops",
-        "cosine": "cosine_ops",
-    }[distance_type]
-
-    return f"{type_prefix}_{distance_suffix}"
-
-
-def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
-    """Get the index type and configuration based on config."""
-    if not store.embedding_config:
-        return "hnsw", {}
-
-    config = cast(PostgresEmbeddingConfig, store.embedding_config)
-    default_config = BasePostgresStore._get_default_index_config()
-    index_config = config.get("index_config", default_config).copy()
-    kind = index_config.pop("kind", "hnsw")
-    index_config.pop("vector_type", None)
-    return kind, index_config
+    return bool(store.index_config)
 
 
 MIGRATIONS: Sequence[Union[str, Migration]] = [
@@ -141,10 +101,10 @@ CREATE TABLE IF NOT EXISTS store_vectors (
 """,
         condition=_embedding_requested,
         params={
-            "dims": lambda store: store.embedding_config["dims"],
+            "dims": lambda store: store.index_config["dims"],
             "vector_type": lambda store: (
-                cast(PostgresEmbeddingConfig, store.embedding_config)
-                .get("index_config", {})
+                cast(PostgresIndexConfig, store.index_config)
+                .get("db_index_config", {})
                 .get("vector_type", "vector")
             ),
         },
@@ -198,7 +158,7 @@ class PoolConfig(TypedDict, total=False):
     """
 
 
-class IndexConfig(TypedDict, total=False):
+class DBIndexConfig(TypedDict, total=False):
     """Configuration for vector index in PostgreSQL store."""
 
     kind: Literal["hnsw", "ivfflat"]
@@ -211,7 +171,7 @@ class IndexConfig(TypedDict, total=False):
     """
 
 
-class HNSWConfig(IndexConfig, total=False):
+class HNSWConfig(DBIndexConfig, total=False):
     """Configuration for HNSW (Hierarchical Navigable Small World) index."""
 
     kind: Literal["hnsw"]  # type: ignore[misc]
@@ -221,7 +181,7 @@ class HNSWConfig(IndexConfig, total=False):
     """Size of dynamic candidate list for index construction. Default is 64."""
 
 
-class IVFFlatConfig(IndexConfig, total=False):
+class IVFFlatConfig(DBIndexConfig, total=False):
     """IVFFlat index divides vectors into lists, and then searches a subset of those lists that are closest to the query vector. It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff).
 
     Three keys to achieving good recall are:
@@ -240,13 +200,13 @@ class IVFFlatConfig(IndexConfig, total=False):
     """
 
 
-class PostgresEmbeddingConfig(EmbeddingConfig, total=False):
+class PostgresIndexConfig(IndexConfig, total=False):
     """Configuration for vector embeddings in PostgreSQL store with pgvector-specific options.
 
     Extends EmbeddingConfig with additional configuration for pgvector index and vector types.
     """
 
-    index_config: Union[HNSWConfig, IVFFlatConfig]
+    db_index_config: Union[HNSWConfig, IVFFlatConfig]
     """Specific configuration for the chosen index type (HNSW or IVF Flat)."""
     distance_type: Literal["l2", "inner_product", "cosine"]
     """Distance metric to use for vector similarity search:
@@ -260,7 +220,7 @@ class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
     conn: C
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
-    embedding_config: Optional[PostgresEmbeddingConfig]
+    index_config: Optional[PostgresIndexConfig]
 
     @staticmethod
     def _get_default_index_config() -> IndexConfig:
@@ -343,12 +303,8 @@ class BasePostgresStore(Generic[C]):
                 )
 
             # Then handle embeddings if configured
-            if self.embedding_config:
-                text_fields = self.embedding_config.get("text_fields", ["__root__"])
-                if isinstance(text_fields, str):
-                    text_fields = [text_fields]
-                elif text_fields is None:
-                    text_fields = ["__root__"]
+            if self.index_config:
+                paths = self.index_config["__tokenized_fields"]
                 for op in inserts:
                     if op.index is False:
                         continue
@@ -356,12 +312,14 @@ class BasePostgresStore(Generic[C]):
                     ns = _namespace_to_text(op.namespace)
                     k = op.key
 
-                    for field in text_fields:
-                        for text in _extract_text_by_path(value, field):
+                    for path, tokenized_path in paths:
+                        texts = get_text_at_path(value, tokenized_path)
+                        for i, text in enumerate(texts):
+                            pathname = f"{path}.{i}" if len(texts) > 1 else path
                             vector_values.append(
                                 "(%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                             )
-                            embedding_request_params.append((ns, k, field, text))
+                            embedding_request_params.append((ns, k, pathname, text))
 
             values_str = ",".join(values)
             query = f"""
@@ -405,34 +363,48 @@ class BasePostgresStore(Generic[C]):
             params: list = [f"{_namespace_to_text(op.namespace_prefix)}%"]
             needs_vector_search = False
 
-            if op.query and self.embedding_config:
+            if op.query and self.index_config:
                 needs_vector_search = True
                 embedding_requests.append((idx, op.query))
 
-                _, score_expr = _get_distance_operator(self)
+                score_expr = _get_distance_operator(self)
                 vector_type = (
-                    cast(PostgresEmbeddingConfig, self.embedding_config)
-                    .get("index_config", self._get_default_index_config())
+                    cast(PostgresIndexConfig, self.index_config)
+                    .get("db_index_config", self._get_default_index_config())
                     .get("vector_type", "vector")
                 )
 
-                # For hamming distance, we need the vector dimension for normalization
                 if (
                     vector_type == "bit"
-                    and self.embedding_config.get("distance_type") == "hamming"
+                    and self.index_config.get("distance_type") == "hamming"
                 ):
-                    score_expr = score_expr % ("%s", self.embedding_config["dims"])
+                    score_expr = score_expr % ("%s", self.index_config["dims"])
                 else:
                     score_expr = score_expr % ("%s", vector_type)
 
+                vectors_per_doc_estimate = self.index_config["__estimated_num_vectors"]
+                expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
+
+                # Direct query with DISTINCT ON to get best score per document
                 base_query = f"""
-                    SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at,
-                           {score_expr} as score
-                    FROM store s
-                    JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
-                    WHERE s.prefix LIKE %s
+                    with scored as (
+                        SELECT DISTINCT ON (s.prefix, s.key)
+                            s.prefix, s.key, s.value, s.created_at, s.updated_at,
+                            {score_expr} as score
+                        FROM store s
+                        JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
+                        WHERE s.prefix LIKE %s
+                        ORDER BY s.prefix, s.key, score DESC
+                        LIMIT %s
+                    )
+
+                    SELECT * FROM scored
                 """
-                params = [None, f"{_namespace_to_text(op.namespace_prefix)}%"]
+                params = [
+                    None,  # Vector placeholder
+                    f"{_namespace_to_text(op.namespace_prefix)}%",
+                    expanded_limit,
+                ]
 
             if op.filter:
                 filter_conditions = []
@@ -449,14 +421,17 @@ class BasePostgresStore(Generic[C]):
                         params.extend([key, json.dumps(value)])
 
                 if filter_conditions:
-                    base_query += " AND " + " AND ".join(filter_conditions)
+                    if needs_vector_search:
+                        base_query += " WHERE " + " AND ".join(filter_conditions)
+                    else:
+                        base_query += " AND " + " AND ".join(filter_conditions)
 
-            order_by = (
-                "ORDER BY score DESC"
-                if needs_vector_search
-                else "ORDER BY updated_at DESC"
-            )
-            base_query += f" {order_by} LIMIT %s OFFSET %s"
+            if needs_vector_search:
+                base_query += " ORDER BY score DESC"
+            else:
+                base_query += " ORDER BY updated_at DESC"
+
+            base_query += " LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
             queries.append((base_query, params))
 
@@ -535,7 +510,14 @@ class BasePostgresStore(Generic[C]):
 
 
 class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
-    __slots__ = ("_deserializer", "pipe", "lock", "supports_pipeline")
+    __slots__ = (
+        "_deserializer",
+        "pipe",
+        "lock",
+        "supports_pipeline",
+        "index_config",
+        "embeddings",
+    )
 
     def __init__(
         self,
@@ -545,7 +527,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
-        embedding: Optional[PostgresEmbeddingConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> None:
         super().__init__()
         self._deserializer = deserializer
@@ -553,15 +535,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.pipe = pipe
         self.supports_pipeline = Capabilities().has_pipeline()
         self.lock = threading.Lock()
-        self.embedding_config = embedding
-        if self.embedding_config:
-            self.embeddings: Optional[Embeddings] = ensure_embeddings(
-                self.embedding_config.get("embed"),
-                aembed=self.embedding_config.get("aembed"),
-            )
+        self.index_config = index
+        if self.index_config:
+            self.embeddings, self.index_config = _ensure_index_config(self.index_config)
         else:
             self.embeddings = None
-        # TODO: Coerce embedding regular functions
 
     @classmethod
     @contextmanager
@@ -571,7 +549,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         *,
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
-        embedding: Optional[PostgresEmbeddingConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
 
@@ -581,7 +559,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             pool_config (Optional[PoolArgs]): Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
-            embedding (Optional[PostgresEmbeddingConfig]): The embedding config.
+            embedding (Optional[PostgresIndexConfig]): The embedding config.
 
         Returns:
             PostgresStore: A new PostgresStore instance.
@@ -603,16 +581,16 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool, embedding=embedding)
+                yield cls(conn=pool, index=index)
         else:
             with Connection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     with conn.pipeline() as pipe:
-                        yield cls(conn, pipe=pipe, embedding=embedding)
+                        yield cls(conn, pipe=pipe, index=index)
                 else:
-                    yield cls(conn, embedding=embedding)
+                    yield cls(conn, index=index)
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
@@ -728,11 +706,15 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 [param[-1] for param in txt_params]
             )
 
-            queries.extend(
-                [
-                    (query, (ns, key, value, vector))
-                    for (ns, key, value, _), vector in zip(txt_params, vectors)
-                ]
+            queries.append(
+                (
+                    query,
+                    [
+                        p
+                        for (ns, k, pathname, _), vector in zip(txt_params, vectors)
+                        for p in (ns, k, pathname, vector)
+                    ],
+                )
             )
 
         for query, params in queries:
@@ -757,11 +739,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
             results[idx] = [
-                _row_to_item(
-                    _decode_ns_bytes(row["prefix"]),
-                    row,
-                    loader=self._deserializer,
-                    cls=SearchItem,
+                _row_to_search_item(
+                    _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
                 )
                 for row in rows
             ]
@@ -824,9 +803,6 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 cur.execute(sql)
                 cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
 
-        if self.pipe:
-            self.pipe.sync()
-
 
 class Row(TypedDict):
     key: str
@@ -834,6 +810,56 @@ class Row(TypedDict):
     prefix: str
     created_at: datetime
     updated_at: datetime
+
+
+# Private utilities
+
+
+def _get_vector_type_ops(store: BasePostgresStore) -> str:
+    """Get the vector type operator class based on config."""
+    if not store.index_config:
+        return "vector_cosine_ops"
+
+    config = cast(PostgresIndexConfig, store.index_config)
+    index_config = config.get(
+        "db_index_config", BasePostgresStore._get_default_index_config()
+    )
+    vector_type = cast(str, index_config.get("vector_type", "vector"))
+    if vector_type not in ("vector", "halfvec"):
+        raise ValueError(
+            f"Vector type must be 'vector' or 'halfvec', got {vector_type}"
+        )
+
+    distance_type = config.get("distance_type", "cosine")
+
+    # For regular vectors
+    type_prefix = {"vector": "vector", "halfvec": "halfvec"}[vector_type]
+
+    if distance_type not in ("l2", "inner_product", "cosine"):
+        raise ValueError(
+            f"Vector type {vector_type} only supports 'l2', 'inner_product', or 'cosine' distance, got {distance_type}"
+        )
+
+    distance_suffix = {
+        "l2": "l2_ops",
+        "inner_product": "ip_ops",
+        "cosine": "cosine_ops",
+    }[distance_type]
+
+    return f"{type_prefix}_{distance_suffix}"
+
+
+def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
+    """Get the index type and configuration based on config."""
+    if not store.index_config:
+        return "hnsw", {}
+
+    config = cast(PostgresIndexConfig, store.index_config)
+    default_config = BasePostgresStore._get_default_index_config()
+    index_config = config.get("db_index_config", default_config).copy()
+    kind = index_config.pop("kind", "hnsw")
+    index_config.pop("vector_type", None)
+    return kind, index_config
 
 
 def _namespace_to_text(
@@ -850,15 +876,13 @@ def _row_to_item(
     row: Row,
     *,
     loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
-    cls: Union[type[SearchItem], type[Item]] = Item,
-) -> Union[Item, SearchItem]:
+) -> Item:
     """Convert a row from the database into an Item.
 
     Args:
         namespace: Item namespace
         row: Database row
         loader: Optional value loader for non-dict values
-        cls: Item class to instantiate (Item or SearchItem)
     """
     val = row["value"]
     if not isinstance(val, dict):
@@ -872,10 +896,59 @@ def _row_to_item(
         "updated_at": row["updated_at"],
     }
 
-    if cls is SearchItem and "score" in row:
-        kwargs["response_metadata"] = {"score": float(row["score"])}
+    return Item(**kwargs)
 
-    return cls(**kwargs)
+
+def _row_to_search_item(
+    namespace: tuple[str, ...],
+    row: Row,
+    *,
+    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
+) -> SearchItem:
+    """Convert a row from the database into an Item."""
+    loader = loader or _json_loads
+    val = row["value"]
+    score = row.get("score")
+    if score is not None:
+        try:
+            score = float(score)  # type: ignore[arg-type]
+        except ValueError:
+            logger.warning("Invalid score: %s", score)
+            score = None
+    return SearchItem(
+        value=val if isinstance(val, dict) else loader(val),
+        key=row["key"],
+        namespace=namespace,
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        score=score,
+    )
+
+
+def _row_to_search_item(
+    namespace: tuple[str, ...],
+    row: Row,
+    *,
+    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
+) -> SearchItem:
+    """Convert a row from the database into an Item."""
+    loader = loader or _json_loads
+    val = row["value"]
+    score = row.get("score")
+    if score is not None:
+        try:
+            score = float(score)  # type: ignore[arg-type]
+        except ValueError:
+            logger.warning("Invalid score: %s", score)
+            score = None
+    return SearchItem(
+        value=val if isinstance(val, dict) else loader(val),
+        key=row["key"],
+        namespace=namespace,
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        score=score,
+    )
 
 
 def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int]:
@@ -907,171 +980,48 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
     return tuple(namespace.split("."))
 
 
-def _tokenize_path(path: str) -> list[str]:
-    """Tokenize a path into components.
-
-    Handles:
-    - Simple paths: "field1.field2"
-    - Array indexing: "[0]", "[*]", "[-1]"
-    - Wildcards: "*"
-    - Multi-field selection: "{field1,field2}"
-    """
-    if not path:
-        return []
-
-    tokens = []
-    current: list[str] = []
-    i = 0
-    while i < len(path):
-        char = path[i]
-
-        if char == "[":  # Handle array index
-            if current:
-                tokens.append("".join(current))
-                current = []
-            bracket_count = 1
-            index_chars = ["["]
-            i += 1
-            while i < len(path) and bracket_count > 0:
-                if path[i] == "[":
-                    bracket_count += 1
-                elif path[i] == "]":
-                    bracket_count -= 1
-                index_chars.append(path[i])
-                i += 1
-            tokens.append("".join(index_chars))
-            continue
-
-        elif char == "{":  # Handle multi-field selection
-            if current:
-                tokens.append("".join(current))
-                current = []
-            brace_count = 1
-            field_chars = ["{"]
-            i += 1
-            while i < len(path) and brace_count > 0:
-                if path[i] == "{":
-                    brace_count += 1
-                elif path[i] == "}":
-                    brace_count -= 1
-                field_chars.append(path[i])
-                i += 1
-            tokens.append("".join(field_chars))
-            continue
-
-        elif char == ".":  # Handle regular field
-            if current:
-                tokens.append("".join(current))
-                current = []
-        else:
-            current.append(char)
-        i += 1
-
-    if current:
-        tokens.append("".join(current))
-
-    return tokens
-
-
-def _extract_text_by_path(obj: Any, path: str) -> list[str]:
-    """Extract text from an object using a path expression.
-
-    Supports:
-    - Simple paths: "field1.field2"
-    - Array indexing: "[0]", "[*]", "[-1]"
-    - Wildcards: "*"
-    - Multi-field selection: "{field1,field2}"
-    - Nested paths in multi-field: "{field1,nested.field2}"
-    """
-    if not path or path == "__root__":
-        return [json.dumps(obj, sort_keys=True)]
-
-    def _extract_from_obj(obj: Any, tokens: list[str], pos: int) -> list[str]:
-        if pos >= len(tokens):
-            if isinstance(obj, (str, int, float, bool)):
-                return [str(obj)]
-            elif obj is None:
-                return []
-            elif isinstance(obj, (list, dict)):
-                return [json.dumps(obj, sort_keys=True)]
-            return []
-
-        token = tokens[pos]
-        results = []
-
-        if token.startswith("[") and token.endswith("]"):
-            if not isinstance(obj, list):
-                return []
-
-            index = token[1:-1]
-            if index == "*":
-                for item in obj:
-                    results.extend(_extract_from_obj(item, tokens, pos + 1))
-            else:
-                try:
-                    idx = int(index)
-                    if idx < 0:
-                        idx = len(obj) + idx
-                    if 0 <= idx < len(obj):
-                        results.extend(_extract_from_obj(obj[idx], tokens, pos + 1))
-                except (ValueError, IndexError):
-                    return []
-
-        elif token.startswith("{") and token.endswith("}"):
-            if not isinstance(obj, dict):
-                return []
-
-            fields = [f.strip() for f in token[1:-1].split(",")]
-            for field in fields:
-                nested_tokens = _tokenize_path(field)
-                if nested_tokens:
-                    current_obj: Optional[dict] = obj
-                    for nested_token in nested_tokens:
-                        if (
-                            isinstance(current_obj, dict)
-                            and nested_token in current_obj
-                        ):
-                            current_obj = current_obj[nested_token]
-                        else:
-                            current_obj = None
-                            break
-                    if current_obj is not None:
-                        if isinstance(current_obj, (str, int, float, bool)):
-                            results.append(str(current_obj))
-                        elif isinstance(current_obj, (list, dict)):
-                            results.append(json.dumps(current_obj, sort_keys=True))
-
-        # Handle wildcard
-        elif token == "*":
-            if isinstance(obj, dict):
-                for value in obj.values():
-                    results.extend(_extract_from_obj(value, tokens, pos + 1))
-            elif isinstance(obj, list):
-                for item in obj:
-                    results.extend(_extract_from_obj(item, tokens, pos + 1))
-
-        # Handle regular field
-        else:
-            if isinstance(obj, dict) and token in obj:
-                results.extend(_extract_from_obj(obj[token], tokens, pos + 1))
-
-        return results
-
-    tokens = _tokenize_path(path)
-    return _extract_from_obj(obj, tokens, 0)
-
-
-def _get_distance_operator(store: Any) -> tuple[str, str]:
+def _get_distance_operator(store: Any) -> str:
     """Get the distance operator and score expression based on config."""
-    if not store.embedding_config:
-        return "<=>", "1 - (sv.embedding <=> %s::vector)"
+    if not store.index_config:
+        raise ValueError(
+            "Embedding configuration is required for vector operations "
+            f"(for semantic search). "
+            f"Please provide an Embeddings when initializing the {store.__class__.__name__}."
+        )
 
-    config = cast(PostgresEmbeddingConfig, store.embedding_config)
+    config = cast(PostgresIndexConfig, store.index_config)
     distance_type = config.get("distance_type", "cosine")
 
     if distance_type == "l2":
-        return "<->", "1 - (sv.embedding <-> %s::%s)"
+        return "1 - (sv.embedding <-> %s::%s)"
     elif distance_type == "inner_product":
-        return "<#>", "-(sv.embedding <#> %s::%s)"
+        return "-(sv.embedding <#> %s::%s)"
     else:  # cosine
-        return "<=>", "1 - (sv.embedding <=> %s::%s)"
+        return "1 - (sv.embedding <=> %s::%s)"
+
+
+def _ensure_index_config(
+    index_config: PostgresIndexConfig,
+) -> tuple[Optional["Embeddings"], PostgresIndexConfig]:
+    index_config = index_config.copy()
+    tokenized: list[tuple[str, Union[Literal["$"], list[str]]]] = []
+    tot = 0
+    text_fields = index_config.get("text_fields") or ["$"]
+    if isinstance(text_fields, str):
+        text_fields = [text_fields]
+    if not isinstance(text_fields, list):
+        raise ValueError(f"Text fields must be a list or a string. Got {text_fields}")
+    for p in text_fields:
+        if p == "$":
+            tokenized.append((p, "$"))
+            tot += 1
+        else:
+            toks = tokenize_path(p)
+            tokenized.append((p, toks))
+            tot += len(toks)
+    index_config["__tokenized_fields"] = tokenized
+    index_config["__estimated_num_vectors"] = tot
+    embeddings = ensure_embeddings(
+        index_config.get("embed"),
+    )
+    return embeddings, index_config

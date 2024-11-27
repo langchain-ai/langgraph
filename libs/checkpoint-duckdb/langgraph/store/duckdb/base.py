@@ -23,6 +23,7 @@ from langgraph.store.base import (
     Op,
     PutOp,
     Result,
+    SearchItem,
     SearchOp,
 )
 
@@ -283,7 +284,7 @@ class DuckDBStore(BaseStore, BaseDuckDBStore[duckdb.DuckDBPyConnection]):
 
         for cur, idx in cursors:
             rows = cur.fetchall()
-            items = [_row_to_item(_convert_ns(row[0]), row) for row in rows]
+            items = [_row_to_search_item(_convert_ns(row[0]), row) for row in rows]
             results[idx] = items
 
     def _batch_list_namespaces_ops(
@@ -368,6 +369,22 @@ def _row_to_item(
     """Convert a row from the database into an Item."""
     _, key, val, created_at, updated_at = row
     return Item(
+        value=val if isinstance(val, dict) else json.loads(val),
+        key=key,
+        namespace=namespace,
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+
+
+def _row_to_search_item(
+    namespace: tuple[str, ...],
+    row: tuple,
+) -> SearchItem:
+    """Convert a row from the database into an SearchItem."""
+    # TODO: Add support for search
+    _, key, val, created_at, updated_at = row
+    return SearchItem(
         value=val if isinstance(val, dict) else json.loads(val),
         key=key,
         namespace=namespace,

@@ -1,7 +1,6 @@
 from typing import Any
 
 import pytest
-from conftest import DEFAULT_URI  # type: ignore
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
@@ -11,6 +10,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from tests.conftest import DEFAULT_URI
 
 
 class TestAsyncPostgresSaver:

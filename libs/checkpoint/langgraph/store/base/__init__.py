@@ -1,7 +1,12 @@
 """Base classes and types for persistent key-value stores.
 
-Stores enable persistence and memory that can be shared across threads,
-scoped to user IDs, assistant IDs, or other arbitrary namespaces.
+Stores provide long-term memory that persists across threads and conversations.
+Supports hierarchical namespaces, key-value storage, and optional vector search.
+
+Core types:
+- BaseStore: Store interface with sync/async operations
+- Item: Stored key-value pairs with metadata
+- Op: Get/Put/Search/List operations
 """
 
 from abc import ABC, abstractmethod
@@ -10,10 +15,12 @@ from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Unio
 
 from langchain_core.embeddings import Embeddings
 
-from langgraph.store.base._embed import (
+from langgraph.store.base.embed import (
     AEmbeddingsFunc,
     EmbeddingsFunc,
     ensure_embeddings,
+    get_text_at_path,
+    tokenize_path,
 )
 
 
@@ -81,17 +88,10 @@ class Item:
         }
 
 
-class ResponseMetadata(TypedDict, total=False):
-    """Additional metadata about the response/result."""
-
-    score: float
-    """Relevance/similarity score if from a ranked operation."""
-
-
 class SearchItem(Item):
     """Represents a result item with additional response metadata."""
 
-    __slots__ = "response_metadata"
+    __slots__ = ("score",)
 
     def __init__(
         self,
@@ -100,7 +100,7 @@ class SearchItem(Item):
         value: dict[str, Any],
         created_at: datetime,
         updated_at: datetime,
-        response_metadata: Optional[ResponseMetadata] = None,
+        score: Optional[float] = None,
     ) -> None:
         """Initialize a result item.
 
@@ -110,7 +110,7 @@ class SearchItem(Item):
             value: The stored value.
             created_at: When the item was first created.
             updated_at: When the item was last updated.
-            response_metadata: Optional metadata about the response/result.
+            score: Relevance/similarity score if from a ranked operation.
         """
         super().__init__(
             value=value,
@@ -119,132 +119,362 @@ class SearchItem(Item):
             created_at=created_at,
             updated_at=updated_at,
         )
-        self.response_metadata = response_metadata or {}
+        self.score = score
 
     def dict(self) -> dict:
         result = super().dict()
-        result["response_metadata"] = self.response_metadata
+        result["score"] = self.score
         return result
 
 
 class GetOp(NamedTuple):
-    """Operation to retrieve an item by namespace and key."""
+    """Operation to retrieve a specific item by its namespace and key.
+
+    This operation allows precise retrieval of stored items using their full path
+    (namespace) and unique identifier (key) combination.
+
+    ??? example "Examples"
+
+        Basic item retrieval:
+        ```python
+        GetOp(namespace=("users", "profiles"), key="user123")
+        GetOp(namespace=("cache", "embeddings"), key="doc456")
+        ```
+    """
 
     namespace: tuple[str, ...]
-    """Hierarchical path for the item."""
+    """Hierarchical path that uniquely identifies the item's location.
+
+    ??? example "Examples"
+
+        ```python
+        ("users",)  # Root level users namespace
+        ("users", "profiles")  # Profiles within users namespace
+        ```
+    """
+
     key: str
-    """Unique identifier within the namespace."""
+    """Unique identifier for the item within its specific namespace.
+
+    ??? example "Examples"
+
+        ```python
+        "user123"  # For a user profile
+        "doc456"  # For a document
+        ```
+    """
 
 
 class SearchOp(NamedTuple):
-    """Operation to search for items within a namespace prefix."""
+    """Operation to search for items within a specified namespace hierarchy.
+
+    This operation supports both structured filtering and natural language search
+    within a given namespace prefix. It provides pagination through limit and offset
+    parameters.
+
+    Note:
+        Natural language search support depends on your store implementation.
+
+    ??? example "Examples"
+        Search with filters and pagination:
+        ```python
+        SearchOp(
+            namespace_prefix=("documents",),
+            filter={"type": "report", "status": "active"},
+            limit=5,
+            offset=10
+        )
+        ```
+
+        Natural language search:
+        ```python
+        SearchOp(
+            namespace_prefix=("users", "content"),
+            query="technical documentation about APIs",
+            limit=20
+        )
+        ```
+    """
 
     namespace_prefix: tuple[str, ...]
-    """Hierarchical path prefix to search within."""
+    """Hierarchical path prefix defining the search scope.
+
+    ??? example "Examples"
+
+        ```python
+        ()  # Search entire store
+        ("documents",)  # Search all documents
+        ("users", "content")  # Search within user content
+        ```
+    """
+
     filter: Optional[dict[str, Any]] = None
-    """Key-value pairs to filter results."""
+    """Key-value pairs for filtering results based on exact matches or comparison operators.
+
+    The filter supports both exact matches and operator-based comparisons.
+
+    Supported Operators:
+        - $eq: Equal to (same as direct value comparison)
+        - $ne: Not equal to
+        - $gt: Greater than
+        - $gte: Greater than or equal to
+        - $lt: Less than
+        - $lte: Less than or equal to
+
+    ??? example "Examples"
+
+        Simple exact match:
+
+        ```python
+        {"status": "active"}
+        ```
+
+        Comparison operators:
+
+        ```python
+        {"score": {"$gt": 4.99}}  # Score greater than 4.99
+        ```
+
+        Multiple conditions:
+
+        ```python
+        {
+            "score": {"$gte": 3.0},
+            "color": "red"
+        }
+        ```
+
+    Note:
+        Comparison operator support depends on your store implementation.
+    """
+
     limit: int = 10
-    """Maximum number of items to return."""
+    """Maximum number of items to return in the search results."""
+
     offset: int = 0
-    """Number of items to skip before returning results."""
+    """Number of matching items to skip for pagination."""
+
     query: Optional[str] = None
-    """The search query for natural language search."""
+    """Natural language search query for semantic search capabilities.
 
-
-class PutOp(NamedTuple):
-    """Operation to store, update, or delete an item."""
-
-    namespace: tuple[str, ...]
-    """Hierarchical path for the item.
-    
-    Represented as a tuple of strings, allowing for nested categorization.
-    For example: ("documents", "user123")
-    """
-
-    key: str
-    """Unique identifier for the document.
-    
-    Should be distinct within its namespace.
-    """
-
-    value: Optional[dict[str, Any]]
-    """Data to be stored, or None to delete the item.
-    
-    Schema:
-    - Should be a dictionary where:
-      - Keys are strings representing field names
-      - Values can be of any serializable type
-    - If None, it indicates that the item should be deleted
-    """
-    index: Optional[bool] = None  # type: ignore[assignment]
-    """Whether to index the item (if supported by the store).
-    
-    Defaults to True if the store supports indexing. This will embed the document
-    so it can be queried using search.
+    ??? example "Examples"
+        - "technical documentation about REST APIs"
+        - "machine learning papers from 2023"
     """
 
 
-NameSpacePath = tuple[Union[str, Literal["*"]], ...]
+# Type representing a namespace path that can include wildcards
+NamespacePath = tuple[Union[str, Literal["*"]], ...]
+"""A tuple representing a namespace path that can include wildcards.
 
+Examples:
+    ("users",)  # Exact users namespace
+    ("documents", "*")  # Any sub-namespace under documents
+    ("cache", "*", "v1")  # Any cache category with v1 version
+"""
+
+# Type for specifying how to match namespaces
 NamespaceMatchType = Literal["prefix", "suffix"]
+"""Specifies how to match namespace paths.
+
+Values:
+    "prefix": Match from the start of the namespace
+    "suffix": Match from the end of the namespace
+"""
 
 
 class MatchCondition(NamedTuple):
-    """Represents a single match condition."""
+    """Represents a pattern for matching namespaces in the store.
+
+    This class combines a match type (prefix or suffix) with a namespace path
+    pattern that can include wildcards to flexibly match different namespace
+    hierarchies.
+
+    ??? example "Examples"
+        Prefix matching:
+        ```python
+        MatchCondition(match_type="prefix", path=("users", "profiles"))
+        ```
+
+        Suffix matching with wildcard:
+        ```python
+        MatchCondition(match_type="suffix", path=("cache", "*"))
+        ```
+
+        Simple suffix matching:
+        ```python
+        MatchCondition(match_type="suffix", path=("v1",))
+        ```
+    """
 
     match_type: NamespaceMatchType
-    path: NameSpacePath
+    """Type of namespace matching to perform."""
+
+    path: NamespacePath
+    """Namespace path pattern that can include wildcards."""
 
 
 class ListNamespacesOp(NamedTuple):
-    """Operation to list namespaces with optional match conditions."""
+    """Operation to list and filter namespaces in the store.
+
+    This operation allows exploring the organization of data, finding specific
+    collections, and navigating the namespace hierarchy.
+
+    ??? example "Examples"
+
+        List all namespaces under the "documents" path:
+        ```python
+        ListNamespacesOp(
+            match_conditions=(MatchCondition(match_type="prefix", path=("documents",)),),
+            max_depth=2
+        )
+        ```
+
+        List all namespaces that end with "v1":
+        ```python
+        ListNamespacesOp(
+            match_conditions=(MatchCondition(match_type="suffix", path=("v1",)),),
+            limit=50
+        )
+        ```
+
+    """
 
     match_conditions: Optional[tuple[MatchCondition, ...]] = None
-    """A tuple of match conditions to apply to namespaces."""
+    """Optional conditions for filtering namespaces.
+
+    ??? example "Examples"
+        All user namespaces:
+        ```python
+        (MatchCondition(match_type="prefix", path=("users",)),)
+        ```
+
+        All namespaces that start with "docs" and end with "draft":
+        ```python
+        (
+            MatchCondition(match_type="prefix", path=("docs",)),
+            MatchCondition(match_type="suffix", path=("draft",))
+        ) 
+        ```
+    """
 
     max_depth: Optional[int] = None
-    """Return namespaces up to this depth in the hierarchy."""
+    """Maximum depth of namespace hierarchy to return.
+
+    Note:
+        Namespaces deeper than this level will be truncated.
+    """
 
     limit: int = 100
     """Maximum number of namespaces to return."""
 
     offset: int = 0
-    """Number of namespaces to skip before returning results."""
+    """Number of namespaces to skip for pagination."""
+
+
+class PutOp(NamedTuple):
+    """Operation to store, update, or delete an item in the store.
+
+    This class represents a single operation to modify the store's contents,
+    whether adding new items, updating existing ones, or removing them.
+    """
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that identifies the location of the item.
+
+    The namespace acts as a folder-like structure to organize items.
+    Each element in the tuple represents one level in the hierarchy.
+
+    ??? example "Examples"
+        Root level documents
+        ```python
+        ("documents",)
+        ```
+        
+        User-specific documents
+        ```python
+        ("documents", "user123")
+        ```
+        
+        Nested cache structure
+        ```python
+        ("cache", "embeddings", "v1")
+        ```
+    """
+
+    key: str
+    """Unique identifier for the item within its namespace.
+
+    The key must be unique within the specific namespace to avoid conflicts.
+    Together with the namespace, it forms a complete path to the item.
+
+    Example:
+        If namespace is ("documents", "user123") and key is "report1",
+        the full path would effectively be "documents/user123/report1"
+    """
+
+    value: Optional[dict[str, Any]]
+    """The data to store, or None to mark the item for deletion.
+
+    The value must be a dictionary with string keys and JSON-serializable values.
+    Setting this to None signals that the item should be deleted.
+
+    Example:
+        {
+            "field1": "string value",
+            "field2": 123,
+            "nested": {"can": "contain", "any": "serializable data"}
+        }
+    """
+
+    index: Optional[Union[Literal[False], list[str]]] = None  # type: ignore[assignment]
+    """Controls how the item's fields are indexed for search operations.
+
+    Indexing configuration determines how the item can be found through search:
+    - None (default): Uses the store's default indexing configuration (if provided)
+    - False: Disables indexing for this item
+    - list[str]: Specifies which json path fields to index for search
+
+    The item remains accessible through direct get() operations regardless of indexing.
+    When indexed, fields can be searched using natural language queries through
+    vector similarity search (if supported by the store implementation).
+
+    Path Syntax:
+        - Simple field access: "field"
+        - Nested fields: "parent.child.grandchild"
+        - Array indexing:
+          - Specific index: "array[0]"
+          - Last element: "array[-1]"
+          - All elements (each individually): "array[*]"
+
+    ??? example "Examples"
+        - None - Use store defaults
+        - False - Don't index this item
+        - list[str] - List of fields to index
+        
+        ```python
+        [
+            "metadata.title",                    # Nested field access
+            "chapters[*].content",               # Index content from all chapters as separate vectors
+            "authors[0].name",                   # First author's name
+            "revisions[-1].changes",             # Most recent revision's changes
+            "sections[*].paragraphs[*].text",    # All text from all paragraphs in all sections
+            "metadata.tags[*]",                  # All tags in metadata
+        ]
+        ```
+    """
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
-Result = Union[Item, list[Item], list[tuple[str, ...]], None]
+Result = Union[Item, list[Item], list[SearchItem], list[tuple[str, ...]], None]
 
 
 class InvalidNamespaceError(ValueError):
     """Provided namespace is invalid."""
 
 
-def _validate_namespace(namespace: tuple[str, ...]) -> None:
-    if not namespace:
-        raise InvalidNamespaceError("Namespace cannot be empty.")
-    for label in namespace:
-        if not isinstance(label, str):
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
-                f" must be strings, but got {type(label).__name__}."
-            )
-        if "." in label:
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
-            )
-        elif not label:
-            raise InvalidNamespaceError(
-                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
-            )
-    if namespace[0] == "langgraph":
-        raise InvalidNamespaceError(
-            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
-        )
-
-
-class EmbeddingConfig(TypedDict, total=False):
-    """Configuration for vector embeddings in PostgreSQL store."""
+class IndexConfig(TypedDict, total=False):
+    """Configuration for indexing documents for semantic search in the store."""
 
     dims: int
     """Number of dimensions in the embedding vectors.
@@ -261,17 +491,11 @@ class EmbeddingConfig(TypedDict, total=False):
 
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
     """Optional function to generate embeddings from text."""
-    aembed: Optional[AEmbeddingsFunc]
-    """Optional asynchronous function to generate embeddings from text.
-    
-    Provide for asynchronous embedding generation if you do not provide
-    an Embeddings object.
-    """
 
-    text_fields: Optional[list[str]]
+    fields: Optional[list[str]]
     """Fields to extract text from for embedding generation.
     
-    Defaults to ["__root__"], which embeds the json object as a whole.
+    Defaults to the root ["$"], which embeds the json object as a whole.
     """
 
 
@@ -329,7 +553,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
         Args:
@@ -349,16 +573,44 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[bool] = None,
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
-        """Store or update an item.
+        """Store or update an item in the store.
 
         Args:
-            namespace: Hierarchical path for the item.
-            key: Unique identifier within the namespace.
-            value: Dictionary containing the item's data.
-            index: Whether to index the item (if supported by the store).
-                Defaults to True if the store supports indexing.
+            namespace: Hierarchical path for the item, represented as a tuple of strings.
+                Example: ("documents", "user123")
+            key: Unique identifier within the namespace. Together with namespace forms
+                the complete path to the item.
+            value: Dictionary containing the item's data. Must contain string keys
+                and JSON-serializable values.
+            index: Controls how the item's fields are indexed for search:
+                - None (default): Use store's default indexing configuration
+                - False: Disable indexing for this item
+                - list[str]: List of field paths to index, supporting:
+                    - Nested fields: "metadata.title"
+                    - Array access: "chapters[*].content" (each indexed separately)
+                    - Specific indices: "authors[0].name"
+
+        Note:
+            Indexing capabilities depend on your store implementation.
+            Some implementations may support only a subset of indexing features.
+
+        ??? example "Examples"
+            Simple storage without special indexing (respects store defaults)
+            ```python
+            store.put(("docs",), "report", {"title": "Annual Report"})
+            ```
+
+            Index specific fields for search
+            ```python
+            store.put(("docs",), "report", {"title": "Annual Report"}, index=["title"])
+            ```
+
+            Do not index for semantic search
+            ```python
+            store.put(("docs",), "report", {"title": "Annual Report"}, index=False)
+            ```
         """
         _validate_namespace(namespace)
         self.batch([PutOp(namespace, key, value, index=index)])
@@ -375,8 +627,8 @@ class BaseStore(ABC):
     def list_namespaces(
         self,
         *,
-        prefix: Optional[NameSpacePath] = None,
-        suffix: Optional[NameSpacePath] = None,
+        prefix: Optional[NamespacePath] = None,
+        suffix: Optional[NamespacePath] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -390,7 +642,7 @@ class BaseStore(ABC):
             prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
             suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
             max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
-                Namespaces deeper than this level will be truncated to this depth.
+                Namespaces deeper than this level will be truncated.
             limit (int): Maximum number of namespaces to return (default 100).
             offset (int): Number of namespaces to skip for pagination (default 0).
 
@@ -398,16 +650,18 @@ class BaseStore(ABC):
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
             Each tuple represents a full namespace path up to `max_depth`.
 
-        Examples:
-
+        ??? example "Examples":
             Setting max_depth=3. Given the namespaces:
-                # ("a", "b", "c")
-                # ("a", "b", "d", "e")
-                # ("a", "b", "d", "i")
-                # ("a", "b", "f")
-                # ("a", "c", "f")
-                store.list_namespaces(prefix=("a", "b"), max_depth=3)
-                # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+            ```python
+            # Example if you have the following namespaces:
+            # ("a", "b", "c")
+            # ("a", "b", "d", "e")
+            # ("a", "b", "d", "i")
+            # ("a", "b", "f")
+            # ("a", "c", "f")
+            store.list_namespaces(prefix=("a", "b"), max_depth=3)
+            # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+            ```
         """
         match_conditions = []
         if prefix:
@@ -444,7 +698,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
         Args:
@@ -468,19 +722,50 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[bool] = None,
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
-        """Asynchronously store or update an item.
+        """Asynchronously store or update an item in the store.
 
         Args:
-            namespace: Hierarchical path for the item.
-            key: Unique identifier within the namespace.
-            value: Dictionary containing the item's data.
-            index: Whether to index the item (if supported by the store).
-                Defaults to True if the store supports indexing.
+            namespace: Hierarchical path for the item, represented as a tuple of strings.
+                Example: ("documents", "user123")
+            key: Unique identifier within the namespace. Together with namespace forms
+                the complete path to the item.
+            value: Dictionary containing the item's data. Must contain string keys
+                and JSON-serializable values.
+            index: Controls how the item's fields are indexed for search:
+                - None (default): Use store's default indexing configuration
+                - False: Disable indexing for this item
+                - list[str]: List of field paths to index, supporting:
+                    - Nested fields: "metadata.title"
+                    - Array access: "chapters[*].content" (each indexed separately)
+                    - Specific indices: "authors[0].name"
+
+        Note:
+            Indexing capabilities depend on your store implementation.
+            Some implementations may support only a subset of indexing features.
+
+        ??? example "Examples"
+            Simple storage without special indexing:
+            ```python
+            await store.aput(("docs",), "report", {"title": "Annual Report"})
+            ```
+
+            Index specific fields for search:
+            ```python
+            await store.aput(
+                ("docs",),
+                "report",
+                {
+                    "title": "Q4 Report",
+                    "chapters": [{"content": "..."}, {"content": "..."}]
+                },
+                index=["title", "chapters[*].content"]
+            )
+            ```
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value, index)])
+        await self.abatch([PutOp(namespace, key, value, index=index)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
@@ -494,8 +779,8 @@ class BaseStore(ABC):
     async def alist_namespaces(
         self,
         *,
-        prefix: Optional[NameSpacePath] = None,
-        suffix: Optional[NameSpacePath] = None,
+        prefix: Optional[NamespacePath] = None,
+        suffix: Optional[NamespacePath] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -517,16 +802,19 @@ class BaseStore(ABC):
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
             Each tuple represents a full namespace path up to `max_depth`.
 
-        Examples:
+        ??? example "Examples"
+            Setting max_depth=3 with existing namespaces:
+            ```python
+            # Given the following namespaces:
+            # ("a", "b", "c")
+            # ("a", "b", "d", "e")
+            # ("a", "b", "d", "i")
+            # ("a", "b", "f")
+            # ("a", "c", "f")
 
-            Setting max_depth=3. Given the namespaces:
-                # ("a", "b", "c")
-                # ("a", "b", "d", "e")
-                # ("a", "b", "d", "i")
-                # ("a", "b", "f")
-                # ("a", "c", "f")
-                await store.alist_namespaces(prefix=("a", "b"), max_depth=3)
-                # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+            await store.alist_namespaces(prefix=("a", "b"), max_depth=3)
+            # Returns: [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
+            ```
         """
         match_conditions = []
         if prefix:
@@ -543,6 +831,29 @@ class BaseStore(ABC):
         return (await self.abatch([op]))[0]
 
 
+def _validate_namespace(namespace: tuple[str, ...]) -> None:
+    if not namespace:
+        raise InvalidNamespaceError("Namespace cannot be empty.")
+    for label in namespace:
+        if not isinstance(label, str):
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
+                f" must be strings, but got {type(label).__name__}."
+            )
+        if "." in label:
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
+            )
+        elif not label:
+            raise InvalidNamespaceError(
+                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
+            )
+    if namespace[0] == "langgraph":
+        raise InvalidNamespaceError(
+            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
+        )
+
+
 __all__ = [
     "BaseStore",
     "Item",
@@ -552,8 +863,10 @@ __all__ = [
     "SearchOp",
     "ListNamespacesOp",
     "MatchCondition",
-    "NameSpacePath",
+    "NamespacePath",
     "NamespaceMatchType",
     "Embeddings",
     "ensure_embeddings",
+    "tokenize_path",
+    "get_text_at_path",
 ]

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
+from typing import Any, Callable, Optional, Union, cast
 
 import orjson
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -17,23 +17,20 @@ from langgraph.store.base import (
     Op,
     PutOp,
     Result,
-    SearchItem,
     SearchOp,
-    ensure_embeddings,
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.postgres.base import (
     BasePostgresStore,
     PoolConfig,
-    PostgresEmbeddingConfig,
+    PostgresIndexConfig,
     Row,
     _decode_ns_bytes,
+    _ensure_index_config,
     _group_ops,
     _row_to_item,
+    _row_to_search_item,
 )
-
-if TYPE_CHECKING:
-    from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +41,8 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         "pipe",
         "lock",
         "supports_pipeline",
-        "embedding_config",
+        "index_config",
+        "embeddings",
     )
 
     def __init__(
@@ -55,7 +53,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
-        embedding: Optional[PostgresEmbeddingConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> None:
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
@@ -68,12 +66,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
         self.supports_pipeline = Capabilities().has_pipeline()
-        self.embedding_config = embedding
-        if self.embedding_config:
-            self.embeddings: Optional[Embeddings] = ensure_embeddings(
-                self.embedding_config.get("embed"),
-                aembed=self.embedding_config.get("aembed"),
-            )
+        self.index_config = index
+        if self.index_config:
+            self.embeddings, self.index_config = _ensure_index_config(self.index_config)
+
         else:
             self.embeddings = None
 
@@ -89,6 +85,107 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 await self._execute_batch(grouped_ops, results, conn)
 
         return results
+
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
+        return asyncio.run_coroutine_threadsafe(self.abatch(ops), self.loop).result()
+
+    @classmethod
+    @asynccontextmanager
+    async def from_conn_string(
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        pool_config: Optional[PoolConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
+    ) -> AsyncIterator["AsyncPostgresStore"]:
+        """Create a new AsyncPostgresStore instance from a connection string.
+
+        Args:
+            conn_string (str): The Postgres connection info string.
+            pipeline (bool): Whether to use AsyncPipeline (only for single connections)
+            pool_config (Optional[PoolConfig]): Configuration for the connection pool.
+                If provided, will create a connection pool and use it instead of a single connection.
+                This overrides the `pipeline` argument.
+            index (Optional[PostgresIndexConfig]): The embedding config.
+
+        Returns:
+            AsyncPostgresStore: A new AsyncPostgresStore instance.
+        """
+        if pool_config is not None:
+            pc = pool_config.copy()
+            async with cast(
+                AsyncConnectionPool[AsyncConnection[DictRow]],
+                AsyncConnectionPool(
+                    conn_string,
+                    min_size=pc.pop("min_size", 1),
+                    max_size=pc.pop("max_size", None),
+                    kwargs={
+                        "autocommit": True,
+                        "prepare_threshold": 0,
+                        "row_factory": dict_row,
+                        **(pc.pop("kwargs", None) or {}),
+                    },
+                    **cast(dict, pc),
+                ),
+            ) as pool:
+                yield cls(conn=pool, index=index)
+        else:
+            async with await AsyncConnection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
+                if pipeline:
+                    async with conn.pipeline() as pipe:
+                        yield cls(conn=conn, pipe=pipe, index=index)
+                else:
+                    yield cls(conn=conn, index=index)
+
+    async def setup(self) -> None:
+        """Set up the store database asynchronously.
+
+        This method creates the necessary tables in the Postgres database if they don't
+        already exist and runs database migrations. It MUST be called directly by the user
+        the first time the store is used.
+        """
+        async with self._cursor() as cur:
+            try:
+                await cur.execute(
+                    "SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1"
+                )
+                row = await cur.fetchone()
+                if row is None:
+                    version = -1
+                else:
+                    version = row["v"]
+            except UndefinedTable:
+                version = -1
+                await cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS store_migrations (
+                        v INTEGER PRIMARY KEY
+                    )
+                """
+                )
+
+            for v, migration in enumerate(
+                self.MIGRATIONS[version + 1 :], start=version + 1
+            ):
+                if isinstance(migration, str):
+                    sql = migration
+                else:
+                    if migration.condition and not migration.condition(self):
+                        continue
+
+                    sql = migration.sql
+                    if migration.params:
+                        params = {
+                            k: v(self) if v is not None and callable(v) else v
+                            for k, v in migration.params.items()
+                        }
+                        sql = sql % params
+
+                await cur.execute(sql)
+                await cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
 
     async def _execute_batch(
         self,
@@ -162,15 +259,18 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                     f"Please provide an EmbeddingConfig when initializing the {self.__class__.__name__}."
                 )
             query, txt_params = embedding_request
-            # Update the params to replace the raw text with the vectors
             vectors = await self.embeddings.aembed_documents(
                 [param[-1] for param in txt_params]
             )
-            queries.extend(
-                [
-                    (query, (ns, key, value, vector))
-                    for (ns, key, value, _), vector in zip(txt_params, vectors)
-                ]
+            queries.append(
+                (
+                    query,
+                    [
+                        p
+                        for (ns, k, pathname, _), vector in zip(txt_params, vectors)
+                        for p in (ns, k, pathname, vector)
+                    ],
+                )
             )
 
         for query, params in queries:
@@ -185,21 +285,18 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
 
         if embedding_requests and self.embeddings:
-            embeddings = await self.embeddings.aembed_documents(
+            vectors = await self.embeddings.aembed_documents(
                 [query for _, query in embedding_requests]
             )
-            for (idx, _), embedding in zip(embedding_requests, embeddings):
-                queries[idx][1][0] = embedding
+            for (idx, _), vector in zip(embedding_requests, vectors):
+                queries[idx][1][0] = vector
 
         for (idx, _), (query, params) in zip(search_ops, queries):
             await cur.execute(query, params)
             rows = cast(list[Row], await cur.fetchall())
             items = [
-                _row_to_item(
-                    _decode_ns_bytes(row["prefix"]),
-                    row,
-                    loader=self._deserializer,
-                    cls=SearchItem,
+                _row_to_search_item(
+                    _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
                 )
                 for row in rows
             ]
@@ -258,109 +355,8 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                     ):
                         yield cur
             else:
-                async with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                async with (
+                    self.lock,
+                    conn.cursor(binary=True) as cur,
+                ):
                     yield cur
-
-    def batch(self, ops: Iterable[Op]) -> list[Result]:
-        return asyncio.run_coroutine_threadsafe(self.abatch(ops), self.loop).result()
-
-    @classmethod
-    @asynccontextmanager
-    async def from_conn_string(
-        cls,
-        conn_string: str,
-        *,
-        pipeline: bool = False,
-        pool_config: Optional[PoolConfig] = None,
-        embedding: Optional[PostgresEmbeddingConfig] = None,
-    ) -> AsyncIterator["AsyncPostgresStore"]:
-        """Create a new AsyncPostgresStore instance from a connection string.
-
-        Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): Whether to use AsyncPipeline (only for single connections)
-            pool_config (Optional[PoolConfig]): Configuration for the connection pool.
-                If provided, will create a connection pool and use it instead of a single connection.
-                This overrides the `pipeline` argument.
-            embedding (Optional[PostgresEmbeddingConfig]): The embedding config.
-
-        Returns:
-            AsyncPostgresStore: A new AsyncPostgresStore instance.
-        """
-        if pool_config is not None:
-            pc = pool_config.copy()
-            async with cast(
-                AsyncConnectionPool[AsyncConnection[DictRow]],
-                AsyncConnectionPool(
-                    conn_string,
-                    min_size=pc.pop("min_size", 1),
-                    max_size=pc.pop("max_size", None),
-                    kwargs={
-                        "autocommit": True,
-                        "prepare_threshold": 0,
-                        "row_factory": dict_row,
-                        **(pc.pop("kwargs", None) or {}),
-                    },
-                    **cast(dict, pc),
-                ),
-            ) as pool:
-                yield cls(conn=pool, embedding=embedding)
-        else:
-            async with await AsyncConnection.connect(
-                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-            ) as conn:
-                if pipeline:
-                    async with conn.pipeline() as pipe:
-                        yield cls(conn=conn, pipe=pipe, embedding=embedding)
-                else:
-                    yield cls(conn=conn, embedding=embedding)
-
-    async def setup(self) -> None:
-        """Set up the store database asynchronously.
-
-        This method creates the necessary tables in the Postgres database if they don't
-        already exist and runs database migrations. It MUST be called directly by the user
-        the first time the store is used.
-        """
-        async with self._cursor() as cur:
-            try:
-                await cur.execute(
-                    "SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1"
-                )
-                row = await cur.fetchone()
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
-                version = -1
-                await cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS store_migrations (
-                        v INTEGER PRIMARY KEY
-                    )
-                """
-                )
-
-            for v, migration in enumerate(
-                self.MIGRATIONS[version + 1 :], start=version + 1
-            ):
-                if isinstance(migration, str):
-                    sql = migration
-                else:
-                    if migration.condition and not migration.condition(self):
-                        continue
-
-                    sql = migration.sql
-                    if migration.params:
-                        params = {
-                            k: v(self) if v is not None and callable(v) else v
-                            for k, v in migration.params.items()
-                        }
-                        sql = sql % params
-
-                await cur.execute(sql)
-                await cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
-
-            if self.pipe:
-                await self.pipe.sync()
