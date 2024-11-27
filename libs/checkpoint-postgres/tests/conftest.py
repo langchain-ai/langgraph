@@ -4,7 +4,8 @@ import pytest
 from psycopg import AsyncConnection
 from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
-from utils import CharacterEmbeddings  # type: ignore
+
+from tests.embed_test_utils import CharacterEmbeddings
 
 DEFAULT_URI = "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
 

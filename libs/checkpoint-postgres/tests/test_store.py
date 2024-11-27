@@ -1,15 +1,10 @@
 # type: ignore
 
-import json
+from contextlib import contextmanager
+from typing import Any, Optional
 from uuid import uuid4
 
 import pytest
-from conftest import (
-    DEFAULT_URI,  # type: ignore
-    INDEX_TYPES,
-    VECTOR_TYPES,
-    CharacterEmbeddings,
-)
 from langchain_core.embeddings import Embeddings
 from psycopg import Connection
 
@@ -22,7 +17,12 @@ from langgraph.store.base import (
     SearchOp,
 )
 from langgraph.store.postgres import PostgresStore
-from langgraph.store.postgres.base import _extract_text_by_path
+from tests.conftest import (
+    DEFAULT_URI,
+    INDEX_TYPES,
+    VECTOR_TYPES,
+    CharacterEmbeddings,
+)
 
 
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
@@ -350,6 +350,51 @@ class TestPostgresStore:
                 store.delete(namespace, key)
 
 
+@contextmanager
+def _create_vector_store(
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+    fake_embeddings: Embeddings,
+    text_fields: Optional[list[str]] = None,
+) -> PostgresStore:
+    """Create a store with vector search enabled."""
+    database = f"test_{uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
+
+    index_config = {
+        "dims": fake_embeddings.dims,
+        "embed": fake_embeddings,
+        "db_index_config": {
+            "kind": index_type,
+            "vector_type": vector_type,
+        },
+        "distance_type": distance_type,
+        "text_fields": text_fields,
+    }
+
+    with Connection.connect(admin_conn_string, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with PostgresStore.from_conn_string(
+            conn_string,
+            index=index_config,
+        ) as store:
+            store.setup()
+            yield store
+    finally:
+        with Connection.connect(admin_conn_string, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
 @pytest.fixture(
     scope="function",
     params=[
@@ -364,42 +409,16 @@ class TestPostgresStore:
     ],
     ids=lambda p: f"{p[0]}_{p[1]}_{p[2]}",
 )
-def vector_store(request, fake_embeddings: Embeddings) -> PostgresStore:
+def vector_store(
+    request,
+    fake_embeddings: Embeddings,
+) -> PostgresStore:
     """Create a store with vector search enabled."""
-    database = f"test_{uuid4().hex[:16]}"
-    uri_parts = DEFAULT_URI.split("/")
-    uri_base = "/".join(uri_parts[:-1])
-    query_params = ""
-    if "?" in uri_parts[-1]:
-        db_name, query_params = uri_parts[-1].split("?", 1)
-        query_params = "?" + query_params
-
-    conn_string = f"{uri_base}/{database}{query_params}"
-    admin_conn_string = DEFAULT_URI
-
     index_type, vector_type, distance_type = request.param
-    embedding_config = {
-        "dims": fake_embeddings.dims,
-        "embed": fake_embeddings,
-        "index_config": {
-            "kind": index_type,
-            "vector_type": vector_type,
-        },
-        "distance_type": distance_type,
-    }
-
-    with Connection.connect(admin_conn_string, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
-    try:
-        with PostgresStore.from_conn_string(
-            conn_string,
-            embedding=embedding_config,
-        ) as store:
-            store.setup()
-            yield store
-    finally:
-        with Connection.connect(admin_conn_string, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+    with _create_vector_store(
+        index_type, vector_type, distance_type, fake_embeddings
+    ) as store:
+        yield store
 
 
 def test_vector_store_initialization(
@@ -407,9 +426,9 @@ def test_vector_store_initialization(
 ) -> None:
     """Test store initialization with embedding config."""
     # Store should be initialized with embedding config
-    assert vector_store.embedding_config is not None
-    assert vector_store.embedding_config["dims"] == fake_embeddings.dims
-    assert vector_store.embedding_config["embed"] == fake_embeddings
+    assert vector_store.index_config is not None
+    assert vector_store.index_config["dims"] == fake_embeddings.dims
+    assert vector_store.index_config["embed"] == fake_embeddings
 
 
 def test_vector_insert_with_auto_embedding(vector_store: PostgresStore) -> None:
@@ -443,20 +462,18 @@ def test_vector_update_with_embedding(vector_store: PostgresStore) -> None:
     results_initial = vector_store.search(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
-    initial_score = results_initial[0].response_metadata["score"]
+    initial_score = results_initial[0].score
 
     vector_store.put(("test",), "doc1", {"text": "new text about dogs"})
 
     results_after = vector_store.search(("test",), query="Zany Xerxes")
-    after_score = next(
-        (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
-    )
+    after_score = next((r.score for r in results_after if r.key == "doc1"), 0.0)
     assert after_score < initial_score
 
     results_new = vector_store.search(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
-            assert r.response_metadata["score"] > after_score
+            assert r.score > after_score
 
     # Don't index this one
     vector_store.put(("test",), "doc4", {"text": "new text about dogs"}, index=False)
@@ -537,69 +554,75 @@ def test_vector_search_edge_cases(vector_store: PostgresStore) -> None:
     assert len(results) == 1
 
 
-def test_extract_text_by_path():
-    nested_data = {
-        "name": "test",
-        "info": {
-            "age": 25,
-            "tags": ["a", "b", "c"],
-            "metadata": {"created": "2024-01-01", "updated": "2024-01-02"},
-        },
-        "items": [
-            {"id": 1, "value": "first", "tags": ["x", "y"]},
-            {"id": 2, "value": "second", "tags": ["y", "z"]},
-            {"id": 3, "value": "third", "tags": ["z", "w"]},
-        ],
-        "empty": None,
-        "zeros": [0, 0.0, "0"],
-        "empty_list": [],
-        "empty_dict": {},
-    }
+@pytest.mark.parametrize(
+    "index_type,vector_type,distance_type",
+    [
+        ("ivfflat", "vector", "cosine"),
+        ("hnsw", "vector", "cosine"),
+        ("hnsw", "halfvec", "cosine"),
+        ("hnsw", "halfvec", "inner_product"),
+    ],
+)
+def test_embed_with_path_sync(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test vector search with specific text fields in Postgres store."""
+    with _create_vector_store(
+        index_type,
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key0", "key1", "key3"],
+    ) as store:
+        # This will have 2 vectors representing it
+        doc1 = {
+            # Omit key0 - check it doesn't raise an error
+            "key1": "xxx",
+            "key2": "yyy",
+            "key3": "zzz",
+        }
+        # This will have 3 vectors representing it
+        doc2 = {
+            "key0": "uuu",
+            "key1": "vvv",
+            "key2": "www",
+            "key3": "xxx",
+        }
+        store.put(("test",), "doc1", doc1)
+        store.put(("test",), "doc2", doc2)
 
-    assert _extract_text_by_path(nested_data, "__root__") == [
-        json.dumps(nested_data, sort_keys=True)
-    ]
+        # doc2.key3 and doc1.key1 both would have the highest score
+        results = store.search(("test",), query="xxx")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        ascore = results[0].score
+        bscore = results[1].score
+        assert ascore == pytest.approx(bscore, abs=1e-3)
 
-    assert _extract_text_by_path(nested_data, "name") == ["test"]
-    assert _extract_text_by_path(nested_data, "info.age") == ["25"]
+        # ~Only match doc2
+        results = store.search(("test",), query="uuu")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].key == "doc2"
+        assert results[0].score > results[1].score
+        assert ascore == pytest.approx(results[0].score, abs=1e-3)
 
-    assert _extract_text_by_path(nested_data, "info.metadata.created") == ["2024-01-01"]
+        # ~Only match doc1
+        results = store.search(("test",), query="zzz")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].key == "doc1"
+        assert results[0].score > results[1].score
+        assert ascore == pytest.approx(results[0].score, abs=1e-3)
 
-    assert _extract_text_by_path(nested_data, "items[0].value") == ["first"]
-    assert _extract_text_by_path(nested_data, "items[-1].value") == ["third"]
-    assert _extract_text_by_path(nested_data, "items[1].tags[0]") == ["y"]
-
-    values = _extract_text_by_path(nested_data, "items[*].value")
-    assert set(values) == {"first", "second", "third"}
-
-    metadata_dates = _extract_text_by_path(nested_data, "info.metadata.*")
-    assert set(metadata_dates) == {"2024-01-01", "2024-01-02"}
-    name_and_age = _extract_text_by_path(nested_data, "{name,info.age}")
-    assert set(name_and_age) == {"test", "25"}
-
-    item_fields = _extract_text_by_path(nested_data, "items[*].{id,value}")
-    assert set(item_fields) == {"1", "2", "3", "first", "second", "third"}
-
-    all_tags = _extract_text_by_path(nested_data, "items[*].tags[*]")
-    assert set(all_tags) == {"x", "y", "z", "w"}
-
-    assert _extract_text_by_path(None, "any.path") == []
-    assert _extract_text_by_path({}, "any.path") == []
-    assert _extract_text_by_path(nested_data, "") == [
-        json.dumps(nested_data, sort_keys=True)
-    ]
-    assert _extract_text_by_path(nested_data, "nonexistent") == []
-    assert _extract_text_by_path(nested_data, "items[99].value") == []
-    assert _extract_text_by_path(nested_data, "items[*].nonexistent") == []
-
-    assert _extract_text_by_path(nested_data, "empty") == []
-    assert _extract_text_by_path(nested_data, "empty_list") == ["[]"]
-    assert _extract_text_by_path(nested_data, "empty_dict") == ["{}"]
-
-    zeros = _extract_text_by_path(nested_data, "zeros[*]")
-    assert set(zeros) == {"0", "0.0"}
-
-    assert _extract_text_by_path(nested_data, "items[].value") == []
-    assert _extract_text_by_path(nested_data, "items[abc].value") == []
-    assert _extract_text_by_path(nested_data, "{unclosed") == []
-    assert _extract_text_by_path(nested_data, "nested[{invalid}]") == []
+        # Un-indexed - will have low results for both. Not zero (because we're projecting)
+        # but less than the above.
+        results = store.search(("test",), query="www")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].score < ascore
+        assert results[1].score < ascore
