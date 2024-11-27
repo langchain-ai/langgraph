@@ -304,13 +304,17 @@ class BasePostgresStore(Generic[C]):
 
             # Then handle embeddings if configured
             if self.index_config:
-                paths = self.index_config["__tokenized_fields"]
                 for op in inserts:
                     if op.index is False:
                         continue
                     value = op.value
                     ns = _namespace_to_text(op.namespace)
                     k = op.key
+
+                    if op.index is None:
+                        paths = self.index_config["__tokenized_fields"]
+                    else:
+                        paths = [(ix, tokenize_path(ix)) for ix in op.index]
 
                     for path, tokenized_path in paths:
                         texts = get_text_at_path(value, tokenized_path)
@@ -370,7 +374,7 @@ class BasePostgresStore(Generic[C]):
                 score_expr = _get_distance_operator(self)
                 vector_type = (
                     cast(PostgresIndexConfig, self.index_config)
-                    .get("db_index_config", self._get_default_index_config())
+                    .get("db_index_config", {})
                     .get("vector_type", "vector")
                 )
 
@@ -897,32 +901,6 @@ def _row_to_item(
     }
 
     return Item(**kwargs)
-
-
-def _row_to_search_item(
-    namespace: tuple[str, ...],
-    row: Row,
-    *,
-    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
-) -> SearchItem:
-    """Convert a row from the database into an Item."""
-    loader = loader or _json_loads
-    val = row["value"]
-    score = row.get("score")
-    if score is not None:
-        try:
-            score = float(score)  # type: ignore[arg-type]
-        except ValueError:
-            logger.warning("Invalid score: %s", score)
-            score = None
-    return SearchItem(
-        value=val if isinstance(val, dict) else loader(val),
-        key=row["key"],
-        namespace=namespace,
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-        score=score,
-    )
 
 
 def _row_to_search_item(

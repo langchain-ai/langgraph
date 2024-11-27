@@ -626,3 +626,83 @@ def test_embed_with_path_sync(
         assert results[0].key != results[1].key
         assert results[0].score < ascore
         assert results[1].score < ascore
+
+
+@pytest.mark.parametrize(
+    "index_type,vector_type,distance_type",
+    [
+        ("ivfflat", "vector", "cosine"),
+        ("hnsw", "vector", "cosine"),
+        ("hnsw", "halfvec", "cosine"),
+        ("hnsw", "halfvec", "inner_product"),
+    ],
+)
+def test_embed_with_path_operation_config(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    index_type: str,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test operation-level field configuration for vector search."""
+    with _create_vector_store(
+        index_type,
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key17"],  # Default fields that won't match our test data
+    ) as store:
+        doc3 = {
+            "key0": "aaa",
+            "key1": "bbb",
+            "key2": "ccc",
+            "key3": "ddd",
+        }
+        doc4 = {
+            "key0": "eee",
+            "key1": "bbb",  # Same as doc3.key1
+            "key2": "fff",
+            "key3": "ggg",
+        }
+
+        store.put(("test",), "doc3", doc3, index=["key0", "key1"])
+        store.put(("test",), "doc4", doc4, index=["key1", "key3"])
+
+        results = store.search(("test",), query="aaa")
+        assert len(results) == 2
+        assert results[0].key == "doc3"
+        assert results[0].score > results[1].score
+
+        results = store.search(("test",), query="ggg")
+        assert len(results) == 2
+        assert results[0].key == "doc4"
+        assert results[0].score > results[1].score
+
+        results = store.search(("test",), query="bbb")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].score == pytest.approx(results[1].score, abs=1e-3)
+
+        results = store.search(("test",), query="ccc")
+        assert len(results) == 2
+        assert all(
+            r.score < 0.9 for r in results
+        )  # Unindexed field should have low scores
+
+        # Test index=False behavior
+        doc5 = {
+            "key0": "hhh",
+            "key1": "iii",
+        }
+        store.put(("test",), "doc5", doc5, index=False)
+        results = store.search(("test",))
+        assert len(results) == 3
+        assert all(r.score is None for r in results)
+        assert any(r.key == "doc5" for r in results)
+
+        results = store.search(("test",), query="hhh")
+        # TODO: We don't currently fill in additional results if there are not enough
+        # returned during vector search.
+        # assert len(results) == 3
+        # doc5_result = next(r for r in results if r.key == "doc5")
+        # assert doc5_result.score is None
