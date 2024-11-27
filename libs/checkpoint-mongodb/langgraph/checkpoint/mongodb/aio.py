@@ -22,7 +22,7 @@ from langgraph.checkpoint.serde.types import ChannelProtocol
 class AsyncMongoDBSaver(BaseCheckpointSaver[str]):
     """A checkpoint saver that stores checkpoints in a MongoDB database asynchronously.
 
-    python
+    ```python
     from typing import Literal
     from langchain_core.tools import tool
     from langchain_openai import ChatOpenAI
@@ -62,6 +62,7 @@ class AsyncMongoDBSaver(BaseCheckpointSaver[str]):
 
         # List all checkpoint tuples
         checkpoint_tuples = list(checkpointer.list(config))
+    ```
     """
 
     def __init__(self, client: AsyncIOMotorClient, db_name: str) -> None:

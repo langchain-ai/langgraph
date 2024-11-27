@@ -64,6 +64,7 @@ class MongoDBSaver(BaseCheckpointSaver[str]):
 
         # List all checkpoint tuples
         checkpoint_tuples = list(checkpointer.list(config))
+    ```
     """
 
     def __init__(self, client: MongoClient, db_name: str) -> None:
