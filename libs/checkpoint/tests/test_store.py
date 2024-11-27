@@ -881,3 +881,53 @@ async def test_async_vector_search_edge_cases(
     special_query = "test!@#$%^&*()"
     results = await store.asearch(("test",), query=special_query)
     assert len(results) == 1
+
+
+async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
+    # Basi
+    store = InMemoryStore(
+        embedding_config={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            # Key 2 isn't included. Don't index it.
+            "text_fields": ["key0", "key1", "key3"],
+        }
+    )
+    # This will have 2 vectors representing it
+    doc1 = {
+        # Omit key0 - check it doesn't raise an error
+        "key1": "xxx",
+        "key2": "yyy",
+        "key3": "zzz",
+    }
+    # This will have 3 vectors representing it
+    doc2 = {
+        "key0": "uuu",
+        "key1": "vvv",
+        "key2": "www",
+        "key3": "xxx",
+    }
+    await store.aput(("test",), "doc1", doc1)
+    await store.aput(("test",), "doc2", doc2)
+
+    # doc2.key3 and doc1.key1 both would have the highest score
+    results = await store.asearch(("test",), query="xxx")
+    assert len(results) == 2
+    assert results[0].key != results[1].key
+    ascore = results[0].response_metadata["score"]
+    bscore = results[1].response_metadata["score"]
+    assert ascore == bscore
+
+    results = await store.asearch(("test",), query="uuu")
+    assert len(results) == 2
+    assert results[0].key != results[1].key
+    assert results[0].key == "doc2"
+    assert results[0].response_metadata["score"] > results[1].response_metadata["score"]
+    assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-5)
+
+    # Un-indexed - will have low results for both. Not zero (because we're projecting)
+    # but less than the above.
+    results = await store.asearch(("test",), query="www")
+    assert len(results) == 2
+    assert results[0].response_metadata["score"] < ascore
+    assert results[1].response_metadata["score"] < ascore

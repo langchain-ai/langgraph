@@ -199,7 +199,7 @@ class InMemoryStore(BaseStore):
                 with cf.ThreadPoolExecutor() as executor:
                     futures = {
                         q: executor.submit(self.embeddings.embed_query, q)
-                        for q in queries
+                        for q in list(queries)
                     }
                     for query, future in futures.items():
                         queryinmem_store[query] = future.result()
@@ -215,7 +215,7 @@ class InMemoryStore(BaseStore):
             queries = {op.query for (op, _) in search_ops.values() if op.query}
 
             if queries:
-                coros = [self.embeddings.aembed_query(q) for q in queries]
+                coros = [self.embeddings.aembed_query(q) for q in list(queries)]
                 results = await asyncio.gather(*coros)
                 queryinmem_store = dict(zip(queries, results))
 
