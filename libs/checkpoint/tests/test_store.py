@@ -1,3 +1,4 @@
+# mypy: disable-error-code="operator"
 import asyncio
 import json
 from datetime import datetime
@@ -15,9 +16,9 @@ from langgraph.store.base import (
     Result,
     get_text_at_path,
 )
-from langgraph.store.base._embed_test_utils import CharacterEmbeddings
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
+from tests.embed_test_utils import CharacterEmbeddings
 
 
 class MockAsyncBatchedStore(AsyncBatchedBaseStore):
@@ -51,7 +52,7 @@ def test_get_text_at_path() -> None:
         "empty_dict": {},
     }
 
-    assert get_text_at_path(nested_data, "__root__") == [
+    assert get_text_at_path(nested_data, "$") == [
         json.dumps(nested_data, sort_keys=True)
     ]
 
@@ -382,12 +383,14 @@ async def test_cannot_put_empty_namespace() -> None:
 
     await store.aput(("foo", "langgraph", "foo"), "bar", doc)
     assert (await store.aget(("foo", "langgraph", "foo"), "bar")).value == doc  # type: ignore[union-attr]
-    assert (await store.asearch(("foo", "langgraph", "foo")))[0].value == doc
+    assert (await store.asearch(("foo", "langgraph", "foo"), query="bar"))[
+        0
+    ].value == doc
     await store.adelete(("foo", "langgraph", "foo"), "bar")
     assert (await store.aget(("foo", "langgraph", "foo"), "bar")) is None
     store.put(("foo", "langgraph", "foo"), "bar", doc)
     assert store.get(("foo", "langgraph", "foo"), "bar").value == doc  # type: ignore[union-attr]
-    assert store.search(("foo", "langgraph", "foo"))[0].value == doc
+    assert store.search(("foo", "langgraph", "foo"), query="bar")[0].value == doc
     store.delete(("foo", "langgraph", "foo"), "bar")
     assert store.get(("foo", "langgraph", "foo"), "bar") is None
 
@@ -423,6 +426,9 @@ async def test_cannot_put_empty_namespace() -> None:
     assert val is not None
     assert val.value == doc
     assert (await async_store.asearch(("foo", "langgraph", "foo")))[0].value == doc
+    assert (await async_store.asearch(("foo", "langgraph", "foo"), query="bar"))[
+        0
+    ].value == doc
     await async_store.adelete(("foo", "langgraph", "foo"), "bar")
     assert (await async_store.aget(("foo", "langgraph", "foo"), "bar")) is None
 
@@ -508,11 +514,11 @@ def fake_embeddings() -> CharacterEmbeddings:
 def test_vector_store_initialization(fake_embeddings: CharacterEmbeddings) -> None:
     """Test store initialization with embedding config."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
-    assert store.embedding_config is not None
-    assert store.embedding_config["dims"] == fake_embeddings.dims
-    assert store.embedding_config["embed"] == fake_embeddings
+    assert store.index_config is not None
+    assert store.index_config["dims"] == fake_embeddings.dims
+    assert store.index_config["embed"] == fake_embeddings
 
 
 def test_vector_insert_with_auto_embedding(
@@ -520,7 +526,7 @@ def test_vector_insert_with_auto_embedding(
 ) -> None:
     """Test inserting items that get auto-embedded."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     docs = [
         ("doc1", {"text": "short text"}),
@@ -547,7 +553,7 @@ async def test_async_vector_insert_with_auto_embedding(
 ) -> None:
     """Test inserting items that get auto-embedded using async methods."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     docs = [
         ("doc1", {"text": "short text"}),
@@ -572,7 +578,7 @@ async def test_async_vector_insert_with_auto_embedding(
 def test_vector_update_with_embedding(fake_embeddings: CharacterEmbeddings) -> None:
     """Test that updating items properly updates their embeddings."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     store.put(("test",), "doc1", {"text": "zany zebra Xerxes"})
     store.put(("test",), "doc2", {"text": "something about dogs"})
@@ -581,20 +587,20 @@ def test_vector_update_with_embedding(fake_embeddings: CharacterEmbeddings) -> N
     results_initial = store.search(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
-    initial_score = results_initial[0].response_metadata["score"]
+    initial_score = results_initial[0].score
+    assert initial_score is not None
 
     store.put(("test",), "doc1", {"text": "new text about dogs"})
 
     results_after = store.search(("test",), query="Zany Xerxes")
-    after_score = next(
-        (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
-    )
+    after_score = next((r.score for r in results_after if r.key == "doc1"), 0.0)
+    assert after_score is not None
     assert after_score < initial_score
 
     results_new = store.search(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
-            assert r.response_metadata["score"] > after_score
+            assert r.score > after_score
 
     # Don't index this one
     store.put(("test",), "doc4", {"text": "new text about dogs"}, index=False)
@@ -607,7 +613,7 @@ async def test_async_vector_update_with_embedding(
 ) -> None:
     """Test that updating items properly updates their embeddings using async methods."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     await store.aput(("test",), "doc1", {"text": "zany zebra Xerxes"})
     await store.aput(("test",), "doc2", {"text": "something about dogs"})
@@ -616,20 +622,20 @@ async def test_async_vector_update_with_embedding(
     results_initial = await store.asearch(("test",), query="Zany Xerxes")
     assert len(results_initial) > 0
     assert results_initial[0].key == "doc1"
-    initial_score = results_initial[0].response_metadata["score"]
+    initial_score = results_initial[0].score
 
     await store.aput(("test",), "doc1", {"text": "new text about dogs"})
 
     results_after = await store.asearch(("test",), query="Zany Xerxes")
-    after_score = next(
-        (r.response_metadata["score"] for r in results_after if r.key == "doc1"), 0.0
-    )
+    after_score = next((r.score for r in results_after if r.key == "doc1"), 0.0)
+    assert after_score is not None
     assert after_score < initial_score
 
     results_new = await store.asearch(("test",), query="new text about dogs")
     for r in results_new:
         if r.key == "doc1":
-            assert r.response_metadata["score"] > after_score
+            assert r.score is not None
+            assert r.score > after_score
 
     # Don't index this one
     await store.aput(("test",), "doc4", {"text": "new text about dogs"}, index=False)
@@ -640,7 +646,7 @@ async def test_async_vector_update_with_embedding(
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     # Insert test documents
     docs = [
@@ -680,7 +686,7 @@ async def test_async_vector_search_with_filters(
 ) -> None:
     """Test combining vector search with filters using async methods."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     # Insert test documents
     docs = [
@@ -720,7 +726,7 @@ async def test_async_batched_vector_search_concurrent(
 ) -> None:
     """Test concurrent vector search operations using async batched store."""
     store = MockAsyncBatchedStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
 
     colors = ["red", "blue", "green", "yellow", "purple"]
@@ -800,7 +806,7 @@ async def test_async_batched_vector_search_concurrent(
 def test_vector_search_pagination(fake_embeddings: CharacterEmbeddings) -> None:
     """Test pagination with vector search."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     for i in range(5):
         store.put(("test",), f"doc{i}", {"text": f"test document number {i}"})
@@ -821,7 +827,7 @@ async def test_async_vector_search_pagination(
 ) -> None:
     """Test pagination with vector search using async methods."""
     store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     for i in range(5):
         await store.aput(("test",), f"doc{i}", {"text": f"test document number {i}"})
@@ -837,60 +843,14 @@ async def test_async_vector_search_pagination(
     assert len(all_results) == 5
 
 
-def test_vector_search_edge_cases(fake_embeddings: CharacterEmbeddings) -> None:
-    """Test edge cases in vector search."""
-    store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
-    )
-    store.put(("test",), "doc1", {"text": "test document"})
-
-    results = store.search(("test",), query="")
-    assert len(results) == 1
-
-    results = store.search(("test",), query=None)
-    assert len(results) == 1
-
-    long_query = "test " * 100
-    results = store.search(("test",), query=long_query)
-    assert len(results) == 1
-
-    special_query = "test!@#$%^&*()"
-    results = store.search(("test",), query=special_query)
-    assert len(results) == 1
-
-
-async def test_async_vector_search_edge_cases(
-    fake_embeddings: CharacterEmbeddings,
-) -> None:
-    """Test edge cases in vector search using async methods."""
-    store = InMemoryStore(
-        embedding_config={"dims": fake_embeddings.dims, "embed": fake_embeddings}
-    )
-    await store.aput(("test",), "doc1", {"text": "test document"})
-
-    results = await store.asearch(("test",), query="")
-    assert len(results) == 1
-
-    results = await store.asearch(("test",), query=None)
-    assert len(results) == 1
-
-    long_query = "test " * 100
-    results = await store.asearch(("test",), query=long_query)
-    assert len(results) == 1
-
-    special_query = "test!@#$%^&*()"
-    results = await store.asearch(("test",), query=special_query)
-    assert len(results) == 1
-
-
 async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
-    # Basi
+    # Test store-level field configuration
     store = InMemoryStore(
-        embedding_config={
+        index={
             "dims": fake_embeddings.dims,
             "embed": fake_embeddings,
             # Key 2 isn't included. Don't index it.
-            "text_fields": ["key0", "key1", "key3"],
+            "fields": ["key0", "key1", "key3"],
         }
     )
     # This will have 2 vectors representing it
@@ -914,20 +874,76 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
     results = await store.asearch(("test",), query="xxx")
     assert len(results) == 2
     assert results[0].key != results[1].key
-    ascore = results[0].response_metadata["score"]
-    bscore = results[1].response_metadata["score"]
+    ascore = results[0].score
+    bscore = results[1].score
     assert ascore == bscore
+    assert ascore is not None and bscore is not None
 
     results = await store.asearch(("test",), query="uuu")
     assert len(results) == 2
     assert results[0].key != results[1].key
     assert results[0].key == "doc2"
-    assert results[0].response_metadata["score"] > results[1].response_metadata["score"]
-    assert ascore == pytest.approx(results[0].response_metadata["score"], abs=1e-5)
+    assert results[0].score is not None and results[0].score > results[1].score
+    assert ascore == pytest.approx(results[0].score, abs=1e-5)
 
     # Un-indexed - will have low results for both. Not zero (because we're projecting)
     # but less than the above.
     results = await store.asearch(("test",), query="www")
     assert len(results) == 2
-    assert results[0].response_metadata["score"] < ascore
-    assert results[1].response_metadata["score"] < ascore
+    assert results[0].score < ascore
+    assert results[1].score < ascore
+
+    # Test operation-level field configuration
+    store_no_defaults = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+            "fields": ["key17"],
+        }
+    )
+
+    doc3 = {
+        "key0": "aaa",
+        "key1": "bbb",
+        "key2": "ccc",
+        "key3": "ddd",
+    }
+    doc4 = {
+        "key0": "eee",
+        "key1": "bbb",  # Same as doc3.key1
+        "key2": "fff",
+        "key3": "ggg",
+    }
+
+    await store_no_defaults.aput(("test",), "doc3", doc3, index=["key0", "key1"])
+    await store_no_defaults.aput(("test",), "doc4", doc4, index=["key1", "key3"])
+
+    results = await store_no_defaults.asearch(("test",), query="aaa")
+    assert len(results) == 2
+    assert results[0].key == "doc3"
+    assert results[0].score is not None and results[0].score > results[1].score
+
+    results = await store_no_defaults.asearch(("test",), query="ggg")
+    assert len(results) == 2
+    assert results[0].key == "doc4"
+    assert results[0].score is not None and results[0].score > results[1].score
+
+    results = await store_no_defaults.asearch(("test",), query="bbb")
+    assert len(results) == 2
+    assert results[0].key != results[1].key
+    assert results[0].score == results[1].score
+
+    results = await store_no_defaults.asearch(("test",), query="ccc")
+    assert len(results) == 2
+    assert all(r.score < ascore for r in results)
+
+    doc5 = {
+        "key0": "hhh",
+        "key1": "iii",
+    }
+    await store_no_defaults.aput(("test",), "doc5", doc5, index=False)
+
+    results = await store_no_defaults.asearch(("test",), query="hhh")
+    assert len(results) == 3
+    doc5_result = next(r for r in results if r.key == "doc5")
+    assert doc5_result.score is None

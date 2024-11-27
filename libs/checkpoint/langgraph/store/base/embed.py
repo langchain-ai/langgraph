@@ -28,9 +28,7 @@ Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddi
 
 
 def ensure_embeddings(
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, None],
-    *,
-    aembed: Optional[AEmbeddingsFunc] = None,
+    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc],
 ) -> Embeddings:
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
@@ -42,73 +40,85 @@ def ensure_embeddings(
         embed: Either an existing Embeddings instance, or a function that converts
             text to embeddings. If the function is async, it will be used for both
             sync and async operations.
-        aembed: Optional async function for embeddings. If provided, it will be used
-            for async operations while the sync function is used for sync operations.
-            Must be None if embed is async.
 
     Returns:
         An Embeddings instance that wraps the provided function(s).
 
-    Example:
-        >>> def my_embed_fn(texts): return [[0.1, 0.2] for _ in texts]
-        >>> async def my_async_fn(texts): return [[0.1, 0.2] for _ in texts]
-        >>> # Wrap a sync function
-        >>> embeddings = ensure_embeddings(my_embed_fn)
-        >>> # Wrap an async function
-        >>> embeddings = ensure_embeddings(my_async_fn)
-        >>> # Provide both sync and async implementations
-        >>> embeddings = ensure_embeddings(my_embed_fn, aembed=my_async_fn)
+    ??? example "Examples"
+        Wrap a synchronous embedding function:
+        ```python
+        def my_embed_fn(texts):
+            return [[0.1, 0.2] for _ in texts]
+        
+        embeddings = ensure_embeddings(my_embed_fn)
+        result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
+        ```
+
+        Wrap an asynchronous embedding function:
+        ```python
+        async def my_async_fn(texts):
+            return [[0.1, 0.2] for _ in texts]
+        
+        embeddings = ensure_embeddings(my_async_fn)
+        result = await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
+        ```
     """
-    if embed is None and aembed is None:
-        raise ValueError("embed or aembed must be provided")
+    if embed is None:
+        raise ValueError("embed must be provided")
     if isinstance(embed, Embeddings):
         return embed
-    return EmbeddingsLambda(embed, afunc=aembed)
+    return EmbeddingsLambda(embed)
 
 
 class EmbeddingsLambda(Embeddings):
     """Wrapper to convert embedding functions into LangChain's Embeddings interface.
 
     This class allows arbitrary embedding functions to be used with LangChain-compatible
-    tools. It supports both synchronous and asynchronous operations, and can be
-    initialized with either:
-    1. A synchronous function for both sync/async operations
-    2. An async function for both sync/async operations
-    3. Both sync and async functions for their respective operations
+    tools. It supports both synchronous and asynchronous operations, and can handle:
+    1. A synchronous function for sync operations (async operations will use sync function)
+    2. An async function for both sync/async operations (sync operations will raise an error)
 
     The embedding functions should convert text into fixed-dimensional vectors that
     capture the semantic meaning of the text.
 
     Args:
         func: Function that converts text to embeddings. Can be sync or async.
-            If async, it will be used for both sync and async operations.
-        afunc: Optional async function for embeddings. If provided, it will be used
-            for async operations while func is used for sync operations.
-            Must be None if func is async.
+            If async, it will be used for async operations, but sync operations
+            will raise an error. If sync, it will be used for both sync and async operations.
 
-    Example:
-        >>> def my_embed_fn(texts):
-        ...     # Return 2D embeddings for each text
-        ...     return [[0.1, 0.2] for _ in texts]
-        >>> embeddings = EmbeddingsLambda(my_embed_fn)
-        >>> result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
+    ??? example "Examples"
+        With a sync function:
+        ```python
+        def my_embed_fn(texts):
+            # Return 2D embeddings for each text
+            return [[0.1, 0.2] for _ in texts]
+
+        embeddings = EmbeddingsLambda(my_embed_fn)
+        result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
+        await embeddings.aembed_query("hello")  # Also returns [0.1, 0.2]
+        ```
+
+        With an async function:
+        ```python
+        async def my_async_fn(texts):
+            return [[0.1, 0.2] for _ in texts]
+
+        embeddings = EmbeddingsLambda(my_async_fn)
+        await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
+        # Note: embed_query() would raise an error
+        ```
     """
 
     def __init__(
         self,
-        func: Union[EmbeddingsFunc, AEmbeddingsFunc, None],
-        afunc: Optional[AEmbeddingsFunc] = None,
+        func: Union[EmbeddingsFunc, AEmbeddingsFunc],
     ) -> None:
+        if func is None:
+            raise ValueError("func must be provided")
         if _is_async_callable(func):
-            if afunc is not None:
-                raise ValueError(
-                    "afunc must be None if func is async. The async func will be used for both sync and async operations."
-                )
             self.afunc = func
         else:
             self.func = func
-            if afunc is not None:
-                self.afunc = afunc
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed a list of texts into vectors.
@@ -186,14 +196,16 @@ def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
 
     Args:
         obj: The object to extract text from
-        path: Either a path string or pre-tokenized path list. Path string supports:
-            - Simple paths: "field1.field2"
-            - Array indexing: "[0]", "[*]", "[-1]"
-            - Wildcards: "*"
-            - Multi-field selection: "{field1,field2}"
-            - Nested paths in multi-field: "{field1,nested.field2}"
+        path: Either a path string or pre-tokenized path list. 
+        
+    !!! info "Path types handled"
+        - Simple paths: "field1.field2"
+        - Array indexing: "[0]", "[*]", "[-1]"
+        - Wildcards: "*"
+        - Multi-field selection: "{field1,field2}"
+        - Nested paths in multi-field: "{field1,nested.field2}"
     """
-    if not path or path == "__root__":
+    if not path or path == "$":
         return [json.dumps(obj, sort_keys=True)]
 
     tokens = tokenize_path(path) if isinstance(path, str) else path
@@ -278,11 +290,11 @@ def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
 def tokenize_path(path: str) -> list[str]:
     """Tokenize a path into components.
 
-    Handles:
-    - Simple paths: "field1.field2"
-    - Array indexing: "[0]", "[*]", "[-1]"
-    - Wildcards: "*"
-    - Multi-field selection: "{field1,field2}"
+    !!! info "Types handled"
+        - Simple paths: "field1.field2"
+        - Array indexing: "[0]", "[*]", "[-1]"
+        - Wildcards: "*"
+        - Multi-field selection: "{field1,field2}"
     """
     if not path:
         return []

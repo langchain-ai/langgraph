@@ -37,7 +37,6 @@ from langgraph.store.base import (
     ListNamespacesOp,
     Op,
     PutOp,
-    ResponseMetadata,
     Result,
     SearchItem,
     SearchOp,
@@ -903,20 +902,20 @@ def _row_to_search_item(
     """Convert a row from the database into an Item."""
     loader = loader or _json_loads
     val = row["value"]
-    response_metadata: Optional[ResponseMetadata] = (
-        {
-            "score": float(row["score"]),
-        }
-        if row.get("score") is not None
-        else None
-    )
+    score = row.get("score")
+    if score is not None:
+        try:
+            score = float(score)  # type: ignore[arg-type]
+        except ValueError:
+            logger.warning("Invalid score: %s", score)
+            score = None
     return SearchItem(
         value=val if isinstance(val, dict) else loader(val),
         key=row["key"],
         namespace=namespace,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
-        response_metadata=response_metadata,
+        score=score,
     )
 
 
