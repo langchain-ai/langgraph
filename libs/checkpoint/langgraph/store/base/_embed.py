@@ -7,6 +7,7 @@ asynchronous operations.
 """
 
 import asyncio
+import json
 from typing import Any, Awaitable, Callable, Optional, Sequence, Union
 
 from langchain_core.embeddings import Embeddings
@@ -178,6 +179,166 @@ class EmbeddingsLambda(Embeddings):
         if afunc is None:
             return await super().aembed_query(text)
         return (await afunc([text]))[0]
+
+
+def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
+    """Extract text from an object using a path expression or pre-tokenized path.
+
+    Args:
+        obj: The object to extract text from
+        path: Either a path string or pre-tokenized path list. Path string supports:
+            - Simple paths: "field1.field2"
+            - Array indexing: "[0]", "[*]", "[-1]"
+            - Wildcards: "*"
+            - Multi-field selection: "{field1,field2}"
+            - Nested paths in multi-field: "{field1,nested.field2}"
+    """
+    if not path or path == "__root__":
+        return [json.dumps(obj, sort_keys=True)]
+
+    tokens = tokenize_path(path) if isinstance(path, str) else path
+
+    def _extract_from_obj(obj: Any, tokens: list[str], pos: int) -> list[str]:
+        if pos >= len(tokens):
+            if isinstance(obj, (str, int, float, bool)):
+                return [str(obj)]
+            elif obj is None:
+                return []
+            elif isinstance(obj, (list, dict)):
+                return [json.dumps(obj, sort_keys=True)]
+            return []
+
+        token = tokens[pos]
+        results = []
+
+        if token.startswith("[") and token.endswith("]"):
+            if not isinstance(obj, list):
+                return []
+
+            index = token[1:-1]
+            if index == "*":
+                for item in obj:
+                    results.extend(_extract_from_obj(item, tokens, pos + 1))
+            else:
+                try:
+                    idx = int(index)
+                    if idx < 0:
+                        idx = len(obj) + idx
+                    if 0 <= idx < len(obj):
+                        results.extend(_extract_from_obj(obj[idx], tokens, pos + 1))
+                except (ValueError, IndexError):
+                    return []
+
+        elif token.startswith("{") and token.endswith("}"):
+            if not isinstance(obj, dict):
+                return []
+
+            fields = [f.strip() for f in token[1:-1].split(",")]
+            for field in fields:
+                nested_tokens = tokenize_path(field)
+                if nested_tokens:
+                    current_obj: Optional[dict] = obj
+                    for nested_token in nested_tokens:
+                        if (
+                            isinstance(current_obj, dict)
+                            and nested_token in current_obj
+                        ):
+                            current_obj = current_obj[nested_token]
+                        else:
+                            current_obj = None
+                            break
+                    if current_obj is not None:
+                        if isinstance(current_obj, (str, int, float, bool)):
+                            results.append(str(current_obj))
+                        elif isinstance(current_obj, (list, dict)):
+                            results.append(json.dumps(current_obj, sort_keys=True))
+
+        # Handle wildcard
+        elif token == "*":
+            if isinstance(obj, dict):
+                for value in obj.values():
+                    results.extend(_extract_from_obj(value, tokens, pos + 1))
+            elif isinstance(obj, list):
+                for item in obj:
+                    results.extend(_extract_from_obj(item, tokens, pos + 1))
+
+        # Handle regular field
+        else:
+            if isinstance(obj, dict) and token in obj:
+                results.extend(_extract_from_obj(obj[token], tokens, pos + 1))
+
+        return results
+
+    return _extract_from_obj(obj, tokens, 0)
+
+
+# Private utility functions
+
+
+def tokenize_path(path: str) -> list[str]:
+    """Tokenize a path into components.
+
+    Handles:
+    - Simple paths: "field1.field2"
+    - Array indexing: "[0]", "[*]", "[-1]"
+    - Wildcards: "*"
+    - Multi-field selection: "{field1,field2}"
+    """
+    if not path:
+        return []
+
+    tokens = []
+    current: list[str] = []
+    i = 0
+    while i < len(path):
+        char = path[i]
+
+        if char == "[":  # Handle array index
+            if current:
+                tokens.append("".join(current))
+                current = []
+            bracket_count = 1
+            index_chars = ["["]
+            i += 1
+            while i < len(path) and bracket_count > 0:
+                if path[i] == "[":
+                    bracket_count += 1
+                elif path[i] == "]":
+                    bracket_count -= 1
+                index_chars.append(path[i])
+                i += 1
+            tokens.append("".join(index_chars))
+            continue
+
+        elif char == "{":  # Handle multi-field selection
+            if current:
+                tokens.append("".join(current))
+                current = []
+            brace_count = 1
+            field_chars = ["{"]
+            i += 1
+            while i < len(path) and brace_count > 0:
+                if path[i] == "{":
+                    brace_count += 1
+                elif path[i] == "}":
+                    brace_count -= 1
+                field_chars.append(path[i])
+                i += 1
+            tokens.append("".join(field_chars))
+            continue
+
+        elif char == ".":  # Handle regular field
+            if current:
+                tokens.append("".join(current))
+                current = []
+        else:
+            current.append(char)
+        i += 1
+
+    if current:
+        tokens.append("".join(current))
+
+    return tokens
 
 
 def _is_async_callable(

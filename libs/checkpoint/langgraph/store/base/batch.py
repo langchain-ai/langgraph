@@ -11,6 +11,7 @@ from langgraph.store.base import (
     NameSpacePath,
     Op,
     PutOp,
+    SearchItem,
     SearchOp,
     _validate_namespace,
 )
@@ -47,7 +48,7 @@ class AsyncBatchedBaseStore(BaseStore):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         fut = self._loop.create_future()
         self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
         return await fut

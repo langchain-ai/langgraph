@@ -1,7 +1,12 @@
 """Base classes and types for persistent key-value stores.
 
-Stores enable persistence and memory that can be shared across threads,
-scoped to user IDs, assistant IDs, or other arbitrary namespaces.
+Stores provide long-term memory that persists across threads and conversations.
+Supports hierarchical namespaces, key-value storage, and optional vector search.
+
+Core types:
+- BaseStore: Store interface with sync/async operations
+- Item: Stored key-value pairs with metadata
+- Op: Get/Put/Search/List operations
 """
 
 from abc import ABC, abstractmethod
@@ -14,6 +19,8 @@ from langgraph.store.base._embed import (
     AEmbeddingsFunc,
     EmbeddingsFunc,
     ensure_embeddings,
+    get_text_at_path,
+    tokenize_path,
 )
 
 
@@ -213,34 +220,11 @@ class ListNamespacesOp(NamedTuple):
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
-Result = Union[Item, list[Item], list[tuple[str, ...]], None]
+Result = Union[Item, list[Item], list[SearchItem], list[tuple[str, ...]], None]
 
 
 class InvalidNamespaceError(ValueError):
     """Provided namespace is invalid."""
-
-
-def _validate_namespace(namespace: tuple[str, ...]) -> None:
-    if not namespace:
-        raise InvalidNamespaceError("Namespace cannot be empty.")
-    for label in namespace:
-        if not isinstance(label, str):
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
-                f" must be strings, but got {type(label).__name__}."
-            )
-        if "." in label:
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
-            )
-        elif not label:
-            raise InvalidNamespaceError(
-                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
-            )
-    if namespace[0] == "langgraph":
-        raise InvalidNamespaceError(
-            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
-        )
 
 
 class EmbeddingConfig(TypedDict, total=False):
@@ -329,7 +313,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
         Args:
@@ -444,7 +428,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
         Args:
@@ -543,6 +527,29 @@ class BaseStore(ABC):
         return (await self.abatch([op]))[0]
 
 
+def _validate_namespace(namespace: tuple[str, ...]) -> None:
+    if not namespace:
+        raise InvalidNamespaceError("Namespace cannot be empty.")
+    for label in namespace:
+        if not isinstance(label, str):
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
+                f" must be strings, but got {type(label).__name__}."
+            )
+        if "." in label:
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
+            )
+        elif not label:
+            raise InvalidNamespaceError(
+                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
+            )
+    if namespace[0] == "langgraph":
+        raise InvalidNamespaceError(
+            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
+        )
+
+
 __all__ = [
     "BaseStore",
     "Item",
@@ -556,4 +563,6 @@ __all__ = [
     "NamespaceMatchType",
     "Embeddings",
     "ensure_embeddings",
+    "tokenize_path",
+    "get_text_at_path",
 ]
