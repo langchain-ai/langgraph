@@ -81,6 +81,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         async with self._cursor() as cur:
+            await cur.execute(
+                self.MIGRATIONS[0]
+            )
             try:
                 results = await cur.execute(
                     "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
