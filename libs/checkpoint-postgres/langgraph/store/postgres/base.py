@@ -227,13 +227,6 @@ class BasePostgresStore(Generic[C]):
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
     index_config: Optional[PostgresIndexConfig]
 
-    @staticmethod
-    def _get_default_index_config() -> IndexConfig:
-        return HNSWConfig(
-            kind="hnsw",
-            vector_type="vector",
-        )
-
     def _get_batch_GET_ops_queries(
         self,
         get_ops: Sequence[tuple[int, GetOp]],
@@ -303,7 +296,7 @@ class BasePostgresStore(Generic[C]):
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
-                        Jsonb(cast(dict, op.value).copy()),
+                        Jsonb(cast(dict, op.value)),
                     ]
                 )
 
@@ -828,6 +821,11 @@ class Row(TypedDict):
 
 # Private utilities
 
+_DEFAULT_ANN_CONFIG = HNSWConfig(
+    kind="hnsw",
+    vector_type="vector",
+)
+
 
 def _get_vector_type_ops(store: BasePostgresStore) -> str:
     """Get the vector type operator class based on config."""
@@ -835,9 +833,7 @@ def _get_vector_type_ops(store: BasePostgresStore) -> str:
         return "vector_cosine_ops"
 
     config = cast(PostgresIndexConfig, store.index_config)
-    index_config = config.get(
-        "db_index_config", BasePostgresStore._get_default_index_config()
-    )
+    index_config = config.get("db_index_config", _DEFAULT_ANN_CONFIG).copy()
     vector_type = cast(str, index_config.get("vector_type", "vector"))
     if vector_type not in ("vector", "halfvec"):
         raise ValueError(
@@ -869,8 +865,7 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
         return "hnsw", {}
 
     config = cast(PostgresIndexConfig, store.index_config)
-    default_config = BasePostgresStore._get_default_index_config()
-    index_config = config.get("db_index_config", default_config).copy()
+    index_config = config.get("db_index_config", _DEFAULT_ANN_CONFIG).copy()
     kind = index_config.pop("kind", "hnsw")
     index_config.pop("vector_type", None)
     return kind, index_config
