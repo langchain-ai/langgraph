@@ -1,6 +1,6 @@
 import asyncio
 import weakref
-from typing import Any, Optional
+from typing import Any, Literal, Optional, Union
 
 from langgraph.store.base import (
     BaseStore,
@@ -8,9 +8,10 @@ from langgraph.store.base import (
     Item,
     ListNamespacesOp,
     MatchCondition,
-    NameSpacePath,
+    NamespacePath,
     Op,
     PutOp,
+    SearchItem,
     SearchOp,
     _validate_namespace,
 )
@@ -43,12 +44,13 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset)
+        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
         return await fut
 
     async def aput(
@@ -56,10 +58,11 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, key, value)
+        self._aqueue[fut] = PutOp(namespace, key, value, index)
         return await fut
 
     async def adelete(
@@ -74,8 +77,8 @@ class AsyncBatchedBaseStore(BaseStore):
     async def alist_namespaces(
         self,
         *,
-        prefix: Optional[NameSpacePath] = None,
-        suffix: Optional[NameSpacePath] = None,
+        prefix: Optional[NamespacePath] = None,
+        suffix: Optional[NamespacePath] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,

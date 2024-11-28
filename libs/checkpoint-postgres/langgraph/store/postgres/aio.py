@@ -28,6 +28,7 @@ from langgraph.store.postgres.base import (
     _decode_ns_bytes,
     _group_ops,
     _row_to_item,
+    _row_to_search_item,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             await cur.execute(query, params)
             rows = cast(list[Row], await cur.fetchall())
             items = [
-                _row_to_item(
+                _row_to_search_item(
                     _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
                 )
                 for row in rows
@@ -195,9 +196,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 async with self.lock, conn.pipeline(), conn.cursor(binary=True) as cur:
                     yield cur
             else:
-                async with self.lock, conn.transaction(), conn.cursor(
-                    binary=True
-                ) as cur:
+                async with (
+                    self.lock,
+                    conn.transaction(),
+                    conn.cursor(binary=True) as cur,
+                ):
                     yield cur
         else:
             async with conn.cursor(binary=True) as cur:
