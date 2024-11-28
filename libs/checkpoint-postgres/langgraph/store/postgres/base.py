@@ -55,11 +55,10 @@ class Migration(NamedTuple):
     """A database migration with optional conditions and parameters."""
 
     sql: str
-    condition: Optional[Callable[[Any], bool]] = None
     params: Optional[dict[str, Any]] = None
 
 
-MIGRATIONS: Sequence[Union[str, Migration]] = [
+MIGRATIONS: Sequence[str] = [
     """
 CREATE TABLE IF NOT EXISTS store (
     -- 'prefix' represents the doc's 'namespace'
@@ -75,11 +74,13 @@ CREATE TABLE IF NOT EXISTS store (
 -- For faster lookups by prefix
 CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
 """,
+]
+
+VECTOR_MIGRATIONS: Sequence[Migration] = [
     Migration(
         """
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
-        condition=lambda store: bool(store.index_config),
     ),
     Migration(
         """
@@ -94,7 +95,6 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE CASCADE
 );
 """,
-        condition=lambda store: bool(store.index_config),
         params={
             "dims": lambda store: store.index_config["dims"],
             "vector_type": lambda store: (
@@ -109,7 +109,6 @@ CREATE TABLE IF NOT EXISTS store_vectors (
 CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
     USING %(index_type)s (embedding %(ops)s)%(index_params)s;
 """,
-        condition=lambda store: bool(store.index_config),
         params={
             "index_type": lambda store: _get_index_params(store)[0],
             "ops": lambda store: _get_vector_type_ops(store),
@@ -123,7 +122,6 @@ CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors
         },
     ),
 ]
-
 
 C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
 
@@ -157,7 +155,18 @@ class DBIndexConfig(TypedDict, total=False):
     """Configuration for vector index in PostgreSQL store."""
 
     kind: Literal["hnsw", "ivfflat"]
-    """Type of index to use: 'hnsw' for Hierarchical Navigable Small World, or 'ivfflat' for Inverted File Flat."""
+    """Type of index to use.
+    
+    'hnsw': Hierarchical Navigable Small World index.
+    'ivfflat': Inverted File Flat index.
+    
+    HNSW has slower build times and uses more memory than IVFFlat, but has better query performance
+    (in terms of speed-recall tradeoff).
+
+    IVFFlat divides vectors into lists, then searches a subset closest to the query vector.
+    It has faster build times and uses less memory than HNSW, but lower query performance.
+
+    """
     vector_type: Literal["vector", "halfvec"]
     """Type of vector storage to use.
     Options:
@@ -213,6 +222,7 @@ class PostgresIndexConfig(IndexConfig, total=False):
 
 class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
+    VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
     conn: C
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
     index_config: Optional[PostgresIndexConfig]
@@ -766,9 +776,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time the store is used.
         """
-        with self._cursor() as cur:
+
+        def _get_version(cur: Cursor[dict[str, Any]], table: str) -> int:
             try:
-                cur.execute("SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1")
+                cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
                 row = cast(dict, cur.fetchone())
                 if row is None:
                     version = -1
@@ -777,21 +788,25 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             except UndefinedTable:
                 version = -1
                 cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS store_migrations (
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
                         v INTEGER PRIMARY KEY
                     )
                 """
                 )
-            for v, migration in enumerate(
-                self.MIGRATIONS[version + 1 :], start=version + 1
-            ):
-                if isinstance(migration, str):
-                    sql = migration
-                else:
-                    if migration.condition and not migration.condition(self):
-                        continue
+            return version
 
+        with self._cursor() as cur:
+            version = _get_version(cur, table="store_migrations")
+            for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
+                cur.execute(sql)
+                cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+
+            if self.index_config:
+                version = _get_version(cur, table="vector_migrations")
+                for v, migration in enumerate(
+                    self.VECTOR_MIGRATIONS[version + 1 :], start=version + 1
+                ):
                     sql = migration.sql
                     if migration.params:
                         params = {
@@ -799,8 +814,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                             for k, v in migration.params.items()
                         }
                         sql = sql % params
-                cur.execute(sql)
-                cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+                    cur.execute(sql)
+                    cur.execute("INSERT INTO vector_migrations (v) VALUES (%s)", (v,))
 
 
 class Row(TypedDict):

@@ -147,11 +147,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         already exist and runs database migrations. It MUST be called directly by the user
         the first time the store is used.
         """
-        async with self._cursor() as cur:
+
+        async def _get_version(cur: AsyncCursor[DictRow], table: str) -> int:
             try:
-                await cur.execute(
-                    "SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1"
-                )
+                await cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
                 row = await cur.fetchone()
                 if row is None:
                     version = -1
@@ -160,22 +159,25 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             except UndefinedTable:
                 version = -1
                 await cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS store_migrations (
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
                         v INTEGER PRIMARY KEY
                     )
                 """
                 )
+            return version
 
-            for v, migration in enumerate(
-                self.MIGRATIONS[version + 1 :], start=version + 1
-            ):
-                if isinstance(migration, str):
-                    sql = migration
-                else:
-                    if migration.condition and not migration.condition(self):
-                        continue
+        async with self._cursor() as cur:
+            version = await _get_version(cur, table="store_migrations")
+            for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
+                await cur.execute(sql)
+                await cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
 
+            if self.index_config:
+                version = await _get_version(cur, table="vector_migrations")
+                for v, migration in enumerate(
+                    self.VECTOR_MIGRATIONS[version + 1 :], start=version + 1
+                ):
                     sql = migration.sql
                     if migration.params:
                         params = {
@@ -183,9 +185,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                             for k, v in migration.params.items()
                         }
                         sql = sql % params
-
-                await cur.execute(sql)
-                await cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+                    await cur.execute(sql)
+                    await cur.execute(
+                        "INSERT INTO vector_migrations (v) VALUES (%s)", (v,)
+                    )
 
     async def _execute_batch(
         self,
