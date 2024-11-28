@@ -523,7 +523,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             pool_config (Optional[PoolArgs]): Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
-            embedding (Optional[PostgresIndexConfig]): The embedding config.
+            index (Optional[PostgresIndexConfig]): The index configuration for the store.
 
         Returns:
             PostgresStore: A new PostgresStore instance.
