@@ -3,16 +3,17 @@ import json
 import logging
 import threading
 from collections import defaultdict
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
-    Iterable,
-    Iterator,
+    Literal,
+    NamedTuple,
     Optional,
-    Sequence,
     TypeVar,
     Union,
     cast,
@@ -31,6 +32,7 @@ from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
     GetOp,
+    IndexConfig,
     Item,
     ListNamespacesOp,
     Op,
@@ -38,12 +40,25 @@ from langgraph.store.base import (
     Result,
     SearchItem,
     SearchOp,
+    ensure_embeddings,
+    get_text_at_path,
+    tokenize_path,
 )
+
+if TYPE_CHECKING:
+    from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
 
-MIGRATIONS = [
+class Migration(NamedTuple):
+    """A database migration with optional conditions and parameters."""
+
+    sql: str
+    params: Optional[dict[str, Any]] = None
+
+
+MIGRATIONS: Sequence[str] = [
     """
 CREATE TABLE IF NOT EXISTS store (
     -- 'prefix' represents the doc's 'namespace'
@@ -59,6 +74,39 @@ CREATE TABLE IF NOT EXISTS store (
 -- For faster lookups by prefix
 CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
 """,
+]
+
+VECTOR_MIGRATIONS: Sequence[Migration] = [
+    Migration(
+        """
+CREATE EXTENSION IF NOT EXISTS vector;
+""",
+    ),
+    Migration(
+        """
+CREATE TABLE IF NOT EXISTS store_vectors (
+    prefix text NOT NULL,
+    key text NOT NULL,
+    field_name text NOT NULL,
+    embedding %(vector_type)s(%(dims)s),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (prefix, key, field_name),
+    FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE CASCADE
+);
+""",
+        params={
+            "dims": lambda store: store.index_config["dims"],
+            "vector_type": lambda store: (
+                cast(PostgresIndexConfig, store.index_config)
+                .get("ann_index_config", {})
+                .get("vector_type", "vector")
+            ),
+        },
+    ),
+    # TODO: Add an HNSW or IVFFlat index depending on config
+    # First must improve the search query when filtering by
+    # namespace
 ]
 
 C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
@@ -89,10 +137,39 @@ class PoolConfig(TypedDict, total=False):
     """
 
 
+class ANNIndexConfig(TypedDict, total=False):
+    """Configuration for vector index in PostgreSQL store."""
+
+    vector_type: Literal["vector", "halfvec"]
+    """Type of vector storage to use.
+    Options:
+    - 'vector': Regular vectors (default)
+    - 'halfvec': Half-precision vectors for reduced memory usage
+    """
+
+
+class PostgresIndexConfig(IndexConfig, total=False):
+    """Configuration for vector embeddings in PostgreSQL store with pgvector-specific options.
+
+    Extends EmbeddingConfig with additional configuration for pgvector index and vector types.
+    """
+
+    ann_index_config: ANNIndexConfig
+    """Specific configuration for the chosen index type (HNSW or IVF Flat)."""
+    distance_type: Literal["l2", "inner_product", "cosine"]
+    """Distance metric to use for vector similarity search:
+    - 'l2': Euclidean distance
+    - 'inner_product': Dot product
+    - 'cosine': Cosine similarity
+    """
+
+
 class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
+    VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
     conn: C
     _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
+    index_config: Optional[PostgresIndexConfig]
 
     def _get_batch_GET_ops_queries(
         self,
@@ -114,10 +191,13 @@ class BasePostgresStore(Generic[C]):
             results.append((query, params, namespace, items))
         return results
 
-    def _get_batch_PUT_queries(
+    def _prepare_batch_PUT_queries(
         self,
         put_ops: Sequence[tuple[int, PutOp]],
-    ) -> list[tuple[str, Sequence]]:
+    ) -> tuple[
+        list[tuple[str, Sequence]],
+        Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
+    ]:
         # Last-write wins
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
         for _, op in put_ops:
@@ -144,60 +224,182 @@ class BasePostgresStore(Generic[C]):
                 )
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
+        embedding_request: Optional[tuple[str, Sequence[tuple[str, str, str, str]]]] = (
+            None
+        )
         if inserts:
             values = []
             insertion_params = []
+            vector_values = []
+            embedding_request_params = []
+
+            # First handle main store insertions
             for op in inserts:
                 values.append("(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
                 insertion_params.extend(
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
-                        Jsonb(op.value),
+                        Jsonb(cast(dict, op.value)),
                     ]
                 )
+
+            # Then handle embeddings if configured
+            if self.index_config:
+                for op in inserts:
+                    if op.index is False:
+                        continue
+                    value = op.value
+                    ns = _namespace_to_text(op.namespace)
+                    k = op.key
+
+                    if op.index is None:
+                        paths = self.index_config["__tokenized_fields"]
+                    else:
+                        paths = [(ix, tokenize_path(ix)) for ix in op.index]
+
+                    for path, tokenized_path in paths:
+                        texts = get_text_at_path(value, tokenized_path)
+                        for i, text in enumerate(texts):
+                            pathname = f"{path}.{i}" if len(texts) > 1 else path
+                            vector_values.append(
+                                "(%s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                            )
+                            embedding_request_params.append((ns, k, pathname, text))
+
             values_str = ",".join(values)
             query = f"""
                 INSERT INTO store (prefix, key, value, created_at, updated_at)
                 VALUES {values_str}
                 ON CONFLICT (prefix, key) DO UPDATE
-                SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+                SET value = EXCLUDED.value,
+                    updated_at = CURRENT_TIMESTAMP
             """
             queries.append((query, insertion_params))
 
-        return queries
+            if vector_values:
+                values_str = ",".join(vector_values)
+                query = f"""
+                    INSERT INTO store_vectors (prefix, key, field_name, embedding, created_at, updated_at)
+                    VALUES {values_str}
+                    ON CONFLICT (prefix, key, field_name) DO UPDATE
+                    SET embedding = EXCLUDED.embedding,
+                        updated_at = CURRENT_TIMESTAMP
+                """
+                embedding_request = (query, embedding_request_params)
 
-    def _get_batch_search_queries(
+        return queries, embedding_request
+
+    def _prepare_batch_search_queries(
         self,
         search_ops: Sequence[tuple[int, SearchOp]],
-    ) -> list[tuple[str, Sequence]]:
-        queries: list[tuple[str, Sequence]] = []
-        for _, op in search_ops:
-            query = """
-                SELECT prefix, key, value, created_at, updated_at
-                FROM store
-                WHERE prefix LIKE %s
-            """
-            params: list = [f"{_namespace_to_text(op.namespace_prefix)}%"]
+    ) -> tuple[
+        list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
+        list[tuple[int, str]],  # idx, query_text pairs to embed
+    ]:
+        queries = []
+        embedding_requests = []
 
+        for idx, (_, op) in enumerate(search_ops):
+            # Build filter conditions first
+            filter_params = []
+            filter_conditions = []
             if op.filter:
-                filter_conditions = []
                 for key, value in op.filter.items():
-                    if isinstance(value, list):
-                        filter_conditions.append("value->%s @> %s::jsonb")
-                        params.extend([key, json.dumps(value)])
+                    if isinstance(value, dict):
+                        for op_name, val in value.items():
+                            condition, filter_params_ = self._get_filter_condition(
+                                key, op_name, val
+                            )
+                            filter_conditions.append(condition)
+                            filter_params.extend(filter_params_)
                     else:
                         filter_conditions.append("value->%s = %s::jsonb")
-                        params.extend([key, json.dumps(value)])
-                query += " AND " + " AND ".join(filter_conditions)
+                        filter_params.extend([key, json.dumps(value)])
 
-            # Note: we will need to not do this if sim/keyword search
-            # is used
-            query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
-            params.extend([op.limit, op.offset])
+            # Vector search branch
+            if op.query and self.index_config:
+                embedding_requests.append((idx, op.query))
 
-            queries.append((query, params))
-        return queries
+                score_operator = _get_distance_operator(self)
+                vector_type = (
+                    cast(PostgresIndexConfig, self.index_config)
+                    .get("ann_index_config", {})
+                    .get("vector_type", "vector")
+                )
+
+                if (
+                    vector_type == "bit"
+                    and self.index_config.get("distance_type") == "hamming"
+                ):
+                    score_operator = score_operator % (
+                        "%s",
+                        self.index_config["dims"],
+                    )
+                else:
+                    score_operator = score_operator % (
+                        "%s",
+                        vector_type,
+                    )
+
+                vectors_per_doc_estimate = self.index_config["__estimated_num_vectors"]
+                expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
+
+                # Vector search with CTE for proper score handling
+                filter_str = (
+                    ""
+                    if not filter_conditions
+                    else " AND " + " AND ".join(filter_conditions)
+                )
+                base_query = f"""
+                    WITH scored AS (
+                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, {score_operator} AS score
+                        FROM store s
+                        JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
+                        WHERE s.prefix LIKE %s {filter_str}
+                        ORDER BY {score_operator} DESC 
+                        LIMIT %s
+                    )
+                    SELECT * FROM (
+                        SELECT DISTINCT ON (prefix, key) 
+                            prefix, key, value, created_at, updated_at, score 
+                        FROM scored 
+                        ORDER BY prefix, key, score DESC
+                    ) AS unique_docs
+                    ORDER BY score DESC
+                    LIMIT %s
+                    OFFSET %s
+                """
+                params = [
+                    _PLACEHOLDER,  # Vector placeholder
+                    f"{_namespace_to_text(op.namespace_prefix)}%",
+                    *filter_params,
+                    _PLACEHOLDER,
+                    expanded_limit,
+                    op.limit,
+                    op.offset,
+                ]
+
+            # Regular search branch
+            else:
+                base_query = """
+                    SELECT prefix, key, value, created_at, updated_at
+                    FROM store
+                    WHERE prefix LIKE %s
+                """
+                params = [f"{_namespace_to_text(op.namespace_prefix)}%"]
+
+                if filter_conditions:
+                    params.extend(filter_params)
+                    base_query += " AND " + " AND ".join(filter_conditions)
+
+                base_query += " ORDER BY updated_at DESC"
+                base_query += " LIMIT %s OFFSET %s"
+                params.extend([op.limit, op.offset])
+
+            queries.append((base_query, params))
+
+        return queries, embedding_requests
 
     def _get_batch_list_namespaces_queries(
         self,
@@ -249,13 +451,37 @@ class BasePostgresStore(Generic[C]):
 
             query += " ORDER BY truncated_prefix LIMIT %s OFFSET %s"
             params.extend([op.limit, op.offset])
-            queries.append((query, params))
+            queries.append((query, tuple(params)))
 
         return queries
 
+    def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
+        """Helper to generate filter conditions."""
+        if op == "$eq":
+            return "value->%s = %s::jsonb", [key, json.dumps(value)]
+        elif op == "$gt":
+            return "value->>%s > %s", [key, str(value)]
+        elif op == "$gte":
+            return "value->>%s >= %s", [key, str(value)]
+        elif op == "$lt":
+            return "value->>%s < %s", [key, str(value)]
+        elif op == "$lte":
+            return "value->>%s <= %s", [key, str(value)]
+        elif op == "$ne":
+            return "value->%s != %s::jsonb", [key, json.dumps(value)]
+        else:
+            raise ValueError(f"Unsupported operator: {op}")
+
 
 class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
-    __slots__ = ("_deserializer", "pipe", "lock", "supports_pipeline")
+    __slots__ = (
+        "_deserializer",
+        "pipe",
+        "lock",
+        "supports_pipeline",
+        "index_config",
+        "embeddings",
+    )
 
     def __init__(
         self,
@@ -265,6 +491,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         deserializer: Optional[
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> None:
         super().__init__()
         self._deserializer = deserializer
@@ -272,6 +499,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.pipe = pipe
         self.supports_pipeline = Capabilities().has_pipeline()
         self.lock = threading.Lock()
+        self.index_config = index
+        if self.index_config:
+            self.embeddings, self.index_config = _ensure_index_config(self.index_config)
+        else:
+            self.embeddings = None
 
     @classmethod
     @contextmanager
@@ -281,15 +513,18 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         *,
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
+        index: Optional[PostgresIndexConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
 
         Args:
             conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use Pipeline (only for single connections)
+            pipeline (bool): whether to use Pipeline
             pool_config (Optional[PoolArgs]): Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
+            index (Optional[PostgresIndexConfig]): The index configuration for the store.
+
         Returns:
             PostgresStore: A new PostgresStore instance.
         """
@@ -310,16 +545,16 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool)
+                yield cls(conn=pool, index=index)
         else:
             with Connection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     with conn.pipeline() as pipe:
-                        yield cls(conn, pipe=pipe)
+                        yield cls(conn, pipe=pipe, index=index)
                 else:
-                    yield cls(conn)
+                    yield cls(conn, index=index)
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
@@ -419,7 +654,32 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         put_ops: Sequence[tuple[int, PutOp]],
         cur: Cursor[DictRow],
     ) -> None:
-        queries = self._get_batch_PUT_queries(put_ops)
+        queries, embedding_request = self._prepare_batch_PUT_queries(put_ops)
+        if embedding_request:
+            if self.embeddings is None:
+                # Should not get here since the embedding config is required
+                # to return an embedding_request above
+                raise ValueError(
+                    "Embedding configuration is required for vector operations "
+                    f"(for semantic search). "
+                    f"Please provide an Embeddings when initializing the {self.__class__.__name__}."
+                )
+            query, txt_params = embedding_request
+            # Update the params to replace the raw text with the vectors
+            vectors = self.embeddings.embed_documents(
+                [param[-1] for param in txt_params]
+            )
+            queries.append(
+                (
+                    query,
+                    [
+                        p
+                        for (ns, k, pathname, _), vector in zip(txt_params, vectors)
+                        for p in (ns, k, pathname, vector)
+                    ],
+                )
+            )
+
         for query, params in queries:
             cur.execute(query, params)
 
@@ -429,9 +689,20 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         results: list[Result],
         cur: Cursor[DictRow],
     ) -> None:
-        for (query, params), (idx, _) in zip(
-            self._get_batch_search_queries(search_ops), search_ops
-        ):
+        queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
+
+        if embedding_requests and self.embeddings:
+            embeddings = self.embeddings.embed_documents(
+                [query for _, query in embedding_requests]
+            )
+            for (idx, _), embedding in zip(embedding_requests, embeddings):
+                _paramslist = queries[idx][1]
+                for i in range(len(_paramslist)):
+                    if _paramslist[i] is _PLACEHOLDER:
+                        _paramslist[i] = embedding
+
+        for (idx, _), (query, params) in zip(search_ops, queries):
+            # Execute the actual query
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
             results[idx] = [
@@ -463,9 +734,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time the store is used.
         """
-        with self._cursor() as cur:
+
+        def _get_version(cur: Cursor[dict[str, Any]], table: str) -> int:
             try:
-                cur.execute("SELECT v FROM store_migrations ORDER BY v DESC LIMIT 1")
+                cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
                 row = cast(dict, cur.fetchone())
                 if row is None:
                     version = -1
@@ -474,17 +746,34 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             except UndefinedTable:
                 version = -1
                 cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS store_migrations (
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
                         v INTEGER PRIMARY KEY
                     )
                 """
                 )
-            for v, migration in enumerate(
-                self.MIGRATIONS[version + 1 :], start=version + 1
-            ):
-                cur.execute(migration)
+            return version
+
+        with self._cursor() as cur:
+            version = _get_version(cur, table="store_migrations")
+            for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
+                cur.execute(sql)
                 cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+
+            if self.index_config:
+                version = _get_version(cur, table="vector_migrations")
+                for v, migration in enumerate(
+                    self.VECTOR_MIGRATIONS[version + 1 :], start=version + 1
+                ):
+                    sql = migration.sql
+                    if migration.params:
+                        params = {
+                            k: v(self) if v is not None and callable(v) else v
+                            for k, v in migration.params.items()
+                        }
+                        sql = sql % params
+                    cur.execute(sql)
+                    cur.execute("INSERT INTO vector_migrations (v) VALUES (%s)", (v,))
 
 
 class Row(TypedDict):
@@ -493,6 +782,45 @@ class Row(TypedDict):
     prefix: str
     created_at: datetime
     updated_at: datetime
+
+
+# Private utilities
+
+_DEFAULT_ANN_CONFIG = ANNIndexConfig(
+    vector_type="vector",
+)
+
+
+def _get_vector_type_ops(store: BasePostgresStore) -> str:
+    """Get the vector type operator class based on config."""
+    if not store.index_config:
+        return "vector_cosine_ops"
+
+    config = cast(PostgresIndexConfig, store.index_config)
+    index_config = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
+    vector_type = cast(str, index_config.get("vector_type", "vector"))
+    if vector_type not in ("vector", "halfvec"):
+        raise ValueError(
+            f"Vector type must be 'vector' or 'halfvec', got {vector_type}"
+        )
+
+    distance_type = config.get("distance_type", "cosine")
+
+    # For regular vectors
+    type_prefix = {"vector": "vector", "halfvec": "halfvec"}[vector_type]
+
+    if distance_type not in ("l2", "inner_product", "cosine"):
+        raise ValueError(
+            f"Vector type {vector_type} only supports 'l2', 'inner_product', or 'cosine' distance, got {distance_type}"
+        )
+
+    distance_suffix = {
+        "l2": "l2_ops",
+        "inner_product": "ip_ops",
+        "cosine": "cosine_ops",
+    }[distance_type]
+
+    return f"{type_prefix}_{distance_suffix}"
 
 
 def _namespace_to_text(
@@ -510,16 +838,26 @@ def _row_to_item(
     *,
     loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
 ) -> Item:
-    """Convert a row from the database into an Item."""
-    loader = loader or _json_loads
+    """Convert a row from the database into an Item.
+
+    Args:
+        namespace: Item namespace
+        row: Database row
+        loader: Optional value loader for non-dict values
+    """
     val = row["value"]
-    return Item(
-        value=val if isinstance(val, dict) else loader(val),
-        key=row["key"],
-        namespace=namespace,
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )
+    if not isinstance(val, dict):
+        val = (loader or _json_loads)(val)
+
+    kwargs = {
+        "key": row["key"],
+        "namespace": namespace,
+        "value": val,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+    return Item(**kwargs)
 
 
 def _row_to_search_item(
@@ -575,3 +913,62 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
     if isinstance(namespace, bytes):
         namespace = namespace.decode()[1:]
     return tuple(namespace.split("."))
+
+
+def _get_distance_operator(store: Any) -> str:
+    """Get the distance operator and score expression based on config."""
+    # Note: Today, we are not using ANN indices due to restrictions
+    # on PGVector's support for mixing vector and non-vector filters
+    # To use the index, PGVector expects:
+    #  - ORDER BY the operator NOT an expression (even negation blocks it)
+    #  - ASCENDING order
+    #  - Any WHERE clause should be over a partial index.
+    # If we violate any of these, it will use a sequential scan
+    # See https://github.com/pgvector/pgvector/issues/216 and the
+    # pgvector documentation for more details.
+    if not store.index_config:
+        raise ValueError(
+            "Embedding configuration is required for vector operations "
+            f"(for semantic search). "
+            f"Please provide an Embeddings when initializing the {store.__class__.__name__}."
+        )
+
+    config = cast(PostgresIndexConfig, store.index_config)
+    distance_type = config.get("distance_type", "cosine")
+
+    if distance_type == "l2":
+        return "1 - (sv.embedding <-> %s::%s)"
+    elif distance_type == "inner_product":
+        return "-(sv.embedding <#> %s::%s)"
+    else:  # cosine
+        return "1 - (sv.embedding <=> %s::%s)"
+
+
+def _ensure_index_config(
+    index_config: PostgresIndexConfig,
+) -> tuple[Optional["Embeddings"], PostgresIndexConfig]:
+    index_config = index_config.copy()
+    tokenized: list[tuple[str, Union[Literal["$"], list[str]]]] = []
+    tot = 0
+    text_fields = index_config.get("text_fields") or ["$"]
+    if isinstance(text_fields, str):
+        text_fields = [text_fields]
+    if not isinstance(text_fields, list):
+        raise ValueError(f"Text fields must be a list or a string. Got {text_fields}")
+    for p in text_fields:
+        if p == "$":
+            tokenized.append((p, "$"))
+            tot += 1
+        else:
+            toks = tokenize_path(p)
+            tokenized.append((p, toks))
+            tot += len(toks)
+    index_config["__tokenized_fields"] = tokenized
+    index_config["__estimated_num_vectors"] = tot
+    embeddings = ensure_embeddings(
+        index_config.get("embed"),
+    )
+    return embeddings, index_config
+
+
+_PLACEHOLDER = object()

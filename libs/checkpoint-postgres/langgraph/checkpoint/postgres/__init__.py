@@ -1,6 +1,7 @@
 import threading
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional, Sequence
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline

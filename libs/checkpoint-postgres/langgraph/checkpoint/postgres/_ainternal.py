@@ -1,7 +1,8 @@
 """Shared async utility functions for the Postgres checkpoint & storage classes."""
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Union
+from typing import Union
 
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow
