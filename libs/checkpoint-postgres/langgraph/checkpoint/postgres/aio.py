@@ -84,17 +84,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
             await cur.execute(
                 self.MIGRATIONS[0]
             )
-            try:
-                results = await cur.execute(
-                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                )
-                row = await results.fetchone()
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
+            await cur.execute(
+                self.MIGRATIONS[0]
+            )
+            results = await cur.execute(
+                "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+            )
+            row = await results.fetchone()
+            if row is None:
                 version = -1
+            else:
+                version = row["v"]
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
