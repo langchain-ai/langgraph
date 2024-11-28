@@ -13,7 +13,6 @@ from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
 from langgraph.store.postgres import AsyncPostgresStore
 from tests.conftest import (
     DEFAULT_URI,
-    INDEX_TYPES,
     VECTOR_TYPES,
     CharacterEmbeddings,
 )
@@ -191,7 +190,6 @@ async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
 
 @asynccontextmanager
 async def _create_vector_store(
-    index_type: str,
     vector_type: str,
     distance_type: str,
     fake_embeddings: CharacterEmbeddings,
@@ -215,8 +213,7 @@ async def _create_vector_store(
     index_config = {
         "dims": fake_embeddings.dims,
         "embed": fake_embeddings,
-        "db_index_config": {
-            "kind": index_type,
+        "ann_index_config": {
             "vector_type": vector_type,
         },
         "distance_type": distance_type,
@@ -244,25 +241,22 @@ async def _create_vector_store(
 @pytest.fixture(
     scope="function",
     params=[
-        (index_type, vector_type, distance_type)
-        for index_type in INDEX_TYPES
+        (vector_type, distance_type)
         for vector_type in VECTOR_TYPES
         for distance_type in (
-            (["hamming"] if index_type == "ivfflat" else ["hamming", "jaccard"])
-            if vector_type == "bit"
-            else ["l2", "inner_product", "cosine"]
+            ["hamming"] if vector_type == "bit" else ["l2", "inner_product", "cosine"]
         )
     ],
-    ids=lambda p: f"{p[0]}_{p[1]}_{p[2]}",
+    ids=lambda p: f"{p[0]}_{p[1]}",
 )
 async def vector_store(
     request,
     fake_embeddings: CharacterEmbeddings,
 ) -> AsyncIterator[AsyncPostgresStore]:
     """Create a store with vector search enabled."""
-    index_type, vector_type, distance_type = request.param
+    vector_type, distance_type = request.param
     async with _create_vector_store(
-        index_type, vector_type, distance_type, fake_embeddings
+        vector_type, distance_type, fake_embeddings
     ) as store:
         yield store
 
@@ -417,24 +411,24 @@ async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> Non
 
 
 @pytest.mark.parametrize(
-    "index_type,vector_type,distance_type",
+    "vector_type,distance_type",
     [
-        ("ivfflat", "vector", "cosine"),
-        ("hnsw", "vector", "cosine"),
-        ("hnsw", "halfvec", "cosine"),
-        ("hnsw", "halfvec", "inner_product"),
+        ("vector", "cosine"),
+        ("vector", "inner_product"),
+        ("vector", "l2"),
+        ("halfvec", "cosine"),
+        ("halfvec", "inner_product"),
+        ("halfvec", "l2"),
     ],
 )
 async def test_embed_with_path(
     request: Any,
     fake_embeddings: CharacterEmbeddings,
-    index_type: str,
     vector_type: str,
     distance_type: str,
 ) -> None:
     """Test vector search with specific text fields in Postgres store."""
     async with _create_vector_store(
-        index_type,
         vector_type,
         distance_type,
         fake_embeddings,
@@ -481,24 +475,22 @@ async def test_embed_with_path(
 
 
 @pytest.mark.parametrize(
-    "index_type,vector_type,distance_type",
+    "vector_type,distance_type",
     [
-        ("ivfflat", "vector", "cosine"),
-        ("hnsw", "vector", "cosine"),
-        ("hnsw", "halfvec", "cosine"),
-        ("hnsw", "halfvec", "inner_product"),
+        ("vector", "cosine"),
+        ("vector", "cosine"),
+        ("halfvec", "cosine"),
+        ("halfvec", "inner_product"),
     ],
 )
 async def test_embed_with_path_operation_config(
     request: Any,
     fake_embeddings: CharacterEmbeddings,
-    index_type: str,
     vector_type: str,
     distance_type: str,
 ) -> None:
     """Test operation-level field configuration for vector search."""
     async with _create_vector_store(
-        index_type,
         vector_type,
         distance_type,
         fake_embeddings,

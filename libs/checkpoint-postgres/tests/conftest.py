@@ -40,5 +40,4 @@ def fake_embeddings() -> CharacterEmbeddings:
     return CharacterEmbeddings(dims=500)
 
 
-INDEX_TYPES = ["hnsw", "ivfflat"]
 VECTOR_TYPES = ["vector", "halfvec"]
