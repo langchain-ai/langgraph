@@ -325,10 +325,21 @@ class ListNamespaceResponse(TypedDict):
     """A list of namespace paths, where each path is a list of strings."""
 
 
+class SearchItem(Item, total=False):
+    """Item with an optional relevance score from search operations.
+
+    Attributes:
+        score (Optional[float]): Relevance/similarity score. Included when
+            searching a compatible store with a natural language query.
+    """
+
+    score: Optional[float]
+
+
 class SearchItemsResponse(TypedDict):
     """Response structure for searching items."""
 
-    items: list[Item]
+    items: list[SearchItem]
     """A list of items matching the search criteria."""
 
 
