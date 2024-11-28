@@ -18,6 +18,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Optional,
     Sequence,
     Union,
@@ -59,7 +60,6 @@ from langgraph_sdk.schema import (
     ThreadStatus,
     ThreadUpdateStateResponse,
 )
-from langgraph_sdk.sse import EventSource
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +293,7 @@ class HttpClient:
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            async for event in EventSource(sse.response).aiter_sse():
+            async for event in sse.aiter_sse():
                 yield StreamPart(
                     event.event, orjson.loads(event.data) if event.data else None
                 )
@@ -1947,7 +1947,7 @@ class CronClient:
 
         Example Usage:
 
-            cron_run = await client.crons.create(
+            cron_run = client.crons.create(
                 assistant_id="agent",
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
@@ -2071,7 +2071,12 @@ class StoreClient:
         self.http = http
 
     async def put_item(
-        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -2079,6 +2084,7 @@ class StoreClient:
             namespace: A list of strings representing the namespace path.
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
+            index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
 
         Returns:
             None
@@ -2096,11 +2102,7 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        payload = {
-            "namespace": namespace,
-            "key": key,
-            "value": value,
-        }
+        payload = {"namespace": namespace, "key": key, "value": value, "index": index}
         await self.http.put("/store/items", json=payload)
 
     async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
@@ -2168,6 +2170,7 @@ class StoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        query: Optional[str] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2176,6 +2179,7 @@ class StoreClient:
             filter: Optional dictionary of key-value pairs to filter results.
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
+            query: Optional query for natural language search.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -2213,6 +2217,7 @@ class StoreClient:
             "filter": filter,
             "limit": limit,
             "offset": offset,
+            "query": query,
         }
 
         return await self.http.post("/store/items/search", json=_provided_vals(payload))
@@ -2427,7 +2432,7 @@ class SyncHttpClient:
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            for event in EventSource(sse.response).iter_sse():
+            for event in sse.iter_sse():
                 yield StreamPart(
                     event.event, orjson.loads(event.data) if event.data else None
                 )
@@ -4155,7 +4160,12 @@ class SyncStoreClient:
         self.http = http
 
     def put_item(
-        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4163,6 +4173,7 @@ class SyncStoreClient:
             namespace: A list of strings representing the namespace path.
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
+            index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
 
         Returns:
             None
@@ -4184,6 +4195,7 @@ class SyncStoreClient:
             "namespace": namespace,
             "key": key,
             "value": value,
+            "index": index,
         }
         self.http.put("/store/items", json=payload)
 
@@ -4251,6 +4263,7 @@ class SyncStoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        query: Optional[str] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4259,6 +4272,7 @@ class SyncStoreClient:
             filter: Optional dictionary of key-value pairs to filter results.
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
+            query: Optional query for natural language search.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -4296,6 +4310,7 @@ class SyncStoreClient:
             "filter": filter,
             "limit": limit,
             "offset": offset,
+            "query": query,
         }
         return self.http.post("/store/items/search", json=_provided_vals(payload))
 

@@ -1,7 +1,8 @@
 """Shared utility functions for the Postgres checkpoint & storage classes."""
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator, Union
+from typing import Union
 
 from psycopg import Connection
 from psycopg.rows import DictRow
