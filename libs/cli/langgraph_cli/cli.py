@@ -511,19 +511,6 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     )
 
 
-@click.argument("path", required=False)
-@click.option(
-    "--template",
-    type=str,
-    help=TEMPLATE_HELP_STRING,
-)
-@cli.command("new", help="🌱 Create a new LangGraph project from a template.")
-@log_command
-def new(path: Optional[str], template: Optional[str]) -> None:
-    """Create a new LangGraph project from a template."""
-    return create_new(path, template)
-
-
 @click.option(
     "--host",
     default="127.0.0.1",
@@ -608,6 +595,10 @@ def dev(
             sys.path.append(str(dep_path))
 
     graphs = config_json.get("graphs", {})
+    additional_config = {}
+    if config_json.get("store"):
+        additional_config["store"] = config_json["store"]
+
     run_server(
         host,
         port,
@@ -617,8 +608,21 @@ def dev(
         open_browser=not no_browser,
         debug_port=debug_port,
         env=config_json.get("env", None),
-        store=config_json.get("store", None),
+        config=additional_config,
     )
+
+
+@click.argument("path", required=False)
+@click.option(
+    "--template",
+    type=str,
+    help=TEMPLATE_HELP_STRING,
+)
+@cli.command("new", help="🌱 Create a new LangGraph project from a template.")
+@log_command
+def new(path: Optional[str], template: Optional[str]) -> None:
+    """Create a new LangGraph project from a template."""
+    return create_new(path, template)
 
 
 def prepare_args_and_stdin(

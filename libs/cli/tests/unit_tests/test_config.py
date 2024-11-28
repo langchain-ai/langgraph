@@ -30,6 +30,7 @@ def test_validate_config():
         "pip_config_file": None,
         "dockerfile_lines": [],
         "env": {},
+        "store": None,
         **expected_config,
     }
     actual_config = validate_config(expected_config)
@@ -46,6 +47,7 @@ def test_validate_config():
             "agent": "./agent.py:graph",
         },
         "env": env,
+        "store": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config

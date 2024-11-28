@@ -10,8 +10,8 @@ MIN_NODE_VERSION = "20"
 MIN_PYTHON_VERSION = "3.11"
 
 
-class EmbeddingConfig(TypedDict, total=False):
-    """Configuration for vector embeddings in PostgreSQL store."""
+class IndexConfig(TypedDict, total=False):
+    """Configuration for indexing documents for semantic search in the store."""
 
     dims: int
     """Number of dimensions in the embedding vectors.
@@ -32,25 +32,18 @@ class EmbeddingConfig(TypedDict, total=False):
     Examples:
         - "openai:text-embedding-3-large"
         - "cohere:embed-multilingual-v3.0"
-        - "src/app.py::embeddings
-    """
-    aembed: Optional[str]
-    """Optional asynchronous function to generate embeddings from text.
-    
-    Provide for asynchronous embedding generation. This should be a string
-    representing the path to an async function, e.g., 'src/embeddings.py::aembed'.
-    Use this if you don't provide an Embeddings object through the 'embed' field.
+        - "src/app.py:embeddings
     """
 
-    text_fields: Optional[list[str]]
+    fields: Optional[list[str]]
     """Fields to extract text from for embedding generation.
     
-    Defaults to ["__root__"], which embeds the json object as a whole.
+    Defaults to the root ["$"], which embeds the json object as a whole.
     """
 
 
 class StoreConfig(TypedDict, total=False):
-    embed: Optional[EmbeddingConfig]
+    embed: Optional[IndexConfig]
     """Configuration for vector embeddings in store."""
 
 
@@ -399,7 +392,16 @@ RUN set -ex && \\
             ],
         )
     )
-
+    additional_config = {}
+    if config.get("store"):
+        additional_config["store"] = config["store"]
+    env_additional_config = (
+        ""
+        if not additional_config
+        else f"""
+ENV LANGGRAPH_CONFIG='{json.dumps(additional_config)}'
+"""
+    )
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -407,8 +409,7 @@ RUN set -ex && \\
 {installs}
 
 RUN {pip_install} -e /deps/*
-
-ENV LANGGRAPH_STORE='{json.dumps(config["store"])}'
+{env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 {f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
@@ -438,7 +439,16 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "npm ci"
     else:
         install_cmd = "npm i"
-
+    additional_config = {}
+    if config.get("store"):
+        additional_config["store"] = config["store"]
+    env_additional_config = (
+        ""
+        if not additional_config
+        else f"""
+ENV LANGGRAPH_CONFIG='{json.dumps(additional_config)}'
+"""
+    )
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -446,8 +456,7 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
 ADD . {faux_path}
 
 RUN cd {faux_path} && {install_cmd}
-
-ENV LANGGRAPH_STORE='{json.dumps(config["store"])}'
+{env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 WORKDIR {faux_path}
