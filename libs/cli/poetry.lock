@@ -565,13 +565,13 @@ langgraph-sdk = ">=0.1.32,<0.2.0"
 
 [[package]]
 name = "langgraph-api"
-version = "0.0.2"
+version = "0.0.5"
 description = ""
 optional = true
 python-versions = "<4.0,>=3.11.0"
 files = [
-    {file = "langgraph_api-0.0.2-py3-none-any.whl", hash = "sha256:7a30fb21987572eacc93dd1c69c2155c17957afed71dde18d6f47992b3124d65"},
-    {file = "langgraph_api-0.0.2.tar.gz", hash = "sha256:b751afca96cb6db67fe2f48e798ada27a4df068f0df86b36d2b8eee52344bbf0"},
+    {file = "langgraph_api-0.0.5-py3-none-any.whl", hash = "sha256:9c981c489924f5d7e67ce7a3a9908ede15ac266e699deff6f5de691af5b49931"},
+    {file = "langgraph_api-0.0.5.tar.gz", hash = "sha256:f7ff041f1706152a2587916f0373f513e456cde067c94f8266ff29f6af908d20"},
 ]
 
 [package.dependencies]
@@ -579,8 +579,8 @@ cryptography = ">=43.0.3,<44.0.0"
 httpx = ">=0.27.0"
 jsonschema-rs = ">=0.25.0,<0.26.0"
 langchain-core = ">=0.2.38,<0.4.0"
-langgraph = ">=0.2.52"
-langgraph-checkpoint = ">=2.0.5,<3.0"
+langgraph = ">=0.2.52,<0.3.0"
+langgraph-checkpoint = ">=2.0.7,<3.0"
 langsmith = ">=0.1.63,<0.2.0"
 orjson = ">=3.10.1"
 pyjwt = ">=2.9.0,<3.0.0"
@@ -593,13 +593,13 @@ watchfiles = ">=0.13"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.6"
+version = "2.0.7"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 files = [
-    {file = "langgraph_checkpoint-2.0.6-py3-none-any.whl", hash = "sha256:2878283c3ee2519bf180df9b7b7155b73fa05eb63b1af9600a03e03a930d8c53"},
-    {file = "langgraph_checkpoint-2.0.6.tar.gz", hash = "sha256:69ab9c61c4e2992264671f55579c24070b7b6cedc105a33da3fba6526df248cf"},
+    {file = "langgraph_checkpoint-2.0.7-py3-none-any.whl", hash = "sha256:9709f672e1c5a47e13352067c2ffa114dd91d443967b7ce8a1d36d6fc170370e"},
+    {file = "langgraph_checkpoint-2.0.7.tar.gz", hash = "sha256:88d648a331d20aa8ce65280de34a34a9190380b004f6afcc5f9894fe3abeed08"},
 ]
 
 [package.dependencies]
@@ -608,13 +608,13 @@ msgpack = ">=1.1.0,<2.0.0"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.36"
+version = "0.1.40"
 description = "SDK for interacting with LangGraph API"
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 files = [
-    {file = "langgraph_sdk-0.1.36-py3-none-any.whl", hash = "sha256:b11e1f0bc67631134d09d50c812dc73f9eb30394764ae1144d7d2a786a715355"},
-    {file = "langgraph_sdk-0.1.36.tar.gz", hash = "sha256:2a2c651b7851ba15aeaab7e4e3ea7fd8357ef1cb0b592f264916fa990cdda6e7"},
+    {file = "langgraph_sdk-0.1.40-py3-none-any.whl", hash = "sha256:8810cca5e4144cf3a5441fc76b4ee6e658ec95f932d3a0bf9ad63de117e925b9"},
+    {file = "langgraph_sdk-0.1.40.tar.gz", hash = "sha256:ab2719ac7274612a791a7a0ad9395d250357106cba8ba81bca9968fc91009af2"},
 ]
 
 [package.dependencies]
@@ -624,13 +624,13 @@ orjson = ">=3.10.1"
 
 [[package]]
 name = "langsmith"
-version = "0.1.146"
+version = "0.1.147"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = true
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langsmith-0.1.146-py3-none-any.whl", hash = "sha256:9d062222f1a32c9b047dab0149b24958f988989cd8d4a5f9139ff959a51e59d8"},
-    {file = "langsmith-0.1.146.tar.gz", hash = "sha256:ead8b0b9d5b6cd3ac42937ec48bdf09d4afe7ca1bba22dc05eb65591a18106f8"},
+    {file = "langsmith-0.1.147-py3-none-any.whl", hash = "sha256:7166fc23b965ccf839d64945a78e9f1157757add228b086141eb03a60d699a15"},
+    {file = "langsmith-0.1.147.tar.gz", hash = "sha256:2e933220318a4e73034657103b3b1a3a6109cc5db3566a7e8e03be8d6d7def7a"},
 ]
 
 [package.dependencies]
@@ -642,6 +642,9 @@ pydantic = [
 ]
 requests = ">=2,<3"
 requests-toolbelt = ">=1.0.0,<2.0.0"
+
+[package.extras]
+langsmith-pyo3 = ["langsmith-pyo3 (>=0.1.0rc2,<0.2.0)"]
 
 [[package]]
 name = "msgpack"
@@ -1035,13 +1038,13 @@ typing-extensions = ">=4.6.0,<4.7.0 || >4.7.0"
 
 [[package]]
 name = "pyjwt"
-version = "2.10.0"
+version = "2.10.1"
 description = "JSON Web Token implementation in Python"
 optional = true
 python-versions = ">=3.9"
 files = [
-    {file = "PyJWT-2.10.0-py3-none-any.whl", hash = "sha256:543b77207db656de204372350926bed5a86201c4cbff159f623f79c7bb487a15"},
-    {file = "pyjwt-2.10.0.tar.gz", hash = "sha256:7628a7eb7938959ac1b26e819a1df0fd3259505627b575e4bad6d08f76db695c"},
+    {file = "PyJWT-2.10.1-py3-none-any.whl", hash = "sha256:dcdd193e30abefd5debf142f9adfcdd2b58004e644f25406ffaebd50bd98dacb"},
+    {file = "pyjwt-2.10.1.tar.gz", hash = "sha256:3cc5772eb20009233caf06e9d8a0577824723b44e6648ee0a2aedb6cf9381953"},
 ]
 
 [package.extras]
@@ -1342,13 +1345,43 @@ test = ["pytest", "tornado (>=4.5)", "typeguard"]
 
 [[package]]
 name = "tomli"
-version = "2.1.0"
+version = "2.2.1"
 description = "A lil' TOML parser"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "tomli-2.1.0-py3-none-any.whl", hash = "sha256:a5c57c3d1c56f5ccdf89f6523458f60ef716e210fc47c4cfb188c5ba473e0391"},
-    {file = "tomli-2.1.0.tar.gz", hash = "sha256:3f646cae2aec94e17d04973e4249548320197cfabdf130015d023de4b74d8ab8"},
+    {file = "tomli-2.2.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:678e4fa69e4575eb77d103de3df8a895e1591b48e740211bd1067378c69e8249"},
+    {file = "tomli-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:023aa114dd824ade0100497eb2318602af309e5a55595f76b626d6d9f3b7b0a6"},
+    {file = "tomli-2.2.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ece47d672db52ac607a3d9599a9d48dcb2f2f735c6c2d1f34130085bb12b112a"},
+    {file = "tomli-2.2.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6972ca9c9cc9f0acaa56a8ca1ff51e7af152a9f87fb64623e31d5c83700080ee"},
+    {file = "tomli-2.2.1-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c954d2250168d28797dd4e3ac5cf812a406cd5a92674ee4c8f123c889786aa8e"},
+    {file = "tomli-2.2.1-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:8dd28b3e155b80f4d54beb40a441d366adcfe740969820caf156c019fb5c7ec4"},
+    {file = "tomli-2.2.1-cp311-cp311-musllinux_1_2_i686.whl", hash = "sha256:e59e304978767a54663af13c07b3d1af22ddee3bb2fb0618ca1593e4f593a106"},
+    {file = "tomli-2.2.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:33580bccab0338d00994d7f16f4c4ec25b776af3ffaac1ed74e0b3fc95e885a8"},
+    {file = "tomli-2.2.1-cp311-cp311-win32.whl", hash = "sha256:465af0e0875402f1d226519c9904f37254b3045fc5084697cefb9bdde1ff99ff"},
+    {file = "tomli-2.2.1-cp311-cp311-win_amd64.whl", hash = "sha256:2d0f2fdd22b02c6d81637a3c95f8cd77f995846af7414c5c4b8d0545afa1bc4b"},
+    {file = "tomli-2.2.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:4a8f6e44de52d5e6c657c9fe83b562f5f4256d8ebbfe4ff922c495620a7f6cea"},
+    {file = "tomli-2.2.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:8d57ca8095a641b8237d5b079147646153d22552f1c637fd3ba7f4b0b29167a8"},
+    {file = "tomli-2.2.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4e340144ad7ae1533cb897d406382b4b6fede8890a03738ff1683af800d54192"},
+    {file = "tomli-2.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:db2b95f9de79181805df90bedc5a5ab4c165e6ec3fe99f970d0e302f384ad222"},
+    {file = "tomli-2.2.1-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:40741994320b232529c802f8bc86da4e1aa9f413db394617b9a256ae0f9a7f77"},
+    {file = "tomli-2.2.1-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:400e720fe168c0f8521520190686ef8ef033fb19fc493da09779e592861b78c6"},
+    {file = "tomli-2.2.1-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:02abe224de6ae62c19f090f68da4e27b10af2b93213d36cf44e6e1c5abd19fdd"},
+    {file = "tomli-2.2.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:b82ebccc8c8a36f2094e969560a1b836758481f3dc360ce9a3277c65f374285e"},
+    {file = "tomli-2.2.1-cp312-cp312-win32.whl", hash = "sha256:889f80ef92701b9dbb224e49ec87c645ce5df3fa2cc548664eb8a25e03127a98"},
+    {file = "tomli-2.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:7fc04e92e1d624a4a63c76474610238576942d6b8950a2d7f908a340494e67e4"},
+    {file = "tomli-2.2.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:f4039b9cbc3048b2416cc57ab3bda989a6fcf9b36cf8937f01a6e731b64f80d7"},
+    {file = "tomli-2.2.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:286f0ca2ffeeb5b9bd4fcc8d6c330534323ec51b2f52da063b11c502da16f30c"},
+    {file = "tomli-2.2.1-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a92ef1a44547e894e2a17d24e7557a5e85a9e1d0048b0b5e7541f76c5032cb13"},
+    {file = "tomli-2.2.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9316dc65bed1684c9a98ee68759ceaed29d229e985297003e494aa825ebb0281"},
+    {file = "tomli-2.2.1-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:e85e99945e688e32d5a35c1ff38ed0b3f41f43fad8df0bdf79f72b2ba7bc5272"},
+    {file = "tomli-2.2.1-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:ac065718db92ca818f8d6141b5f66369833d4a80a9d74435a268c52bdfa73140"},
+    {file = "tomli-2.2.1-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:d920f33822747519673ee656a4b6ac33e382eca9d331c87770faa3eef562aeb2"},
+    {file = "tomli-2.2.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:a198f10c4d1b1375d7687bc25294306e551bf1abfa4eace6650070a5c1ae2744"},
+    {file = "tomli-2.2.1-cp313-cp313-win32.whl", hash = "sha256:d3f5614314d758649ab2ab3a62d4f2004c825922f9e370b29416484086b264ec"},
+    {file = "tomli-2.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:a38aa0308e754b0e3c67e344754dff64999ff9b513e691d0e786265c93583c69"},
+    {file = "tomli-2.2.1-py3-none-any.whl", hash = "sha256:cb55c73c5f4408779d0cf3eef9f762b9c9f147a77de7b258bef0a5628adc85cc"},
+    {file = "tomli-2.2.1.tar.gz", hash = "sha256:cd45e1dc79c835ce60f7404ec8119f2eb06d38b1deba146f07ced3bbc44505ff"},
 ]
 
 [[package]]
@@ -1528,4 +1561,4 @@ inmem = ["langgraph-api", "python-dotenv"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "3d655bb578e20219e19152d4a3d86be370fe3be61b5559847f0204dfff499b4a"
+content-hash = "7388b141c48dd6cfa33b504822e5348ac514ac2e2711d37368d7cb7103c8340a"

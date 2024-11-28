@@ -10,7 +10,44 @@ MIN_NODE_VERSION = "20"
 MIN_PYTHON_VERSION = "3.11"
 
 
-class Config(TypedDict):
+class IndexConfig(TypedDict, total=False):
+    """Configuration for indexing documents for semantic search in the store."""
+
+    dims: int
+    """Number of dimensions in the embedding vectors.
+    
+    Common embedding models have the following dimensions:
+        - OpenAI text-embedding-3-large: 256, 1024, or 3072
+        - OpenAI text-embedding-3-small: 512 or 1536
+        - OpenAI text-embedding-ada-002: 1536
+        - Cohere embed-english-v3.0: 1024
+        - Cohere embed-english-light-v3.0: 384
+        - Cohere embed-multilingual-v3.0: 1024
+        - Cohere embed-multilingual-light-v3.0: 384
+    """
+
+    embed: str
+    """Optional model (string) to generate embeddings from text or path to model or function.
+    
+    Examples:
+        - "openai:text-embedding-3-large"
+        - "cohere:embed-multilingual-v3.0"
+        - "src/app.py:embeddings
+    """
+
+    fields: Optional[list[str]]
+    """Fields to extract text from for embedding generation.
+    
+    Defaults to the root ["$"], which embeds the json object as a whole.
+    """
+
+
+class StoreConfig(TypedDict, total=False):
+    embed: Optional[IndexConfig]
+    """Configuration for vector embeddings in store."""
+
+
+class Config(TypedDict, total=False):
     python_version: str
     node_version: Optional[str]
     pip_config_file: Optional[str]
@@ -18,6 +55,7 @@ class Config(TypedDict):
     dependencies: list[str]
     graphs: dict[str, str]
     env: Union[dict[str, str], str]
+    store: Optional[StoreConfig]
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -49,6 +87,7 @@ def validate_config(config: Config) -> Config:
             "dockerfile_lines": config.get("dockerfile_lines", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
+            "store": config.get("store"),
         }
         if config.get("node_version")
         else {
@@ -58,6 +97,7 @@ def validate_config(config: Config) -> Config:
             "dependencies": config.get("dependencies", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
+            "store": config.get("store"),
         }
     )
 
@@ -352,7 +392,16 @@ RUN set -ex && \\
             ],
         )
     )
-
+    additional_config = {}
+    if config.get("store"):
+        additional_config["store"] = config["store"]
+    env_additional_config = (
+        ""
+        if not additional_config
+        else f"""
+ENV LANGGRAPH_CONFIG='{json.dumps(additional_config)}'
+"""
+    )
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -360,7 +409,7 @@ RUN set -ex && \\
 {installs}
 
 RUN {pip_install} -e /deps/*
-
+{env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 {f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
@@ -390,7 +439,16 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "npm ci"
     else:
         install_cmd = "npm i"
-
+    additional_config = {}
+    if config.get("store"):
+        additional_config["store"] = config["store"]
+    env_additional_config = (
+        ""
+        if not additional_config
+        else f"""
+ENV LANGGRAPH_CONFIG='{json.dumps(additional_config)}'
+"""
+    )
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -398,7 +456,7 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
 ADD . {faux_path}
 
 RUN cd {faux_path} && {install_cmd}
-
+{env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 WORKDIR {faux_path}
