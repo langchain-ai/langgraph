@@ -392,14 +392,12 @@ RUN set -ex && \\
             ],
         )
     )
-    additional_config = {}
-    if config.get("store"):
-        additional_config["store"] = config["store"]
+    store_config = config.get("store")
     env_additional_config = (
         ""
-        if not additional_config
+        if not store_config
         else f"""
-ENV LANGGRAPH_CONFIG='{json.dumps(additional_config)}'
+ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
     return f"""FROM {base_image}:{config['python_version']}
@@ -439,14 +437,12 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "npm ci"
     else:
         install_cmd = "npm i"
-    additional_config = {}
-    if config.get("store"):
-        additional_config["store"] = config["store"]
+    store_config = config.get("store")
     env_additional_config = (
         ""
-        if not additional_config
+        if not store_config
         else f"""
-ENV LANGGRAPH_CONFIG='{json.dumps(additional_config)}'
+ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
     return f"""FROM {base_image}:{config['node_version']}

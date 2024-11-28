@@ -550,6 +550,12 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     type=int,
     help="Enable remote debugging by listening on specified port. Requires debugpy to be installed",
 )
+@click.option(
+    "--wait-for-client",
+    is_flag=True,
+    help="Wait for a debugger client to connect to the debug port before starting the server",
+    default=False,
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -563,6 +569,7 @@ def dev(
     n_jobs_per_worker: Optional[int],
     no_browser: bool,
     debug_port: Optional[int],
+    wait_for_client: bool,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -595,9 +602,6 @@ def dev(
             sys.path.append(str(dep_path))
 
     graphs = config_json.get("graphs", {})
-    additional_config = {}
-    if config_json.get("store"):
-        additional_config["store"] = config_json["store"]
 
     run_server(
         host,
@@ -607,8 +611,9 @@ def dev(
         n_jobs_per_worker=n_jobs_per_worker,
         open_browser=not no_browser,
         debug_port=debug_port,
-        env=config_json.get("env", None),
-        config=additional_config,
+        env=config_json.get("env"),
+        store=config_json.get("store"),
+        wait_for_client=wait_for_client,
     )
 
 
