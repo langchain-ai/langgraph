@@ -5,7 +5,6 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
-from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -81,12 +80,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         async with self._cursor() as cur:
-            await cur.execute(
-                self.MIGRATIONS[0]
-            )
-            await cur.execute(
-                self.MIGRATIONS[0]
-            )
+            await cur.execute(self.MIGRATIONS[0])
             results = await cur.execute(
                 "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
             )
