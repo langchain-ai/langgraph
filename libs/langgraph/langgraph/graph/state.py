@@ -641,6 +641,13 @@ class CompiledStateGraph(CompiledGraph):
             if input is None:
                 return SKIP_WRITE
             elif isinstance(input, dict):
+                if hasattr(self.builder.output, 'model_fields'):
+                    model_fields = self.builder.output.model_fields
+                    # Extract the alias for the key if it exists
+                    if key in model_fields:
+                        alias = model_fields[key].alias
+                        if alias in input:
+                            return input.get(alias, SKIP_WRITE)
                 if all(k not in output_keys for k in input):
                     raise InvalidUpdateError(
                         f"Expected node {node_key} to update at least one of {output_keys}, got {input}"
@@ -823,6 +830,8 @@ def _get_state_reader(
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
+    if hasattr(schema, '__fields__') and any(field.alias and field.alias != name for name, field in schema.__fields__.items()):
+        input = {schema.model_fields[key].alias if key in schema.model_fields else key: value for key, value in input.items()}
     return schema(**input)
 
 
