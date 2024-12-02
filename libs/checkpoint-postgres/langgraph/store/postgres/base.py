@@ -58,7 +58,7 @@ class Migration(NamedTuple):
     params: Optional[dict[str, Any]] = None
 
 
-MIGRATIONS: Sequence[str] = [
+MIGRATIONS: Sequence[Union[str, Migration]] = [
     """
 CREATE TABLE IF NOT EXISTS store (
     -- 'prefix' represents the doc's 'namespace'
@@ -104,10 +104,25 @@ CREATE TABLE IF NOT EXISTS store_vectors (
             ),
         },
     ),
-    # TODO: Add an HNSW or IVFFlat index depending on config
-    # First must improve the search query when filtering by
-    # namespace
+    Migration(
+        """
+CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
+    USING %(index_type)s (embedding %(ops)s)%(index_params)s;
+""",
+        params={
+            "index_type": lambda store: _get_index_params(store)[0],
+            "ops": lambda store: _get_vector_type_ops(store),
+            "index_params": lambda store: (
+                " WITH ("
+                + ", ".join(f"{k}={v}" for k, v in _get_index_params(store)[1].items())
+                + ")"
+                if _get_index_params(store)[1]
+                else ""
+            ),
+        },
+    ),
 ]
+
 
 C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
 
@@ -140,11 +155,42 @@ class PoolConfig(TypedDict, total=False):
 class ANNIndexConfig(TypedDict, total=False):
     """Configuration for vector index in PostgreSQL store."""
 
+    kind: Literal["hnsw", "ivfflat"]
+    """Type of index to use: 'hnsw' for Hierarchical Navigable Small World, or 'ivfflat' for Inverted File Flat."""
     vector_type: Literal["vector", "halfvec"]
     """Type of vector storage to use.
     Options:
     - 'vector': Regular vectors (default)
     - 'halfvec': Half-precision vectors for reduced memory usage
+    """
+
+
+class HNSWConfig(ANNIndexConfig, total=False):
+    """Configuration for HNSW (Hierarchical Navigable Small World) index."""
+
+    kind: Literal["hnsw"]  # type: ignore[misc]
+    m: int
+    """Maximum number of connections per layer. Default is 16."""
+    ef_construction: int
+    """Size of dynamic candidate list for index construction. Default is 64."""
+
+
+class IVFFlatConfig(ANNIndexConfig, total=False):
+    """IVFFlat index divides vectors into lists, and then searches a subset of those lists that are closest to the query vector. It has faster build times and uses less memory than HNSW, but has lower query performance (in terms of speed-recall tradeoff).
+
+    Three keys to achieving good recall are:
+    1. Create the index after the table has some data
+    2. Choose an appropriate number of lists - a good place to start is rows / 1000 for up to 1M rows and sqrt(rows) for over 1M rows
+    3. When querying, specify an appropriate number of probes (higher is better for recall, lower is better for speed) - a good place to start is sqrt(lists)
+    """
+
+    kind: Literal["ivfflat"]  # type: ignore[misc]
+    nlist: int
+    """Number of inverted lists (clusters) for IVF index.
+    
+    Determines the number of clusters used in the index structure.
+    Higher values can improve search speed but increase index size and build time.
+    Typically set to the square root of the number of vectors in the index.
     """
 
 
@@ -321,7 +367,7 @@ class BasePostgresStore(Generic[C]):
             if op.query and self.index_config:
                 embedding_requests.append((idx, op.query))
 
-                score_operator = _get_distance_operator(self)
+                score_operator, post_operator = _get_distance_operator(self)
                 vector_type = (
                     cast(PostgresIndexConfig, self.index_config)
                     .get("ann_index_config", {})
@@ -344,25 +390,34 @@ class BasePostgresStore(Generic[C]):
 
                 vectors_per_doc_estimate = self.index_config["__estimated_num_vectors"]
                 expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
-
                 # Vector search with CTE for proper score handling
                 filter_str = (
                     ""
                     if not filter_conditions
                     else " AND " + " AND ".join(filter_conditions)
                 )
+                ns_args = []
+                if op.namespace_prefix:
+                    prefix_filter_str = f"WHERE s.prefix = %s {filter_str} "
+                    ns_args = [f"{_namespace_to_text(op.namespace_prefix)}"]
+                else:
+                    if filter_str:
+                        prefix_filter_str = f"WHERE {filter_str} "
+                    else:
+                        prefix_filter_str = ""
+
                 base_query = f"""
                     WITH scored AS (
-                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, {score_operator} AS score
+                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, {score_operator} AS neg_score
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
-                        WHERE s.prefix LIKE %s {filter_str}
-                        ORDER BY {score_operator} DESC 
+                        {prefix_filter_str}
+                        ORDER BY {score_operator} ASC 
                         LIMIT %s
                     )
                     SELECT * FROM (
                         SELECT DISTINCT ON (prefix, key) 
-                            prefix, key, value, created_at, updated_at, score 
+                            prefix, key, value, created_at, updated_at, {post_operator} as score 
                         FROM scored 
                         ORDER BY prefix, key, score DESC
                     ) AS unique_docs
@@ -372,7 +427,7 @@ class BasePostgresStore(Generic[C]):
                 """
                 params = [
                     _PLACEHOLDER,  # Vector placeholder
-                    f"{_namespace_to_text(op.namespace_prefix)}%",
+                    *ns_args,
                     *filter_params,
                     _PLACEHOLDER,
                     expanded_limit,
@@ -702,6 +757,19 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                         _paramslist[i] = embedding
 
         for (idx, _), (query, params) in zip(search_ops, queries):
+            # Get and print pgvector version
+            cur.execute("SELECT extversion FROM pg_extension WHERE extname = 'vector'")
+            version = cur.fetchone()
+            if version:
+                print(f"pgvector version: {list(version.values())[0]}", flush=True)
+
+            # Run EXPLAIN on the query, verbose to get the query plan
+            cur.execute(f"EXPLAIN {query}", params)
+            # Print the query plan line by line. Truncate at 300 chars per line
+            print("^" * 80, flush=True)
+            for line in cur.fetchall():
+                print(list(line.values())[0][:300], flush=True)
+            print("*" * 80, flush=True)
             # Execute the actual query
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
@@ -823,6 +891,18 @@ def _get_vector_type_ops(store: BasePostgresStore) -> str:
     return f"{type_prefix}_{distance_suffix}"
 
 
+def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
+    """Get the index type and configuration based on config."""
+    if not store.index_config:
+        return "hnsw", {}
+
+    config = cast(PostgresIndexConfig, store.index_config)
+    index_config = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
+    kind = index_config.pop("kind", "hnsw")
+    index_config.pop("vector_type", None)
+    return kind, index_config
+
+
 def _namespace_to_text(
     namespace: tuple[str, ...], handle_wildcards: bool = False
 ) -> str:
@@ -915,7 +995,7 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
     return tuple(namespace.split("."))
 
 
-def _get_distance_operator(store: Any) -> str:
+def _get_distance_operator(store: Any) -> tuple[str, str]:
     """Get the distance operator and score expression based on config."""
     # Note: Today, we are not using ANN indices due to restrictions
     # on PGVector's support for mixing vector and non-vector filters
@@ -936,12 +1016,21 @@ def _get_distance_operator(store: Any) -> str:
     config = cast(PostgresIndexConfig, store.index_config)
     distance_type = config.get("distance_type", "cosine")
 
+    # Return the operator and the score expression
+    # The operator is used in the CTE and will be compatible with an ASCENDING ORDER
+    # sort clause.
+    # The score expression is used in the final query and will be compatible with
+    # a DESCENDING ORDER sort clause and the user's expectations of what the similarity score
+    # should be.
     if distance_type == "l2":
-        return "1 - (sv.embedding <-> %s::%s)"
+        # Final: "1 - (sv.embedding <-> %s::%s)"
+        return "sv.embedding <-> %s::%s", "1 - (scored.neg_score)"
     elif distance_type == "inner_product":
-        return "-(sv.embedding <#> %s::%s)"
+        # Final: "-(sv.embedding <#> %s::%s)"
+        return "sv.embedding <#> %s::%s", "-(scored.neg_score)"
     else:  # cosine
-        return "1 - (sv.embedding <=> %s::%s)"
+        # Final:  "1 - (sv.embedding <=> %s::%s)"
+        return "sv.embedding <=> %s::%s", "1 - (scored.neg_score)"
 
 
 def _ensure_index_config(
