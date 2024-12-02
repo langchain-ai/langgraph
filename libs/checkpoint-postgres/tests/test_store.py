@@ -634,6 +634,7 @@ def test_embed_with_path_operation_config(
     distance_type: str,
 ) -> None:
     """Test operation-level field configuration for vector search."""
+
     with _create_vector_store(
         vector_type,
         distance_type,
@@ -695,3 +696,89 @@ def test_embed_with_path_operation_config(
         # assert len(results) == 3
         # doc5_result = next(r for r in results if r.key == "doc5")
         # assert doc5_result.score is None
+
+
+def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
+    """
+    Compute cosine similarity between a vector X and a matrix Y.
+    Lazy import numpy for efficiency.
+    """
+
+    similarities = []
+    for y in Y:
+        dot_product = sum(a * b for a, b in zip(X, y))
+        norm1 = sum(a * a for a in X) ** 0.5
+        norm2 = sum(a * a for a in y) ** 0.5
+        similarity = dot_product / (norm1 * norm2) if norm1 > 0 and norm2 > 0 else 0.0
+        similarities.append(similarity)
+
+    return similarities
+
+
+def _inner_product(X: list[float], Y: list[list[float]]) -> list[float]:
+    """
+    Compute inner product between a vector X and a matrix Y.
+    Lazy import numpy for efficiency.
+    """
+
+    similarities = []
+    for y in Y:
+        similarity = sum(a * b for a, b in zip(X, y))
+        similarities.append(similarity)
+
+    return similarities
+
+
+def _neg_l2_distance(X: list[float], Y: list[list[float]]) -> list[float]:
+    """
+    Compute l2 distance between a vector X and a matrix Y.
+    Lazy import numpy for efficiency.
+    """
+
+    similarities = []
+    for y in Y:
+        similarity = sum((a - b) ** 2 for a, b in zip(X, y)) ** 0.5
+        similarities.append(-similarity)
+
+    return similarities
+
+
+@pytest.mark.parametrize(
+    "vector_type,distance_type",
+    [
+        ("vector", "cosine"),
+        ("vector", "inner_product"),
+        ("halfvec", "l2"),
+    ],
+)
+@pytest.mark.parametrize("query", ["aaa", "bbb", "ccc", "abcd", "poisson"])
+def test_scores(
+    fake_embeddings: CharacterEmbeddings,
+    vector_type: str,
+    distance_type: str,
+    query: str,
+) -> None:
+    """Test operation-level field configuration for vector search."""
+    with _create_vector_store(
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key0"],
+    ) as store:
+        doc = {
+            "key0": "aaa",
+        }
+        store.put(("test",), "doc", doc, index=["key0", "key1"])
+
+        results = store.search((), query=query)
+        vec0 = fake_embeddings.embed_query(doc["key0"])
+        vec1 = fake_embeddings.embed_query(query)
+        if distance_type == "cosine":
+            similarities = _cosine_similarity(vec1, [vec0])
+        elif distance_type == "inner_product":
+            similarities = _inner_product(vec1, [vec0])
+        elif distance_type == "l2":
+            similarities = _neg_l2_distance(vec1, [vec0])
+
+        assert len(results) == 1
+        assert results[0].score == pytest.approx(similarities[0], abs=1e-3)
