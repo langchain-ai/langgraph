@@ -1,11 +1,13 @@
 """Adapted from httpx_sse to split lines on \n, \r, \r\n per the SSE spec."""
 
-import io
-from typing import AsyncIterator, Iterator
+from typing import AsyncIterator, Iterator, Optional, Union
 
 import httpx
-import httpx_sse
-import httpx_sse._decoders
+import orjson
+
+from langgraph_sdk.schema import StreamPart
+
+BytesLike = Union[bytes, bytearray, memoryview]
 
 
 class BytesLineDecoder:
@@ -17,10 +19,10 @@ class BytesLineDecoder:
     """
 
     def __init__(self) -> None:
-        self.buffer = io.BytesIO()
+        self.buffer = bytearray()
         self.trailing_cr: bool = False
 
-    def decode(self, text: bytes) -> list[bytes]:
+    def decode(self, text: bytes) -> list[BytesLike]:
         # See https://docs.python.org/3/glossary.html#term-universal-newlines
         NEWLINE_CHARS = b"\n\r"
 
@@ -42,33 +44,93 @@ class BytesLineDecoder:
 
         if len(lines) == 1 and not trailing_newline:
             # No new lines, buffer the input and continue.
-            self.buffer.write(lines[0])
+            self.buffer.extend(lines[0])
             return []
 
         if self.buffer:
             # Include any existing buffer in the first portion of the
             # splitlines result.
-            lines = [self.buffer.getvalue() + lines[0]] + lines[1:]
-            self.buffer.truncate(0)
+            self.buffer.extend(lines[0])
+            lines = [self.buffer] + lines[1:]
+            self.buffer = bytearray()
 
         if not trailing_newline:
             # If the last segment of splitlines is not newline terminated,
             # then drop it from our output and start a new buffer.
-            self.buffer.write(lines.pop())
+            self.buffer.extend(lines.pop())
 
         return lines
 
-    def flush(self) -> list[bytes]:
+    def flush(self) -> list[BytesLike]:
         if not self.buffer and not self.trailing_cr:
             return []
 
-        lines = [self.buffer.getvalue()] if self.buffer else []
-        self.buffer.truncate(0)
+        lines = [self.buffer]
+        self.buffer = bytearray()
         self.trailing_cr = False
         return lines
 
 
-async def aiter_lines_raw(response: httpx.Response) -> AsyncIterator[bytes]:
+class SSEDecoder:
+    def __init__(self) -> None:
+        self._event = ""
+        self._data = bytearray()
+        self._last_event_id = ""
+        self._retry: Optional[int] = None
+
+    def decode(self, line: bytes) -> Optional[StreamPart]:
+        # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation  # noqa: E501
+
+        if not line:
+            if (
+                not self._event
+                and not self._data
+                and not self._last_event_id
+                and self._retry is None
+            ):
+                return None
+
+            sse = StreamPart(
+                event=self._event,
+                data=orjson.loads(self._data) if self._data else None,
+            )
+
+            # NOTE: as per the SSE spec, do not reset last_event_id.
+            self._event = ""
+            self._data = bytearray()
+            self._retry = None
+
+            return sse
+
+        if line.startswith(b":"):
+            return None
+
+        fieldname, _, value = line.partition(b":")
+
+        if value.startswith(b" "):
+            value = value[1:]
+
+        if fieldname == b"event":
+            self._event = value.decode()
+        elif fieldname == b"data":
+            self._data.extend(value)
+        elif fieldname == b"id":
+            if b"\0" in value:
+                pass
+            else:
+                self._last_event_id = value.decode()
+        elif fieldname == b"retry":
+            try:
+                self._retry = int(value)
+            except (TypeError, ValueError):
+                pass
+        else:
+            pass  # Field is ignored.
+
+        return None
+
+
+async def aiter_lines_raw(response: httpx.Response) -> AsyncIterator[BytesLike]:
     decoder = BytesLineDecoder()
     async for chunk in response.aiter_bytes():
         for line in decoder.decode(chunk):
@@ -77,30 +139,10 @@ async def aiter_lines_raw(response: httpx.Response) -> AsyncIterator[bytes]:
         yield line
 
 
-def iter_lines_raw(response: httpx.Response) -> Iterator[bytes]:
+def iter_lines_raw(response: httpx.Response) -> Iterator[BytesLike]:
     decoder = BytesLineDecoder()
     for chunk in response.iter_bytes():
         for line in decoder.decode(chunk):
             yield line
     for line in decoder.flush():
         yield line
-
-
-class EventSource(httpx_sse.EventSource):
-    async def aiter_sse(self) -> AsyncIterator[httpx_sse.ServerSentEvent]:
-        self._check_content_type()
-        decoder = httpx_sse._decoders.SSEDecoder()
-        async for line in aiter_lines_raw(self._response):
-            line = line.rstrip(b"\n")
-            sse = decoder.decode(line.decode())
-            if sse is not None:
-                yield sse
-
-    def iter_sse(self) -> Iterator[httpx_sse.ServerSentEvent]:
-        self._check_content_type()
-        decoder = httpx_sse._decoders.SSEDecoder()
-        for line in iter_lines_raw(self._response):
-            line = line.rstrip(b"\n")
-            sse = decoder.decode(line.decode())
-            if sse is not None:
-                yield sse

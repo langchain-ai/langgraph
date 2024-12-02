@@ -26,7 +26,6 @@ from typing import (
 )
 
 import httpx
-import httpx_sse
 import orjson
 from httpx._types import QueryParamTypes
 
@@ -60,7 +59,7 @@ from langgraph_sdk.schema import (
     ThreadStatus,
     ThreadUpdateStateResponse,
 )
-from langgraph_sdk.sse import EventSource
+from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw, iter_lines_raw
 
 logger = logging.getLogger(__name__)
 
@@ -282,22 +281,37 @@ class HttpClient:
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         headers, content = await aencode_json(json)
-        async with httpx_sse.aconnect_sse(
-            self.client, method, path, headers=headers, content=content
-        ) as sse:
+        headers["Accept"] = "text/event-stream"
+        headers["Cache-Control"] = "no-store"
+
+        async with self.client.stream(
+            method, path, headers=headers, content=content
+        ) as res:
+            # check status
             try:
-                sse.response.raise_for_status()
+                res.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = (await sse.response.aread()).decode()
+                body = (await res.aread()).decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            async for event in EventSource(sse.response).aiter_sse():
-                yield StreamPart(
-                    event.event, orjson.loads(event.data) if event.data else None
+            # check content type
+            content_type = self._response.headers.get("content-type", "").partition(
+                ";"
+            )[0]
+            if "text/event-stream" not in content_type:
+                raise httpx.TransportError(
+                    "Expected response header Content-Type to contain 'text/event-stream', "
+                    f"got {content_type!r}"
                 )
+            # parse SSE
+            decoder = SSEDecoder()
+            async for line in aiter_lines_raw(res):
+                sse = decoder.decode(line=line.rstrip(b"\n"))
+                if sse is not None:
+                    yield sse
 
 
 async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
@@ -2421,22 +2435,32 @@ class SyncHttpClient:
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         headers, content = encode_json(json)
-        with httpx_sse.connect_sse(
-            self.client, method, path, headers=headers, content=content
-        ) as sse:
+        with self.client.stream(method, path, headers=headers, content=content) as res:
+            # check status
             try:
-                sse.response.raise_for_status()
+                res.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = sse.response.read().decode()
+                body = (res.read()).decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            for event in EventSource(sse.response).iter_sse():
-                yield StreamPart(
-                    event.event, orjson.loads(event.data) if event.data else None
+            # check content type
+            content_type = self._response.headers.get("content-type", "").partition(
+                ";"
+            )[0]
+            if "text/event-stream" not in content_type:
+                raise httpx.TransportError(
+                    "Expected response header Content-Type to contain 'text/event-stream', "
+                    f"got {content_type!r}"
                 )
+            # parse SSE
+            decoder = SSEDecoder()
+            for line in iter_lines_raw(res):
+                sse = decoder.decode(line.rstrip(b"\n"))
+                if sse is not None:
+                    yield sse
 
 
 def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
