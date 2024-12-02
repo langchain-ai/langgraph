@@ -51,6 +51,7 @@ from langgraph_sdk.schema import (
     OnConflictBehavior,
     Run,
     RunCreate,
+    RunStatus,
     SearchItemsResponse,
     StreamMode,
     StreamPart,
@@ -1684,7 +1685,12 @@ class RunsClient:
         return response
 
     async def list(
-        self, thread_id: str, *, limit: int = 10, offset: int = 0
+        self,
+        thread_id: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        status: Optional[RunStatus] = None,
     ) -> List[Run]:
         """List runs.
 
@@ -1692,6 +1698,7 @@ class RunsClient:
             thread_id: The thread ID to list runs for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            status: The status of the run to filter by.
 
         Returns:
             List[Run]: The runs for the thread.
@@ -1705,9 +1712,13 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return await self.http.get(
-            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}"
-        )
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if status is not None:
+            params["status"] = status
+        return await self.http.get(f"/threads/{thread_id}/runs", params=params)
 
     async def get(self, thread_id: str, run_id: str) -> Run:
         """Get a run.
