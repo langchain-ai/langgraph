@@ -3303,6 +3303,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3326,6 +3327,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3346,6 +3348,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3370,6 +3373,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3420,6 +3424,7 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": command,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3453,6 +3458,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3472,6 +3478,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3492,6 +3499,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3514,6 +3522,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3600,6 +3609,7 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": command,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3637,6 +3647,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3657,6 +3668,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -3674,6 +3686,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3695,6 +3708,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -3761,6 +3775,7 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": command,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
