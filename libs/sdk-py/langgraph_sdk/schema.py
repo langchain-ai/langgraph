@@ -1,7 +1,7 @@
 """Data models for interacting with the LangGraph API."""
 
 from datetime import datetime
-from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
+from typing import Any, Dict, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -176,6 +176,19 @@ class Assistant(AssistantBase):
     """The name of the assistant"""
 
 
+class Interrupt(TypedDict, total=False):
+    """Represents an interruption in the execution flow."""
+
+    value: Any
+    """The value associated with the interrupt."""
+    when: Literal["during"]
+    """When the interrupt occurred."""
+    resumable: bool
+    """Whether the interrupt can be resumed."""
+    ns: Optional[list[str]]
+    """Optional namespace for the interrupt."""
+
+
 class Thread(TypedDict):
     """Represents a conversation thread."""
 
@@ -191,6 +204,8 @@ class Thread(TypedDict):
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
     values: Json
     """The current state of the thread."""
+    interrupts: Dict[str, list[Interrupt]]
+    """Interrupts which were thrown in this thread"""
 
 
 class ThreadTask(TypedDict):
@@ -199,7 +214,7 @@ class ThreadTask(TypedDict):
     id: str
     name: str
     error: Optional[str]
-    interrupts: list[dict]
+    interrupts: list[Interrupt]
     checkpoint: Optional[Checkpoint]
     state: Optional["ThreadState"]
     result: Optional[dict[str, Any]]
