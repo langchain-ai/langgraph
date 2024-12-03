@@ -2,7 +2,7 @@ import type { JSONSchema7 } from "json-schema";
 
 type Optional<T> = T | null | undefined;
 
-type RunStatus =
+export type RunStatus =
   | "pending"
   | "running"
   | "error"

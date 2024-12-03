@@ -7,6 +7,7 @@ import {
   GraphSchema,
   Metadata,
   Run,
+  RunStatus,
   Thread,
   ThreadState,
   Cron,
@@ -944,12 +945,18 @@ export class RunsClient extends BaseClient {
        * Defaults to 0.
        */
       offset?: number;
+
+      /**
+       * Status of the run to filter by.
+       */
+      status?: RunStatus;
     },
   ): Promise<Run[]> {
     return this.fetch<Run[]>(`/threads/${threadId}/runs`, {
       params: {
         limit: options?.limit ?? 10,
         offset: options?.offset ?? 0,
+        status: options?.status ?? undefined,
       },
     });
   }
