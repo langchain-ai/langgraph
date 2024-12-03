@@ -11,7 +11,6 @@ packages = [{ include = "langgraph_sdk" }]
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
 httpx = ">=0.25.2"
-httpx-sse = ">=0.4.0"
 orjson = ">=3.10.1"
 
 [tool.poetry.group.dev.dependencies]
