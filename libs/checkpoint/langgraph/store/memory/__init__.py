@@ -290,16 +290,18 @@ class InMemoryStore(BaseStore):
                     for (item, _) in candidates[op.offset : op.offset + op.limit]
                 ]
 
-    def _prepare_ops(self, ops: Iterable[Op]) -> tuple[
+    def _prepare_ops(
+        self, ops: Iterable[Op]
+    ) -> tuple[
         list[Result],
         dict[tuple[tuple[str, ...], str], PutOp],
         dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]],
     ]:
         results: list[Result] = []
         put_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
-        search_ops: dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]] = (
-            {}
-        )
+        search_ops: dict[
+            int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]
+        ] = {}
         for i, op in enumerate(ops):
             if isinstance(op, GetOp):
                 item = self._data[op.namespace].get(op.key)
