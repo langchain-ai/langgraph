@@ -259,7 +259,7 @@ memories[-1].dict()
  'updated_at': '2024-10-02T17:22:31.590605+00:00'}
 ```
 
-Each memory type is a Python class ([`Item`](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/?h=item#langgraph_sdk.schema.Item)) with certain attributes. We can access it as a dictionary by converting via `.dict` as above.
+Each memory type is a Python class ([`Item`](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.Item)) with certain attributes. We can access it as a dictionary by converting via `.dict` as above.
 The attributes it has are:
 
 - `value`: The value (itself a dictionary) of this memory
