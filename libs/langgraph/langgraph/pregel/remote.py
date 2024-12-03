@@ -28,6 +28,7 @@ from langgraph_sdk.client import (
     get_sync_client,
 )
 from langgraph_sdk.schema import Checkpoint, ThreadState
+from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
@@ -599,7 +600,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
-            command: dict[str, Any] = asdict(input)
+            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
@@ -688,7 +689,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
-            command: dict[str, Any] = asdict(input)
+            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
