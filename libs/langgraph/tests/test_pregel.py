@@ -1925,7 +1925,7 @@ def test_send_sequences() -> None:
 
     def send_for_fun(state):
         return [
-            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", Command(send=Send("2", 3))),
             Send("2", GraphCommand(send=Send("2", 4))),
             "3.1",
         ]

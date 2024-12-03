@@ -2573,14 +2573,14 @@ async def test_send_sequences(checkpointer_name: str) -> None:
                 if isinstance(state, list)  # or isinstance(state, Control)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, GraphCommand):
+            if isinstance(state, Command):
                 return replace(state, update=update)
             else:
                 return update
 
     async def send_for_fun(state):
         return [
-            Send("2", GraphCommand(send=Send("2", 3))),
+            Send("2", Command(send=Send("2", 3))),
             Send("2", GraphCommand(send=Send("2", 4))),
             "3.1",
         ]
