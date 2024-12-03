@@ -35,10 +35,10 @@ Create a new app from the `react-agent` template. This template is a simple agen
 
 ## Install Dependencies
 
-In the root of your new LangGraph app, install the dependencies:
+In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
 
 ```shell
-pip install .
+pip install -e .
 ```
 
 ## Create a `.env` file

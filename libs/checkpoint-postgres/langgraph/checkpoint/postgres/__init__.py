@@ -75,11 +75,11 @@ class PostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         with self._cursor() as cur:
-            await cur.execute(self.MIGRATIONS[0])
-            results = await cur.execute(
+            cur.execute(self.MIGRATIONS[0])
+            results = cur.execute(
                 "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
             )
-            row = await results.fetchone()
+            row = results.fetchone()
             if row is None:
                 version = -1
             else:
