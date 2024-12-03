@@ -43,6 +43,7 @@ from langgraph.constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_WRITES,
     EMPTY_SEQ,
+    ERROR,
     INTERRUPT,
     NO_WRITES,
     NS_END,
@@ -270,7 +271,7 @@ def apply_writes(
     pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
-            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN):
+            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
                 pass
             elif chan == TASKS:  # TODO: remove branch in 1.0
                 checkpoint["pending_sends"].append(val)

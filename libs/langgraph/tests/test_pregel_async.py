@@ -2648,6 +2648,10 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         ]
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2690,6 +2694,64 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert mapper_calls == 2
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_imp_task_cancel(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        mapper_calls = 0
+        mapper_cancels = 0
+
+        @task()
+        async def mapper(input: int) -> str:
+            nonlocal mapper_calls, mapper_cancels
+            mapper_calls += 1
+            try:
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                mapper_cancels += 1
+                raise
+            return str(input) * 2
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(input: list[int]) -> list[str]:
+            futures = [mapper(i) for i in input]
+            await asyncio.sleep(0.1)
+            futures.pop().cancel()  # cancel one
+            mapped = await asyncio.gather(*futures)
+            answer = interrupt("question")
+            return [m + answer for m in mapped]
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert [c async for c in graph.astream([0, 1], thread1)] == [
+            {"mapper": "00"},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="question",
+                        resumable=True,
+                        ns=[AnyStr("graph:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        assert mapper_calls == 2
+        assert mapper_cancels == 1
+
+        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+            "00answer",
+        ]
+        assert mapper_calls == 3
+        assert mapper_cancels == 2
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_sync_from_async(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2722,6 +2784,10 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         ]
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_stream_order(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:

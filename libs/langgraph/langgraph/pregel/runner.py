@@ -441,7 +441,12 @@ class PregelRunner:
     ) -> None:
         if fut is not None:
             exception = _exception(fut)
-        if exception:
+        if isinstance(exception, asyncio.CancelledError):
+            # for cancelled tasks, also save error in task,
+            # so loop can finish super-step
+            task.writes.append((ERROR, exception))
+            self.put_writes(task.id, task.writes)
+        elif exception:
             if isinstance(exception, GraphInterrupt):
                 # save interrupt to checkpointer
                 if interrupts := [(INTERRUPT, i) for i in exception.args[0]]:
@@ -472,11 +477,12 @@ def _should_stop_others(
     GraphInterrupts are not considered failures."""
     for fut in done:
         if fut.cancelled():
-            return True
-        if exc := fut.exception():
-            return not isinstance(exc, GraphBubbleUp)
-    else:
-        return False
+            continue
+        elif exc := fut.exception():
+            if not isinstance(exc, GraphBubbleUp):
+                return True
+
+    return False
 
 
 def _exception(
@@ -502,7 +508,9 @@ def _panic_or_proceed(
     done: set[Union[concurrent.futures.Future[Any], asyncio.Future[Any]]] = set()
     inflight: set[Union[concurrent.futures.Future[Any], asyncio.Future[Any]]] = set()
     for fut in futs:
-        if fut.done():
+        if fut.cancelled():
+            continue
+        elif fut.done():
             done.add(fut)
         else:
             inflight.add(fut)
@@ -515,8 +523,6 @@ def _panic_or_proceed(
             # raise the exception
             if panic:
                 raise exc
-            else:
-                return
     if inflight:
         # if we got here means we timed out
         while inflight:
