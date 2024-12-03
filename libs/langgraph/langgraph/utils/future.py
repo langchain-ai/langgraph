@@ -17,7 +17,7 @@ def _get_loop(fut: asyncio.Future) -> asyncio.AbstractEventLoop:
     return fut._loop
 
 
-def _convert_future_exc(exc):
+def _convert_future_exc(exc: BaseException) -> BaseException:
     exc_class = type(exc)
     if exc_class is concurrent.futures.CancelledError:
         return asyncio.CancelledError(*exc.args)
@@ -29,7 +29,10 @@ def _convert_future_exc(exc):
         return exc
 
 
-def _set_concurrent_future_state(concurrent, source):
+def _set_concurrent_future_state(
+    concurrent: concurrent.futures.Future,
+    source: AnyFuture,
+) -> None:
     """Copy state from a future to a concurrent.futures.Future."""
     assert source.done()
     if source.cancelled():
@@ -44,7 +47,7 @@ def _set_concurrent_future_state(concurrent, source):
         concurrent.set_result(result)
 
 
-def _copy_future_state(source, dest):
+def _copy_future_state(source: AnyFuture, dest: asyncio.Future) -> None:
     """Internal helper to copy state from another Future.
 
     The other Future may be a concurrent.futures.Future.
@@ -82,20 +85,20 @@ def _chain_future(source: AnyFuture, destination: AnyFuture) -> None:
     source_loop = _get_loop(source) if asyncio.isfuture(source) else None
     dest_loop = _get_loop(destination) if asyncio.isfuture(destination) else None
 
-    def _set_state(future, other):
+    def _set_state(future: AnyFuture, other: AnyFuture) -> None:
         if asyncio.isfuture(future):
             _copy_future_state(other, future)
         else:
             _set_concurrent_future_state(future, other)
 
-    def _call_check_cancel(destination):
+    def _call_check_cancel(destination: AnyFuture) -> None:
         if destination.cancelled():
             if source_loop is None or source_loop is dest_loop:
                 source.cancel()
             else:
                 source_loop.call_soon_threadsafe(source.cancel)
 
-    def _call_set_state(source):
+    def _call_set_state(source: AnyFuture) -> None:
         if destination.cancelled() and dest_loop is not None and dest_loop.is_closed():
             return
         if dest_loop is None or dest_loop is source_loop:
@@ -109,7 +112,7 @@ def _chain_future(source: AnyFuture, destination: AnyFuture) -> None:
     source.add_done_callback(_call_set_state)
 
 
-def chain_future(source: AnyFuture, destination: AnyFuture) -> None:
+def chain_future(source: AnyFuture, destination: concurrent.futures.Future) -> None:
     # adapted from asyncio.run_coroutine_threadsafe
     try:
         _chain_future(source, destination)
