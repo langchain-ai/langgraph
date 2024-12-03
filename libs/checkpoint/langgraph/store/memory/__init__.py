@@ -290,18 +290,16 @@ class InMemoryStore(BaseStore):
                     for (item, _) in candidates[op.offset : op.offset + op.limit]
                 ]
 
-    def _prepare_ops(
-        self, ops: Iterable[Op]
-    ) -> tuple[
+    def _prepare_ops(self, ops: Iterable[Op]) -> tuple[
         list[Result],
         dict[tuple[tuple[str, ...], str], PutOp],
         dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]],
     ]:
         results: list[Result] = []
         put_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
-        search_ops: dict[
-            int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]
-        ] = {}
+        search_ops: dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]] = (
+            {}
+        )
         for i, op in enumerate(ops):
             if isinstance(op, GetOp):
                 item = self._data[op.namespace].get(op.key)
@@ -413,6 +411,8 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
     Compute cosine similarity between a vector X and a matrix Y.
     Lazy import numpy for efficiency.
     """
+    if not Y:
+        return []
     if _check_numpy():
         import numpy as np  # type: ignore
 
