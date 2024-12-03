@@ -413,6 +413,8 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
     Compute cosine similarity between a vector X and a matrix Y.
     Lazy import numpy for efficiency.
     """
+    if not Y:
+        return []
     if _check_numpy():
         import numpy as np  # type: ignore
 
