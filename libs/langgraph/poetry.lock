@@ -792,17 +792,6 @@ http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
 
 [[package]]
-name = "httpx-sse"
-version = "0.4.0"
-description = "Consume Server-Sent Event (SSE) messages with HTTPX."
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "httpx-sse-0.4.0.tar.gz", hash = "sha256:1e81a3a3070ce322add1d3529ed42eb5f70817f45ed6ec915ab753f961139721"},
-    {file = "httpx_sse-0.4.0-py3-none-any.whl", hash = "sha256:f329af6eae57eaa2bdfd962b42524764af68075ea87370a2de920af5341e318f"},
-]
-
-[[package]]
 name = "idna"
 version = "3.10"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -1359,7 +1348,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.4"
+version = "2.0.8"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1393,7 +1382,7 @@ url = "../checkpoint-duckdb"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.2"
+version = "2.0.7"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1401,10 +1390,10 @@ files = []
 develop = true
 
 [package.dependencies]
-langgraph-checkpoint = "^2.0.2"
+langgraph-checkpoint = "^2.0.7"
 orjson = ">=3.10.1"
-psycopg = "^3.0.0"
-psycopg-pool = "^3.0.0"
+psycopg = "^3.2.0"
+psycopg-pool = "^3.2.0"
 
 [package.source]
 type = "directory"
@@ -1429,7 +1418,7 @@ url = "../checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.36"
+version = "0.1.42"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1438,7 +1427,6 @@ develop = true
 
 [package.dependencies]
 httpx = ">=0.25.2"
-httpx-sse = ">=0.4.0"
 orjson = ">=3.10.1"
 
 [package.source]
@@ -3425,4 +3413,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "9bf5668d3f70f3b77457906732404a6401583a5966f70a72ef10a68f2a5b27ad"
+content-hash = "2df4d5d5e61917bdfff0ba430067a17662666eedee2858d841fa02e594cf69d0"
