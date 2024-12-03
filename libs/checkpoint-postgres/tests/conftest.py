@@ -7,6 +7,7 @@ from psycopg.rows import DictRow, dict_row
 
 from tests.embed_test_utils import CharacterEmbeddings
 
+DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5441/"
 DEFAULT_URI = "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
 
 
