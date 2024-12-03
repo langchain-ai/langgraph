@@ -8741,14 +8741,12 @@ def test_dynamic_interrupt_subgraph(
     tool_two_node_count = 0
 
     def tool_two_node(s: SubgraphState) -> SubgraphState:
-        print("tool_two_node", s)
         nonlocal tool_two_node_count
         tool_two_node_count += 1
         if s["market"] == "DE":
             answer = interrupt("Just because...")
         else:
             answer = " all good"
-        print("after interrupt")
         return {"my_key": answer}
 
     subgraph = StateGraph(SubgraphState)
@@ -8807,7 +8805,7 @@ def test_dynamic_interrupt_subgraph(
     ]
     # resume with answer
     assert [c for c in tool_two.stream(Command(resume=" my answer"), thread2)] == [
-        {"tool_two": {"my_key": " my answer"}},
+        {"tool_two": {"my_key": " my answer", "market": "DE"}},
     ]
 
     # flow: interrupt -> clear tasks
@@ -8817,7 +8815,12 @@ def test_dynamic_interrupt_subgraph(
         "my_key": "value ⛰️",
         "market": "DE",
     }
-    assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+    assert [
+        c.metadata
+        for c in tool_two.checkpointer.list(
+            {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+        )
+    ] == [
         {
             "parents": {},
             "source": "loop",
@@ -8845,9 +8848,15 @@ def test_dynamic_interrupt_subgraph(
                     Interrupt(
                         value="Just because...",
                         resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        ns=[AnyStr("tool_two:"), AnyStr("do:")],
                     ),
                 ),
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("tool_two:"),
+                    }
+                },
             ),
         ),
         config=tool_two.checkpointer.get_tuple(thread1).config,
@@ -8859,7 +8868,11 @@ def test_dynamic_interrupt_subgraph(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=[
+            *tool_two.checkpointer.list(
+                {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
+            )
+        ][-1].config,
     )
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None, as_node=END)
@@ -8877,7 +8890,11 @@ def test_dynamic_interrupt_subgraph(
             "writes": {},
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=[
+            *tool_two.checkpointer.list(
+                {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
+            )
+        ][-1].config,
     )
 
 

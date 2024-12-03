@@ -595,7 +595,7 @@ def prepare_single_task(
                                     for tid, c, v in pending_writes
                                     if tid in (NULL_TASK_ID, task_id) and c == RESUME
                                 ),
-                                MISSING,
+                                configurable.get(CONFIG_KEY_RESUME_VALUE, MISSING),
                             ),
                         },
                     ),
@@ -720,7 +720,7 @@ def prepare_single_task(
                                         if tid in (NULL_TASK_ID, task_id)
                                         and c == RESUME
                                     ),
-                                    MISSING,
+                                    configurable.get(CONFIG_KEY_RESUME_VALUE, MISSING),
                                 ),
                             },
                         ),
