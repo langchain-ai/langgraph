@@ -7,6 +7,7 @@ import {
   GraphSchema,
   Metadata,
   Run,
+  RunStatus,
   Thread,
   ThreadState,
   Cron,
@@ -944,12 +945,18 @@ export class RunsClient extends BaseClient {
        * Defaults to 0.
        */
       offset?: number;
+
+      /**
+       * Status of the run to filter by.
+       */
+      status?: RunStatus;
     },
   ): Promise<Run[]> {
     return this.fetch<Run[]>(`/threads/${threadId}/runs`, {
       params: {
         limit: options?.limit ?? 10,
         offset: options?.offset ?? 0,
+        status: options?.status ?? undefined,
       },
     });
   }
@@ -1014,19 +1021,28 @@ export class RunsClient extends BaseClient {
    *
    * @param threadId The ID of the thread.
    * @param runId The ID of the run.
-   * @param signal An optional abort signal.
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
     threadId: string,
     runId: string,
-    signal?: AbortSignal,
+    options?:
+      | { signal?: AbortSignal; cancelOnDisconnect?: boolean }
+      | AbortSignal,
   ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+    const opts =
+      typeof options === "object" &&
+      options != null &&
+      options instanceof AbortSignal
+        ? { signal: options }
+        : options;
+
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
         method: "GET",
         timeoutMs: null,
-        signal,
+        signal: opts?.signal,
+        params: { cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0" },
       }),
     );
 
@@ -1041,7 +1057,7 @@ export class RunsClient extends BaseClient {
         async start(ctrl) {
           parser = createParser((event) => {
             if (
-              (signal && signal.aborted) ||
+              (opts?.signal && opts.signal.aborted) ||
               (event.type === "event" && event.data === "[DONE]")
             ) {
               ctrl.terminate();

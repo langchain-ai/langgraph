@@ -51,6 +51,7 @@ from langgraph_sdk.schema import (
     OnConflictBehavior,
     Run,
     RunCreate,
+    RunStatus,
     SearchItemsResponse,
     StreamMode,
     StreamPart,
@@ -1684,7 +1685,12 @@ class RunsClient:
         return response
 
     async def list(
-        self, thread_id: str, *, limit: int = 10, offset: int = 0
+        self,
+        thread_id: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        status: Optional[RunStatus] = None,
     ) -> List[Run]:
         """List runs.
 
@@ -1692,6 +1698,7 @@ class RunsClient:
             thread_id: The thread ID to list runs for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            status: The status of the run to filter by.
 
         Returns:
             List[Run]: The runs for the thread.
@@ -1705,9 +1712,13 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return await self.http.get(
-            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}"
-        )
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if status is not None:
+            params["status"] = status
+        return await self.http.get(f"/threads/{thread_id}/runs", params=params)
 
     async def get(self, thread_id: str, run_id: str) -> Run:
         """Get a run.
@@ -1785,7 +1796,9 @@ class RunsClient:
         """  # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
-    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+    def join_stream(
+        self, thread_id: str, run_id: str, *, cancel_on_disconnect: bool = False
+    ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -1793,6 +1806,7 @@ class RunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
             None
@@ -1805,7 +1819,11 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+        return self.http.stream(
+            f"/threads/{thread_id}/runs/{run_id}/stream",
+            "GET",
+            params={"cancel_on_disconnect": cancel_on_disconnect},
+        )
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
@@ -3303,6 +3321,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3326,6 +3345,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3346,6 +3366,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3370,6 +3391,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3420,6 +3442,7 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": command,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3453,6 +3476,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3472,6 +3496,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3492,6 +3517,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3514,6 +3540,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3600,6 +3627,7 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": command,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3637,6 +3665,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3657,6 +3686,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -3674,6 +3704,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3695,6 +3726,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -3761,6 +3793,7 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": command,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
