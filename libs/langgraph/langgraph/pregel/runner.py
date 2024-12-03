@@ -184,9 +184,7 @@ class PregelRunner:
         # add waiter task if requested
         if get_waiter is not None:
             futures[get_waiter()] = None
-        # execute tasks, and wait for one to fail or all to finish.
-        # each task is independent from all other concurrent tasks
-        # yield updates/debug output as each task finishes
+        # schedule tasks
         for t in tasks:
             if not t.writes:
                 fut = self.submit(
@@ -201,6 +199,9 @@ class PregelRunner:
                 )
                 fut.add_done_callback(partial(self.commit, t))
                 futures[fut] = t
+        # execute tasks, and wait for one to fail or all to finish.
+        # each task is independent from all other concurrent tasks
+        # yield updates/debug output as each task finishes
         end_time = timeout + time.monotonic() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = concurrent.futures.wait(
@@ -334,7 +335,7 @@ class PregelRunner:
             if asyncio.iscoroutinefunction(func):
                 return fut
             # adapted from asyncio.run_coroutine_threadsafe
-            sfut = concurrent.futures.Future()
+            sfut: concurrent.futures.Future = concurrent.futures.Future()
             loop.call_soon_threadsafe(chain_future, fut, sfut)
             return sfut
 
@@ -372,9 +373,7 @@ class PregelRunner:
         # add waiter task if requested
         if get_waiter is not None:
             futures[get_waiter()] = None
-        # execute tasks, and wait for one to fail or all to finish.
-        # each task is independent from all other concurrent tasks
-        # yield updates/debug output as each task finishes
+        # schedule tasks
         for t in tasks:
             if not t.writes:
                 fut = cast(
@@ -395,6 +394,9 @@ class PregelRunner:
                 )
                 fut.add_done_callback(partial(self.commit, t))
                 futures[fut] = t
+        # execute tasks, and wait for one to fail or all to finish.
+        # each task is independent from all other concurrent tasks
+        # yield updates/debug output as each task finishes
         end_time = timeout + loop.time() if timeout else None
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = await asyncio.wait(
