@@ -1796,7 +1796,9 @@ class RunsClient:
         """  # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
-    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+    def join_stream(
+        self, thread_id: str, run_id: str, *, cancel_on_disconnect: bool = False
+    ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -1804,6 +1806,7 @@ class RunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
             None
@@ -1816,7 +1819,11 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+        return self.http.stream(
+            f"/threads/{thread_id}/runs/{run_id}/stream",
+            "GET",
+            params={"cancel_on_disconnect": cancel_on_disconnect},
+        )
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
