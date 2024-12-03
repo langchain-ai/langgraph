@@ -298,9 +298,7 @@ class HttpClient:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
             # check content type
-            content_type = self._response.headers.get("content-type", "").partition(
-                ";"
-            )[0]
+            content_type = res.headers.get("content-type", "").partition(";")[0]
             if "text/event-stream" not in content_type:
                 raise httpx.TransportError(
                     "Expected response header Content-Type to contain 'text/event-stream', "
@@ -2447,9 +2445,7 @@ class SyncHttpClient:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
             # check content type
-            content_type = self._response.headers.get("content-type", "").partition(
-                ";"
-            )[0]
+            content_type = res.headers.get("content-type", "").partition(";")[0]
             if "text/event-stream" not in content_type:
                 raise httpx.TransportError(
                     "Expected response header Content-Type to contain 'text/event-stream', "
