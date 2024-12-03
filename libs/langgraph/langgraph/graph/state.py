@@ -849,7 +849,7 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
 async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, GraphCommand):
+    if not isinstance(value, Command):
         return EMPTY_SEQ
     if value.graph == Command.PARENT:
         raise ParentCommand(value)
