@@ -8,11 +8,12 @@ from typing import (
     Awaitable,
     Callable,
     Optional,
-    ParamSpec,
     TypeVar,
     Union,
     overload,
 )
+
+from typing_extensions import ParamSpec
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
