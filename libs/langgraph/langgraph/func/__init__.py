@@ -23,10 +23,26 @@ from langgraph.pregel.call import get_runnable_for_func
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, call
+from langgraph.types import RetryPolicy
 
 P = ParamSpec("P")
+P1 = TypeVar("P1")
 T = TypeVar("T")
+
+
+def call(
+    func: Callable[[P1], T],
+    input: P1,
+    *,
+    retry: Optional[RetryPolicy] = None,
+) -> concurrent.futures.Future[T]:
+    from langgraph.constants import CONFIG_KEY_CALL
+    from langgraph.utils.config import get_configurable
+
+    conf = get_configurable()
+    impl = conf[CONFIG_KEY_CALL]
+    fut = impl(func, input, retry=retry)
+    return fut
 
 
 @overload

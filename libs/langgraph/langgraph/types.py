@@ -1,5 +1,3 @@
-import concurrent
-import concurrent.futures
 import dataclasses
 import sys
 from collections import deque
@@ -22,7 +20,7 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import ParamSpec, Self
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -365,21 +363,3 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
-
-
-P = ParamSpec("P")
-T = TypeVar("T")
-
-
-def call(
-    func: str | Callable[P, T],
-    *args: P.args,
-    retry: Optional[RetryPolicy] = None,
-) -> concurrent.futures.Future[T]:
-    from langgraph.constants import CONFIG_KEY_CALL
-    from langgraph.utils.config import get_configurable
-
-    conf = get_configurable()
-    impl = conf[CONFIG_KEY_CALL]
-    fut = impl(func, *args, retry=retry)
-    return fut
