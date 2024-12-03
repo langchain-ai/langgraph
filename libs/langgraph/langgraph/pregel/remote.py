@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import (
     Any,
     AsyncIterator,
@@ -27,6 +28,7 @@ from langgraph_sdk.client import (
     get_sync_client,
 )
 from langgraph_sdk.schema import Checkpoint, ThreadState
+from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
@@ -41,7 +43,7 @@ from langgraph.constants import (
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Interrupt, StreamProtocol
+from langgraph.types import Command, Interrupt, StreamProtocol
 from langgraph.utils.config import merge_configs
 
 
@@ -597,11 +599,17 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+        if isinstance(input, Command):
+            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            input = None
+        else:
+            command = None
 
         for chunk in sync_client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
+            command=command,
             config=sanitized_config,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
@@ -680,11 +688,17 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+        if isinstance(input, Command):
+            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            input = None
+        else:
+            command = None
 
         async for chunk in client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
+            command=command,
             config=sanitized_config,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
