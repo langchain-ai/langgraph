@@ -933,12 +933,12 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
-            sig = signature(meta[0])
+            sig = signature(meta[-1])
             params = list(sig.parameters.values())
             if len(params) == 2 and all(
                 p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params
             ):
-                return BinaryOperatorAggregate(typ, meta[0])
+                return BinaryOperatorAggregate(typ, meta[-1])
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
