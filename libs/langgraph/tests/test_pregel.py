@@ -5837,6 +5837,7 @@ def test_state_graph_packets(
     @tool()
     def search_api(query: str) -> str:
         """Searches the API for the query."""
+        time.sleep(0.1)
         return f"result for {query}"
 
     tools = [search_api]

@@ -133,6 +133,7 @@ class PregelRunner:
                                 CONFIG_KEY_CALL: partial(call, next_task),
                             },
                             __reraise_on_exit__=reraise,
+                            __next_tick__=True,
                         )
                         fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
@@ -228,6 +229,10 @@ class PregelRunner:
                 break
             # give control back to the caller
             yield
+        # wait for pending done callbacks
+        # if a 2nd future finishes while `wait` is returning, it's possible
+        # that done callbacks for the 2nd future aren't called until next tick
+        time.sleep(0)
         # panic on failure or timeout
         _panic_or_proceed(
             done_futures.union(f for f, t in futures.items() if t is not None),
