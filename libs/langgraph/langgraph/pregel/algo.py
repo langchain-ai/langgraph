@@ -553,6 +553,13 @@ def prepare_single_task(
                         },
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                        CONFIG_KEY_WRITES: [
+                            w
+                            for w in pending_writes
+                            + configurable.get(CONFIG_KEY_WRITES, [])
+                            if w[0] in (NULL_TASK_ID, task_id)
+                        ],
+                        CONFIG_KEY_SCRATCHPAD: {},
                     },
                 ),
                 triggers,
