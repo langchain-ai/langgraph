@@ -9,15 +9,12 @@ body:
         
         Use this to report BUGS in LangChain. For usage questions, feature requests and general design questions, please use [GitHub Discussions](https://github.com/langchain-ai/langchain/discussions).
         
-        If you're not certain that your issue is due to a bug in LangChain, please use [GitHub Discussions](https://github.com/langchain-ai/langchain/discussions)
-        to ask for help with your issue.
-        
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
         
         [LangChain Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
         [LangChain Github Issues](https://github.com/langchain-ai/langgraph/issues),
-        [LangGraph documentation](https://langchain-ai.github.io/langgraph/).
+        [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
         [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),
         [GitHub search](https://github.com/langchain-ai/langgraph),
   - type: checkboxes
@@ -30,9 +27,9 @@ body:
           required: true
         - label: I added a clear and detailed title that summarizes the issue.
           required: true
-        - label: I included a self-contained, minimal example that demonstrates the issue **INCLUDING** all the relevant imports. The code run **AS IS** to reproduce the issue.
-          required: true
         - label: I read what a minimal reproducible example is (https://stackoverflow.com/help/minimal-reproducible-example).
+          required: true
+        - label: I included a self-contained, minimal example that demonstrates the issue **INCLUDING** all the relevant imports. The code run **AS IS** to reproduce the issue.
           required: true
   - type: textarea
     id: reproduction
