@@ -322,13 +322,13 @@ def continue_to_jokes(state: OverallState):
 graph.add_conditional_edges("node_a", continue_to_jokes)
 ```
 
-## `GraphCommand`
+## `Command`
 
-It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND  decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [`GraphCommand`][langgraph.graph.state.GraphCommand] object from node functions:
+It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [`Command`][langgraph.graph.state.GraphCommand] object from node functions:
 
 ```python
-def my_node(state: State) -> GraphCommand[Literal["my_other_node"]]:
-    return GraphCommand(
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(
         # state update
         update={"foo": "bar"},
         # control flow
@@ -336,25 +336,25 @@ def my_node(state: State) -> GraphCommand[Literal["my_other_node"]]:
     )
 ```
 
-`GraphCommand` has the following properties:
+`Command` has the following properties:
 
 | Property | Description |
 | --- | --- |
-| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `GraphCommand.PARENT`: parent graph |
-| `goto` | Name of the node to navigate to next. Can be any node that belongs to the specified `graph` (current or parent). If `goto` not specified, the graph will halt after executing the current superstep. |
+| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `GraphCommand.PARENT`: closest parent graph |
 | `update` | State update to apply to the graph's state at the current superstep |
-| `send` | List of [`Send`](#send) objects to send to other nodes |
 | `resume` | Value to resume execution with. Will be used when `interrupt()` is called |
+| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- list of node names to navigate to next<br>- `Send` object<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
 
 ```python
-from langgraph.graph import GraphCommand, StateGraph, START
+from langgraph.graph import StateGraph, START
+from langgraph.types import Command
 from typing_extensions import Literal, TypedDict
 
 class State(TypedDict):
     foo: str
 
-def my_node(state: State) -> GraphCommand[Literal["my_other_node"]]:
-    return GraphCommand(update={"foo": "bar"}, goto="my_other_node")
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(update={"foo": "bar"}, goto="my_other_node")
 
 def my_other_node(state: State):
     return {"foo": state["foo"] + "baz"}
@@ -367,17 +367,17 @@ builder.add_node("my_other_node", my_other_node)
 graph = builder.compile()
 ```
 
-With `GraphCommand` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
+With `Command` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
 
 ```python
-def my_node(state: State) -> GraphCommand[Literal["my_other_node", "__end__"]]:
+def my_node(state: State) -> Command[Literal["my_other_node", "__end__"]]:
     if state["foo"] == "bar":
-        return GraphCommand(update={"foo": "baz"}, goto="my_other_node")
+        return Command(update={"foo": "baz"}, goto="my_other_node")
     else:
-        return GraphCommand(goto="__end__")
+        return Command(goto="__end__")
 ```
 
-Check out this [how-to guide](../how-tos/graph-command.ipynb) for an end-to-end example of how to use `GraphCommand`.
+Check out this [how-to guide](../how-tos/graph-command.ipynb) for an end-to-end example of how to use `Command`.
 
 ## Persistence
 

@@ -252,8 +252,12 @@ class Command(Generic[N]):
             - None: the current graph (default)
             - GraphCommand.PARENT: closest parent graph
         update: state update to apply to the graph's state at the current superstep.
-        send: list of `Send` objects to send to other nodes.
         resume: value to resume execution with. Will be used when `interrupt()` is called.
+        goto: can be one of the following:
+            - name of the node to navigate to next (any node that belongs to the specified `graph`)
+            - list of node names to navigate to next
+            - `Send` object
+            - sequence of `Send` objects
     """
 
     graph: Optional[str] = None
