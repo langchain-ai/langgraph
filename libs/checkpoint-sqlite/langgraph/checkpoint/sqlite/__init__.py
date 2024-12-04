@@ -110,7 +110,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 check_same_thread=False,
             )
         ) as conn:
-            yield SqliteSaver(conn)
+            yield cls(conn)
 
     def setup(self) -> None:
         """Set up the checkpoint database.
