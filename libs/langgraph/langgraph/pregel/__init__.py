@@ -673,6 +673,7 @@ class Pregel(PregelProtocol):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
+        config = ensure_config(config)
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
@@ -710,6 +711,7 @@ class Pregel(PregelProtocol):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
+        config = ensure_config(config)
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
@@ -751,6 +753,7 @@ class Pregel(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
+        config = ensure_config(config)
         """Get the history of the state of the graph."""
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
@@ -800,6 +803,7 @@ class Pregel(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
+        config = ensure_config(config)
         """Get the history of the state of the graph."""
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
@@ -855,6 +859,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
+        config = ensure_config(config)
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
@@ -1130,6 +1135,7 @@ class Pregel(PregelProtocol):
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        config = ensure_config(config)
         checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
