@@ -301,6 +301,41 @@ class LoopProtocol:
 
 
 def interrupt(value: Any) -> Any:
+    """Interrupt the graph with a resumable exception from within a node.
+
+    The interrupt function is used for supporting human-in-the-loop workflows.
+
+    It can be thought of as an equivalent to the python's built-in `input` function.
+
+    In a given node, the first invocation of this function raises a `GraphInterrupt`
+    exception. The `value` argument is passed to the exception and can be used to
+    communicate information to the client executing the graph.
+
+    The client can choose to resume the graph from the same node provide a value to
+    resume with.
+
+
+    The client will use the `Command` primitive to
+    resume graph execution.
+
+    graph.astream(Command(resume="answer 1", update={"my_key": "foofoo"}), config, stream_mode="updates")
+
+
+    The first invocation of this function raises a `GraphInterrupt` exception
+
+    The first occurrence of this function in a node raises a `GraphInterrupt`
+    exception with the given value.
+
+    A client executing the graph will receive the value and can choose to
+    resume the graph from the same node with a value.
+
+    Args:
+        value: The value to interrupt the graph with.
+
+    Returns:
+        On a first call, raises a `GraphInterrupt` exception with the given value.
+        On subsequent calls from the same node, returns the value to resume with.
+    """
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_RESUME_VALUE,
