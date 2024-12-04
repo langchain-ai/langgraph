@@ -6,17 +6,17 @@ The LangGraph command line interface includes commands to build and run a LangGr
 
 1. Ensure that Docker is installed (e.g. `docker --version`).
 2. Install the `langgraph-cli` package:
+ 
+    === "pip"
+        ```bash    
+        pip install langgraph-cli
+        ```
 
-   === "pip"
-   `bash    
-    pip install langgraph-cli
-    `
-
-   === "Homebrew (MacOS only)"
-   `bash
-    brew install langgraph-cli
-    `
-
+    === "Homebrew (MacOS only)"
+        ```bash
+        brew install langgraph-cli
+        ```
+ 
 3. Run the command `langgraph --help` to confirm that the CLI is installed.
 
 [](){#langgraph.json}
@@ -30,7 +30,7 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
 | `dependencies`     | **Required**. Array of dependencies for LangGraph Cloud API server. Dependencies can be one of the following: (1) `"."`, which will look for local Python packages, (2) `pyproject.toml`, `setup.py` or `requirements.txt` in the app directory `"./local_package"`, or (3) a package name.                                                                                                                                                                                                                                                  |
 | `graphs`           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and creates an instance of `langgraph.graph.state.StateGraph` / `langgraph.graph.state.CompiledStateGraph`.</li></ul> |
 | `env`              | Path to `.env` file or a mapping from environment variable to its value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `store`            | Configuration for the LangGraph store. Object with the following fields: <ul><li>`index`: Configuration for semantic search indexing with fields:<ul><li>`embed`: Embedding provider (e.g., "openai:text-embedding-3-small") or path to custom embedding function</li><li>`dims`: Dimension size of the embedding model</li><li>`fields`: List of fields to index. Use `["$"]` to index entire documents, or specific fields like `["text", "summary"]`</li></ul></li></ul>                                                                  |
+| `store`            | Configuration for adding semantic search to the BaseStore. Contains the following fields: <ul><li>`index`: Configuration for semantic search indexing with fields:<ul><li>`embed`: Embedding provider (e.g., "openai:text-embedding-3-small") or path to custom embedding function</li><li>`dims`: Dimension size of the embedding model. Used to initialize the vector table.</li><li>`fields` (optional): List of fields to index. Defaults to `["$"]`, meaningto index entire documents. Can be specific fields like `["text", "summary", "some.value"]`</li></ul></li></ul>                                                                  |
 | `python_version`   | `3.11` or `3.12`. Defaults to `3.11`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `pip_config_file`  | Path to `pip` config file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `dockerfile_lines` | Array of additional lines to add to Dockerfile following the import from parent image.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
