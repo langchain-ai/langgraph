@@ -12,8 +12,8 @@ body:
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
         
-        [LangChain Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
-        [LangChain Github Issues](https://github.com/langchain-ai/langgraph/issues),
+        [LangGraph Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
+        [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
         [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
         [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),
         [GitHub search](https://github.com/langchain-ai/langgraph),
