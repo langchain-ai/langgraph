@@ -39,7 +39,8 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 - [How to manage conversation history](memory/manage-conversation-history.ipynb)
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
-- [Add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
+- [How to add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
+- [How to use semantic search for long-term memory](memory/semantic-search.ipynb)
 
 ### Human-in-the-loop
 
