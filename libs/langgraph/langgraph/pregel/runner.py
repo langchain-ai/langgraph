@@ -133,6 +133,8 @@ class PregelRunner:
                                 CONFIG_KEY_CALL: partial(call, next_task),
                             },
                             __reraise_on_exit__=reraise,
+                            # starting a new task in the next tick ensures
+                            # updates from this tick are committed/streamed first
                             __next_tick__=True,
                         )
                         fut.add_done_callback(partial(self.commit, next_task))
@@ -319,6 +321,9 @@ class PregelRunner:
                                 __name__=t.name,
                                 __cancel_on_exit__=True,
                                 __reraise_on_exit__=reraise,
+                                # starting a new task in the next tick ensures
+                                # updates from this tick are committed/streamed first
+                                __next_tick__=True,
                             ),
                         )
                         fut.add_done_callback(partial(self.commit, next_task))
