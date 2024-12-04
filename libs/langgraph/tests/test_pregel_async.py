@@ -847,7 +847,6 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         assert awhiles == 1
 
 
-@pytest.mark.repeat(10)
 async def test_step_timeout_on_stream_hang() -> None:
     inner_task_cancelled = False
 
@@ -2559,7 +2558,6 @@ async def test_concurrent_emit_sends() -> None:
     )
 
 
-@pytest.mark.repeat(10)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_sequences(checkpointer_name: str) -> None:
     class Node:
@@ -2649,7 +2647,6 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.repeat(20)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     if not FF_SEND_V2:

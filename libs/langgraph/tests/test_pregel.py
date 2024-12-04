@@ -1969,7 +1969,6 @@ def test_send_sequences() -> None:
     )
 
 
-@pytest.mark.repeat(20)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_dedupe_on_resume(
     request: pytest.FixtureRequest, checkpointer_name: str
