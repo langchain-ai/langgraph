@@ -190,7 +190,7 @@ class LangGraphClient:
 
 
 class HttpClient:
-    """Hancle async requests to the LangGraph API.
+    """Handle async requests to the LangGraph API.
 
     Adds additional error messaging & content handling above the
     provided httpx client.
