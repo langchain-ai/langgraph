@@ -471,7 +471,11 @@ class InvalidNamespaceError(ValueError):
 
 
 class IndexConfig(TypedDict, total=False):
-    """Configuration for indexing documents for semantic search in the store."""
+    """Configuration for indexing documents for semantic search in the store.
+
+    If not provided to the store, the store will not support vector search.
+    In that case, all `index` arguments to put() and `aput()` operations will be ignored.
+    """
 
     dims: int
     """Number of dimensions in the embedding vectors.
