@@ -89,14 +89,15 @@ class GraphCommand(Generic[N], Command[N]):
     """One or more commands to update a StateGraph's state and go to, or send messages to nodes.
 
     Args:
-        goto: name of the node to navigate to next.
-            If not specified, the graph will halt after executing the current superstep.
         graph: graph to send the command to. Supported values are:
             - None: the current graph (default)
             - GraphCommand.PARENT: closest parent graph
         update: state update to apply to the graph's state at the current superstep.
         send: list of `Send` objects to send to other nodes.
         resume: value to resume execution with. Will be used when `interrupt()` is called.
+        goto: name of the node to navigate to next.
+            Can be any node that belongs to the specified `graph` (current or parent).
+            If `goto` not specified, the graph will halt after executing the current superstep.
     """
 
     goto: Union[str, Sequence[str]] = ()

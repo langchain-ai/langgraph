@@ -324,22 +324,31 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 ## `GraphCommand`
 
-Typically, LangGraph separates control flow (edges) from state updates (nodes). However, it is often beneficial to combine the two. For example, you might want to BOTH perform state updates AND decide which node to go next in the SAME node. LangGraph provides a way to combine control flow and node state updates using [`GraphCommand`][langgraph.graph.state.GraphCommand]. To do so, you can return a `GraphCommand` object from a node instead of a state update or `Send` objects.
+It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND  decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [`GraphCommand`][langgraph.graph.state.GraphCommand] object from node functions:
+
+```python
+def my_node(state: State) -> GraphCommand[Literal["my_other_node"]]:
+    return GraphCommand(
+        # state update
+        update={"foo": "bar"},
+        # control flow
+        goto="my_other_node"
+    )
+```
 
 `GraphCommand` has the following properties:
 
-  - `goto`: optional, name of the node to navigate to next.
-        If not specified, the graph will halt after executing the current superstep.
-  - `graph`: optional, graph to send the command to. Supported values are:
-    - `None`: the current graph (default)
-    - `GraphCommand.PARENT`: parent graph.
-  - `update`: optional, state update to apply to the graph's state at the current superstep.
-  - `send`: optional, list of [`Send`](#send) objects to send to other nodes.
-  - `resume`: optional, value to resume execution with. Will be used when `interrupt()` is called.
+| Property | Description |
+| --- | --- |
+| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `GraphCommand.PARENT`: parent graph |
+| `goto` | Name of the node to navigate to next. Can be any node that belongs to the specified `graph` (current or parent). If `goto` not specified, the graph will halt after executing the current superstep. |
+| `update` | State update to apply to the graph's state at the current superstep |
+| `send` | List of [`Send`](#send) objects to send to other nodes |
+| `resume` | Value to resume execution with. Will be used when `interrupt()` is called |
 
 ```python
 from langgraph.graph import GraphCommand, StateGraph, START
-from typing_extensions import TypedDict, Literal
+from typing_extensions import Literal, TypedDict
 
 class State(TypedDict):
     foo: str
@@ -367,6 +376,8 @@ def my_node(state: State) -> GraphCommand[Literal["my_other_node", "__end__"]]:
     else:
         return GraphCommand(goto="__end__")
 ```
+
+Check out this [how-to guide](../how-tos/graph-command.ipynb) for an end-to-end example of how to use `GraphCommand`.
 
 ## Persistence
 
