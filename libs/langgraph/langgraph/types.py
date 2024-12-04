@@ -239,7 +239,16 @@ N = TypeVar("N", bound=Hashable)
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Command(Generic[N]):
-    """One or more commands to update the graph's state and send messages to nodes."""
+    """One or more commands to update the graph's state and send messages to nodes.
+
+    Args:
+        graph: graph to send the command to. Supported values are:
+            - None: the current graph (default)
+            - GraphCommand.PARENT: closest parent graph
+        update: state update to apply to the graph's state at the current superstep.
+        send: list of `Send` objects to send to other nodes.
+        resume: value to resume execution with. Will be used when `interrupt()` is called.
+    """
 
     graph: Optional[str] = None
     update: Optional[dict[str, Any]] = None

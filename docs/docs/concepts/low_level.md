@@ -322,6 +322,52 @@ def continue_to_jokes(state: OverallState):
 graph.add_conditional_edges("node_a", continue_to_jokes)
 ```
 
+## `GraphCommand`
+
+Typically, LangGraph separates control flow (edges) from state updates (nodes). However, it is often beneficial to combine the two. For example, you might want to BOTH perform state updates AND decide which node to go next in the SAME node. LangGraph provides a way to combine control flow and node state updates using [`GraphCommand`][langgraph.graph.state.GraphCommand]. To do so, you can return a `GraphCommand` object from a node instead of a state update or `Send` objects.
+
+`GraphCommand` has the following properties:
+
+  - `goto`: optional, name of the node to navigate to next.
+        If not specified, the graph will halt after executing the current superstep.
+  - `graph`: optional, graph to send the command to. Supported values are:
+    - `None`: the current graph (default)
+    - `GraphCommand.PARENT`: parent graph.
+  - `update`: optional, state update to apply to the graph's state at the current superstep.
+  - `send`: optional, list of [`Send`](#send) objects to send to other nodes.
+  - `resume`: optional, value to resume execution with. Will be used when `interrupt()` is called.
+
+```python
+from langgraph.graph import GraphCommand, StateGraph, START
+from typing_extensions import TypedDict, Literal
+
+class State(TypedDict):
+    foo: str
+
+def my_node(state: State) -> GraphCommand[Literal["my_other_node"]]:
+    return GraphCommand(update={"foo": "bar"}, goto="my_other_node")
+
+def my_other_node(state: State):
+    return {"foo": state["foo"] + "baz"}
+
+builder = StateGraph(State)
+builder.add_edge(START, "my_node")
+builder.add_node("my_node", my_node)
+builder.add_node("my_other_node", my_other_node)
+
+graph = builder.compile()
+```
+
+With `GraphCommand` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
+
+```python
+def my_node(state: State) -> GraphCommand[Literal["my_other_node", "__end__"]]:
+    if state["foo"] == "bar":
+        return GraphCommand(update={"foo": "baz"}, goto="my_other_node")
+    else:
+        return GraphCommand(goto="__end__")
+```
+
 ## Persistence
 
 LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the

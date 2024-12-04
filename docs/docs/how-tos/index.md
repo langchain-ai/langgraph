@@ -20,6 +20,7 @@ These how-to guides show how to achieve that controllability.
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 - [How to control graph recursion limit](recursion-limit.ipynb)
+- [How to combine control flow and state updates with GraphCommand](graph-command.ipynb)
 
 ### Persistence
 
