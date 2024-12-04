@@ -11,7 +11,6 @@
       members:
         - StateGraph
         - CompiledStateGraph
-        - GraphCommand
 
 ::: langgraph.graph.message
     options:
