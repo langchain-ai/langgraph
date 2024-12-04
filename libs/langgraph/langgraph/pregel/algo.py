@@ -37,13 +37,13 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
-    CONFIG_KEY_RESUME_VALUE,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_WRITES,
     EMPTY_SEQ,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -589,14 +589,13 @@ def prepare_single_task(
                             },
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                            CONFIG_KEY_RESUME_VALUE: next(
-                                (
-                                    v
-                                    for tid, c, v in pending_writes
-                                    if tid in (NULL_TASK_ID, task_id) and c == RESUME
-                                ),
-                                configurable.get(CONFIG_KEY_RESUME_VALUE, MISSING),
-                            ),
+                            CONFIG_KEY_WRITES: [
+                                w
+                                for w in pending_writes
+                                + configurable.get(CONFIG_KEY_WRITES, [])
+                                if w[0] in (NULL_TASK_ID, task_id)
+                            ],
+                            CONFIG_KEY_SCRATCHPAD: {},
                         },
                     ),
                     triggers,
@@ -713,15 +712,13 @@ def prepare_single_task(
                                 },
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                                CONFIG_KEY_RESUME_VALUE: next(
-                                    (
-                                        v
-                                        for tid, c, v in pending_writes
-                                        if tid in (NULL_TASK_ID, task_id)
-                                        and c == RESUME
-                                    ),
-                                    configurable.get(CONFIG_KEY_RESUME_VALUE, MISSING),
-                                ),
+                                CONFIG_KEY_WRITES: [
+                                    w
+                                    for w in pending_writes
+                                    + configurable.get(CONFIG_KEY_WRITES, [])
+                                    if w[0] in (NULL_TASK_ID, task_id)
+                                ],
+                                CONFIG_KEY_SCRATCHPAD: {},
                             },
                         ),
                         triggers,

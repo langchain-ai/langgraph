@@ -75,6 +75,10 @@ CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # callback to be called when a node is finished
 CONFIG_KEY_RESUME_VALUE = sys.intern("__pregel_resume_value")
 # holds the value that "answers" an interrupt() call
+CONFIG_KEY_WRITES = sys.intern("__pregel_writes")
+# read-only list of existing task writes
+CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
+# holds a mutable dict for temporary storage scoped to the current task
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
