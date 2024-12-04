@@ -59,7 +59,7 @@ def search_memory(state: State, *, store: BaseStore):
     results = store.search(
         namespace=("memory", "facts"),  # Organize memories by type
         query="your search query",
-        k=3  # number of results to return
+        limit=3  # number of results to return
     )
     return results
 ```
