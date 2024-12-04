@@ -54,7 +54,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         pipeline: bool = False,
         serde: Optional[SerializerProtocol] = None,
     ) -> AsyncIterator["AsyncPostgresSaver"]:
-        """Create a new PostgresSaver instance from a connection string.
+        """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
             conn_string (str): The Postgres connection info string.

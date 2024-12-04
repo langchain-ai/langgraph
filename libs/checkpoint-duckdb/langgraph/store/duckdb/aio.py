@@ -156,7 +156,7 @@ class AsyncDuckDBStore(AsyncBatchedBaseStore, BaseDuckDBStore):
             AsyncDuckDBStore: A new AsyncDuckDBStore instance.
         """
         with duckdb.connect(conn_string) as conn:
-            yield AsyncDuckDBStore(conn)
+            yield cls(conn)
 
     async def setup(self) -> None:
         """Set up the store database asynchronously.
