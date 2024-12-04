@@ -15,7 +15,7 @@ from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from tests.any import AnyDict
+from tests.any import AnyDict, AnyList
 from tests.drain import drain_topics_async
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
@@ -196,7 +196,8 @@ async def test_subgraph_w_interrupt(
                             "__pregel_resuming": False,
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
-                            "__pregel_resume_value": None,
+                            "__pregel_scratchpad": {},
+                            "__pregel_writes": AnyList(),
                             "checkpoint_id": None,
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -261,7 +262,8 @@ async def test_subgraph_w_interrupt(
                             "__pregel_resuming": False,
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
-                            "__pregel_resume_value": None,
+                            "__pregel_scratchpad": {},
+                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -356,7 +358,8 @@ async def test_subgraph_w_interrupt(
                             "__pregel_resuming": False,
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
-                            "__pregel_resume_value": None,
+                            "__pregel_scratchpad": {},
+                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -461,7 +464,8 @@ async def test_subgraph_w_interrupt(
                             "__pregel_resuming": True,
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
-                            "__pregel_resume_value": None,
+                            "__pregel_scratchpad": {},
+                            "__pregel_writes": AnyList(),
                             "checkpoint_id": None,
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
@@ -521,7 +525,8 @@ async def test_subgraph_w_interrupt(
                             "__pregel_resuming": True,
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
-                            "__pregel_resume_value": None,
+                            "__pregel_scratchpad": {},
+                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
@@ -637,7 +642,8 @@ async def test_subgraph_w_interrupt(
                             "__pregel_resuming": True,
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
-                            "__pregel_resume_value": None,
+                            "__pregel_scratchpad": {},
+                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]

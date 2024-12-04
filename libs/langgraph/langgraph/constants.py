@@ -72,8 +72,6 @@ CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
 CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
-# callback to be called when a node is finished
-CONFIG_KEY_RESUME_VALUE = sys.intern("__pregel_resume_value")
 # holds the value that "answers" an interrupt() call
 CONFIG_KEY_WRITES = sys.intern("__pregel_writes")
 # read-only list of existing task writes
