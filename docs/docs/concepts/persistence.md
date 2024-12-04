@@ -276,9 +276,11 @@ The attributes it has are:
 Beyond simple retrieval, the store also supports semantic search, allowing you to find memories based on meaning rather than exact matches. To enable this, configure the store with an embedding model:
 
 ```python
+from langchain.embeddings import init_embeddings
+
 store = InMemoryStore(
     index={
-        "embed": "openai:text-embedding-3-small",  # Embedding provider
+        "embed": init_embeddings("openai:text-embedding-3-small"),  # Embedding provider
         "dims": 1536,                              # Embedding dimensions
         "fields": ["food_preference", "$"]              # Fields to embed
     }
@@ -289,6 +291,7 @@ Now when searching, you can use natural language queries to find relevant memori
 
 ```python
 # Find memories about food preferences
+# (This can be done after putting memories into the store)
 memories = store.search(
     namespace_for_memory,
     query="What does the user like to eat?",
