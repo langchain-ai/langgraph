@@ -39,6 +39,7 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 - [How to manage conversation history](memory/manage-conversation-history.ipynb)
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
+- [Add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
 
 ### Human-in-the-loop
 
@@ -139,6 +140,7 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to set up app for deployment (requirements.txt)](../cloud/deployment/setup.md)
 - [How to set up app for deployment (pyproject.toml)](../cloud/deployment/setup_pyproject.md)
 - [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
+- [How to add semantic search](../cloud/deployment/semantic_search.md)
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)

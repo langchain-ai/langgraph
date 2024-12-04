@@ -1,31 +1,102 @@
-"""In-memory key-value store.
+"""In-memory dictionary-backed store with optional vector search.
 
-A lightweight store implementation using Python dictionaries. Supports basic
-key-value operations and vector search when configured with embeddings.
-
-Examples:
+!!! example "Examples"
     Basic key-value storage:
-        store = InMemoryStore()
-        store.put(("users", "123"), "prefs", {"theme": "dark"})
-        item = store.get(("users", "123"), "prefs")
+    ```python
+    from langgraph.store.memory import InMemoryStore
 
-    Vector search with embeddings:
-        from langchain_openai import OpenAIEmbeddings
-        store = InMemoryStore(index={
+    store = InMemoryStore()
+    store.put(("users", "123"), "prefs", {"theme": "dark"})
+    item = store.get(("users", "123"), "prefs")
+    ```
+
+    Vector search using LangChain embeddings:
+    ```python
+    from langchain.embeddings import init_embeddings
+    from langgraph.store.memory import InMemoryStore
+
+    store = InMemoryStore(
+        index={
             "dims": 1536,
-            "embed": OpenAIEmbeddings(model="text-embedding-3-small"),
-        })
+            "embed": init_embeddings("openai:text-embedding-3-small")
+        }
+    )
 
-        # Store documents
-        store.put(("docs",), "doc1", {"text": "Python tutorial"})
-        store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+    # Store documents
+    store.put(("docs",), "doc1", {"text": "Python tutorial"})
+    store.put(("docs",), "doc2", {"text": "TypeScript guide"})
 
-        # Search by similarity
-        results = store.search(("docs",), query="python programming")
+    # Search by similarity
+    results = store.search(("docs",), query="python programming")
+    ```
 
+    Vector search using OpenAI SDK directly:
+    ```python
+    from openai import OpenAI
+    from langgraph.store.memory import InMemoryStore
 
-Note:
-    For production use cases requiring persistence, use a database-backed store instead.
+    client = OpenAI()
+
+    def embed_texts(texts: list[str]) -> list[list[float]]:
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=texts
+        )
+        return [e.embedding for e in response.data]
+
+    store = InMemoryStore(
+        index={
+            "dims": 1536,
+            "embed": embed_texts
+        }
+    )
+
+    # Store documents
+    store.put(("docs",), "doc1", {"text": "Python tutorial"})
+    store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+
+    # Search by similarity
+    results = store.search(("docs",), query="python programming")
+    ```
+
+    Async vector search using OpenAI SDK:
+    ```python
+    from openai import AsyncOpenAI
+    from langgraph.store.memory import InMemoryStore
+
+    client = AsyncOpenAI()
+
+    async def aembed_texts(texts: list[str]) -> list[list[float]]:
+        response = await client.embeddings.create(
+            model="text-embedding-3-small",
+            input=texts
+        )
+        return [e.embedding for e in response.data]
+
+    store = InMemoryStore(
+        index={
+            "dims": 1536,
+            "embed": aembed_texts
+        }
+    )
+
+    # Store documents
+    await store.aput(("docs",), "doc1", {"text": "Python tutorial"})
+    await store.aput(("docs",), "doc2", {"text": "TypeScript guide"})
+
+    # Search by similarity
+    results = await store.asearch(("docs",), query="python programming")
+    ```
+
+Warning:
+    This store keeps all data in memory. Data is lost when the process exits.
+    For persistence, use a database-backed store like PostgresStore.
+
+Tip:
+    For vector search, install numpy for better performance:
+    ```bash
+    pip install numpy
+    ```
 """
 
 import asyncio
@@ -62,17 +133,18 @@ logger = logging.getLogger(__name__)
 class InMemoryStore(BaseStore):
     """In-memory dictionary-backed store with optional vector search.
 
-    Examples:
+    !!! example "Examples"
         Basic key-value storage:
             store = InMemoryStore()
             store.put(("users", "123"), "prefs", {"theme": "dark"})
             item = store.get(("users", "123"), "prefs")
 
         Vector search with embeddings:
-            from langchain_openai import OpenAIEmbeddings
+            from langchain.embeddings import init_embeddings
             store = InMemoryStore(index={
                 "dims": 1536,
-                "embed": OpenAIEmbeddings(model="text-embedding-3-small"),
+                "embed": init_embeddings("openai:text-embedding-3-small"),
+                "fields": ["text"],
             })
 
             # Store documents
