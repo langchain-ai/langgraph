@@ -73,7 +73,7 @@ def map_command(
     if cmd.graph == Command.PARENT:
         raise InvalidUpdateError("There is not parent graph")
     if cmd.goto:
-        if isinstance(cmd.send, (tuple, list)):
+        if isinstance(cmd.goto, (tuple, list)):
             sends = cmd.goto
         else:
             sends = [cmd.goto]
