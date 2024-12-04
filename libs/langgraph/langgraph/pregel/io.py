@@ -86,8 +86,8 @@ def map_command(
     if cmd.resume:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
-                existing = next(
-                    (w for w in pending_writes if w[0] == tid and w[1] == RESUME), []
+                existing: list[Any] = next(
+                    (w[2] for w in pending_writes if w[0] == tid and w[1] == RESUME), []
                 )
                 existing.append(resume)
                 yield (tid, RESUME, existing)
