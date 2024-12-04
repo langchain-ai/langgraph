@@ -218,13 +218,16 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ## Memory Store
 
-![Update](img/persistence/shared_state.png)
+![Model of shared state](img/persistence/shared_state.png)
 
 A [state schema](low_level.md#schema) specifies a set of keys that are populated as a graph is executed. As discussed above, state can be written by a checkpointer to a thread at each graph step, enabling state persistence.
 
 But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
 
-With checkpointers alone, we cannot share information across threads. This motivates the need for the `Store` interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
+With checkpointers alone, we cannot share information across threads. This motivates the need for the [`Store`](../reference/store/#langgraph.store.base.BaseStore) interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
+
+### Basic Usage
+
 First, let's showcase this in isolation without using LangGraph.
 
 ```python
@@ -268,6 +271,56 @@ The attributes it has are:
 - `created_at`: Timestamp for when this memory was created
 - `updated_at`: Timestamp for when this memory was updated
 
+### Semantic Search
+
+Beyond simple retrieval, the store also supports semantic search, allowing you to find memories based on meaning rather than exact matches. To enable this, configure the store with an embedding model:
+
+```python
+store = InMemoryStore(
+    index={
+        "embed": "openai:text-embedding-3-small",  # Embedding provider
+        "dims": 1536,                              # Embedding dimensions
+        "fields": ["food_preference", "$"]              # Fields to embed
+    }
+)
+```
+
+Now when searching, you can use natural language queries to find relevant memories:
+
+```python
+# Find memories about food preferences
+memories = store.search(
+    namespace_for_memory,
+    query="What does the user like to eat?",
+    limit=3  # Return top 3 matches
+)
+```
+
+You can control which parts of your memories get embedded by configuring the `fields` parameter or by specifying the `index` parameter when storing memories:
+
+```python
+# Store with specific fields to embed
+store.put(
+    namespace_for_memory,
+    str(uuid.uuid4()),
+    {
+        "food_preference": "I love Italian cuisine",
+        "context": "Discussing dinner plans"
+    },
+    index=["food_preference"]  # Only embed "food_preferences" field
+)
+
+# Store without embedding (still retrievable, but not searchable)
+store.put(
+    namespace_for_memory,
+    str(uuid.uuid4()),
+    {"system_info": "Last updated: 2024-01-01"},
+    index=False
+)
+```
+
+### Using in LangGraph
+
 With this all in place, we use the `in_memory_store` in LangGraph. The `in_memory_store` works hand-in-hand with the checkpointer: the checkpointer saves state to threads, as discussed above, and the `in_memory_store` allows us to store arbitrary information for access *across* threads. We compile the graph with both the checkpointer and the `in_memory_store` as follows. 
 
 ```python
@@ -296,7 +349,7 @@ for update in graph.stream(
     print(update)
 ```
 
-We can access the `in_memory_store` and the `user_id` in *any node* by passing `store: BaseStore` and `config: RunnableConfig` as node arguments. Just as we saw above, simply use the `put` method to save memories to the store.
+We can access the `in_memory_store` and the `user_id` in *any node* by passing `store: BaseStore` and `config: RunnableConfig` as node arguments. Here's how we might use semantic search in a node to find relevant memories:
 
 ```python
 def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
@@ -332,12 +385,15 @@ We can access the memories and use them in our model call.
 
 ```python
 def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
-    
     # Get the user id from the config
     user_id = config["configurable"]["user_id"]
     
-    # Get the memories for the user from the store
-    memories = store.search(("memories", user_id))
+    # Search based on the most recent message
+    memories = store.search(
+        namespace,
+        query=state["messages"][-1].content,
+        limit=3
+    )
     info = "\n".join([d.value["memory"] for d in memories])
     
     # ... Use memories in the model call
@@ -356,7 +412,7 @@ for update in graph.stream(
     print(update)
 ```
 
-When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the memory store is available to use by default and does not need to be specified during graph compilation.
+When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. For cloud deployments, semantic search is automatically configured based on your `langgraph.json` settings. See the [deployment guide](../deployment/semantic_search.md) for more details.
 
 ## Checkpointer libraries
 
