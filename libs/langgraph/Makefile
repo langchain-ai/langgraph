@@ -48,6 +48,12 @@ test:
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
+test_parallel:
+	make start-postgres && poetry run pytest -n auto --dist worksteal $(TEST); \
+	EXIT_CODE=$$?; \
+	make stop-postgres; \
+	exit $$EXIT_CODE
+
 WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
 MAXFAIL ?=
