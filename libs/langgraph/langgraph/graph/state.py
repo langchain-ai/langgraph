@@ -829,15 +829,16 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, GraphCommand):
+    if not isinstance(value, Command):
         return EMPTY_SEQ
     if value.graph == Command.PARENT:
         raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
-    if isinstance(value.goto, str):
-        rtn.append(value.goto)
-    else:
-        rtn.extend(value.goto)
+    if isinstance(value, GraphCommand):
+        if isinstance(value.goto, str):
+            rtn.append(value.goto)
+        else:
+            rtn.extend(value.goto)
     if isinstance(value.send, Send):
         rtn.append(value.send)
     else:
@@ -848,15 +849,16 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
 async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, GraphCommand):
+    if not isinstance(value, Command):
         return EMPTY_SEQ
     if value.graph == Command.PARENT:
         raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
-    if isinstance(value.goto, str):
-        rtn.append(value.goto)
-    else:
-        rtn.extend(value.goto)
+    if isinstance(value, GraphCommand):
+        if isinstance(value.goto, str):
+            rtn.append(value.goto)
+        else:
+            rtn.extend(value.goto)
     if isinstance(value.send, Send):
         rtn.append(value.send)
     else:
