@@ -133,7 +133,7 @@ class GetOp(NamedTuple):
     This operation allows precise retrieval of stored items using their full path
     (namespace) and unique identifier (key) combination.
 
-    ???+example "Examples"
+    ???+ example "Examples"
 
         Basic item retrieval:
         ```python
@@ -145,7 +145,7 @@ class GetOp(NamedTuple):
     namespace: tuple[str, ...]
     """Hierarchical path that uniquely identifies the item's location.
 
-    ???+example "Examples"
+    ???+ example "Examples"
 
         ```python
         ("users",)  # Root level users namespace
@@ -156,7 +156,7 @@ class GetOp(NamedTuple):
     key: str
     """Unique identifier for the item within its specific namespace.
 
-    ???+example "Examples"
+    ???+ example "Examples"
 
         ```python
         "user123"  # For a user profile
@@ -175,7 +175,7 @@ class SearchOp(NamedTuple):
     Note:
         Natural language search support depends on your store implementation.
 
-    ???+example "Examples"
+    ???+ example "Examples"
         Search with filters and pagination:
         ```python
         SearchOp(
@@ -199,7 +199,7 @@ class SearchOp(NamedTuple):
     namespace_prefix: tuple[str, ...]
     """Hierarchical path prefix defining the search scope.
 
-    ???+example "Examples"
+    ???+ example "Examples"
 
         ```python
         ()  # Search entire store
@@ -221,7 +221,7 @@ class SearchOp(NamedTuple):
         - $lt: Less than
         - $lte: Less than or equal to
 
-    ???+example "Examples"
+    ???+ example "Examples"
         Simple exact match:
 
         ```python
@@ -253,7 +253,7 @@ class SearchOp(NamedTuple):
     query: Optional[str] = None
     """Natural language search query for semantic search capabilities.
 
-    ???+example "Examples"
+    ???+ example "Examples"
         - "technical documentation about REST APIs"
         - "machine learning papers from 2023"
     """
@@ -263,7 +263,7 @@ class SearchOp(NamedTuple):
 NamespacePath = tuple[Union[str, Literal["*"]], ...]
 """A tuple representing a namespace path that can include wildcards.
 
-???+example "Examples"
+???+ example "Examples"
     ```python
     ("users",)  # Exact users namespace
     ("documents", "*")  # Any sub-namespace under documents
@@ -288,7 +288,7 @@ class MatchCondition(NamedTuple):
     pattern that can include wildcards to flexibly match different namespace
     hierarchies.
 
-    ???+example "Examples"
+    ???+ example "Examples"
         Prefix matching:
         ```python
         MatchCondition(match_type="prefix", path=("users", "profiles"))
@@ -318,7 +318,7 @@ class ListNamespacesOp(NamedTuple):
     This operation allows exploring the organization of data, finding specific
     collections, and navigating the namespace hierarchy.
 
-    ???+example "Examples"
+    ???+ example "Examples"
 
         List all namespaces under the "documents" path:
         ```python
@@ -341,7 +341,7 @@ class ListNamespacesOp(NamedTuple):
     match_conditions: Optional[tuple[MatchCondition, ...]] = None
     """Optional conditions for filtering namespaces.
 
-    ???+example "Examples"
+    ???+ example "Examples"
         All user namespaces:
         ```python
         (MatchCondition(match_type="prefix", path=("users",)),)
@@ -383,7 +383,7 @@ class PutOp(NamedTuple):
     The namespace acts as a folder-like structure to organize items.
     Each element in the tuple represents one level in the hierarchy.
 
-    ???+example "Examples"
+    ???+ example "Examples"
         Root level documents
         ```python
         ("documents",)
@@ -429,9 +429,9 @@ class PutOp(NamedTuple):
     """Controls how the item's fields are indexed for search operations.
 
     Indexing configuration determines how the item can be found through search:
-    - None (default): Uses the store's default indexing configuration (if provided)
-    - False: Disables indexing for this item
-    - list[str]: Specifies which json path fields to index for search
+        - None (default): Uses the store's default indexing configuration (if provided)
+        - False: Disables indexing for this item
+        - list[str]: Specifies which json path fields to index for search
 
     The item remains accessible through direct get() operations regardless of indexing.
     When indexed, fields can be searched using natural language queries through
@@ -445,15 +445,14 @@ class PutOp(NamedTuple):
           - Last element: "array[-1]"
           - All elements (each individually): "array[*]"
 
-    ???+example "Examples"
-        - None - Use store defaults
-        - False - Don't index this item
+    ???+ example "Examples"
+        - None - Use store defaults (whole item)
         - list[str] - List of fields to index
         
         ```python
         [
             "metadata.title",                    # Nested field access
-            "chapters[*].content",               # Index content from all chapters as separate vectors
+            "context[*].content",                # Index content from all context as separate vectors
             "authors[0].name",                   # First author's name
             "revisions[-1].changes",             # Most recent revision's changes
             "sections[*].paragraphs[*].text",    # All text from all paragraphs in all sections
@@ -495,7 +494,7 @@ class IndexConfig(TypedDict, total=False):
         2. A synchronous embedding function (EmbeddingsFunc)
         3. An asynchronous embedding function (AEmbeddingsFunc)
     
-    ???+example "Examples"
+    ???+ example "Examples"
         Using LangChain's initialization with InMemoryStore:
         ```python
         from langchain.embeddings import init_embeddings
@@ -557,7 +556,37 @@ class IndexConfig(TypedDict, total=False):
     fields: Optional[list[str]]
     """Fields to extract text from for embedding generation.
     
-    Defaults to the root ["$"], which embeds the json object as a whole.
+    Controls which parts of stored items are embedded for semantic search. Follows JSON path syntax:
+
+        - ["$"]: Embeds the entire JSON object as one vector  (default)
+        - ["field1", "field2"]: Embeds specific top-level fields
+        - ["parent.child"]: Embeds nested fields using dot notation
+        - ["array[*].field"]: Embeds field from each array element separately
+    
+    Note:
+        You can always override this behavior when storing an item using the
+        `index` parameter in the `put` or `aput` operations.
+    
+    ???+ example "Examples"
+        ```python
+        # Embed entire document (default)
+        fields=["$"]
+        
+        # Embed specific fields
+        fields=["text", "summary"]
+        
+        # Embed nested fields
+        fields=["metadata.title", "content.body"]
+        
+        # Embed from arrays
+        fields=["messages[*].content"]  # Each message content separately
+        fields=["context[0].text"]      # First context item's text
+        ```
+    
+    Note:
+        - Fields missing from a document are skipped
+        - Array notation creates separate embeddings for each element
+        - Complex nested paths are supported (e.g., "a.b[*].c.d")
     """
 
 
@@ -645,7 +674,7 @@ class BaseStore(ABC):
                 index={
                     "dims": 1536,  # embedding dimensions
                     "embed": your_embedding_function,  # function to create embeddings
-                    "fields": ["text"]  # fields to embed
+                    "fields": ["text"]  # fields to embed. Defaults to ["$"]
                 }
             )
 
@@ -680,7 +709,10 @@ class BaseStore(ABC):
             value: Dictionary containing the item's data. Must contain string keys
                 and JSON-serializable values.
             index: Controls how the item's fields are indexed for search:
-                - None (default): Use store's default indexing configuration
+
+                - None (default): Use `fields` you configured when creating the store (if any)
+                    If you do not initialize the store with indexing capabilities,
+                    the `index` parameter will be ignored
                 - False: Disable indexing for this item
                 - list[str]: List of field paths to index, supporting:
                     - Nested fields: "metadata.title"
@@ -688,23 +720,25 @@ class BaseStore(ABC):
                     - Specific indices: "authors[0].name"
 
         Note:
-            Indexing capabilities depend on your store implementation.
-            Some implementations may support only a subset of indexing features.
+            Indexing support depends on your store implementation.
+            If you do not initialize the store with indexing capabilities,
+            the `index` parameter will be ignored.
 
-        ???+example "Examples"
-            Simple storage without special indexing (respects store defaults)
+        ???+ example "Examples"
+            Store item. Indexing depends on how you configure the store.
             ```python
-            store.put(("docs",), "report", {"title": "Annual Report"})
+            store.put(("docs",), "report", {"memory": "Will likes ai"})
             ```
 
-            Index specific fields for search (if store configured to index items)
+            Do not index item for semantic search. Still accessible through get()
+            and search() operations but won't have a vector representation.
             ```python
-            store.put(("docs",), "report", {"title": "Annual Report"}, index=["title"])
+            store.put(("docs",), "report", {"memory": "Will likes ai"}, index=False)
             ```
 
-            Do not index for semantic search
+            Index specific fields for search.
             ```python
-            store.put(("docs",), "report", {"title": "Annual Report"}, index=False)
+            store.put(("docs",), "report", {"memory": "Will likes ai"}, index=["memory"])
             ```
         """
         _validate_namespace(namespace)
@@ -745,7 +779,7 @@ class BaseStore(ABC):
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
             Each tuple represents a full namespace path up to `max_depth`.
 
-        ???+example "Examples":
+        ???+ example "Examples":
             Setting max_depth=3. Given the namespaces:
             ```python
             # Example if you have the following namespaces:
@@ -862,7 +896,10 @@ class BaseStore(ABC):
             value: Dictionary containing the item's data. Must contain string keys
                 and JSON-serializable values.
             index: Controls how the item's fields are indexed for search:
-                - None (default): Use store's default indexing configuration
+
+                - None (default): Use `fields` you configured when creating the store (if any)
+                    If you do not initialize the store with indexing capabilities,
+                    the `index` parameter will be ignored
                 - False: Disable indexing for this item
                 - list[str]: List of field paths to index, supporting:
                     - Nested fields: "metadata.title"
@@ -870,13 +907,20 @@ class BaseStore(ABC):
                     - Specific indices: "authors[0].name"
 
         Note:
-            Indexing capabilities depend on your store implementation.
-            Some implementations may support only a subset of indexing features.
+            Indexing support depends on your store implementation.
+            If you do not initialize the store with indexing capabilities,
+            the `index` parameter will be ignored.
 
-        ???+example "Examples"
-            Simple storage without special indexing:
+        ???+ example "Examples"
+            Store item. Indexing depends on how you configure the store.
             ```python
-            await store.aput(("docs",), "report", {"title": "Annual Report"})
+            await store.aput(("docs",), "report", {"memory": "Will likes ai"})
+            ```
+
+            Do not index item for semantic search. Still accessible through get()
+            and search() operations but won't have a vector representation.
+            ```python
+            await store.aput(("docs",), "report", {"memory": "Will likes ai"}, index=False)
             ```
 
             Index specific fields for search (if store configured to index items):
@@ -885,10 +929,10 @@ class BaseStore(ABC):
                 ("docs",),
                 "report",
                 {
-                    "title": "Q4 Report",
-                    "chapters": [{"content": "..."}, {"content": "..."}]
+                    "memory": "Will likes ai",
+                    "context": [{"content": "..."}, {"content": "..."}]
                 },
-                index=["title", "chapters[*].content"]
+                index=["memory", "context[*].content"]
             )
             ```
         """
@@ -930,7 +974,7 @@ class BaseStore(ABC):
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
             Each tuple represents a full namespace path up to `max_depth`.
 
-        ???+example "Examples"
+        ???+ example "Examples"
             Setting max_depth=3 with existing namespaces:
             ```python
             # Given the following namespaces:

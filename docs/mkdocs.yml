@@ -164,6 +164,7 @@ nav:
             - how-tos/memory/manage-conversation-history.ipynb
             - how-tos/memory/delete-messages.ipynb
             - how-tos/memory/add-summary-conversation-history.ipynb
+            - how-tos/memory/semantic-search.ipynb
         - Human-in-the-loop:
             - Human-in-the-loop: how-tos#human-in-the-loop
             - how-tos/human_in_the_loop/breakpoints.ipynb
@@ -225,6 +226,7 @@ nav:
               - cloud/deployment/setup.md
               - cloud/deployment/setup_pyproject.md
               - cloud/deployment/setup_javascript.md
+              - cloud/deployment/semantic_search.md
               - cloud/deployment/custom_docker.md
               - cloud/deployment/test_locally.md
               - cloud/deployment/graph_rebuild.md

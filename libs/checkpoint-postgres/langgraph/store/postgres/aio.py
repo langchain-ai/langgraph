@@ -72,6 +72,8 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             # Store documents
             await store.aput(("docs",), "doc1", {"text": "Python tutorial"})
             await store.aput(("docs",), "doc2", {"text": "TypeScript guide"})
+            # Don't index the following
+            await store.aput(("docs",), "doc3", {"text": "Other guide"}, index=False)
 
             # Search by similarity
             results = await store.asearch(("docs",), query="python programming")
