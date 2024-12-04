@@ -71,7 +71,7 @@ you to involve humans in the decision-making process of your graph. These how-to
 
 ### Tool calling
 
-[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of chat model API that accepts tool schemas, along with messages, as input and returns invocations of those tools as part of the output message. 
+[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of chat model API that accepts tool schemas, along with messages, as input and returns invocations of those tools as part of the output message.
 
 These how-to guides show common patterns for tool calling with LangGraph:
 
@@ -124,7 +124,7 @@ These guides show how to use the prebuilt ReAct agent:
 
 This section includes how-to guides for LangGraph Platform.
 
-LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework. 
+LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework.
 
 The LangGraph Platform offers a few different deployment options described in the [deployment options guide](../concepts/deployment_options.md).
 
@@ -152,8 +152,8 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 - [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 - [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
-- [How to interact with the deployment using RemoteGraph](./use-remote-graph.md) 
- 
+- [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
+
 ### Assistants
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.
@@ -198,7 +198,7 @@ When designing complex graphs, relying entirely on the LLM for decision-making c
 
 ### Double-texting
 
-Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways. 
+Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways.
 
 - [How to use the interrupt option](../cloud/how-tos/interrupt_concurrent.md)
 - [How to use the rollback option](../cloud/how-tos/rollback_concurrent.md)
@@ -218,8 +218,9 @@ Graph execution can take a while, and sometimes users may change their mind abou
 LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
 
 - [How to connect to a LangGraph Cloud deployment](../cloud/how-tos/test_deployment.md)
-- [How to connect to a local deployment](../cloud/how-tos/test_local_deployment.md)
-- [How to test your graph in LangGraph Studio](../cloud/how-tos/invoke_studio.md)
+- [How to connect to a local dev server](../how-tos/local-studio.md)
+- [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
+- [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
 
 ## Troubleshooting
@@ -231,5 +232,3 @@ These are the guides for resolving common errors you may find while building wit
 - [INVALID_GRAPH_NODE_RETURN_VALUE](../troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
 - [MULTIPLE_SUBGRAPHS](../troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
 - [INVALID_CHAT_HISTORY](../troubleshooting/errors/INVALID_CHAT_HISTORY.md)
-
-
