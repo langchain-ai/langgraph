@@ -29,7 +29,7 @@ body:
           required: true
         - label: I read what a minimal reproducible example is (https://stackoverflow.com/help/minimal-reproducible-example).
           required: true
-        - label: I included a self-contained, minimal example that demonstrates the issue **INCLUDING** all the relevant imports. The code run **AS IS** to reproduce the issue.
+        - label: I included a self-contained, minimal example that demonstrates the issue INCLUDING all the relevant imports. The code run AS IS to reproduce the issue.
           required: true
   - type: textarea
     id: reproduction
