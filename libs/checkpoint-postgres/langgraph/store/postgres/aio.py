@@ -97,6 +97,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         1. Call `setup()` before first use to create necessary tables and indexes
         2. Have the pgvector extension available to use vector search
         3. Use Python 3.10+ for async functionality
+
+    Note:
+        Semantic search is disabled by default. You can enable it by providing an `index` configuration
+        when creating the store. Without this configuration, all `index` arguments passed to
+        `put` or `aput`will have no effect.
     """
 
     __slots__ = (

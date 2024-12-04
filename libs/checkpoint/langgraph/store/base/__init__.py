@@ -594,6 +594,15 @@ class BaseStore(ABC):
 
     Stores enable persistence and memory that can be shared across threads,
     scoped to user IDs, assistant IDs, or other arbitrary namespaces.
+    Some implementations may support semantic search capabilities through
+    an optional `index` configuration.
+
+    Note:
+        Semantic search capabilities vary by implementation and are typically
+        disabled by default. Stores that support this feature can be configured
+        by providing an `index` configuration at creation time. Without this
+        configuration, semantic search is disabled and any `index` arguments
+        to storage operations will have no effect.
     """
 
     __slots__ = ("__weakref__",)
