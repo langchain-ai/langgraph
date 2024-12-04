@@ -72,17 +72,18 @@ def map_command(
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if cmd.graph == Command.PARENT:
         raise InvalidUpdateError("There is not parent graph")
-    if cmd.send:
+    if cmd.goto:
         if isinstance(cmd.send, (tuple, list)):
-            sends = cmd.send
+            sends = cmd.goto
         else:
-            sends = [cmd.send]
+            sends = [cmd.goto]
         for send in sends:
             if not isinstance(send, Send):
                 raise TypeError(
-                    f"In Command.send, expected Send, got {type(send).__name__}"
+                    f"In Command.goto, expected Send, got {type(send).__name__}"
                 )
             yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+        # TODO handle goto str for state graph
     if cmd.resume:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
