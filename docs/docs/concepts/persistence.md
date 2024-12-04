@@ -412,7 +412,22 @@ for update in graph.stream(
     print(update)
 ```
 
-When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. For cloud deployments, semantic search is automatically configured based on your `langgraph.json` settings. See the [deployment guide](../deployment/semantic_search.md) for more details.
+When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. To enable semantic search, however, you **do** need to configure the indexing settings in your `langgraph.json` file. For example:
+
+```json
+{
+    ...
+    "store": {
+        "index": {
+            "embed": "openai:text-embeddings-3-small",
+            "dims": 1536,
+            "fields": ["$"]
+        }
+    }
+}
+```
+
+See the [deployment guide](../deployment/semantic_search.md) for more details and configuration options.
 
 ## Checkpointer libraries
 
