@@ -12896,3 +12896,160 @@ async def test_interrupt_subgraph(checkpointer_name: str):
         assert await graph.ainvoke({"baz": ""}, thread1)
         # Resume with answer
         assert await graph.ainvoke(Command(resume="bar"), thread1)
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_multiple(checkpointer_name: str):
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    async def node(s: State) -> State:
+        answer = interrupt({"value": 1})
+        answer2 = interrupt({"value": 2})
+        return {"my_key": answer + " " + answer2}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        assert [
+            e async for e in graph.astream({"my_key": "DE", "market": "DE"}, thread1)
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value={"value": 1},
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="answer 1", update={"my_key": "foofoo"}),
+                thread1,
+                stream_mode="updates",
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value={"value": 2},
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="answer 2"), thread1, stream_mode="updates"
+            )
+        ] == [
+            {"node": {"my_key": "answer 1 answer 2"}},
+        ]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_loop(checkpointer_name: str):
+    class State(TypedDict):
+        age: int
+        other: str
+
+    async def ask_age(s: State):
+        """Ask an expert for help."""
+        question = "How old are you?"
+        value = None
+        for _ in range(10):
+            value: str = interrupt(question)
+            if not value.isdigit() or int(value) < 18:
+                question = "invalid response"
+                value = None
+            else:
+                break
+
+        return {"age": int(value)}
+
+    builder = StateGraph(State)
+    builder.add_node("node", ask_age)
+    builder.add_edge(START, "node")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        assert [e async for e in graph.astream({"other": ""}, thread1)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="How old are you?",
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="13"),
+                thread1,
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="invalid response",
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="15"),
+                thread1,
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="invalid response",
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event async for event in graph.astream(Command(resume="19"), thread1)
+        ] == [
+            {"node": {"age": 19}},
+        ]

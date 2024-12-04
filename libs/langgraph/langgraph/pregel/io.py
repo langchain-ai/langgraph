@@ -4,6 +4,7 @@ from uuid import UUID
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
+from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
@@ -66,7 +67,7 @@ def read_channels(
 
 
 def map_command(
-    cmd: Command,
+    cmd: Command, pending_writes: list[PendingWrite]
 ) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if cmd.graph == Command.PARENT:
@@ -85,7 +86,11 @@ def map_command(
     if cmd.resume:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
-                yield (tid, RESUME, resume)
+                existing: list[Any] = next(
+                    (w[2] for w in pending_writes if w[0] == tid and w[1] == RESUME), []
+                )
+                existing.append(resume)
+                yield (tid, RESUME, existing)
         else:
             yield (NULL_TASK_ID, RESUME, cmd.resume)
     if cmd.update:

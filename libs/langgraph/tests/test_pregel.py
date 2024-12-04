@@ -14680,3 +14680,143 @@ def test_interrupt_subgraph(request: pytest.FixtureRequest, checkpointer_name: s
     assert graph.invoke({"baz": ""}, thread1)
     # Resume with answer
     assert graph.invoke(Command(resume="bar"), thread1)
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_interrupt_multiple(request: pytest.FixtureRequest, checkpointer_name: str):
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    def node(s: State) -> State:
+        answer = interrupt({"value": 1})
+        answer2 = interrupt({"value": 2})
+        return {"my_key": answer + " " + answer2}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+
+    graph = builder.compile(checkpointer=checkpointer)
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    assert [e for e in graph.stream({"my_key": "DE", "market": "DE"}, thread1)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value={"value": 1},
+                    resumable=True,
+                    ns=[AnyStr("node:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    assert [
+        event
+        for event in graph.stream(
+            Command(resume="answer 1", update={"my_key": "foofoo"}), thread1
+        )
+    ] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value={"value": 2},
+                    resumable=True,
+                    ns=[AnyStr("node:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    assert [event for event in graph.stream(Command(resume="answer 2"), thread1)] == [
+        {"node": {"my_key": "answer 1 answer 2"}},
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_interrupt_loop(request: pytest.FixtureRequest, checkpointer_name: str):
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        age: int
+        other: str
+
+    def ask_age(s: State):
+        """Ask an expert for help."""
+        question = "How old are you?"
+        value = None
+        for _ in range(10):
+            value: str = interrupt(question)
+            if not value.isdigit() or int(value) < 18:
+                question = "invalid response"
+                value = None
+            else:
+                break
+
+        return {"age": int(value)}
+
+    builder = StateGraph(State)
+    builder.add_node("node", ask_age)
+    builder.add_edge(START, "node")
+
+    graph = builder.compile(checkpointer=checkpointer)
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    assert [e for e in graph.stream({"other": ""}, thread1)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="How old are you?",
+                    resumable=True,
+                    ns=[AnyStr("node:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    assert [
+        event
+        for event in graph.stream(
+            Command(resume="13"),
+            thread1,
+        )
+    ] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="invalid response",
+                    resumable=True,
+                    ns=[AnyStr("node:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    assert [
+        event
+        for event in graph.stream(
+            Command(resume="15"),
+            thread1,
+        )
+    ] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="invalid response",
+                    resumable=True,
+                    ns=[AnyStr("node:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    assert [event for event in graph.stream(Command(resume="19"), thread1)] == [
+        {"node": {"age": 19}},
+    ]
