@@ -534,6 +534,52 @@ class BasePostgresStore(Generic[C]):
 
 
 class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
+    """Postgres-backed store with optional vector search using pgvector.
+
+    !!! example "Examples"
+        Basic setup and key-value storage:
+        ```python
+        from langgraph.store.postgres import PostgresStore
+
+        store = PostgresStore(
+            connection_string="postgresql://user:pass@localhost:5432/dbname"
+        )
+        store.setup()
+
+        # Store and retrieve data
+        store.put(("users", "123"), "prefs", {"theme": "dark"})
+        item = store.get(("users", "123"), "prefs")
+        ```
+
+        Vector search using LangChain embeddings:
+        ```python
+        from langchain.embeddings import init_embeddings
+        from langgraph.store.postgres import PostgresStore
+
+        store = PostgresStore(
+            connection_string="postgresql://user:pass@localhost:5432/dbname",
+            index={
+                "dims": 1536,
+                "embed": init_embeddings("openai:text-embedding-3-small"),
+                "fields": ["text"]  # specify which fields to embed. Default is the whole serialized value
+            }
+        )
+        store.setup() # Do this once to run migrations
+
+        # Store documents
+        store.put(("docs",), "doc1", {"text": "Python tutorial"})
+        store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+
+        # Search by similarity
+        results = store.search(("docs",), query="python programming")
+        ```
+
+    Warning:
+        Make sure to call `setup()` before first use to create necessary tables and indexes.
+        The pgvector extension must be available to use vector search.
+
+    """
+
     __slots__ = (
         "_deserializer",
         "pipe",

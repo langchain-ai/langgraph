@@ -4,9 +4,9 @@ Stores provide long-term memory that persists across threads and conversations.
 Supports hierarchical namespaces, key-value storage, and optional vector search.
 
 Core types:
-- BaseStore: Store interface with sync/async operations
-- Item: Stored key-value pairs with metadata
-- Op: Get/Put/Search/List operations
+    - BaseStore: Store interface with sync/async operations
+    - Item: Stored key-value pairs with metadata
+    - Op: Get/Put/Search/List operations
 """
 
 from abc import ABC, abstractmethod
@@ -89,7 +89,7 @@ class Item:
 
 
 class SearchItem(Item):
-    """Represents a result item with additional response metadata."""
+    """Represents an item returned from a search operation with additional metadata."""
 
     __slots__ = ("score",)
 
@@ -133,7 +133,7 @@ class GetOp(NamedTuple):
     This operation allows precise retrieval of stored items using their full path
     (namespace) and unique identifier (key) combination.
 
-    ??? example "Examples"
+    ???+example "Examples"
 
         Basic item retrieval:
         ```python
@@ -145,7 +145,7 @@ class GetOp(NamedTuple):
     namespace: tuple[str, ...]
     """Hierarchical path that uniquely identifies the item's location.
 
-    ??? example "Examples"
+    ???+example "Examples"
 
         ```python
         ("users",)  # Root level users namespace
@@ -156,7 +156,7 @@ class GetOp(NamedTuple):
     key: str
     """Unique identifier for the item within its specific namespace.
 
-    ??? example "Examples"
+    ???+example "Examples"
 
         ```python
         "user123"  # For a user profile
@@ -175,7 +175,7 @@ class SearchOp(NamedTuple):
     Note:
         Natural language search support depends on your store implementation.
 
-    ??? example "Examples"
+    ???+example "Examples"
         Search with filters and pagination:
         ```python
         SearchOp(
@@ -199,7 +199,7 @@ class SearchOp(NamedTuple):
     namespace_prefix: tuple[str, ...]
     """Hierarchical path prefix defining the search scope.
 
-    ??? example "Examples"
+    ???+example "Examples"
 
         ```python
         ()  # Search entire store
@@ -221,8 +221,7 @@ class SearchOp(NamedTuple):
         - $lt: Less than
         - $lte: Less than or equal to
 
-    ??? example "Examples"
-
+    ???+example "Examples"
         Simple exact match:
 
         ```python
@@ -243,9 +242,6 @@ class SearchOp(NamedTuple):
             "color": "red"
         }
         ```
-
-    Note:
-        Comparison operator support depends on your store implementation.
     """
 
     limit: int = 10
@@ -257,7 +253,7 @@ class SearchOp(NamedTuple):
     query: Optional[str] = None
     """Natural language search query for semantic search capabilities.
 
-    ??? example "Examples"
+    ???+example "Examples"
         - "technical documentation about REST APIs"
         - "machine learning papers from 2023"
     """
@@ -267,10 +263,12 @@ class SearchOp(NamedTuple):
 NamespacePath = tuple[Union[str, Literal["*"]], ...]
 """A tuple representing a namespace path that can include wildcards.
 
-Examples:
+???+example "Examples"
+    ```python
     ("users",)  # Exact users namespace
     ("documents", "*")  # Any sub-namespace under documents
     ("cache", "*", "v1")  # Any cache category with v1 version
+    ```
 """
 
 # Type for specifying how to match namespaces
@@ -290,7 +288,7 @@ class MatchCondition(NamedTuple):
     pattern that can include wildcards to flexibly match different namespace
     hierarchies.
 
-    ??? example "Examples"
+    ???+example "Examples"
         Prefix matching:
         ```python
         MatchCondition(match_type="prefix", path=("users", "profiles"))
@@ -320,7 +318,7 @@ class ListNamespacesOp(NamedTuple):
     This operation allows exploring the organization of data, finding specific
     collections, and navigating the namespace hierarchy.
 
-    ??? example "Examples"
+    ???+example "Examples"
 
         List all namespaces under the "documents" path:
         ```python
@@ -343,7 +341,7 @@ class ListNamespacesOp(NamedTuple):
     match_conditions: Optional[tuple[MatchCondition, ...]] = None
     """Optional conditions for filtering namespaces.
 
-    ??? example "Examples"
+    ???+example "Examples"
         All user namespaces:
         ```python
         (MatchCondition(match_type="prefix", path=("users",)),)
@@ -385,7 +383,7 @@ class PutOp(NamedTuple):
     The namespace acts as a folder-like structure to organize items.
     Each element in the tuple represents one level in the hierarchy.
 
-    ??? example "Examples"
+    ???+example "Examples"
         Root level documents
         ```python
         ("documents",)
@@ -447,7 +445,7 @@ class PutOp(NamedTuple):
           - Last element: "array[-1]"
           - All elements (each individually): "array[*]"
 
-    ??? example "Examples"
+    ???+example "Examples"
         - None - Use store defaults
         - False - Don't index this item
         - list[str] - List of fields to index
@@ -490,7 +488,71 @@ class IndexConfig(TypedDict, total=False):
     """
 
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
-    """Optional function to generate embeddings from text."""
+    """Optional function to generate embeddings from text.
+    
+    Can be specified in three ways:
+        1. A LangChain Embeddings instance
+        2. A synchronous embedding function (EmbeddingsFunc)
+        3. An asynchronous embedding function (AEmbeddingsFunc)
+    
+    ???+example "Examples"
+        Using LangChain's initialization with InMemoryStore:
+        ```python
+        from langchain.embeddings import init_embeddings
+        from langgraph.store.memory import InMemoryStore
+        
+        store = InMemoryStore(
+            index={
+                "dims": 1536,
+                "embed": init_embeddings("openai:text-embedding-3-small")
+            }
+        )
+        ```
+        
+        Using a custom embedding function with InMemoryStore:
+        ```python
+        from openai import OpenAI
+        from langgraph.store.memory import InMemoryStore
+        
+        client = OpenAI()
+        
+        def embed_texts(texts: list[str]) -> list[list[float]]:
+            response = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=texts
+            )
+            return [e.embedding for e in response.data]
+            
+        store = InMemoryStore(
+            index={
+                "dims": 1536,
+                "embed": embed_texts
+            }
+        )
+        ```
+        
+        Using an asynchronous embedding function with InMemoryStore:
+        ```python
+        from openai import AsyncOpenAI
+        from langgraph.store.memory import InMemoryStore
+        
+        client = AsyncOpenAI()
+        
+        async def aembed_texts(texts: list[str]) -> list[list[float]]:
+            response = await client.embeddings.create(
+                model="text-embedding-3-small",
+                input=texts
+            )
+            return [e.embedding for e in response.data]
+            
+        store = InMemoryStore(
+            index={
+                "dims": 1536,
+                "embed": aembed_texts
+            }
+        )
+        ```
+    """
 
     fields: Optional[list[str]]
     """Fields to extract text from for embedding generation.
@@ -565,6 +627,39 @@ class BaseStore(ABC):
 
         Returns:
             List of items matching the search criteria.
+
+        ???+ example "Examples"
+            Basic filtering:
+            ```python
+            # Search for documents with specific metadata
+            results = store.search(
+                ("docs",),
+                filter={"type": "article", "status": "published"}
+            )
+            ```
+
+            Natural language search (requires vector store implementation):
+            ```python
+            # Initialize store with embedding configuration
+            store = YourStore( # e.g., InMemoryStore, AsyncPostgresStore
+                index={
+                    "dims": 1536,  # embedding dimensions
+                    "embed": your_embedding_function,  # function to create embeddings
+                    "fields": ["text"]  # fields to embed
+                }
+            )
+
+            # Search for semantically similar documents
+            results = store.search(
+                ("docs",),
+                query="machine learning applications in healthcare",
+                filter={"type": "research_paper"},
+                limit=5
+            )
+            ```
+
+            Note: Natural language search support depends on your store implementation
+            and requires proper embedding configuration.
         """
         return self.batch([SearchOp(namespace_prefix, filter, limit, offset, query)])[0]
 
@@ -596,13 +691,13 @@ class BaseStore(ABC):
             Indexing capabilities depend on your store implementation.
             Some implementations may support only a subset of indexing features.
 
-        ??? example "Examples"
+        ???+example "Examples"
             Simple storage without special indexing (respects store defaults)
             ```python
             store.put(("docs",), "report", {"title": "Annual Report"})
             ```
 
-            Index specific fields for search
+            Index specific fields for search (if store configured to index items)
             ```python
             store.put(("docs",), "report", {"title": "Annual Report"}, index=["title"])
             ```
@@ -650,7 +745,7 @@ class BaseStore(ABC):
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
             Each tuple represents a full namespace path up to `max_depth`.
 
-        ??? example "Examples":
+        ???+example "Examples":
             Setting max_depth=3. Given the namespaces:
             ```python
             # Example if you have the following namespaces:
@@ -710,6 +805,39 @@ class BaseStore(ABC):
 
         Returns:
             List of items matching the search criteria.
+
+        ???+ example "Examples"
+            Basic filtering:
+            ```python
+            # Search for documents with specific metadata
+            results = await store.asearch(
+                ("docs",),
+                filter={"type": "article", "status": "published"}
+            )
+            ```
+
+            Natural language search (requires vector store implementation):
+            ```python
+            # Initialize store with embedding configuration
+            store = YourStore( # e.g., InMemoryStore, AsyncPostgresStore
+                index={
+                    "dims": 1536,  # embedding dimensions
+                    "embed": your_embedding_function,  # function to create embeddings
+                    "fields": ["text"]  # fields to embed
+                }
+            )
+
+            # Search for semantically similar documents
+            results = await store.asearch(
+                ("docs",),
+                query="machine learning applications in healthcare",
+                filter={"type": "research_paper"},
+                limit=5
+            )
+            ```
+
+            Note: Natural language search support depends on your store implementation
+            and requires proper embedding configuration.
         """
         return (
             await self.abatch(
@@ -745,13 +873,13 @@ class BaseStore(ABC):
             Indexing capabilities depend on your store implementation.
             Some implementations may support only a subset of indexing features.
 
-        ??? example "Examples"
+        ???+example "Examples"
             Simple storage without special indexing:
             ```python
             await store.aput(("docs",), "report", {"title": "Annual Report"})
             ```
 
-            Index specific fields for search:
+            Index specific fields for search (if store configured to index items):
             ```python
             await store.aput(
                 ("docs",),
@@ -802,7 +930,7 @@ class BaseStore(ABC):
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
             Each tuple represents a full namespace path up to `max_depth`.
 
-        ??? example "Examples"
+        ???+example "Examples"
             Setting max_depth=3 with existing namespaces:
             ```python
             # Given the following namespaces:

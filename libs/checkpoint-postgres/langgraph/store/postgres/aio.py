@@ -37,6 +37,68 @@ logger = logging.getLogger(__name__)
 
 
 class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Conn]):
+    """Asynchronous Postgres-backed store with optional vector search using pgvector.
+
+    !!! example "Examples"
+        Basic setup and key-value storage:
+        ```python
+        from langgraph.store.postgres import AsyncPostgresStore
+
+        async with AsyncPostgresStore.from_conn_string(
+            "postgresql://user:pass@localhost:5432/dbname"
+        ) as store:
+            await store.setup()
+
+            # Store and retrieve data
+            await store.aput(("users", "123"), "prefs", {"theme": "dark"})
+            item = await store.aget(("users", "123"), "prefs")
+        ```
+
+        Vector search using LangChain embeddings:
+        ```python
+        from langchain.embeddings import init_embeddings
+        from langgraph.store.postgres import AsyncPostgresStore
+
+        async with AsyncPostgresStore.from_conn_string(
+            "postgresql://user:pass@localhost:5432/dbname",
+            index={
+                "dims": 1536,
+                "embed": init_embeddings("openai:text-embedding-3-small"),
+                "fields": ["text"]  # specify which fields to embed. Default is the whole serialized value
+            }
+        ) as store:
+            await store.setup()  # Do this once to run migrations
+
+            # Store documents
+            await store.aput(("docs",), "doc1", {"text": "Python tutorial"})
+            await store.aput(("docs",), "doc2", {"text": "TypeScript guide"})
+
+            # Search by similarity
+            results = await store.asearch(("docs",), query="python programming")
+        ```
+
+        Using connection pooling for better performance:
+        ```python
+        from langgraph.store.postgres import AsyncPostgresStore, PoolConfig
+
+        async with AsyncPostgresStore.from_conn_string(
+            "postgresql://user:pass@localhost:5432/dbname",
+            pool_config=PoolConfig(
+                min_size=5,
+                max_size=20
+            )
+        ) as store:
+            await store.setup()
+            # Use store with connection pooling...
+        ```
+
+    Warning:
+        Make sure to:
+        1. Call `setup()` before first use to create necessary tables and indexes
+        2. Have the pgvector extension available to use vector search
+        3. Use Python 3.10+ for async functionality
+    """
+
     __slots__ = (
         "_deserializer",
         "pipe",
