@@ -26,13 +26,13 @@ body:
       label: Checked other resources
       description: Before submitting this issue, please confirm that you have completed all the steps below by checking each option. These steps help ensure your issue is well-defined, relevant, and actionable.
       options:
-        - label: I am filing a BUG! This is not a usage question which should be in [GitHub Discussions](https://github.com/langchain-ai/langgraph/discussions/new/choose).
-          required: true
-        - label: I am filing a BUG or a FEATURE REQUEST, not a usage question. (For questions, please use GitHub Discussions -- https://stackoverflow.com/help/minimal-reproducible-example)
+        - label: This is a bug, not a usage question. For questions, please use GitHub Discussions.
           required: true
         - label: I added a clear and detailed title that summarizes the issue.
           required: true
-        - label: I included a self-contained, minimal example that demonstrates the issue (https://stackoverflow.com/help/minimal-reproducible-example) **INCLUDING** all the relevant imports and the code can be copy and pasted **AS IS** to reproduce the issue.
+        - label: I included a self-contained, minimal example that demonstrates the issue **INCLUDING** all the relevant imports. The code run **AS IS** to reproduce the issue.
+          required: true
+        - label: I read what a minimal reproducible example is (https://stackoverflow.com/help/minimal-reproducible-example).
           required: true
   - type: textarea
     id: reproduction
@@ -42,18 +42,6 @@ body:
       label: Example Code
       description: |
         Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) with your use case.
-        
-        Your code should be complete and be able to run by a maintainer **AS IS**.
-        
-        It should have relevant imports and be as minimal as possible.
-        
-        If a maintainer can copy it, run it, and see it right away, there's a much higher chance that you'll be able to get help.
-        
-        **Important!** 
-        
-        * Reduce your code to the minimum required to reproduce the issue if possible. This makes it much easier for others to help you.
-        * Avoid screenshots when possible, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
-
       placeholder: |
         from langgraph.graph import StateGraph
 
