@@ -154,6 +154,11 @@ class InMemoryStore(BaseStore):
             # Search by similarity
             results = store.search(("docs",), query="python programming")
 
+    Note:
+        Semantic search is disabled by default. You can enable it by providing an `index` configuration
+        when creating the store. Without this configuration, all `index` arguments passed to
+        `put` or `aput`will have no effect.
+
     Warning:
         This store keeps all data in memory. Data is lost when the process exits.
         For persistence, use a database-backed store like PostgresStore.
