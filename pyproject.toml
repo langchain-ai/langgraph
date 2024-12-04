@@ -34,7 +34,7 @@ ruff = "^0.6.8"
 jupyter = "^1.1.1"
 
 [tool.poetry.group.test.dependencies]
-langchain = "^0.3.1"
+langchain = "^0.3.8"
 langchain-openai = "^0.2.0"
 langchain-anthropic = "^0.2.1"
 langchain-nomic = "^0.1.3"
