@@ -27,8 +27,8 @@ Adding a [breakpoint](./low_level.md#breakpoints) a specific location in the gra
 Here, we compile our graph with a checkpointer and a breakpoint at the node we want to interrupt before, `step_for_human_in_the_loop`. We then perform one of the above interaction patterns, which will create a new checkpoint if a human edits the graph state. The new checkpoint is saved to the `thread` and we can resume the graph execution from there by passing in `None` as the input.
 
 ```python
-# Compile our graph with a checkpoitner and a breakpoint before "step_for_human_in_the_loop"
-graph = builder.compile(checkpointer=checkpoitner, interrupt_before=["step_for_human_in_the_loop"])
+# Compile our graph with a checkpointer and a breakpoint before "step_for_human_in_the_loop"
+graph = builder.compile(checkpointer=checkpointer, interrupt_before=["step_for_human_in_the_loop"])
 
 # Run the graph up to the breakpoint
 thread_config = {"configurable": {"thread_id": "1"}}
@@ -98,8 +98,8 @@ With persistence, we can surface the current agent state as well as the next ste
 If approved, the graph resumes execution from the last saved checkpoint, which is saved to the `thread`:
 
 ```python
-# Compile our graph with a checkpoitner and a breakpoint before the step to approve
-graph = builder.compile(checkpointer=checkpoitner, interrupt_before=["node_2"])
+# Compile our graph with a checkpointer and a breakpoint before the step to approve
+graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node_2"])
 
 # Run the graph up to the breakpoint
 for event in graph.stream(inputs, thread, stream_mode="values"):
@@ -120,7 +120,7 @@ See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed h
 
 Sometimes we want to review and edit the agent's state. 
  
-As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior the the step we want to check. 
+As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to the step we want to check. 
  
 We can surface the current state to a user and allow the user to edit the agent state.
  
@@ -131,8 +131,8 @@ We can edit the graph state by forking the current checkpoint, which is saved to
 We can then proceed with the graph from our forked checkpoint as done before. 
 
 ```python
-# Compile our graph with a checkpoitner and a breakpoint before the step to review
-graph = builder.compile(checkpointer=checkpoitner, interrupt_before=["node_2"])
+# Compile our graph with a checkpointer and a breakpoint before the step to review
+graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node_2"])
 
 # Run the graph up to the breakpoint
 for event in graph.stream(inputs, thread, stream_mode="values"):
@@ -170,11 +170,11 @@ With editing, the user makes a decision about whether or not to edit the graph s
 
 With input, we explicitly define a node in our graph for collecting human input!
 
-The the state update with the human input then runs *as this node*.
+The state update with the human input then runs *as this node*.
 
 ```python
-# Compile our graph with a checkpoitner and a breakpoint before the step to to collect human input
-graph = builder.compile(checkpointer=checkpoitner, interrupt_before=["human_input"])
+# Compile our graph with a checkpointer and a breakpoint before the step to to collect human input
+graph = builder.compile(checkpointer=checkpointer, interrupt_before=["human_input"])
 
 # Run the graph up to the breakpoint
 for event in graph.stream(inputs, thread, stream_mode="values"):
@@ -211,8 +211,8 @@ Even if the tool call is correct, we may also want to apply discretion:
 With these points in mind, we can combine the above ideas to create a human-in-the-loop review of a tool call.
 
 ```python
-# Compile our graph with a checkpoitner and a breakpoint before the step to to review the tool call from the LLM 
-graph = builder.compile(checkpointer=checkpoitner, interrupt_before=["human_review"])
+# Compile our graph with a checkpointer and a breakpoint before the step to to review the tool call from the LLM 
+graph = builder.compile(checkpointer=checkpointer, interrupt_before=["human_review"])
 
 # Run the graph up to the breakpoint
 for event in graph.stream(inputs, thread, stream_mode="values"):

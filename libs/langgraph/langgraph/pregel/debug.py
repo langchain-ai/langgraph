@@ -20,9 +20,19 @@ from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
-from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_NS,
+    ERROR,
+    INTERRUPT,
+    NS_END,
+    NS_SEP,
+    TAG_HIDDEN,
+)
 from langgraph.pregel.io import read_channels
+from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
+from langgraph.utils.config import patch_checkpoint_map
 
 
 class TaskPayload(TypedDict):
@@ -45,6 +55,7 @@ class CheckpointTask(TypedDict):
     name: str
     error: Optional[str]
     interrupts: list[dict]
+    state: Optional[RunnableConfig]
 
 
 class CheckpointPayload(TypedDict):
@@ -138,15 +149,37 @@ def map_debug_checkpoint(
     tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
     parent_config: Optional[RunnableConfig],
+    output_keys: Union[str, Sequence[str]],
 ) -> Iterator[DebugOutputCheckpoint]:
     """Produce "checkpoint" events for stream_mode=debug."""
+
+    parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+    task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+
+    for task in tasks:
+        if not find_subgraph_pregel(task.proc):
+            continue
+
+        # assemble checkpoint_ns for this task
+        task_ns = f"{task.name}{NS_END}{task.id}"
+        if parent_ns:
+            task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+
+        # set config as signal that subgraph checkpoints exist
+        task_states[task.id] = {
+            CONF: {
+                "thread_id": config[CONF]["thread_id"],
+                CONFIG_KEY_CHECKPOINT_NS: task_ns,
+            }
+        }
+
     yield {
         "type": "checkpoint",
         "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
-            "config": config,
-            "parent_config": parent_config,
+            "config": patch_checkpoint_map(config, metadata),
+            "parent_config": patch_checkpoint_map(parent_config, metadata),
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
@@ -155,14 +188,24 @@ def map_debug_checkpoint(
                     "id": t.id,
                     "name": t.name,
                     "error": t.error,
+                    "state": t.state,
                 }
                 if t.error
                 else {
                     "id": t.id,
                     "name": t.name,
+                    "result": t.result,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
                 }
-                for t in tasks_w_writes(tasks, pending_writes, None)
+                if t.result
+                else {
+                    "id": t.id,
+                    "name": t.name,
+                    "interrupts": tuple(asdict(i) for i in t.interrupts),
+                    "state": t.state,
+                }
+                for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
             ],
         },
     }
@@ -173,7 +216,7 @@ def print_step_tasks(step: int, next_tasks: list[PregelExecutableTask]) -> None:
     print(
         f"{get_colored_text(f'[{step}:tasks]', color='blue')} "
         + get_bolded_text(
-            f"Starting step {step} with {n_tasks} task{'s' if n_tasks != 1 else ''}:\n"
+            f"Starting {n_tasks} task{'s' if n_tasks != 1 else ''} for step {step}:\n"
         )
         + "\n".join(
             f"- {get_colored_text(task.name, 'green')} -> {pformat(task.input)}"
@@ -218,6 +261,7 @@ def tasks_w_writes(
     tasks: Iterable[Union[PregelTask, PregelExecutableTask]],
     pending_writes: Optional[list[PendingWrite]],
     states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
+    output_keys: Union[str, Sequence[str]],
 ) -> tuple[PregelTask, ...]:
     """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
     pending_writes = pending_writes or []
@@ -238,6 +282,32 @@ def tasks_w_writes(
                 v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
             ),
             states.get(task.id) if states else None,
+            (
+                next(
+                    (
+                        val
+                        for tid, chan, val in pending_writes
+                        if tid == task.id and chan == output_keys
+                    ),
+                    None,
+                )
+                if isinstance(output_keys, str)
+                else {
+                    chan: val
+                    for tid, chan, val in pending_writes
+                    if tid == task.id
+                    and (
+                        chan == output_keys
+                        if isinstance(output_keys, str)
+                        else chan in output_keys
+                    )
+                }
+            )
+            if any(
+                w[0] == task.id and w[1] not in (ERROR, INTERRUPT)
+                for w in pending_writes
+            )
+            else None,
         )
         for task in tasks
     )

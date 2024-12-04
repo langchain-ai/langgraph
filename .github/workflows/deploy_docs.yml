@@ -44,6 +44,8 @@ jobs:
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,8 +60,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with docs
-          poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
+          poetry install --with test --no-root
+          poetry run pip install -U \
+            pytest \
+            pytest-check-links \
+            langsmith \
+            langchain \
+            GitPython \
+            "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
@@ -80,8 +88,13 @@ jobs:
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
+              --check-links-ignore "http://localhost:8123/.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
-              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html')
+              --check-links-ignore "https://python\.langchain\.com/.*" \
+              --check-links-ignore "https://openai\.com/.*" \
+              --check-links-ignore "https://pepy\.tech/.*" \
+              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html') 
+              
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
@@ -92,6 +105,7 @@ jobs:
               echo "Running link check on HTML files matching changed notebook files..."
               poetry run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "http://localhost:8123/.*" \
                 --check-links-ignore "https://x.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \

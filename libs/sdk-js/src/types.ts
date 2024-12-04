@@ -1,6 +1,13 @@
-import { Config, Metadata } from "./schema.js";
+import { Checkpoint, Config, Metadata } from "./schema.js";
 
-export type StreamMode = "values" | "messages" | "updates" | "events" | "debug";
+export type StreamMode =
+  | "values"
+  | "messages"
+  | "updates"
+  | "events"
+  | "debug"
+  | "custom"
+  | "messages-tuple";
 export type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 export type OnConflictBehavior = "raise" | "do_nothing";
 export type OnCompletionBehavior = "complete" | "continue";
@@ -15,6 +22,28 @@ export type StreamEvent =
   | "messages/metadata"
   | "messages/complete"
   | (string & {});
+
+export interface Send {
+  node: string;
+  input: Record<string, unknown> | null;
+}
+
+export interface Command {
+  /**
+   * An object to update the thread state with.
+   */
+  update?: Record<string, unknown>;
+
+  /**
+   * The value to return from an `interrupt` function call.
+   */
+  resume?: unknown;
+
+  /**
+   * A single, or array of `Send` commands to trigger nodes.
+   */
+  send?: Send | Send[];
+}
 
 interface RunsInvokePayload {
   /**
@@ -38,14 +67,19 @@ interface RunsInvokePayload {
   checkpointId?: string;
 
   /**
+   * Checkpoint for when creating a new run.
+   */
+  checkpoint?: Omit<Checkpoint, "thread_id">;
+
+  /**
    * Interrupt execution before entering these nodes.
    */
-  interruptBefore?: string[];
+  interruptBefore?: "*" | string[];
 
   /**
    * Interrupt execution after leaving these nodes.
    */
-  interruptAfter?: string[];
+  interruptAfter?: "*" | string[];
 
   /**
    * Strategy to handle concurrent runs on the same thread. Only relevant if
@@ -90,6 +124,16 @@ interface RunsInvokePayload {
    * Use to schedule future runs.
    */
   afterSeconds?: number;
+
+  /**
+   * Behavior if the specified run doesn't exist. Defaults to "reject".
+   */
+  ifNotExists?: "create" | "reject";
+
+  /**
+   * One or more commands to invoke the graph with.
+   */
+  command?: Command;
 }
 
 export interface RunsStreamPayload extends RunsInvokePayload {
@@ -125,4 +169,9 @@ export interface CronsCreatePayload extends RunsCreatePayload {
   schedule: string;
 }
 
-export type RunsWaitPayload = RunsStreamPayload;
+export interface RunsWaitPayload extends RunsStreamPayload {
+  /**
+   * Raise errors returned by the run. Default is `true`.
+   */
+  raiseError?: boolean;
+}

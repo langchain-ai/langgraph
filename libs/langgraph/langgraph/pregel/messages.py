@@ -17,8 +17,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, LLMResult
 from langchain_core.tracers._streaming import T, _StreamingCallbackHandler
 
-from langgraph.constants import NS_SEP
-from langgraph.pregel.loop import StreamChunk
+from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
+from langgraph.types import StreamChunk
 
 Meta = tuple[tuple[str, ...], dict[str, Any]]
 
@@ -63,7 +63,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         metadata: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Any:
-        if metadata:
+        if metadata and (not tags or TAG_NOSTREAM not in tags):
             self.metadata[run_id] = (
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
                 metadata,
@@ -114,7 +114,11 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         metadata: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Any:
-        if metadata and kwargs.get("name") == metadata.get("langgraph_node"):
+        if (
+            metadata
+            and kwargs.get("name") == metadata.get("langgraph_node")
+            and (not tags or TAG_HIDDEN not in tags)
+        ):
             self.metadata[run_id] = (
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
                 metadata,

@@ -1,11 +1,32 @@
 from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
+from uuid import UUID
 
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.constants import EMPTY_SEQ, ERROR, INTERRUPT, TAG_HIDDEN
+from langgraph.constants import (
+    EMPTY_SEQ,
+    ERROR,
+    FF_SEND_V2,
+    INTERRUPT,
+    NULL_TASK_ID,
+    PUSH,
+    RESUME,
+    TAG_HIDDEN,
+    TASKS,
+)
+from langgraph.errors import InvalidUpdateError
 from langgraph.pregel.log import logger
-from langgraph.types import PregelExecutableTask
+from langgraph.types import Command, PregelExecutableTask, Send
+
+
+def is_task_id(task_id: str) -> bool:
+    """Check if a string is a valid task id."""
+    try:
+        UUID(task_id)
+    except ValueError:
+        return False
+    return True
 
 
 def read_channel(
@@ -42,6 +63,38 @@ def read_channels(
             except EmptyChannelError:
                 pass
         return values
+
+
+def map_command(
+    cmd: Command,
+) -> Iterator[tuple[str, str, Any]]:
+    """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+    if cmd.graph == Command.PARENT:
+        raise InvalidUpdateError("There is not parent graph")
+    if cmd.send:
+        if isinstance(cmd.send, (tuple, list)):
+            sends = cmd.send
+        else:
+            sends = [cmd.send]
+        for send in sends:
+            if not isinstance(send, Send):
+                raise TypeError(
+                    f"In Command.send, expected Send, got {type(send).__name__}"
+                )
+            yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+    if cmd.resume:
+        if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
+            for tid, resume in cmd.resume.items():
+                yield (tid, RESUME, resume)
+        else:
+            yield (NULL_TASK_ID, RESUME, cmd.resume)
+    if cmd.update:
+        if not isinstance(cmd.update, dict):
+            raise TypeError(
+                f"Expected cmd.update to be a dict mapping channel names to update values, got {type(cmd.update).__name__}"
+            )
+        for k, v in cmd.update.items():
+            yield (NULL_TASK_ID, k, v)
 
 
 def map_input(
@@ -123,7 +176,7 @@ def map_output_updates(
         updated = (
             (
                 task.name,
-                {chan: value for chan, value in task.writes if chan in output_channels},
+                {chan: value for chan, value in writes if chan in output_channels},
             )
             for task, writes in output_tasks
             if any(chan in output_channels for chan, _ in writes)

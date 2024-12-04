@@ -1,5 +1,6 @@
 import random
-from typing import Any, List, Optional, Sequence, Tuple, cast
+from collections.abc import Sequence
+from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
@@ -84,7 +85,7 @@ select
             and cw.checkpoint_id = checkpoints.checkpoint_id
     ) as pending_writes,
     (
-        select array_agg(array[cw.type::bytea, cw.blob] order by cw.idx)
+        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -133,6 +134,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
     jsonplus_serde = JsonPlusSerializer()
+    supports_pipeline: bool
 
     def _load_checkpoint(
         self,
@@ -248,8 +250,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         config: Optional[RunnableConfig],
         filter: MetadataInput,
         before: Optional[RunnableConfig] = None,
-    ) -> Tuple[str, List[Any]]:
-        """Return WHERE clause predicates for alist() given config, filter, cursor.
+    ) -> tuple[str, list[Any]]:
+        """Return WHERE clause predicates for alist() given config, filter, before.
 
         This method returns a tuple of a string and a tuple of values. The string
         is the parametered WHERE clause predicate (including the WHERE keyword):

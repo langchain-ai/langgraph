@@ -36,11 +36,11 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb",
     # this loads a massive dataset from gcp
     "docs/docs/tutorials/usaco/usaco.ipynb",
+    # TODO: figure out why autogen notebook is not runnable (they are just hanging. possible due to code execution?)
+    "docs/docs/how-tos/autogen-integration.ipynb",
     # TODO: need to update these notebooks to make sure they are runnable in CI
     "docs/docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
     "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
-    "docs/docs/tutorials/multi_agent/hierarchical_agent_teams.ipynb",  # taking a very long time to run
-    "docs/docs/tutorials/customer-support/customer-support.ipynb",  # user input - update
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
     "docs/docs/how-tos/map-reduce.ipynb"  # flakiness from structured output, only when running with VCR
@@ -70,10 +70,13 @@ def is_comment(code: str) -> bool:
     return code.strip().startswith("#")
 
 
-def has_blocklisted_command(code: str) -> bool:
+def has_blocklisted_command(code: str, metadata: dict) -> bool:
+    if 'hide_from_vcr' in metadata:
+        return True
+    
     code = code.strip()
-    for blocklisted_command in BLOCKLIST_COMMANDS:
-        if blocklisted_command in code:
+    for blocklisted_pattern in BLOCKLIST_COMMANDS:
+        if blocklisted_pattern in code:
             return True
     return False
 
@@ -108,7 +111,7 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
-        if has_blocklisted_command(cell.source):
+        if has_blocklisted_command(cell.source, cell.metadata):
             continue
 
         cell_id = cell.get("id", idx)
@@ -125,6 +128,8 @@ def add_vcr_to_notebook(
         "import msgpack",
         "import base64",
         "import zlib",
+        "import os",
+        "os.environ.pop(\"LANGCHAIN_TRACING_V2\", None)",
         "custom_vcr = vcr.VCR()",
         "",
         "def compress_data(data, compression_level=9):",

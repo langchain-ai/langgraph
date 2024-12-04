@@ -1,31 +1,33 @@
 """Data models for interacting with the LangGraph API."""
 
 from datetime import datetime
-from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
+from typing import Any, Dict, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
-RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
+RunStatus = Literal["pending", "error", "success", "timeout", "interrupted"]
 """
 Represents the status of a run:
 - "pending": The run is waiting to start.
-- "running": The run is currently in progress.
 - "error": The run encountered an error and stopped.
 - "success": The run completed successfully.
 - "timeout": The run exceeded its time limit.
 - "interrupted": The run was manually stopped or interrupted.
 """
 
-ThreadStatus = Literal["idle", "busy", "interrupted"]
+ThreadStatus = Literal["idle", "busy", "interrupted", "error"]
 """
 Represents the status of a thread:
 - "idle": The thread is not currently processing any task.
 - "busy": The thread is actively processing a task.
 - "interrupted": The thread's execution was interrupted.
+- "error": An exception occurred during task processing.
 """
 
-StreamMode = Literal["values", "messages", "updates", "events", "debug"]
+StreamMode = Literal[
+    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+]
 """
 Defines the mode of streaming:
 - "values": Stream only the values.
@@ -33,6 +35,7 @@ Defines the mode of streaming:
 - "updates": Stream updates to the state.
 - "events": Stream events occurring during execution.
 - "debug": Stream detailed debug information.
+- "custom": Stream custom events.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
@@ -67,6 +70,20 @@ Defines action after completion:
 
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
+
+IfNotExists = Literal["create", "reject"]
+"""
+Specifies behavior if the thread doesn't exist:
+- "create": Create a new thread if it doesn't exist.
+- "reject": Reject the operation if the thread doesn't exist.
+"""
+
+CancelAction = Literal["interrupt", "rollback"]
+"""
+Action to take when cancelling the run.
+- "interrupt": Simply cancel the run.
+- "rollback": Cancel the run. Then delete the run and associated checkpoints.
+"""
 
 
 class Config(TypedDict, total=False):
@@ -111,7 +128,7 @@ class GraphSchema(TypedDict):
     graph_id: str
     """The ID of the graph."""
     input_schema: Optional[dict]
-    """The schema for the graph state.
+    """The schema for the graph input.
     Missing if unable to generate JSON schema from graph."""
     output_schema: Optional[dict]
     """The schema for the graph output.
@@ -159,6 +176,19 @@ class Assistant(AssistantBase):
     """The name of the assistant"""
 
 
+class Interrupt(TypedDict, total=False):
+    """Represents an interruption in the execution flow."""
+
+    value: Any
+    """The value associated with the interrupt."""
+    when: Literal["during"]
+    """When the interrupt occurred."""
+    resumable: bool
+    """Whether the interrupt can be resumed."""
+    ns: Optional[list[str]]
+    """Optional namespace for the interrupt."""
+
+
 class Thread(TypedDict):
     """Represents a conversation thread."""
 
@@ -174,6 +204,8 @@ class Thread(TypedDict):
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
     values: Json
     """The current state of the thread."""
+    interrupts: Dict[str, list[Interrupt]]
+    """Interrupts which were thrown in this thread"""
 
 
 class ThreadTask(TypedDict):
@@ -182,9 +214,10 @@ class ThreadTask(TypedDict):
     id: str
     name: str
     error: Optional[str]
-    interrupts: list[dict]
+    interrupts: list[Interrupt]
     checkpoint: Optional[Checkpoint]
     state: Optional["ThreadState"]
+    result: Optional[dict[str, Any]]
 
 
 class ThreadState(TypedDict):
@@ -205,6 +238,13 @@ class ThreadState(TypedDict):
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+
+
+class ThreadUpdateStateResponse(TypedDict):
+    """Represents the response from updating a thread's state."""
+
+    checkpoint: Checkpoint
+    """Checkpoint of the latest state."""
 
 
 class Run(TypedDict):
@@ -300,10 +340,21 @@ class ListNamespaceResponse(TypedDict):
     """A list of namespace paths, where each path is a list of strings."""
 
 
+class SearchItem(Item, total=False):
+    """Item with an optional relevance score from search operations.
+
+    Attributes:
+        score (Optional[float]): Relevance/similarity score. Included when
+            searching a compatible store with a natural language query.
+    """
+
+    score: Optional[float]
+
+
 class SearchItemsResponse(TypedDict):
     """Response structure for searching items."""
 
-    items: list[Item]
+    items: list[SearchItem]
     """A list of items matching the search criteria."""
 
 
@@ -314,3 +365,14 @@ class StreamPart(NamedTuple):
     """The type of event for this stream part."""
     data: dict
     """The data payload associated with the event."""
+
+
+class Send(TypedDict):
+    node: str
+    input: Optional[dict[str, Any]]
+
+
+class Command(TypedDict, total=False):
+    send: Union[Send, Sequence[Send]]
+    update: dict[str, Any]
+    resume: Any

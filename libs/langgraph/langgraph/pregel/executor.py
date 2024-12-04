@@ -20,7 +20,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -68,7 +68,7 @@ class BackgroundExecutor(ContextManager):
     def done(self, task: concurrent.futures.Future) -> None:
         try:
             task.result()
-        except GraphInterrupt:
+        except GraphBubbleUp:
             # This exception is an interruption signal, not an error
             # so we don't want to re-raise it on exit
             self.tasks.pop(task)
@@ -86,19 +86,21 @@ class BackgroundExecutor(ContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # copy the tasks as done() callback may modify the dict
+        tasks = self.tasks.copy()
         # cancel all tasks that should be cancelled
-        for task, (cancel, _) in self.tasks.items():
+        for task, (cancel, _) in tasks.items():
             if cancel:
                 task.cancel()
         # wait for all tasks to finish
-        if tasks := {t for t in self.tasks if not t.done()}:
-            concurrent.futures.wait(tasks)
+        if pending := {t for t in tasks if not t.done()}:
+            concurrent.futures.wait(pending)
         # shutdown the executor
         self.stack.__exit__(exc_type, exc_value, traceback)
         # re-raise the first exception that occurred in a task
         if exc_type is None:
             # if there's already an exception being raised, don't raise another one
-            for task, (_, reraise) in self.tasks.items():
+            for task, (_, reraise) in tasks.items():
                 if not reraise:
                     continue
                 try:
@@ -116,11 +118,17 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     - re-raises the first exception from tasks with `__reraise_on_exit__=True`
       ignoring CancelledError"""
 
-    def __init__(self) -> None:
+    def __init__(self, config: RunnableConfig) -> None:
         self.context_not_supported = sys.version_info < (3, 11)
         self.tasks: dict[asyncio.Task, tuple[bool, bool]] = {}
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
+        if max_concurrency := config.get("max_concurrency"):
+            self.semaphore: Optional[asyncio.Semaphore] = asyncio.Semaphore(
+                max_concurrency
+            )
+        else:
+            self.semaphore = None
 
     def submit(  # type: ignore[valid-type]
         self,
@@ -132,6 +140,8 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         **kwargs: P.kwargs,
     ) -> asyncio.Task[T]:
         coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
+        if self.semaphore:
+            coro = gated(self.semaphore, coro)
         if self.context_not_supported:
             task = self.loop.create_task(coro, name=__name__)
         else:
@@ -145,7 +155,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
             if exc := task.exception():
                 # This exception is an interruption signal, not an error
                 # so we don't want to re-raise it on exit
-                if isinstance(exc, GraphInterrupt):
+                if isinstance(exc, GraphBubbleUp):
                     self.tasks.pop(task)
             else:
                 self.tasks.pop(task)
@@ -161,17 +171,19 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> None:
+        # copy the tasks as done() callback may modify the dict
+        tasks = self.tasks.copy()
         # cancel all tasks that should be cancelled
-        for task, (cancel, _) in self.tasks.items():
+        for task, (cancel, _) in tasks.items():
             if cancel:
                 task.cancel(self.sentinel)
         # wait for all tasks to finish
-        if self.tasks:
-            await asyncio.wait(self.tasks)
+        if tasks:
+            await asyncio.wait(tasks)
         # if there's already an exception being raised, don't raise another one
         if exc_type is None:
             # re-raise the first exception that occurred in a task
-            for task, (_, reraise) in self.tasks.items():
+            for task, (_, reraise) in tasks.items():
                 if not reraise:
                     continue
                 try:
@@ -179,3 +191,9 @@ class AsyncBackgroundExecutor(AsyncContextManager):
                         raise exc
                 except asyncio.CancelledError:
                     pass
+
+
+async def gated(semaphore: asyncio.Semaphore, coro: Coroutine[None, None, T]) -> T:
+    """A coroutine that waits for a semaphore before running another coroutine."""
+    async with semaphore:
+        return await coro

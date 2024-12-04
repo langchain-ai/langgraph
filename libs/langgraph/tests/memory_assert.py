@@ -1,5 +1,8 @@
 import asyncio
+import os
+import tempfile
 from collections import defaultdict
+from functools import partial
 from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -12,7 +15,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     copy_checkpoint,
 )
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
 
 
 class NoopSerializer(SerializerProtocol):
@@ -32,9 +35,13 @@ class MemorySaverAssertImmutable(InMemorySaver):
         serde: Optional[SerializerProtocol] = None,
         put_sleep: Optional[float] = None,
     ) -> None:
-        super().__init__(serde=serde)
+        _, filename = tempfile.mkstemp()
+        super().__init__(
+            serde=serde, factory=partial(PersistentDict, filename=filename)
+        )
         self.storage_for_copies = defaultdict(lambda: defaultdict(dict))
         self.put_sleep = put_sleep
+        self.stack.callback(os.remove, filename)
 
     def put(
         self,

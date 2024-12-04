@@ -138,3 +138,9 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+
+def test_memory_saver() -> None:
+    from langgraph.checkpoint.memory import MemorySaver
+
+    assert issubclass(MemorySaver(), InMemorySaver)
