@@ -81,6 +81,15 @@ The `fields` configuration determines which parts of your documents to embed:
 }
 ```
 
+!!! note "Common model dimensions"
+        - openai:text-embedding-3-large: 3072
+        - openai:text-embedding-3-small: 1536
+        - openai:text-embedding-ada-002: 1536
+        - cohere:embed-english-v3.0: 1024
+        - cohere:embed-english-light-v3.0: 384
+        - cohere:embed-multilingual-v3.0: 1024
+        - cohere:embed-multilingual-light-v3.0: 384
+
 #### Semantic search with a custom embedding function
 
 If you want to use semantic search with a custom embedding function, you can pass a path to a custom embedding function:

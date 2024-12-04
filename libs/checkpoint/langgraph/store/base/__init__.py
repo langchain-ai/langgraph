@@ -477,13 +477,13 @@ class IndexConfig(TypedDict, total=False):
     """Number of dimensions in the embedding vectors.
     
     Common embedding models have the following dimensions:
-        - OpenAI text-embedding-3-large: 256, 1024, or 3072
-        - OpenAI text-embedding-3-small: 512 or 1536
-        - OpenAI text-embedding-ada-002: 1536
-        - Cohere embed-english-v3.0: 1024
-        - Cohere embed-english-light-v3.0: 384
-        - Cohere embed-multilingual-v3.0: 1024
-        - Cohere embed-multilingual-light-v3.0: 384
+        - openai:text-embedding-3-large: 3072
+        - openai:text-embedding-3-small: 1536
+        - openai:text-embedding-ada-002: 1536
+        - cohere:embed-english-v3.0: 1024
+        - cohere:embed-english-light-v3.0: 384
+        - cohere:embed-multilingual-v3.0: 1024
+        - cohere:embed-multilingual-light-v3.0: 384
     """
 
     embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
