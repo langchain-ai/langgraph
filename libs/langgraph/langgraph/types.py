@@ -249,8 +249,8 @@ class Command(Generic[N]):
 
     graph: Optional[str] = None
     update: Optional[dict[str, Any]] = None
-    send: Union[Send, Sequence[Send]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
+    goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:
         # get all non-None values

@@ -373,6 +373,6 @@ class Send(TypedDict):
 
 
 class Command(TypedDict, total=False):
-    send: Union[Send, Sequence[Send]]
+    goto: Union[Send, str, Sequence[Union[Send, str]]]
     update: dict[str, Any]
     resume: Any
