@@ -290,16 +290,15 @@ class PregelLoop(LoopProtocol):
         if self.checkpointer_put_writes is not None:
             self.submit(
                 self.checkpointer_put_writes,
-                {
-                    **self.checkpoint_config,
-                    CONF: {
-                        **self.checkpoint_config[CONF],
+                patch_configurable(
+                    self.checkpoint_config,
+                    {
                         CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                             CONFIG_KEY_CHECKPOINT_NS, ""
                         ),
                         CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                     },
-                },
+                ),
                 writes,
                 task_id,
             )

@@ -423,6 +423,10 @@ class PregelRunner:
                 break
             # give control back to the caller
             yield
+        # wait for pending done callbacks
+        # if a 2nd future finishes while `wait` is returning, it's possible
+        # that done callbacks for the 2nd future aren't called until next tick
+        await asyncio.sleep(0)
         # cancel waiter task
         for fut in futures:
             fut.cancel()
