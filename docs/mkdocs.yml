@@ -225,6 +225,7 @@ nav:
               - cloud/deployment/setup.md
               - cloud/deployment/setup_pyproject.md
               - cloud/deployment/setup_javascript.md
+              - cloud/deployment/semantic_search.md
               - cloud/deployment/custom_docker.md
               - cloud/deployment/test_locally.md
               - cloud/deployment/graph_rebuild.md
