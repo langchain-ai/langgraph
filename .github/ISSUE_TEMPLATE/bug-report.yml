@@ -7,7 +7,7 @@ body:
       value: >
         Thank you for taking the time to file a bug report. 
         
-        Use this to report BUGS in LangChain. For usage questions, feature requests and general design questions, please use [GitHub Discussions](https://github.com/langchain-ai/langchain/discussions).
+        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use [GitHub Discussions](https://github.com/langchain-ai/langgraph/discussions).
         
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
