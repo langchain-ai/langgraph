@@ -264,15 +264,17 @@ export interface Checkpoint {
 export interface ListNamespaceResponse {
   namespaces: string[][];
 }
-
-export interface SearchItemsResponse {
-  items: Item[];
-}
-
 export interface Item {
   namespace: string[];
   key: string;
   value: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SearchItem extends Item {
+  score?: number;
+}
+export interface SearchItemsResponse {
+  items: SearchItem[];
 }

@@ -1206,6 +1206,7 @@ export class StoreClient extends BaseClient {
    * @param options.filter Optional dictionary of key-value pairs to filter results.
    * @param options.limit Maximum number of items to return (default is 10).
    * @param options.offset Number of items to skip before returning results (default is 0).
+   * @param options.query Optional search query.
    * @returns Promise<SearchItemsResponse>
    */
   async searchItems(
@@ -1214,6 +1215,7 @@ export class StoreClient extends BaseClient {
       filter?: Record<string, any>;
       limit?: number;
       offset?: number;
+      query?: string;
     },
   ): Promise<SearchItemsResponse> {
     const payload = {
@@ -1221,6 +1223,7 @@ export class StoreClient extends BaseClient {
       filter: options?.filter,
       limit: options?.limit ?? 10,
       offset: options?.offset ?? 0,
+      query: options?.query,
     };
 
     const response = await this.fetch<APISearchItemsResponse>(
