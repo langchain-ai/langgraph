@@ -427,7 +427,7 @@ When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) o
 }
 ```
 
-See the [deployment guide](../deployment/semantic_search.md) for more details and configuration options.
+See the [deployment guide](../cloud/deployment/semantic_search.md) for more details and configuration options.
 
 ## Checkpointer libraries
 
