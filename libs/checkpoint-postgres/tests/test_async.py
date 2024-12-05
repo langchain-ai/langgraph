@@ -63,9 +63,8 @@ async def _pipe_saver():
             prepare_threshold=0,
             row_factory=dict_row,
         ) as conn:
-            async with conn.pipeline() as pipe:
-                checkpointer = AsyncPostgresSaver(conn, pipe=pipe)
-                await checkpointer.setup()
+            checkpointer = AsyncPostgresSaver(conn)
+            await checkpointer.setup()
             async with conn.pipeline() as pipe:
                 checkpointer = AsyncPostgresSaver(conn, pipe=pipe)
                 yield checkpointer
