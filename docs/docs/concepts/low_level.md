@@ -283,6 +283,9 @@ You can optionally provide a dictionary that maps the `routing_function`'s outpu
 graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
 ```
 
+!!! tip
+    Use [`Command`](#command) instead of conditional edges if you need to combine state updates and routing.
+
 ### Entry Point
 
 The entry point is the first node(s) that are run when the graph starts. You can use the [`add_edge`][langgraph.graph.StateGraph.add_edge] method from the virtual [`START`][langgraph.constants.START] node to the first node to execute to specify where to enter the graph.
