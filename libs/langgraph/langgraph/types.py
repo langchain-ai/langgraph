@@ -251,7 +251,7 @@ class Command(Generic[N]):
         graph: graph to send the command to. Supported values are:
             - None: the current graph (default)
             - GraphCommand.PARENT: closest parent graph
-        update: state update to apply to the graph's state at the current superstep.
+        update: update to apply to the graph's state.
         resume: value to resume execution with. Will be used when `interrupt()` is called.
         goto: can be one of the following:
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
