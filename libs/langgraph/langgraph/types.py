@@ -330,38 +330,55 @@ class PregelScratchpad(TypedDict, total=False):
 def interrupt(value: Any) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
-    The interrupt function is used for supporting human-in-the-loop workflows.
-
-    It can be thought of as an equivalent to the python's built-in `input` function.
+    The `interrupt` function enables human-in-the-loop workflows by pausing graph
+    execution and surfacing a value to the client. This value can communicate context
+    or request input required to resume execution.
 
     In a given node, the first invocation of this function raises a `GraphInterrupt`
-    exception. The `value` argument is passed to the exception and can be used to
-    communicate information to the client executing the graph.
+    exception, halting execution. The provided `value` is included with the exception
+    and sent to the client executing the graph.
 
-    The client can choose to resume the graph from the same node provide a value to
-    resume with.
+    A client resuming the graph must use the `Command` primitive to specify a value
+    for the interrupt and continue execution. The graph resumes from the start of
+    the node, **re-executing** all logic.
 
+    If a node contains multiple `interrupt` calls, LangGraph matches resume values
+    to interrupts based on their order in the node. This list of resume values
+    is scoped to the specific task executing the node and is not shared across tasks.
 
-    The client will use the `Command` primitive to
-    resume graph execution.
+    To use an `interrupt`, you must enable a checkpointer, as the feature relies
+    on persisting the graph state.
 
-    graph.astream(Command(resume="answer 1", update={"my_key": "foofoo"}), config, stream_mode="updates")
+    Examples:
 
+        ```python
+        async def some_node(state: State):
+            # Surface a value as part of the interrupt
+            question = {"question": "how old are you?"}
+            answer = interrupt(question)
+            # Continue execution with the provided answer
+        ```
 
-    The first invocation of this function raises a `GraphInterrupt` exception
-
-    The first occurrence of this function in a node raises a `GraphInterrupt`
-    exception with the given value.
-
-    A client executing the graph will receive the value and can choose to
-    resume the graph from the same node with a value.
+        A client resuming the graph:
+        ```python
+        for chunk in graph.astream(
+            Command(resume="25"),
+            config,
+            stream_mode="updates"
+        ):
+            print(chunk)
+        ```
 
     Args:
-        value: The value to interrupt the graph with.
+        value: The value to surface to the client when the graph is interrupted.
 
     Returns:
-        On a first call, raises a `GraphInterrupt` exception with the given value.
-        On subsequent calls from the same node, returns the value to resume with.
+        On subsequent invocations within the same node (same task to be precise),
+        returns the value provided during the first invocation
+
+    Raises:
+        GraphInterrupt: On the first invocation within the node, halts execution
+        and surfaces the provided value to the client.
     """
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
