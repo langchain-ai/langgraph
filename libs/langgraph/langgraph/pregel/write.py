@@ -136,7 +136,6 @@ class ChannelWrite(RunnableCallable):
                     raise InvalidUpdateError("PASSTHROUGH value must be replaced")
         # assemble writes
         tuples: list[tuple[str, Any]] = []
-        print(writes)
         for w in writes:
             if isinstance(w, Send):
                 tuples.append((PUSH if FF_SEND_V2 else TASKS, w))
@@ -152,7 +151,6 @@ class ChannelWrite(RunnableCallable):
                 tuples.append((w.channel, value))
             else:
                 raise ValueError(f"Invalid write entry: {w}")
-        print(tuples, require_at_least_one_of)
         # assert required channels
         if require_at_least_one_of is not None:
             if not {chan for chan, _ in tuples} & set(require_at_least_one_of):
