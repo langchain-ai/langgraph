@@ -35,6 +35,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
+from langgraph.types import Command
 from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
@@ -214,6 +215,26 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
+
+        commands: list[Command] = [
+            output for output in outputs if isinstance(output, Command)
+        ]
+        # This can be relaxed by moving to a design where there is a single node per tool
+        # In that case multiple Commands can be handled natively by LangGraph
+        # (including concurrent state updates via reducers, multiple goto destinations, etc.)
+        if len(commands) > 1:
+            raise ValueError(
+                "Currently only one Command update per ToolNode is supported, got multiple Commands."
+            )
+
+        if len(commands) == 1:
+            if len(outputs) > 1:
+                raise ValueError("Cannot mix Command returns with ToolMessages.")
+
+            # Users that want to include ToolMessages in the state update
+            # will need to explicitly add them to the Command.update
+            return commands[0]
+
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {self.messages_key: outputs}
 
@@ -246,6 +267,25 @@ class ToolNode(RunnableCallable):
         outputs = await asyncio.gather(
             *(self._arun_one(call, config) for call in tool_calls)
         )
+        commands: list[Command] = [
+            output for output in outputs if isinstance(output, Command)
+        ]
+        # This can be relaxed by moving to a design where there is a single node per tool
+        # In that case multiple Commands can be handled natively by LangGraph
+        # (including concurrent state updates via reducers, multiple goto destinations, etc.)
+        if len(commands) > 1:
+            raise ValueError(
+                "Currently only one Command update per ToolNode is supported, got multiple Commands."
+            )
+
+        if len(commands) == 1:
+            if len(outputs) > 1:
+                raise ValueError("Cannot mix Command returns with ToolMessages.")
+
+            # Users that want to include ToolMessages in the state update
+            # will need to explicitly add them to the Command.update
+            return commands[0]
+
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {self.messages_key: outputs}
 
@@ -254,10 +294,28 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            input = {**call, **{"type": "tool_call"}}
-            tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                input, config
-            )
+            # check if the Tool.func / Tool._run method returns a Command in the type annotation
+            tool = self.tools_by_name[call["name"]]
+            tool_func = getattr(tool, "func", tool._run)
+            if (return_type := tool_func.__annotations__.get("return")) and (
+                return_type is Command or get_origin(return_type) is Command
+            ):
+                # invoke with the raw tool call to return a Command directly
+                # NOTE: we remove type = "tool_call" to allow returning raw tool result
+                # instead of a ToolMessage
+                raw_tool_call = {**call, **{"type": None}}
+                command: Command = tool.invoke(raw_tool_call)
+                state_update = command.update or {}
+                messages_update = state_update.get(self.messages_key, [])
+                for message in messages_update:
+                    # assign tool call ID & name
+                    if isinstance(message, ToolMessage):
+                        message.name = call["name"]
+                        message.tool_call_id = cast(str, call["id"])
+                return command
+            else:
+                # invoke with the full input to return a ToolMessage
+                tool_message: ToolMessage = tool.invoke(call, config)
             tool_message.content = cast(
                 Union[str, list], msg_content_output(tool_message.content)
             )
@@ -295,10 +353,28 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            input = {**call, **{"type": "tool_call"}}
-            tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
-                input, config
-            )
+            # check if the Tool.coroutine / Tool._arun method returns a Command in the type annotation
+            tool = self.tools_by_name[call["name"]]
+            tool_coroutine = getattr(tool, "coroutine", tool._arun)
+            if (return_type := tool_coroutine.__annotations__.get("return")) and (
+                return_type is Command or get_origin(return_type) is Command
+            ):
+                # invoke with the raw tool call to return a Command directly
+                # NOTE: we remove type = "tool_call" to allow returning raw tool result
+                # instead of a ToolMessage
+                raw_tool_call = {**call, **{"type": None}}
+                command: Command = await tool.ainvoke(raw_tool_call)
+                state_update = command.update or {}
+                messages_update = state_update.get(self.messages_key, [])
+                for message in messages_update:
+                    # assign tool call ID & name
+                    if isinstance(message, ToolMessage):
+                        message.name = call["name"]
+                        message.tool_call_id = cast(str, call["id"])
+                return command
+            else:
+                # invoke with the full input to return a ToolMessage
+                tool_message: ToolMessage = await tool.ainvoke(call, config)
             tool_message.content = cast(
                 Union[str, list], msg_content_output(tool_message.content)
             )
