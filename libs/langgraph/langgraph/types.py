@@ -251,7 +251,7 @@ class Command(Generic[N]):
         graph: graph to send the command to. Supported values are:
 
             - None: the current graph (default)
-            - GraphCommand.PARENT: closest parent graph
+            - Command.PARENT: closest parent graph
         update: update to apply to the graph's state.
         resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
         goto: can be one of the following:
