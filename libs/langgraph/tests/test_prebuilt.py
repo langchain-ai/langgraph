@@ -991,7 +991,7 @@ def test_tool_node_node_interrupt():
 async def test_tool_node_command():
     command = Command(
         update={
-            "messages": [ToolMessage(content="Transfered to Bob", tool_call_id="")]
+            "messages": [ToolMessage(content="Transferred to Bob", tool_call_id="")]
         },
         goto="bob",
         graph=Command.PARENT,
@@ -1058,7 +1058,7 @@ async def test_tool_node_command():
             update={
                 "messages": [
                     ToolMessage(
-                        content="Transfered to Bob", tool_call_id="1", name=tool.name
+                        content="Transferred to Bob", tool_call_id="1", name=tool.name
                     )
                 ]
             },
@@ -1082,7 +1082,7 @@ async def test_tool_node_command():
             update={
                 "messages": [
                     ToolMessage(
-                        content="Transfered to Bob", tool_call_id="1", name=tool.name
+                        content="Transferred to Bob", tool_call_id="1", name=tool.name
                     )
                 ]
             },
@@ -1144,7 +1144,7 @@ def test_react_agent_update_state():
     )
     config = {"configurable": {"thread_id": "1"}}
     # run until interrpupted
-    agent.invoke({"messages": [("user", "whats my name")]}, config)
+    agent.invoke({"messages": [("user", "what's my name")]}, config)
     # supply the value for the interrupt
     response = agent.invoke(Command(resume="Archibald"), config)
     # confirm that the state was updated
