@@ -256,7 +256,7 @@ class Command(Generic[N]):
         goto: can be one of the following:
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
             - list of node names to navigate to next
-            - `Send` object
+            - `Send` object (to execute a node with the input provided)
             - sequence of `Send` objects
     """
 
