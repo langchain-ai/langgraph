@@ -380,7 +380,7 @@ def my_node(state: State) -> Command[Literal["my_other_node", "__end__"]]:
         return Command(goto="__end__")
 ```
 
-Check out this [how-to guide](../how-tos/graph-command.ipynb) for an end-to-end example of how to use `Command`.
+Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
 ## Persistence
 

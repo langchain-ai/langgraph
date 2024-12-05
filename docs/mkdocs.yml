@@ -151,7 +151,7 @@ nav:
             - how-tos/branching.ipynb
             - how-tos/map-reduce.ipynb
             - how-tos/recursion-limit.ipynb
-            - how-tos/graph-command.ipynb
+            - how-tos/command.ipynb
         - Persistence:
             - Persistence: how-tos#persistence
             - how-tos/persistence.ipynb
