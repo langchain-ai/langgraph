@@ -284,7 +284,7 @@ graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: 
 ```
 
 !!! tip
-    Use [`Command`](#command) instead of conditional edges if you need to combine state updates and routing.
+    Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
 
 ### Entry Point
 
