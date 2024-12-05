@@ -249,13 +249,15 @@ class Command(Generic[N]):
 
     Args:
         graph: graph to send the command to. Supported values are:
+
             - None: the current graph (default)
             - GraphCommand.PARENT: closest parent graph
         update: update to apply to the graph's state.
-        resume: value to resume execution with. To be used together with `interrupt()`.
+        resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
         goto: can be one of the following:
+
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
-            - list of node names to navigate to next
+            - sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
             - sequence of `Send` objects
     """

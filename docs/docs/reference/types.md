@@ -14,3 +14,4 @@
         - StateSnapshot
         - Send
         - Command
+        - interrupt

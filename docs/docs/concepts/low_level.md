@@ -344,9 +344,9 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 | Property | Description |
 | --- | --- |
 | `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `Command.PARENT`: closest parent graph |
-| `update` | State update to apply to the graph's state at the current superstep |
-| `resume` | Value to resume execution with. Will be used when `interrupt()` is called |
-| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- list of node names to navigate to next<br>- `Send` object<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
+| `update` | Update to apply to the graph's state. |
+| `resume` | Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt]. |
+| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- sequence of node names to navigate to next<br>- `Send` object (to execute a node with the input provided)<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
 
 ```python
 from langgraph.graph import StateGraph, START
@@ -373,12 +373,14 @@ graph = builder.compile()
 With `Command` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
 
 ```python
-def my_node(state: State) -> Command[Literal["my_other_node", "__end__"]]:
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
     if state["foo"] == "bar":
         return Command(update={"foo": "baz"}, goto="my_other_node")
-    else:
-        return Command(goto="__end__")
 ```
+
+!!! important
+
+    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["node_b", "node_c"]]`. This is necessary for the graph compilation and rendering, and tells LangGraph that `node_a` can navigate to `node_b` and `node_c`.
 
 Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
