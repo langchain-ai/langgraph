@@ -134,6 +134,11 @@ langgraph [OPTIONS] COMMAND [ARGS]
 
 Run LangGraph API server in development mode with hot reloading and debugging capabilities. This lightweight server requires no Docker installation and is suitable for development and testing. State is persisted to a local directory.
 
+!!! note "Python only"
+
+    Currently, the CLI only supports Python >= 3.11.
+    JS support is coming soon.
+
 **Installation**
 
 This command requires the "inmem" extra to be installed:
