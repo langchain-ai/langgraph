@@ -5,8 +5,6 @@ from copy import copy
 from typing import (
     Any,
     Callable,
-    Dict,
-    List,
     Literal,
     Optional,
     Sequence,
@@ -45,7 +43,7 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def msg_content_output(output: Any) -> str | List[dict]:
+def msg_content_output(output: Any) -> Union[str, list[dict]]:
     recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
         return output
@@ -90,7 +88,7 @@ def _handle_tool_error(
     return content
 
 
-def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
+def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], ...]:
     sig = inspect.signature(handler)
     params = list(sig.parameters.values())
     if params:
@@ -189,9 +187,9 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
-        self.tools_by_name: Dict[str, BaseTool] = {}
-        self.tool_to_state_args: Dict[str, Dict[str, Optional[str]]] = {}
-        self.tool_to_store_arg: Dict[str, Optional[str]] = {}
+        self.tools_by_name: dict[str, BaseTool] = {}
+        self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
+        self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
@@ -341,7 +339,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: BaseStore,
-    ) -> Tuple[List[ToolCall], Literal["list", "dict"]]:
+    ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
             output_type = "list"
             message: AnyMessage = input[-1]
@@ -651,9 +649,9 @@ def _is_injection(
     return False
 
 
-def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
+def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
-    tool_args_to_state_fields: Dict = {}
+    tool_args_to_state_fields: dict = {}
 
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
         injections = [
