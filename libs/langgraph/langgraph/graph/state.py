@@ -1,4 +1,3 @@
-import dataclasses
 import inspect
 import logging
 import typing
@@ -9,7 +8,6 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
-    Generic,
     Literal,
     NamedTuple,
     Optional,
@@ -55,7 +53,7 @@ from langgraph.managed.base import (
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, All, Checkpointer, Command, N, RetryPolicy
+from langgraph.types import All, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
@@ -82,22 +80,6 @@ def _get_node_name(node: RunnableLike) -> str:
         return getattr(node, "__name__", node.__class__.__name__)
     else:
         raise TypeError(f"Unsupported node type: {type(node)}")
-
-
-@dataclasses.dataclass(**_DC_KWARGS)
-class GraphCommand(Generic[N], Command[N]):
-    """One or more commands to update a StateGraph's state and go to, or send messages to nodes."""
-
-    goto: Union[str, Sequence[str]] = ()
-
-    def __repr__(self) -> str:
-        # get all non-None values
-        contents = ", ".join(
-            f"{key}={value!r}"
-            for key, value in dataclasses.asdict(self).items()
-            if value
-        )
-        return f"Command({contents})"
 
 
 class StateNodeSpec(NamedTuple):
@@ -392,7 +374,7 @@ class StateGraph(Graph):
                             input = input_hint
                 if (
                     (rtn := hints.get("return"))
-                    and get_origin(rtn) in (Command, GraphCommand)
+                    and get_origin(rtn) is Command
                     and (rargs := get_args(rtn))
                     and get_origin(rargs[0]) is Literal
                     and (vals := get_args(rargs[0]))
@@ -834,15 +816,12 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     if value.graph == Command.PARENT:
         raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
-    if isinstance(value, GraphCommand):
-        if isinstance(value.goto, str):
-            rtn.append(value.goto)
-        else:
-            rtn.extend(value.goto)
-    if isinstance(value.send, Send):
-        rtn.append(value.send)
+    if isinstance(value.goto, Send):
+        rtn.append(value.goto)
+    elif isinstance(value.goto, str):
+        rtn.append(value.goto)
     else:
-        rtn.extend(value.send)
+        rtn.extend(value.goto)
     return rtn
 
 
@@ -854,15 +833,12 @@ async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     if value.graph == Command.PARENT:
         raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
-    if isinstance(value, GraphCommand):
-        if isinstance(value.goto, str):
-            rtn.append(value.goto)
-        else:
-            rtn.extend(value.goto)
-    if isinstance(value.send, Send):
-        rtn.append(value.send)
+    if isinstance(value.goto, Send):
+        rtn.append(value.goto)
+    elif isinstance(value.goto, str):
+        rtn.append(value.goto)
     else:
-        rtn.extend(value.send)
+        rtn.extend(value.goto)
     return rtn
 
 

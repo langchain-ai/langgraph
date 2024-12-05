@@ -249,8 +249,8 @@ class Command(Generic[N]):
 
     graph: Optional[str] = None
     update: Optional[dict[str, Any]] = None
-    send: Union[Send, Sequence[Send]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
+    goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:
         # get all non-None values
@@ -350,7 +350,6 @@ def interrupt(value: Any) -> Any:
             if tid == NULL_TASK_ID and c == RESUME:
                 assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
                 scratchpad["resume"].append(v)
-                print("saving:", scratchpad["resume"])
                 conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
                 return v
     # no resume value found
