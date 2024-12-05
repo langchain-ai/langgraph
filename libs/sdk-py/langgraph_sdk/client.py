@@ -278,7 +278,12 @@ class HttpClient:
             raise e
 
     async def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         headers, content = await aencode_json(json)
@@ -286,7 +291,7 @@ class HttpClient:
         headers["Cache-Control"] = "no-store"
 
         async with self.client.stream(
-            method, path, headers=headers, content=content
+            method, path, headers=headers, content=content, params=params
         ) as res:
             # check status
             try:
@@ -314,6 +319,8 @@ class HttpClient:
 
 
 async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+    if json is None:
+        return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
@@ -2447,11 +2454,18 @@ class SyncHttpClient:
             raise e
 
     def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         headers, content = encode_json(json)
-        with self.client.stream(method, path, headers=headers, content=content) as res:
+        with self.client.stream(
+            method, path, headers=headers, content=content, params=params
+        ) as res:
             # check status
             try:
                 res.raise_for_status()
