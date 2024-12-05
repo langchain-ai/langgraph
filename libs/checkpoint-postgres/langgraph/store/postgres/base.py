@@ -21,7 +21,6 @@ from typing import (
 
 import orjson
 from psycopg import Capabilities, Connection, Cursor, Pipeline
-from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
