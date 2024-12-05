@@ -630,10 +630,9 @@ class CompiledGraph(Pregel):
 
         return graph
 
-    def _repr_mimebundle_(self, **kwargs) -> dict[str, Any]:
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
         """Mime bundle used by Jupyter to display the graph"""
-        output = {
+        return {
             "text/plain": repr(self),
             "image/png": self.get_graph().draw_mermaid_png(),
         }
-        return output
