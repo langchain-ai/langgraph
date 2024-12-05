@@ -33,6 +33,11 @@ The `langgraph build` command builds a Docker image for the [LangGraph API serve
 !!! note "New in version 0.1.55"
     The `langgraph dev` command was introduced in langgraph-cli version 0.1.55.
 
+!!! note "Python only"
+
+    Currently, the CLI only supports Python >= 3.11.
+    JS support is coming soon.
+
 The `langgraph dev` command starts a lightweight development server that requires no Docker installation. This server is ideal for rapid development and testing, with features like:
 
 - Hot reloading: Changes to your code are automatically detected and reloaded
