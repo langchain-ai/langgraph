@@ -311,7 +311,9 @@ class PregelLoop(LoopProtocol):
     ) -> Optional[PregelExecutableTask]:
         """Accept a PUSH from a task, potentially returning a new task to start."""
         # don't start if we should interrupt *after* the original task
-        if should_interrupt(self.checkpoint, self.interrupt_after, [task]):
+        if self.interrupt_after and should_interrupt(
+            self.checkpoint, self.interrupt_after, [task]
+        ):
             self.to_interrupt.append(task)
             return
         if pushed := cast(
@@ -333,7 +335,9 @@ class PregelLoop(LoopProtocol):
             ),
         ):
             # don't start if we should interrupt *before* the new task
-            if should_interrupt(self.checkpoint, self.interrupt_before, [pushed]):
+            if self.interrupt_before and should_interrupt(
+                self.checkpoint, self.interrupt_before, [pushed]
+            ):
                 self.to_interrupt.append(pushed)
                 return
             # produce debug output
@@ -409,7 +413,7 @@ class PregelLoop(LoopProtocol):
                 }
             )
             # after execution, check if we should interrupt
-            if should_interrupt(
+            if self.interrupt_after and should_interrupt(
                 self.checkpoint, self.interrupt_after, self.tasks.values()
             ):
                 self.status = "interrupt_after"
@@ -481,7 +485,7 @@ class PregelLoop(LoopProtocol):
             return self.tick(input_keys=input_keys)
 
         # before execution, check if we should interrupt
-        if should_interrupt(
+        if self.interrupt_before and should_interrupt(
             self.checkpoint, self.interrupt_before, self.tasks.values()
         ):
             self.status = "interrupt_before"
