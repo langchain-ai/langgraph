@@ -667,7 +667,7 @@ class CompiledStateGraph(CompiledGraph):
                 raise InvalidUpdateError(msg)
 
         # state updaters
-        write_entries = [
+        write_entries: list[Union[ChannelWriteEntry, ChannelWriteTupleEntry]] = [
             ChannelWriteTupleEntry(
                 mapper=_get_root if output_keys == ["__root__"] else _get_updates
             )
@@ -706,7 +706,7 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
-                        [ChannelWriteEntry(key, key)] + write_entries,
+                        write_entries + [ChannelWriteEntry(key, key)],
                         tags=[TAG_HIDDEN],
                     ),
                 ],

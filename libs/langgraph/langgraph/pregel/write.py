@@ -37,7 +37,7 @@ class ChannelWriteEntry(NamedTuple):
 
 
 class ChannelWriteTupleEntry(NamedTuple):
-    mapper: Callable[[Any], Sequence[tuple[str, Any]]]
+    mapper: Callable[[Any], Optional[Sequence[tuple[str, Any]]]]
     """Function to extract tuples from value."""
     value: Any = PASSTHROUGH
     """Value to write, or PASSTHROUGH to use the input."""
