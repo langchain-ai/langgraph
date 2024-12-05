@@ -569,10 +569,15 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         # Store documents
         store.put(("docs",), "doc1", {"text": "Python tutorial"})
         store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+        store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
 
         # Search by similarity
         results = store.search(("docs",), query="python programming")
-        ```
+
+    Note:
+        Semantic search is disabled by default. You can enable it by providing an `index` configuration
+        when creating the store. Without this configuration, all `index` arguments passed to
+        `put` or `aput`will have no effect.
 
     Warning:
         Make sure to call `setup()` before first use to create necessary tables and indexes.

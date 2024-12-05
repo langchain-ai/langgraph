@@ -276,9 +276,11 @@ The attributes it has are:
 Beyond simple retrieval, the store also supports semantic search, allowing you to find memories based on meaning rather than exact matches. To enable this, configure the store with an embedding model:
 
 ```python
+from langchain.embeddings import init_embeddings
+
 store = InMemoryStore(
     index={
-        "embed": "openai:text-embedding-3-small",  # Embedding provider
+        "embed": init_embeddings("openai:text-embedding-3-small"),  # Embedding provider
         "dims": 1536,                              # Embedding dimensions
         "fields": ["food_preference", "$"]              # Fields to embed
     }
@@ -289,6 +291,7 @@ Now when searching, you can use natural language queries to find relevant memori
 
 ```python
 # Find memories about food preferences
+# (This can be done after putting memories into the store)
 memories = store.search(
     namespace_for_memory,
     query="What does the user like to eat?",
@@ -412,7 +415,22 @@ for update in graph.stream(
     print(update)
 ```
 
-When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. For cloud deployments, semantic search is automatically configured based on your `langgraph.json` settings. See the [deployment guide](../deployment/semantic_search.md) for more details.
+When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. To enable semantic search, however, you **do** need to configure the indexing settings in your `langgraph.json` file. For example:
+
+```json
+{
+    ...
+    "store": {
+        "index": {
+            "embed": "openai:text-embeddings-3-small",
+            "dims": 1536,
+            "fields": ["$"]
+        }
+    }
+}
+```
+
+See the [deployment guide](../cloud/deployment/semantic_search.md) for more details and configuration options.
 
 ## Checkpointer libraries
 

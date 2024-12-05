@@ -471,7 +471,11 @@ class InvalidNamespaceError(ValueError):
 
 
 class IndexConfig(TypedDict, total=False):
-    """Configuration for indexing documents for semantic search in the store."""
+    """Configuration for indexing documents for semantic search in the store.
+
+    If not provided to the store, the store will not support vector search.
+    In that case, all `index` arguments to put() and `aput()` operations will be ignored.
+    """
 
     dims: int
     """Number of dimensions in the embedding vectors.
@@ -557,10 +561,15 @@ class IndexConfig(TypedDict, total=False):
     """Fields to extract text from for embedding generation.
     
     Controls which parts of stored items are embedded for semantic search. Follows JSON path syntax:
-    - ["$"] (default): Embeds the entire JSON object as one vector
-    - ["field1", "field2"]: Embeds specific top-level fields
-    - ["parent.child"]: Embeds nested fields using dot notation
-    - ["array[*].field"]: Embeds field from each array element separately
+
+        - ["$"]: Embeds the entire JSON object as one vector  (default)
+        - ["field1", "field2"]: Embeds specific top-level fields
+        - ["parent.child"]: Embeds nested fields using dot notation
+        - ["array[*].field"]: Embeds field from each array element separately
+    
+    Note:
+        You can always override this behavior when storing an item using the
+        `index` parameter in the `put` or `aput` operations.
     
     ???+ example "Examples"
         ```python
@@ -590,6 +599,15 @@ class BaseStore(ABC):
 
     Stores enable persistence and memory that can be shared across threads,
     scoped to user IDs, assistant IDs, or other arbitrary namespaces.
+    Some implementations may support semantic search capabilities through
+    an optional `index` configuration.
+
+    Note:
+        Semantic search capabilities vary by implementation and are typically
+        disabled by default. Stores that support this feature can be configured
+        by providing an `index` configuration at creation time. Without this
+        configuration, semantic search is disabled and any `index` arguments
+        to storage operations will have no effect.
     """
 
     __slots__ = ("__weakref__",)
@@ -706,6 +724,8 @@ class BaseStore(ABC):
             index: Controls how the item's fields are indexed for search:
 
                 - None (default): Use `fields` you configured when creating the store (if any)
+                    If you do not initialize the store with indexing capabilities,
+                    the `index` parameter will be ignored
                 - False: Disable indexing for this item
                 - list[str]: List of field paths to index, supporting:
                     - Nested fields: "metadata.title"
@@ -713,8 +733,9 @@ class BaseStore(ABC):
                     - Specific indices: "authors[0].name"
 
         Note:
-            Indexing capabilities depend on your store implementation.
-            Some implementations may support only a subset of indexing features.
+            Indexing support depends on your store implementation.
+            If you do not initialize the store with indexing capabilities,
+            the `index` parameter will be ignored.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -890,6 +911,8 @@ class BaseStore(ABC):
             index: Controls how the item's fields are indexed for search:
 
                 - None (default): Use `fields` you configured when creating the store (if any)
+                    If you do not initialize the store with indexing capabilities,
+                    the `index` parameter will be ignored
                 - False: Disable indexing for this item
                 - list[str]: List of field paths to index, supporting:
                     - Nested fields: "metadata.title"
@@ -897,8 +920,9 @@ class BaseStore(ABC):
                     - Specific indices: "authors[0].name"
 
         Note:
-            Indexing capabilities depend on your store implementation.
-            Some implementations may support only a subset of indexing features.
+            Indexing support depends on your store implementation.
+            If you do not initialize the store with indexing capabilities,
+            the `index` parameter will be ignored.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.

@@ -60,7 +60,7 @@ jobs:
         env:
           LANGGRAPH_FF_SEND_V2: ${{ matrix.ff-send-v2 }}
         run: |
-          make test
+          make test_parallel
 
       - name: Ensure the tests did not create any additional files
         shell: bash

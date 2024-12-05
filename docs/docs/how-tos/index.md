@@ -20,6 +20,7 @@ These how-to guides show how to achieve that controllability.
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 - [How to control graph recursion limit](recursion-limit.ipynb)
+- [How to combine control flow and state updates with Command](command.ipynb)
 
 ### Persistence
 
@@ -39,7 +40,8 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 - [How to manage conversation history](memory/manage-conversation-history.ipynb)
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
-- [Add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
+- [How to add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
+- [How to use semantic search for long-term memory](memory/semantic-search.ipynb)
 
 ### Human-in-the-loop
 
@@ -119,6 +121,7 @@ These guides show how to use the prebuilt ReAct agent:
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
+- [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
 
 ## LangGraph Platform
 
