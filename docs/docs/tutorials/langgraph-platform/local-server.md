@@ -10,7 +10,7 @@ This is a quick start guide to help you get a LangGraph app up and running local
 ## Install the LangGraph CLI
 
 ```bash
-pip install "langgraph-cli[inmem]==0.1.58" python-dotenv
+pip install -U "langgraph-cli[inmem]" python-dotenv
 ```
 
 ## 🌱 Create a LangGraph App
