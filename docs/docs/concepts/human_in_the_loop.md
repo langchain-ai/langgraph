@@ -1,20 +1,17 @@
 # Human-in-the-loop
 
-Human-in-the-loop (or "on-the-loop") enhances agent capabilities through several common user interaction patterns.
+Human-in-the-loop (or "on-the-loop") workflows enhance agent capabilities through several common user interaction patterns.
 
 Common interaction patterns include:
 
-(1) `Approval` - We can interrupt our agent, surface the current state to a user, and allow the user to accept an action. 
-
-(2) `Editing` - We can interrupt our agent, surface the current state to a user, and allow the user to edit the agent state. 
-
-(3) `Input` - We can explicitly create a graph node to collect human input and pass that input directly to the agent state.
+1. **Approval**: Pause the agent, present its current state to the user, and allow the user to approve or reject a proposed action.
+2. **Editing**: Pause the agent, present its current state to the user, and allow the user to make modifications to the agent's state.
+3. **Input**: Introduce a dedicated graph node to explicitly collect user input, which is then integrated into the agent's state.
 
 Use-cases for these interaction patterns include:
 
-(1) `Reviewing tool calls` - We can interrupt an agent to review and edit the results of tool calls.
-
-(2) `Time Travel` - We can manually re-play and / or fork past actions of an agent.
+1. `Reviewing tool calls` - We can interrupt an agent to review and edit the results of tool calls.
+2. `Time travel` - We can manually re-play and / or fork past actions of an agent.
 
 ## Persistence
 

@@ -451,25 +451,54 @@ Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-li
 
 ## Breakpoints
 
-It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
+Breakpoints enable **human-in-the-loop** workflows by **pausing** graph execution to allow for human review before continuing.
 
-You **MUST** use a [checkpointer](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
+You **MUST** use a [checkpointer](./persistence.md) when using breakpoints as breakpoints require the ability to save the state of the graph at the time of pausing.
 
-In order to resume execution, you can just invoke your graph with `None` as the input.
+There are two types of breakpoints:
+
+1. **Static breakpoints**: Pause the graph **before** or **after** a node executes.
+2. **Dynamic breakpoints**: Pause the graph from **inside** a node.
+
+### Static Breakpoints
+
+To set static breakpoints, specify the `interrupt_before` and/or `interrupt_after` key when [compiling your graph](#compiling-your-graph). 
 
 ```python
-# Initial run of graph
-graph.invoke(inputs, config=config)
-
-# Let's assume it hit a breakpoint somewhere, you can then resume by passing in None
-graph.invoke(None, config=config)
+graph = graph_builder.compile(
+    interrupt_before=["node_a"], 
+    interrupt_after=["node_b", "node_c"],
+    checkpointer=..., # Required
+)
 ```
 
-See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
+When using sub-graphs, specify the `interrupt_before` and `interrupt_after` values when compiling the subgraph.
 
-### Dynamic Breakpoints
+### Dynamic Breakpoints 
 
-It may be helpful to **dynamically** interrupt the graph from inside a given node based on some condition. In `LangGraph` you can do so by using `NodeInterrupt` -- a special exception that can be raised from inside a node.
+There are two ways to interrupt the graph dynamically:
+
+1. `interrupt` **function (recommended)**: Interrupts the graph within a node and surfaces a value to the client as part of the interrupt information.
+2. `NodeInterrupt` exception: An older, less flexible method for interrupting.
+
+#### `interrupt`
+
+```python
+from langgraph.types import interrupt
+
+def node(state: State):
+    ...
+    client_value = interrupt(
+        # This value will be sent to the client.
+        # It can be any JSON serializable value.
+        {"key": "value"}
+    )
+    ...
+```
+
+#### `NodeInterrupt`
+
+Throw a `NodeInterrupt` exception to interrupt the graph.
 
 ```python
 def my_node(state: State) -> State:
@@ -478,6 +507,46 @@ def my_node(state: State) -> State:
 
     return state
 ```
+
+### Resuming
+
+When a breakpoint is hit, graph execution will pause.
+
+=== "Command"
+
+    Resume execution using the new `Command` primitive.
+
+    ```python
+    graph.invoke(inputs, config=config) # This will pause at the breakpoint
+    ...
+    # Do something (e.g., get human input)
+    ...
+    graph.invoke(
+        Command(
+            # Use `resume` to pass a value to the `interrupt`.
+            resume=resume, 
+            # For other kinds of breakpoints, use `update` to update the state.
+            update=update,
+        ), 
+        config=config
+    )
+    ```
+
+=== "Without the Command Primitive"
+
+    Resume execution without the `Command` primitive (older versions of LangGraph).
+
+    ```python
+    graph.invoke(inputs, config=config) # This will pause at the breakpoint
+    ...
+    # Do something (e.g., get human input)
+    ...
+
+    graph.update_state(update, config=config)
+    graph.invoke(None, config=config)
+    ```
+
+See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
 
 ## Subgraphs
 
