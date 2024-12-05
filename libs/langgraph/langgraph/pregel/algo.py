@@ -1,3 +1,4 @@
+import sys
 from collections import defaultdict, deque
 from functools import partial
 from hashlib import sha1
@@ -36,13 +37,13 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
-    CONFIG_KEY_RESUME_VALUE,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_WRITES,
     EMPTY_SEQ,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -66,6 +67,7 @@ from langgraph.types import All, LoopProtocol, PregelExecutableTask, PregelTask
 from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
+SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
 class WritesProtocol(Protocol):
@@ -587,14 +589,13 @@ def prepare_single_task(
                             },
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                            CONFIG_KEY_RESUME_VALUE: next(
-                                (
-                                    v
-                                    for tid, c, v in pending_writes
-                                    if tid in (NULL_TASK_ID, task_id) and c == RESUME
-                                ),
-                                MISSING,
-                            ),
+                            CONFIG_KEY_WRITES: [
+                                w
+                                for w in pending_writes
+                                + configurable.get(CONFIG_KEY_WRITES, [])
+                                if w[0] in (NULL_TASK_ID, task_id)
+                            ],
+                            CONFIG_KEY_SCRATCHPAD: {},
                         },
                     ),
                     triggers,
@@ -602,6 +603,7 @@ def prepare_single_task(
                     None,
                     task_id,
                     task_path,
+                    writers=proc.flat_writers,
                 )
 
         else:
@@ -633,6 +635,12 @@ def prepare_single_task(
                 )
             except StopIteration:
                 return
+            except Exception as exc:
+                if SUPPORTS_EXC_NOTES:
+                    exc.add_note(
+                        f"Before task with name '{name}' and path '{task_path[:3]}'"
+                    )
+                raise
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
@@ -704,15 +712,13 @@ def prepare_single_task(
                                 },
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                                CONFIG_KEY_RESUME_VALUE: next(
-                                    (
-                                        v
-                                        for tid, c, v in pending_writes
-                                        if tid in (NULL_TASK_ID, task_id)
-                                        and c == RESUME
-                                    ),
-                                    MISSING,
-                                ),
+                                CONFIG_KEY_WRITES: [
+                                    w
+                                    for w in pending_writes
+                                    + configurable.get(CONFIG_KEY_WRITES, [])
+                                    if w[0] in (NULL_TASK_ID, task_id)
+                                ],
+                                CONFIG_KEY_SCRATCHPAD: {},
                             },
                         ),
                         triggers,
@@ -720,6 +726,7 @@ def prepare_single_task(
                         None,
                         task_id,
                         task_path,
+                        writers=proc.flat_writers,
                     )
             else:
                 return PregelTask(task_id, name, task_path)

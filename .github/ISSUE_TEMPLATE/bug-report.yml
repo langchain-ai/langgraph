@@ -7,35 +7,29 @@ body:
       value: >
         Thank you for taking the time to file a bug report. 
         
-        Use this to report bugs in LangChain. 
-        
-        If you're not certain that your issue is due to a bug in LangChain, please use [GitHub Discussions](https://github.com/langchain-ai/langchain/discussions)
-        to ask for help with your issue.
+        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use [GitHub Discussions](https://github.com/langchain-ai/langgraph/discussions).
         
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
         
-        [LangGraph documentation](https://langchain-ai.github.io/langgraph/).
+        [LangGraph Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
+        [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
+        [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
         [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),
         [GitHub search](https://github.com/langchain-ai/langgraph),
-        [LangChain Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
-        [LangChain Github Issues](https://github.com/langchain-ai/langgraph/issues),
-        [LangChain ChatBot](https://chat.langchain.com/)
   - type: checkboxes
     id: checks
     attributes:
       label: Checked other resources
-      description: Please confirm and check all the following options.
+      description: Before submitting this issue, please confirm that you have completed all the steps below by checking each option. These steps help ensure your issue is well-defined, relevant, and actionable.
       options:
-        - label: I added a very descriptive title to this issue.
+        - label: This is a bug, not a usage question. For questions, please use GitHub Discussions.
           required: true
-        - label: I searched the [LangGraph](https://langchain-ai.github.io/langgraph/)/LangChain documentation with the integrated search.
+        - label: I added a clear and detailed title that summarizes the issue.
           required: true
-        - label: I used the GitHub search to find a similar question and didn't find it.
+        - label: I read what a minimal reproducible example is (https://stackoverflow.com/help/minimal-reproducible-example).
           required: true
-        - label: I am sure that this is a bug in LangGraph/LangChain rather than my code.
-          required: true
-        - label: I am sure this is better as an issue [rather than a GitHub discussion](https://github.com/langchain-ai/langgraph/discussions/new/choose), since this is a LangGraph bug and not a design question.
+        - label: I included a self-contained, minimal example that demonstrates the issue INCLUDING all the relevant imports. The code run AS IS to reproduce the issue.
           required: true
   - type: textarea
     id: reproduction
@@ -45,14 +39,6 @@ body:
       label: Example Code
       description: |
         Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) with your use case.
-        
-        If a maintainer can copy it, run it, and see it right away, there's a much higher chance that you'll be able to get help.
-        
-        **Important!** 
-        
-        * Reduce your code to the minimum required to reproduce the issue if possible. This makes it much easier for others to help you.
-        * Avoid screenshots when possible, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
-
       placeholder: |
         from langgraph.graph import StateGraph
 
@@ -92,25 +78,8 @@ body:
     attributes:
       label: System Info
       description: |
-        Please share your system info with us. 
-        
-        "pip freeze | grep langchain" 
-        platform (windows / linux / mac)
-        python version
-        
-        OR if you're on a recent version of langchain-core you can paste the output of:
-        
         python -m langchain_core.sys_info
       placeholder: |
-        "pip freeze | grep langgraph"
-        platform
-        python version
-        
-        Alternatively, if you're on a recent version of langchain-core you can paste the output of:
-        
         python -m langchain_core.sys_info
-        
-        These will only surface LangChain packages, don't forget to include any other relevant
-        packages you're using (if you're not sure what's relevant, you can paste the entire output of `pip freeze`).
     validations:
       required: true

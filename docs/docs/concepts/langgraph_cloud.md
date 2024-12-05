@@ -14,6 +14,13 @@ A **deployment** is an instance of a LangGraph API. A single deployment can have
 
 See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for creating a new deployment.
 
+## Resource Allocation
+
+| **Deployment Type** | **CPU** | **Memory** | **Scaling**         |
+|---------------------|---------|------------|---------------------|
+| Development         | 1 CPU   | 1 GB       | Up to 1 container   |
+| Production          | 1 CPU   | 2 GB       | Up to 10 containers |
+
 ## Revision
 
 A revision is an iteration of a [deployment](#deployment). When a new deployment is created, an initial revision is automatically created. To deploy new code changes or update environment variable configurations for a deployment, a new revision must be created. When a revision is created, a new container image is built automatically.
@@ -32,6 +39,7 @@ The Cloud SaaS deployment architecture may change in the future.
 A high-level diagram of a Cloud SaaS deployment.
 
 ![diagram](img/langgraph_cloud_architecture.png)
+
 
 ## Related
 

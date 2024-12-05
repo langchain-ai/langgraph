@@ -21,9 +21,10 @@ from langgraph.constants import (
     INTERRUPT,
     NO_WRITES,
     PUSH,
+    RESUME,
     TAG_HIDDEN,
 )
-from langgraph.errors import GraphDelegate, GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
 from langgraph.types import PregelExecutableTask, RetryPolicy
@@ -297,8 +298,10 @@ class PregelRunner:
             if isinstance(exception, GraphInterrupt):
                 # save interrupt to checkpointer
                 if interrupts := [(INTERRUPT, i) for i in exception.args[0]]:
+                    if resumes := [w for w in task.writes if w[0] == RESUME]:
+                        interrupts.extend(resumes)
                     self.put_writes(task.id, interrupts)
-            elif isinstance(exception, GraphDelegate):
+            elif isinstance(exception, GraphBubbleUp):
                 raise exception
             else:
                 # save error to checkpointer
@@ -324,7 +327,7 @@ def _should_stop_others(
         if fut.cancelled():
             return True
         if exc := fut.exception():
-            return not isinstance(exc, GraphInterrupt)
+            return not isinstance(exc, GraphBubbleUp)
     else:
         return False
 

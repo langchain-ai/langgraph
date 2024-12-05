@@ -4,6 +4,7 @@ from uuid import UUID
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
+from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
@@ -15,6 +16,7 @@ from langgraph.constants import (
     TAG_HIDDEN,
     TASKS,
 )
+from langgraph.errors import InvalidUpdateError
 from langgraph.pregel.log import logger
 from langgraph.types import Command, PregelExecutableTask, Send
 
@@ -65,24 +67,31 @@ def read_channels(
 
 
 def map_command(
-    cmd: Command,
+    cmd: Command, pending_writes: list[PendingWrite]
 ) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
-    if cmd.send:
-        if isinstance(cmd.send, (tuple, list)):
-            sends = cmd.send
+    if cmd.graph == Command.PARENT:
+        raise InvalidUpdateError("There is not parent graph")
+    if cmd.goto:
+        if isinstance(cmd.goto, (tuple, list)):
+            sends = cmd.goto
         else:
-            sends = [cmd.send]
+            sends = [cmd.goto]
         for send in sends:
             if not isinstance(send, Send):
                 raise TypeError(
-                    f"In Command.send, expected Send, got {type(send).__name__}"
+                    f"In Command.goto, expected Send, got {type(send).__name__}"
                 )
             yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+        # TODO handle goto str for state graph
     if cmd.resume:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
-                yield (tid, RESUME, resume)
+                existing: list[Any] = next(
+                    (w[2] for w in pending_writes if w[0] == tid and w[1] == RESUME), []
+                )
+                existing.append(resume)
+                yield (tid, RESUME, existing)
         else:
             yield (NULL_TASK_ID, RESUME, cmd.resume)
     if cmd.update:

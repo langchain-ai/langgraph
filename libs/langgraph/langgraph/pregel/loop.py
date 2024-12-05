@@ -26,6 +26,7 @@ from typing_extensions import ParamSpec, Self
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -110,13 +111,13 @@ from langgraph.types import (
     Command,
     LoopProtocol,
     PregelExecutableTask,
+    StreamChunk,
     StreamProtocol,
 )
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")
-StreamChunk = tuple[tuple[str, ...], str, Any]
 
 INPUT_DONE = object()
 INPUT_RESUMING = object()
@@ -263,8 +264,28 @@ class PregelLoop(LoopProtocol):
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        # deduplicate writes to special channels, last write wins
+        if all(w[0] in WRITES_IDX_MAP for w in writes):
+            writes = list({w[0]: w for w in writes}.values())
         # save writes
-        self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
+        for c, v in writes:
+            if (
+                c in WRITES_IDX_MAP
+                and (
+                    idx := next(
+                        (
+                            i
+                            for i, w in enumerate(self.checkpoint_pending_writes)
+                            if w[0] == task_id and w[1] == c
+                        ),
+                        None,
+                    )
+                )
+                is not None
+            ):
+                self.checkpoint_pending_writes[idx] = (task_id, c, v)
+            else:
+                self.checkpoint_pending_writes.append((task_id, c, v))
         if self.checkpointer_put_writes is not None:
             self.submit(
                 self.checkpointer_put_writes,
@@ -536,7 +557,7 @@ class PregelLoop(LoopProtocol):
         elif isinstance(self.input, Command):
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(self.input):
+            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
                 writes[tid].append((c, v))
             if not writes:
                 raise EmptyInputError("Received empty Command input")

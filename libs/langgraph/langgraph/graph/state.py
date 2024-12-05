@@ -1,4 +1,3 @@
-import dataclasses
 import inspect
 import logging
 import typing
@@ -9,7 +8,6 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
-    Generic,
     Literal,
     NamedTuple,
     Optional,
@@ -37,7 +35,12 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.constants import EMPTY_SEQ, NS_END, NS_SEP, SELF, TAG_HIDDEN
-from langgraph.errors import ErrorCode, InvalidUpdateError, create_error_message
+from langgraph.errors import (
+    ErrorCode,
+    InvalidUpdateError,
+    ParentCommand,
+    create_error_message,
+)
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -50,7 +53,7 @@ from langgraph.managed.base import (
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, All, Checkpointer, Command, N, RetryPolicy
+from langgraph.types import All, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
@@ -77,22 +80,6 @@ def _get_node_name(node: RunnableLike) -> str:
         return getattr(node, "__name__", node.__class__.__name__)
     else:
         raise TypeError(f"Unsupported node type: {type(node)}")
-
-
-@dataclasses.dataclass(**_DC_KWARGS)
-class GraphCommand(Generic[N], Command[N]):
-    """One or more commands to update a StateGraph's state and go to, or send messages to nodes."""
-
-    goto: Union[str, Sequence[str]] = ()
-
-    def __repr__(self) -> str:
-        # get all non-None values
-        contents = ", ".join(
-            f"{key}={value!r}"
-            for key, value in dataclasses.asdict(self).items()
-            if value
-        )
-        return f"Command({contents})"
 
 
 class StateNodeSpec(NamedTuple):
@@ -387,7 +374,7 @@ class StateGraph(Graph):
                             input = input_hint
                 if (
                     (rtn := hints.get("return"))
-                    and get_origin(rtn) in (Command, GraphCommand)
+                    and get_origin(rtn) is Command
                     and (rargs := get_args(rtn))
                     and get_origin(rargs[0]) is Literal
                     and (vals := get_args(rargs[0]))
@@ -623,9 +610,14 @@ class CompiledStateGraph(CompiledGraph):
 
         def _get_root(input: Any) -> Any:
             if isinstance(input, Command):
+                if input.graph == Command.PARENT:
+                    return SKIP_WRITE
                 return input.update
             else:
                 return input
+
+        # to avoid name collision below
+        node_key = key
 
         def _get_state_key(input: Union[None, dict, Any], *, key: str) -> Any:
             if input is None:
@@ -633,10 +625,12 @@ class CompiledStateGraph(CompiledGraph):
             elif isinstance(input, dict):
                 if all(k not in output_keys for k in input):
                     raise InvalidUpdateError(
-                        f"Expected node {key} to update at least one of {output_keys}, got {input}"
+                        f"Expected node {node_key} to update at least one of {output_keys}, got {input}"
                     )
                 return input.get(key, SKIP_WRITE)
             elif isinstance(input, Command):
+                if input.graph == Command.PARENT:
+                    return SKIP_WRITE
                 return _get_state_key(input.update, key=key)
             elif get_type_hints(type(input)):
                 value = getattr(input, key, SKIP_WRITE)
@@ -817,34 +811,34 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, GraphCommand):
+    if not isinstance(value, Command):
         return EMPTY_SEQ
+    if value.graph == Command.PARENT:
+        raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
-    if isinstance(value.goto, str):
+    if isinstance(value.goto, Send):
+        rtn.append(value.goto)
+    elif isinstance(value.goto, str):
         rtn.append(value.goto)
     else:
         rtn.extend(value.goto)
-    if isinstance(value.send, Send):
-        rtn.append(value.send)
-    else:
-        rtn.extend(value.send)
     return rtn
 
 
 async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, GraphCommand):
+    if not isinstance(value, Command):
         return EMPTY_SEQ
+    if value.graph == Command.PARENT:
+        raise ParentCommand(value)
     rtn: list[Union[str, Send]] = []
-    if isinstance(value.goto, str):
+    if isinstance(value.goto, Send):
+        rtn.append(value.goto)
+    elif isinstance(value.goto, str):
         rtn.append(value.goto)
     else:
         rtn.extend(value.goto)
-    if isinstance(value.send, Send):
-        rtn.append(value.send)
-    else:
-        rtn.extend(value.send)
     return rtn
 
 
@@ -917,12 +911,12 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
-            sig = signature(meta[0])
+            sig = signature(meta[-1])
             params = list(sig.parameters.values())
             if len(params) == 2 and all(
                 p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params
             ):
-                return BinaryOperatorAggregate(typ, meta[0])
+                return BinaryOperatorAggregate(typ, meta[-1])
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"

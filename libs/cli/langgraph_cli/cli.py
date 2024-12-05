@@ -1,4 +1,4 @@
-import json
+import os
 import pathlib
 import shutil
 import sys
@@ -45,7 +45,7 @@ OPT_CONFIG = click.option(
     - "graphs": mapping from graph ID to path where the compiled graph is defined, i.e. ./your_package/your_file.py:variable, where
         "variable" is an instance of langgraph.graph.graph.CompiledGraph
     - "env": (optional) path to .env file or a mapping from environment variable to its value
-    - "python_version": (optional) 3.11 or 3.12. Defaults to 3.11
+    - "python_version": (optional) 3.11, 3.12, or 3.13. Defaults to 3.11
     - "pip_config_file": (optional) path to pip config file
     - "dockerfile_lines": (optional) array of additional lines to add to Dockerfile following the import from parent image
 
@@ -190,7 +190,6 @@ def up(
     click.secho(
         """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Cloud closed beta.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
-        fg="red",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
         capabilities = langgraph_cli.docker.check_capabilities(runner)
@@ -354,8 +353,7 @@ def build(
     with Runner() as runner, Progress(message="Pulling...") as set:
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
-        with open(config) as f:
-            config_json = langgraph_cli.config.validate_config(json.load(f))
+        config_json = langgraph_cli.config.validate_config_file(config)
         _build(
             runner, set, config, config_json, base_image, pull, tag, docker_build_args
         )
@@ -435,8 +433,7 @@ tests
 def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -> None:
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
-    with open(config, encoding="utf-8") as f:
-        config_json = langgraph_cli.config.validate_config(json.load(f))
+    config_json = langgraph_cli.config.validate_config_file(config)
     secho("✅ Configuration validated!", fg="green")
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
@@ -514,19 +511,6 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     )
 
 
-@click.argument("path", required=False)
-@click.option(
-    "--template",
-    type=str,
-    help=TEMPLATE_HELP_STRING,
-)
-@cli.command("new", help="🌱 Create a new LangGraph project from a template.")
-@log_command
-def new(path: Optional[str], template: Optional[str]) -> None:
-    """Create a new LangGraph project from a template."""
-    return create_new(path, template)
-
-
 @click.option(
     "--host",
     default="127.0.0.1",
@@ -566,6 +550,12 @@ def new(path: Optional[str], template: Optional[str]) -> None:
     type=int,
     help="Enable remote debugging by listening on specified port. Requires debugpy to be installed",
 )
+@click.option(
+    "--wait-for-client",
+    is_flag=True,
+    help="Wait for a debugger client to connect to the debug port before starting the server",
+    default=False,
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -575,10 +565,11 @@ def dev(
     host: str,
     port: int,
     no_reload: bool,
-    config: str,
+    config: pathlib.Path,
     n_jobs_per_worker: Optional[int],
     no_browser: bool,
     debug_port: Optional[int],
+    wait_for_client: bool,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -601,12 +592,17 @@ def dev(
             "Please ensure langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
         ) from None
 
-    import json
+    config_json = langgraph_cli.config.validate_config_file(config)
+    cwd = os.getcwd()
+    sys.path.append(cwd)
+    dependencies = config_json.get("dependencies", [])
+    for dep in dependencies:
+        dep_path = pathlib.Path(cwd) / dep
+        if dep_path.is_dir() and dep_path.exists():
+            sys.path.append(str(dep_path))
 
-    with open(config, encoding="utf-8") as f:
-        config_data = json.load(f)
+    graphs = config_json.get("graphs", {})
 
-    graphs = config_data.get("graphs", {})
     run_server(
         host,
         port,
@@ -615,7 +611,23 @@ def dev(
         n_jobs_per_worker=n_jobs_per_worker,
         open_browser=not no_browser,
         debug_port=debug_port,
+        env=config_json.get("env"),
+        store=config_json.get("store"),
+        wait_for_client=wait_for_client,
     )
+
+
+@click.argument("path", required=False)
+@click.option(
+    "--template",
+    type=str,
+    help=TEMPLATE_HELP_STRING,
+)
+@cli.command("new", help="🌱 Create a new LangGraph project from a template.")
+@log_command
+def new(path: Optional[str], template: Optional[str]) -> None:
+    """Create a new LangGraph project from a template."""
+    return create_new(path, template)
 
 
 def prepare_args_and_stdin(
@@ -674,8 +686,7 @@ def prepare(
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ):
-    with open(config_path) as f:
-        config = langgraph_cli.config.validate_config(json.load(f))
+    config_json = langgraph_cli.config.validate_config_file(config_path)
     # pull latest images
     if pull:
         runner.run(
@@ -683,9 +694,9 @@ def prepare(
                 "docker",
                 "pull",
                 (
-                    f"langchain/langgraphjs-api:{config['node_version']}"
-                    if config.get("node_version")
-                    else f"langchain/langgraph-api:{config['python_version']}"
+                    f"langchain/langgraphjs-api:{config_json['node_version']}"
+                    if config_json.get("node_version")
+                    else f"langchain/langgraph-api:{config_json['python_version']}"
                 ),
                 verbose=verbose,
             )
@@ -694,7 +705,7 @@ def prepare(
     args, stdin = prepare_args_and_stdin(
         capabilities=capabilities,
         config_path=config_path,
-        config=config,
+        config=config_json,
         docker_compose=docker_compose,
         port=port,
         watch=watch,

@@ -17,6 +17,10 @@ You will need to do the following:
 2. Build a docker image with the [LangGraph Server](../concepts/langgraph_server.md) using the [LangGraph CLI](../concepts/langgraph_cli.md).
 3. Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
+## Helm Chart
+
+If you would like to deploy LangGraph Cloud on Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+
 ## Environment Variables
 
 You will eventually need to pass in the following environment variables to the LangGraph Deploy server:

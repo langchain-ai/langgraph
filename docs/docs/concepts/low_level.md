@@ -283,6 +283,9 @@ You can optionally provide a dictionary that maps the `routing_function`'s outpu
 graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
 ```
 
+!!! tip
+    Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
+
 ### Entry Point
 
 The entry point is the first node(s) that are run when the graph starts. You can use the [`add_edge`][langgraph.graph.StateGraph.add_edge] method from the virtual [`START`][langgraph.constants.START] node to the first node to execute to specify where to enter the graph.
@@ -321,6 +324,65 @@ def continue_to_jokes(state: OverallState):
 
 graph.add_conditional_edges("node_a", continue_to_jokes)
 ```
+
+## `Command`
+
+It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [`Command`][langgraph.types.Command] object from node functions:
+
+```python
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(
+        # state update
+        update={"foo": "bar"},
+        # control flow
+        goto="my_other_node"
+    )
+```
+
+`Command` has the following properties:
+
+| Property | Description |
+| --- | --- |
+| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `Command.PARENT`: closest parent graph |
+| `update` | Update to apply to the graph's state. |
+| `resume` | Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt]. |
+| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- sequence of node names to navigate to next<br>- `Send` object (to execute a node with the input provided)<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
+
+```python
+from langgraph.graph import StateGraph, START
+from langgraph.types import Command
+from typing_extensions import Literal, TypedDict
+
+class State(TypedDict):
+    foo: str
+
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(update={"foo": "bar"}, goto="my_other_node")
+
+def my_other_node(state: State):
+    return {"foo": state["foo"] + "baz"}
+
+builder = StateGraph(State)
+builder.add_edge(START, "my_node")
+builder.add_node("my_node", my_node)
+builder.add_node("my_other_node", my_other_node)
+
+graph = builder.compile()
+```
+
+With `Command` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
+
+```python
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    if state["foo"] == "bar":
+        return Command(update={"foo": "baz"}, goto="my_other_node")
+```
+
+!!! important
+
+    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["node_b", "node_c"]]`. This is necessary for the graph compilation and rendering, and tells LangGraph that `node_a` can navigate to `node_b` and `node_c`.
+
+Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
 ## Persistence
 

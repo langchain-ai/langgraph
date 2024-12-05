@@ -20,6 +20,7 @@ These how-to guides show how to achieve that controllability.
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 - [How to control graph recursion limit](recursion-limit.ipynb)
+- [How to combine control flow and state updates with Command](command.ipynb)
 
 ### Persistence
 
@@ -39,6 +40,8 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 - [How to manage conversation history](memory/manage-conversation-history.ipynb)
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
+- [How to add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
+- [How to use semantic search for long-term memory](memory/semantic-search.ipynb)
 
 ### Human-in-the-loop
 
@@ -70,7 +73,7 @@ you to involve humans in the decision-making process of your graph. These how-to
 
 ### Tool calling
 
-[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of chat model API that accepts tool schemas, along with messages, as input and returns invocations of those tools as part of the output message. 
+[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of chat model API that accepts tool schemas, along with messages, as input and returns invocations of those tools as part of the output message.
 
 These how-to guides show common patterns for tool calling with LangGraph:
 
@@ -103,6 +106,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 - [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
+- [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
 
 ### Prebuilt ReAct Agent
 
@@ -117,12 +121,13 @@ These guides show how to use the prebuilt ReAct agent:
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
+- [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
 
 ## LangGraph Platform
 
 This section includes how-to guides for LangGraph Platform.
 
-LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework. 
+LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework.
 
 The LangGraph Platform offers a few different deployment options described in the [deployment options guide](../concepts/deployment_options.md).
 
@@ -138,9 +143,11 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to set up app for deployment (requirements.txt)](../cloud/deployment/setup.md)
 - [How to set up app for deployment (pyproject.toml)](../cloud/deployment/setup_pyproject.md)
 - [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
+- [How to add semantic search](../cloud/deployment/semantic_search.md)
 - [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+- [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
 
 ### Deployment
 
@@ -148,7 +155,8 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 - [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 - [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
-- [How to interact with the deployment using RemoteGraph](./use-remote-graph.md) 
+- [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
+
 ### Assistants
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.
@@ -163,7 +171,7 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 ### Runs
 
-LangGraph Cloud supports multiple types of runs besides streaming runs.
+LangGraph Platform supports multiple types of runs besides streaming runs.
 
 - [How to run an agent in the background](../cloud/how-tos/background_run.md)
 - [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
@@ -183,7 +191,7 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 
 ### Human-in-the-loop
 
-When creating complex graphs, leaving every decision up to the LLM can be dangerous, especially when the decisions involve invoking certain tools or accessing specific documents. To remedy this, LangGraph allows you to insert human-in-the-loop behavior to ensure your graph does not have undesired outcomes. Read more about the different ways you can add human-in-the-loop capabilities to your LangGraph Cloud projects in these how-to guides:
+When designing complex graphs, relying entirely on the LLM for decision-making can be risky, particularly when it involves tools that interact with files, APIs, or databases. These interactions may lead to unintended data access or modifications, depending on the use case. To mitigate these risks, LangGraph allows you to integrate human-in-the-loop behavior, ensuring your LLM applications operate as intended without undesirable outcomes.
 
 - [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
 - [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
@@ -193,7 +201,7 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 
 ### Double-texting
 
-Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways. The following how-to guides provide information on the various options LangGraph Cloud gives you for dealing with double-texting:
+Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways.
 
 - [How to use the interrupt option](../cloud/how-tos/interrupt_concurrent.md)
 - [How to use the rollback option](../cloud/how-tos/rollback_concurrent.md)
@@ -213,8 +221,9 @@ Graph execution can take a while, and sometimes users may change their mind abou
 LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
 
 - [How to connect to a LangGraph Cloud deployment](../cloud/how-tos/test_deployment.md)
-- [How to connect to a local deployment](../cloud/how-tos/test_local_deployment.md)
-- [How to test your graph in LangGraph Studio](../cloud/how-tos/invoke_studio.md)
+- [How to connect to a local dev server](../how-tos/local-studio.md)
+- [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
+- [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
 
 ## Troubleshooting
@@ -226,5 +235,3 @@ These are the guides for resolving common errors you may find while building wit
 - [INVALID_GRAPH_NODE_RETURN_VALUE](../troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
 - [MULTIPLE_SUBGRAPHS](../troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
 - [INVALID_CHAT_HISTORY](../troubleshooting/errors/INVALID_CHAT_HISTORY.md)
-
-

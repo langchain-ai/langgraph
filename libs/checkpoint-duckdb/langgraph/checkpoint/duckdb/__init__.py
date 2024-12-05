@@ -42,7 +42,7 @@ class DuckDBSaver(BaseDuckDBSaver):
             DuckDBSaver: A new DuckDBSaver instance.
         """
         with duckdb.connect(conn_string) as conn:
-            yield DuckDBSaver(conn)
+            yield cls(conn)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.

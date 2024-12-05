@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import operator
 import random
 import re
@@ -61,7 +62,7 @@ from langgraph.constants import (
     START,
 )
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
-from langgraph.graph import END, Graph, GraphCommand, StateGraph
+from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
@@ -99,6 +100,8 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+
+logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.anyio
 
@@ -426,6 +429,189 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         )
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
+    class SubgraphState(TypedDict):
+        my_key: str
+        market: str
+
+    tool_two_node_count = 0
+
+    def tool_two_node(s: SubgraphState) -> SubgraphState:
+        nonlocal tool_two_node_count
+        tool_two_node_count += 1
+        if s["market"] == "DE":
+            answer = interrupt("Just because...")
+        else:
+            answer = " all good"
+        return {"my_key": answer}
+
+    subgraph = StateGraph(SubgraphState)
+    subgraph.add_node("do", tool_two_node, retry=RetryPolicy())
+    subgraph.add_edge(START, "do")
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two", subgraph.compile())
+    tool_two_graph.add_edge(START, "tool_two")
+    tool_two = tool_two_graph.compile()
+
+    tracer = FakeTracer()
+    assert await tool_two.ainvoke(
+        {"my_key": "value", "market": "DE"}, {"callbacks": [tracer]}
+    ) == {
+        "my_key": "value",
+        "market": "DE",
+    }
+    assert tool_two_node_count == 1, "interrupts aren't retried"
+    assert len(tracer.runs) == 1
+    run = tracer.runs[0]
+    assert run.end_time is not None
+    assert run.error is None
+    assert run.outputs == {"market": "DE", "my_key": "value"}
+
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value all good",
+        "market": "US",
+    }
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        tool_two = tool_two_graph.compile(checkpointer=checkpointer)
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+
+        # flow: interrupt -> resume with answer
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value ⛰️", "market": "DE"}, thread2
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                    ),
+                )
+            },
+        ]
+        # resume with answer
+        assert [
+            c async for c in tool_two.astream(Command(resume=" my answer"), thread2)
+        ] == [
+            {"tool_two": {"my_key": " my answer", "market": "DE"}},
+        ]
+
+        # flow: interrupt -> clear
+        thread1 = {"configurable": {"thread_id": "1"}}
+        thread1root = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+        # stop when about to enter node
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value ⛰️", "market": "DE"}, thread1
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="Just because...",
+                        resumable=True,
+                        ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                    ),
+                )
+            },
+        ]
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1root)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
+        tup = await tool_two.checkpointer.aget_tuple(thread1)
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value ⛰️", "market": "DE"},
+            next=("tool_two",),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two",
+                    (PULL, "tool_two"),
+                    interrupts=(
+                        Interrupt(
+                            value="Just because...",
+                            resumable=True,
+                            ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                        ),
+                    ),
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("tool_two:"),
+                        }
+                    },
+                ),
+            ),
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
+            ][-1].config,
+        )
+
+        # clear the interrupt and next tasks
+        await tool_two.aupdate_state(thread1, None, as_node=END)
+        # interrupt is cleared, as well as the next tasks
+        tup = await tool_two.checkpointer.aget_tuple(thread1)
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value ⛰️", "market": "DE"},
+            next=(),
+            tasks=(),
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
+            metadata={
+                "parents": {},
+                "source": "update",
+                "step": 1,
+                "writes": {},
+                "thread_id": "1",
+            },
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
+            ][-1].config,
+        )
+
+
 @pytest.mark.skipif(not FF_SEND_V2, reason="send v2 is not enabled")
 @pytest.mark.skipif(
     sys.version_info < (3, 11),
@@ -661,7 +847,6 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         assert awhiles == 1
 
 
-@pytest.mark.repeat(10)
 async def test_step_timeout_on_stream_hang() -> None:
     inner_task_cancelled = False
 
@@ -2373,7 +2558,6 @@ async def test_concurrent_emit_sends() -> None:
     )
 
 
-@pytest.mark.repeat(10)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_sequences(checkpointer_name: str) -> None:
     class Node:
@@ -2387,15 +2571,15 @@ async def test_send_sequences(checkpointer_name: str) -> None:
                 if isinstance(state, list)  # or isinstance(state, Control)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, GraphCommand):
+            if isinstance(state, Command):
                 return replace(state, update=update)
             else:
                 return update
 
     async def send_for_fun(state):
         return [
-            Send("2", GraphCommand(send=Send("2", 3))),
-            Send("2", GraphCommand(send=Send("2", 4))),
+            Send("2", Command(goto=Send("2", 3))),
+            Send("2", Command(goto=Send("2", 4))),
             "3.1",
         ]
 
@@ -2416,8 +2600,8 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         == [
             "0",
             "1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='2', arg=4))",
+            "2|Command(goto=Send(node='2', arg=3))",
+            "2|Command(goto=Send(node='2', arg=4))",
             "2|3",
             "2|4",
             "3",
@@ -2428,8 +2612,8 @@ async def test_send_sequences(checkpointer_name: str) -> None:
             "0",
             "1",
             "3.1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='2', arg=4))",
+            "2|Command(goto=Send(node='2', arg=3))",
+            "2|Command(goto=Send(node='2', arg=4))",
             "3",
             "2|3",
             "2|4",
@@ -2446,16 +2630,16 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         assert await graph.ainvoke(["0"], thread1) == [
             "0",
             "1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='2', arg=4))",
+            "2|Command(goto=Send(node='2', arg=3))",
+            "2|Command(goto=Send(node='2', arg=4))",
             "2|3",
             "2|4",
         ]
         assert await graph.ainvoke(None, thread1) == [
             "0",
             "1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='2', arg=4))",
+            "2|Command(goto=Send(node='2', arg=3))",
+            "2|Command(goto=Send(node='2', arg=4))",
             "2|3",
             "2|4",
             "3",
@@ -2463,7 +2647,6 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.repeat(20)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     if not FF_SEND_V2:
@@ -2491,15 +2674,15 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, GraphCommand):
+            if isinstance(state, Command):
                 return replace(state, update=update)
             else:
                 return update
 
     def send_for_fun(state):
         return [
-            Send("2", GraphCommand(send=Send("2", 3))),
-            Send("2", GraphCommand(send=Send("flaky", 4))),
+            Send("2", Command(goto=Send("2", 3))),
+            Send("2", Command(goto=Send("flaky", 4))),
             "3.1",
         ]
 
@@ -2522,8 +2705,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert await graph.ainvoke(["0"], thread1, debug=1) == [
             "0",
             "1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='flaky', arg=4))",
+            "2|Command(goto=Send(node='2', arg=3))",
+            "2|Command(goto=Send(node='flaky', arg=4))",
             "2|3",
         ]
         assert builder.nodes["2"].runnable.func.ticks == 3
@@ -2532,8 +2715,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert await graph.ainvoke(None, thread1, debug=1) == [
             "0",
             "1",
-            "2|Command(send=Send(node='2', arg=3))",
-            "2|Command(send=Send(node='flaky', arg=4))",
+            "2|Command(goto=Send(node='2', arg=3))",
+            "2|Command(goto=Send(node='flaky', arg=4))",
             "2|3",
             "flaky|4",
             "3",
@@ -2550,8 +2733,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 values=[
                     "0",
                     "1",
-                    "2|Command(send=Send(node='2', arg=3))",
-                    "2|Command(send=Send(node='flaky', arg=4))",
+                    "2|Command(goto=Send(node='2', arg=3))",
+                    "2|Command(goto=Send(node='flaky', arg=4))",
                     "2|3",
                     "flaky|4",
                     "3",
@@ -2586,8 +2769,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 values=[
                     "0",
                     "1",
-                    "2|Command(send=Send(node='2', arg=3))",
-                    "2|Command(send=Send(node='flaky', arg=4))",
+                    "2|Command(goto=Send(node='2', arg=3))",
+                    "2|Command(goto=Send(node='flaky', arg=4))",
                     "2|3",
                     "flaky|4",
                 ],
@@ -2604,8 +2787,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     "writes": {
                         "1": ["1"],
                         "2": [
-                            ["2|Command(send=Send(node='2', arg=3))"],
-                            ["2|Command(send=Send(node='flaky', arg=4))"],
+                            ["2|Command(goto=Send(node='2', arg=3))"],
+                            ["2|Command(goto=Send(node='flaky', arg=4))"],
                             ["2|3"],
                         ],
                         "flaky": ["flaky|4"],
@@ -2690,7 +2873,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         error=None,
                         interrupts=(),
                         state=None,
-                        result=["2|Command(send=Send(node='2', arg=3))"],
+                        result=["2|Command(goto=Send(node='2', arg=3))"],
                     ),
                     PregelTask(
                         id=AnyStr(),
@@ -2704,7 +2887,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         error=None,
                         interrupts=(),
                         state=None,
-                        result=["2|Command(send=Send(node='flaky', arg=4))"],
+                        result=["2|Command(goto=Send(node='flaky', arg=4))"],
                     ),
                     PregelTask(
                         id=AnyStr(),
@@ -3262,9 +3445,9 @@ async def test_send_react_interrupt_control(
     )
 
     async def agent(state) -> Command[Literal["foo"]]:
-        return GraphCommand(
+        return Command(
             update={"messages": ai_message},
-            send=[Send(call["name"], call) for call in ai_message.tool_calls],
+            goto=[Send(call["name"], call) for call in ai_message.tool_calls],
         )
 
     foo_called = 0
@@ -3575,13 +3758,13 @@ async def test_max_concurrency(checkpointer_name: str) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_max_concurrency_control(checkpointer_name: str) -> None:
-    async def node1(state) -> GraphCommand[Literal["2"]]:
-        return GraphCommand(update=["1"], send=[Send("2", idx) for idx in range(100)])
+    async def node1(state) -> Command[Literal["2"]]:
+        return Command(update=["1"], goto=[Send("2", idx) for idx in range(100)])
 
     node2_currently = 0
     node2_max_currently = 0
 
-    async def node2(state) -> GraphCommand[Literal["3"]]:
+    async def node2(state) -> Command[Literal["3"]]:
         nonlocal node2_currently, node2_max_currently
         node2_currently += 1
         if node2_currently > node2_max_currently:
@@ -3589,7 +3772,7 @@ async def test_max_concurrency_control(checkpointer_name: str) -> None:
         await asyncio.sleep(0.1)
         node2_currently -= 1
 
-        return GraphCommand(update=[state], goto="3")
+        return Command(update=[state], goto="3")
 
     async def node3(state) -> Literal["3"]:
         return ["3"]
@@ -12272,60 +12455,89 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
 
     doc_id = str(uuid.uuid4())
     doc = {"some-key": "this-is-a-val"}
+    uid = uuid.uuid4().hex
+    namespace = (f"foo-{uid}", "bar")
+    thread_1 = str(uuid.uuid4())
+    thread_2 = str(uuid.uuid4())
 
-    async def node(input: State, config: RunnableConfig, store: BaseStore):
-        assert isinstance(store, BaseStore)
-        await store.aput(
-            ("foo", "bar"),
-            doc_id,
-            {
-                **doc,
-                "from_thread": config["configurable"]["thread_id"],
-                "some_val": input["count"],
-            },
-        )
-        return {"count": 1}
+    class Node:
+        def __init__(self, i: Optional[int] = None):
+            self.i = i
+
+        async def __call__(
+            self, inputs: State, config: RunnableConfig, store: BaseStore
+        ):
+            assert isinstance(store, BaseStore)
+            await store.aput(
+                namespace
+                if self.i is not None
+                and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                else (f"foo_{self.i}", "bar"),
+                doc_id,
+                {
+                    **doc,
+                    "from_thread": config["configurable"]["thread_id"],
+                    "some_val": inputs["count"],
+                },
+            )
+            return {"count": 1}
 
     builder = StateGraph(State)
-    builder.add_node("node", node)
+    builder.add_node("node", Node())
     builder.add_edge("__start__", "node")
+
+    N = 500
+    M = 1
+    if "duckdb" in store_name:
+        logger.warning(
+            "DuckDB store implementation has a known issue that does not"
+            " support concurrent writes, so we're reducing the test scope"
+        )
+        N = M = 1
+
+    for i in range(N):
+        builder.add_node(f"node_{i}", Node(i))
+        builder.add_edge("__start__", f"node_{i}")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer, awith_store(
         store_name
     ) as the_store:
         graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
-        thread_1 = str(uuid.uuid4())
-        result = await graph.ainvoke(
-            {"count": 0}, {"configurable": {"thread_id": thread_1}}
+        # Test batch operations with multiple threads
+        results = await graph.abatch(
+            [{"count": 0}] * M,
+            ([{"configurable": {"thread_id": str(uuid.uuid4())}}] * (M - 1))
+            + [{"configurable": {"thread_id": thread_1}}],
         )
-        assert result == {"count": 1}
-        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        result = results[-1]
+        assert result == {"count": N + 1}
+        returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-        assert len((await the_store.asearch(("foo", "bar")))) == 1
+        assert len((await the_store.asearch(namespace))) == 1
 
-        # Check update on existing thread
+        # Check results after another turn of the same thread
         result = await graph.ainvoke(
             {"count": 0}, {"configurable": {"thread_id": thread_1}}
         )
-        assert result == {"count": 2}
-        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
-        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 1}
-        assert len((await the_store.asearch(("foo", "bar")))) == 1
+        assert result == {"count": (N + 1) * 2}
+        returned_doc = (await the_store.aget(namespace, doc_id)).value
+        assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
+        assert len((await the_store.asearch(namespace))) == 1
 
-        thread_2 = str(uuid.uuid4())
-
+        # Test with a different thread
         result = await graph.ainvoke(
             {"count": 0}, {"configurable": {"thread_id": thread_2}}
         )
-        assert result == {"count": 1}
-        returned_doc = (await the_store.aget(("foo", "bar"), doc_id)).value
+        assert result == {"count": N + 1}
+        returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {
             **doc,
             "from_thread": thread_2,
             "some_val": 0,
         }  # Overwrites the whole doc
         assert (
-            len((await the_store.asearch(("foo", "bar")))) == 1
+            len((await the_store.asearch(namespace))) == 1
         )  # still overwriting the same one
 
 
@@ -12565,3 +12777,276 @@ async def test_debug_nested_subgraphs():
                 assert stream_task["interrupts"] == history_task.interrupts
                 assert stream_task.get("error") == history_task.error
                 assert stream_task.get("state") == history_task.state
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_parent_command(checkpointer_name: str) -> None:
+    from langchain_core.messages import BaseMessage
+    from langchain_core.tools import tool
+
+    @tool(return_direct=True)
+    def get_user_name() -> Command:
+        """Retrieve user name"""
+        return Command(update={"user_name": "Meow"}, graph=Command.PARENT)
+
+    subgraph_builder = StateGraph(MessagesState)
+    subgraph_builder.add_node("tool", get_user_name)
+    subgraph_builder.add_edge(START, "tool")
+    subgraph = subgraph_builder.compile()
+
+    class CustomParentState(TypedDict):
+        messages: Annotated[list[BaseMessage], add_messages]
+        # this key is not available to the child graph
+        user_name: str
+
+    builder = StateGraph(CustomParentState)
+    builder.add_node("alice", subgraph)
+    builder.add_edge(START, "alice")
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+
+        config = {"configurable": {"thread_id": "1"}}
+
+        assert await graph.ainvoke(
+            {"messages": [("user", "get user name")]}, config
+        ) == {
+            "messages": [
+                _AnyIdHumanMessage(
+                    content="get user name", additional_kwargs={}, response_metadata={}
+                ),
+            ],
+            "user_name": "Meow",
+        }
+        assert await graph.aget_state(config) == StateSnapshot(
+            values={
+                "messages": [
+                    _AnyIdHumanMessage(
+                        content="get user name",
+                        additional_kwargs={},
+                        response_metadata={},
+                    ),
+                ],
+                "user_name": "Meow",
+            },
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "alice": {
+                        "user_name": "Meow",
+                    }
+                },
+                "thread_id": "1",
+                "step": 1,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(),
+        )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_subgraph(checkpointer_name: str):
+    class State(TypedDict):
+        baz: str
+
+    def foo(state):
+        return {"baz": "foo"}
+
+    def bar(state):
+        value = interrupt("Please provide baz value:")
+        return {"baz": value}
+
+    child_builder = StateGraph(State)
+    child_builder.add_node(bar)
+    child_builder.add_edge(START, "bar")
+
+    builder = StateGraph(State)
+    builder.add_node(foo)
+    builder.add_node("bar", child_builder.compile())
+    builder.add_edge(START, "foo")
+    builder.add_edge("foo", "bar")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # First run, interrupted at bar
+        assert await graph.ainvoke({"baz": ""}, thread1)
+        # Resume with answer
+        assert await graph.ainvoke(Command(resume="bar"), thread1)
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_multiple(checkpointer_name: str):
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    async def node(s: State) -> State:
+        answer = interrupt({"value": 1})
+        answer2 = interrupt({"value": 2})
+        return {"my_key": answer + " " + answer2}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        assert [
+            e async for e in graph.astream({"my_key": "DE", "market": "DE"}, thread1)
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value={"value": 1},
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="answer 1", update={"my_key": "foofoo"}),
+                thread1,
+                stream_mode="updates",
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value={"value": 2},
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="answer 2"), thread1, stream_mode="updates"
+            )
+        ] == [
+            {"node": {"my_key": "answer 1 answer 2"}},
+        ]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_loop(checkpointer_name: str):
+    class State(TypedDict):
+        age: int
+        other: str
+
+    async def ask_age(s: State):
+        """Ask an expert for help."""
+        question = "How old are you?"
+        value = None
+        for _ in range(10):
+            value: str = interrupt(question)
+            if not value.isdigit() or int(value) < 18:
+                question = "invalid response"
+                value = None
+            else:
+                break
+
+        return {"age": int(value)}
+
+    builder = StateGraph(State)
+    builder.add_node("node", ask_age)
+    builder.add_edge(START, "node")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        assert [e async for e in graph.astream({"other": ""}, thread1)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="How old are you?",
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="13"),
+                thread1,
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="invalid response",
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event
+            async for event in graph.astream(
+                Command(resume="15"),
+                thread1,
+            )
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="invalid response",
+                        resumable=True,
+                        ns=[AnyStr("node:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        assert [
+            event async for event in graph.astream(Command(resume="19"), thread1)
+        ] == [
+            {"node": {"age": 19}},
+        ]

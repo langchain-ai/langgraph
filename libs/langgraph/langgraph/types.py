@@ -5,6 +5,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    ClassVar,
     Generic,
     Hashable,
     Literal,
@@ -12,6 +13,7 @@ from typing import (
     Optional,
     Sequence,
     Type,
+    TypedDict,
     TypeVar,
     Union,
     cast,
@@ -20,10 +22,15 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
 
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    CheckpointMetadata,
+    PendingWrite,
+)
 
 if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
+
 
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
@@ -140,6 +147,7 @@ class PregelExecutableTask(NamedTuple):
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
+    writers: Sequence[Runnable] = ()
 
 
 class StateSnapshot(NamedTuple):
@@ -237,11 +245,27 @@ N = TypeVar("N", bound=Hashable)
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Command(Generic[N]):
-    """One or more commands to update the graph's state and send messages to nodes."""
+    """One or more commands to update the graph's state and send messages to nodes.
 
+    Args:
+        graph: graph to send the command to. Supported values are:
+
+            - None: the current graph (default)
+            - GraphCommand.PARENT: closest parent graph
+        update: update to apply to the graph's state.
+        resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+        goto: can be one of the following:
+
+            - name of the node to navigate to next (any node that belongs to the specified `graph`)
+            - sequence of node names to navigate to next
+            - `Send` object (to execute a node with the input provided)
+            - sequence of `Send` objects
+    """
+
+    graph: Optional[str] = None
     update: Optional[dict[str, Any]] = None
-    send: Union[Send, Sequence[Send]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
+    goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:
         # get all non-None values
@@ -251,6 +275,8 @@ class Command(Generic[N]):
             if value
         )
         return f"Command({contents})"
+
+    PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
@@ -295,26 +321,59 @@ class LoopProtocol:
         self.stop = stop
 
 
+class PregelScratchpad(TypedDict, total=False):
+    interrupt_counter: int
+    used_null_resume: bool
+    resume: list[Any]
+
+
 def interrupt(value: Any) -> Any:
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
-        CONFIG_KEY_RESUME_VALUE,
-        MISSING,
+        CONFIG_KEY_SCRATCHPAD,
+        CONFIG_KEY_SEND,
+        CONFIG_KEY_TASK_ID,
+        CONFIG_KEY_WRITES,
         NS_SEP,
+        NULL_TASK_ID,
+        RESUME,
     )
     from langgraph.errors import GraphInterrupt
     from langgraph.utils.config import get_configurable
 
     conf = get_configurable()
-    if (resume := conf.get(CONFIG_KEY_RESUME_VALUE, MISSING)) and resume is not MISSING:
-        return resume
+    # track interrupt index
+    scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    if "interrupt_counter" not in scratchpad:
+        scratchpad["interrupt_counter"] = 0
     else:
-        raise GraphInterrupt(
-            (
-                Interrupt(
-                    value=value,
-                    resumable=True,
-                    ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
-                ),
-            )
+        scratchpad["interrupt_counter"] += 1
+    idx = scratchpad["interrupt_counter"]
+    # find previous resume values
+    task_id = conf[CONFIG_KEY_TASK_ID]
+    writes: list[PendingWrite] = conf[CONFIG_KEY_WRITES]
+    scratchpad.setdefault(
+        "resume", next((w[2] for w in writes if w[0] == task_id and w[1] == RESUME), [])
+    )
+    if scratchpad["resume"]:
+        if idx < len(scratchpad["resume"]):
+            return scratchpad["resume"][idx]
+    # find current resume value
+    if not scratchpad.get("used_null_resume"):
+        scratchpad["used_null_resume"] = True
+        for tid, c, v in sorted(writes, key=lambda x: x[0], reverse=True):
+            if tid == NULL_TASK_ID and c == RESUME:
+                assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
+                scratchpad["resume"].append(v)
+                conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
+                return v
+    # no resume value found
+    raise GraphInterrupt(
+        (
+            Interrupt(
+                value=value,
+                resumable=True,
+                ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+            ),
         )
+    )

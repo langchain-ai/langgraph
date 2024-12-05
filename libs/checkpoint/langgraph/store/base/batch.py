@@ -1,13 +1,17 @@
 import asyncio
 import weakref
-from typing import Any, Optional
+from typing import Any, Literal, Optional, Union
 
 from langgraph.store.base import (
     BaseStore,
     GetOp,
     Item,
+    ListNamespacesOp,
+    MatchCondition,
+    NamespacePath,
     Op,
     PutOp,
+    SearchItem,
     SearchOp,
     _validate_namespace,
 )
@@ -40,12 +44,13 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
+        query: Optional[str] = None,
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-    ) -> list[Item]:
+    ) -> list[SearchItem]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset)
+        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
         return await fut
 
     async def aput(
@@ -53,10 +58,11 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, key, value)
+        self._aqueue[fut] = PutOp(namespace, key, value, index)
         return await fut
 
     async def adelete(
@@ -67,6 +73,74 @@ class AsyncBatchedBaseStore(BaseStore):
         fut = self._loop.create_future()
         self._aqueue[fut] = PutOp(namespace, key, None)
         return await fut
+
+    async def alist_namespaces(
+        self,
+        *,
+        prefix: Optional[NamespacePath] = None,
+        suffix: Optional[NamespacePath] = None,
+        max_depth: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[tuple[str, ...]]:
+        fut = self._loop.create_future()
+        match_conditions = []
+        if prefix:
+            match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
+        if suffix:
+            match_conditions.append(MatchCondition(match_type="suffix", path=suffix))
+
+        op = ListNamespacesOp(
+            match_conditions=tuple(match_conditions),
+            max_depth=max_depth,
+            limit=limit,
+            offset=offset,
+        )
+        self._aqueue[fut] = op
+        return await fut
+
+
+def _dedupe_ops(values: list[Op]) -> tuple[Optional[list[int]], list[Op]]:
+    """Dedupe operations while preserving order for results.
+
+    Args:
+        values: List of operations to dedupe
+
+    Returns:
+        Tuple of (listen indices, deduped operations)
+        where listen indices map deduped operation results back to original positions
+    """
+    if len(values) <= 1:
+        return None, list(values)
+
+    dedupped: list[Op] = []
+    listen: list[int] = []
+    puts: dict[tuple[tuple[str, ...], str], int] = {}
+
+    for op in values:
+        if isinstance(op, (GetOp, SearchOp, ListNamespacesOp)):
+            try:
+                listen.append(dedupped.index(op))
+            except ValueError:
+                listen.append(len(dedupped))
+                dedupped.append(op)
+        elif isinstance(op, PutOp):
+            putkey = (op.namespace, op.key)
+            if putkey in puts:
+                # Overwrite previous put
+                ix = puts[putkey]
+                dedupped[ix] = op
+                listen.append(ix)
+            else:
+                puts[putkey] = len(dedupped)
+                listen.append(len(dedupped))
+                dedupped.append(op)
+
+        else:  # Any new ops will be treated regularly
+            listen.append(len(dedupped))
+            dedupped.append(op)
+
+    return listen, dedupped
 
 
 async def _run(
@@ -81,7 +155,12 @@ async def _run(
             taken = aqueue.copy()
             # action each operation
             try:
-                results = await s.abatch(taken.values())
+                values = list(taken.values())
+                listen, dedupped = _dedupe_ops(values)
+                results = await s.abatch(dedupped)
+                if listen is not None:
+                    results = [results[ix] for ix in listen]
+
                 # set the results of each operation
                 for fut, result in zip(taken, results):
                     fut.set_result(result)
