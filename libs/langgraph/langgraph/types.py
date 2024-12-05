@@ -252,7 +252,7 @@ class Command(Generic[N]):
             - None: the current graph (default)
             - GraphCommand.PARENT: closest parent graph
         update: update to apply to the graph's state.
-        resume: value to resume execution with. Will be used when `interrupt()` is called.
+        resume: value to resume execution with. To be used together with `interrupt()`.
         goto: can be one of the following:
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
             - list of node names to navigate to next
