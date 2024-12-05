@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS store (
 """,
     """
 -- For faster lookups by prefix
-CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
 """,
 ]
 
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     ),
     Migration(
         """
-CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
     USING %(index_type)s (embedding %(ops)s)%(index_params)s;
 """,
         condition=lambda store: bool(
