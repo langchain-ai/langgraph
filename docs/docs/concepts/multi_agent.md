@@ -28,12 +28,7 @@ There are several ways to connect agents in a multi-agent system:
 
 ### Network
 
-In this architecture, agents are defined as graph nodes. Each agent can communicate with every other agent (many-to-many connections) and can decide which agent to call next. While very flexible, this architecture doesn't scale well as the number of agents grows:
-
-- hard to enforce which agent should be called next
-- hard to determine how much [information](#shared-message-list) should be passed between the agents
-
-We recommend avoiding this architecture in production and using one of the below architectures instead.
+In this architecture, agents are defined as graph nodes. Each agent can communicate with every other agent (many-to-many connections) and can decide which agent to call next. This architecture is good for problems that do not have a clear hierarchy of agents or a specific sequence in which agents should be called.
 
 ### Supervisor
 

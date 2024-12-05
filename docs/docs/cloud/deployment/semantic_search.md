@@ -111,8 +111,8 @@ from langgraph_sdk import get_client
 
 async def search_store():
     client = get_client()
-    results = await client.store.search(
-        namespace=("memory", "facts"),
+    results = await client.store.search_items(
+        ("memory", "facts"),
         query="your search query",
         limit=3  # number of results to return
     )
