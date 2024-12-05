@@ -458,8 +458,7 @@ There are two types of breakpoints:
 1. **Static breakpoints**: Pause the graph **before** or **after** a node executes. This is achieved by specifying the `interrupt_before` and `interrupt_after` keys when [compiling your graph](#compiling-your-graph).
 2. **Dynamic breakpoints**: Pause the graph from **inside** a node. This is achieved by using the `interrupt` function or raising a `NodeInterrupt` exception.
 
-Please see the [Human-in-the-Loop guide](../human_in_the_loop) for conceptual information about breakpoints.
-
+Please see the [Human-in-the-Loop guide](../human_in_the_loop) for information about breakpoints.
 
 ## Subgraphs
 

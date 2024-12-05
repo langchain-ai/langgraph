@@ -18,16 +18,20 @@ Persistence allows pausing graph execution so that a human can review and / or e
 
 ## Breakpoints
 
-Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution. This functionality is enabled by LangGraph's built-in [checkpointer](./persistence.md#checkpointer), which writes a checkpoint of the graph state at each step.
+Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution. This functionality is enabled by LangGraph's built-in [checkpointer](./persistence.md), which writes a checkpoint of the graph state at each step.
 
-There are two types of breakpoints:
+You have a few options for setting breakpoints:
 
-1. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
-2. [**Dynamic breakpoints**](#dynamic-breakpoints): Pause the graph from **inside** a node often based on some condition.
+1. [**Using the `interrupt` function**](./#interrupts): Pause the graph **inside** a node.
+2. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
+3. [**Dynamic breakpoints**](#dynamic-breakpoints): Pause the graph from **inside** typically based on a condition.
  
 !!! important "Checkpointer Required"
 
     You must compile your graph with a checkpointer to use breakpoints.
+
+
+### `Interrupt` function
 
 ### Static Breakpoints
 

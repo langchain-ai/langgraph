@@ -412,7 +412,6 @@ def interrupt(value: Any) -> Any:
         {'node': {'human_value': 'some input from a human!!!'}}
         ```
 
-
     Args:
         value: The value to surface to the client when the graph is interrupted.
 
