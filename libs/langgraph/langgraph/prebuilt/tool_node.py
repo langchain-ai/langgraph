@@ -280,7 +280,9 @@ class ToolNode(RunnableCallable):
 
         if len(commands) == 1:
             if len(outputs) > 1:
-                raise ValueError("Cannot mix Command returns with ToolMessages.")
+                raise ValueError(
+                    "Cannot mix Command and non-command (message) tool outputs."
+                )
 
             # Users that want to include ToolMessages in the state update
             # will need to explicitly add them to the Command.update
