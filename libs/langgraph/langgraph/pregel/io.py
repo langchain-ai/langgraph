@@ -95,11 +95,7 @@ def map_command(
         else:
             yield (NULL_TASK_ID, RESUME, cmd.resume)
     if cmd.update:
-        if not isinstance(cmd.update, dict):
-            raise TypeError(
-                f"Expected cmd.update to be a dict mapping channel names to update values, got {type(cmd.update).__name__}"
-            )
-        for k, v in cmd.update.items():
+        for k, v in cmd._update_as_tuples():
             yield (NULL_TASK_ID, k, v)
 
 

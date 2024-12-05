@@ -263,7 +263,7 @@ class Command(Generic[N]):
     """
 
     graph: Optional[str] = None
-    update: Optional[dict[str, Any]] = None
+    update: Union[dict[str, Any], Sequence[tuple[str, Any]]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
@@ -275,6 +275,17 @@ class Command(Generic[N]):
             if value
         )
         return f"Command({contents})"
+
+    def _update_as_tuples(self) -> Sequence[tuple[str, Any]]:
+        if isinstance(self.update, dict):
+            return list(self.update.items())
+        elif isinstance(self.update, (list, tuple)) and all(
+            isinstance(t, tuple) and len(t) == 2 and isinstance(t[0], str)
+            for t in self.update
+        ):
+            return self.update
+        else:
+            return [("__root__", self.update)]
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
