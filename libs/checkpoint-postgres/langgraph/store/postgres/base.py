@@ -847,22 +847,19 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         """
 
         def _get_version(cur: Cursor[dict[str, Any]], table: str) -> int:
-            try:
-                cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
-                row = cast(dict, cur.fetchone())
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
-                version = -1
-                cur.execute(
-                    f"""
-                    CREATE TABLE IF NOT EXISTS {table} (
-                        v INTEGER PRIMARY KEY
-                    )
-                """
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    v INTEGER PRIMARY KEY
                 )
+            """
+            )
+            cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
+            row = cast(dict, cur.fetchone())
+            if row is None:
+                version = -1
+            else:
+                version = row["v"]
             return version
 
         with self._cursor() as cur:

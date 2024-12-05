@@ -6,7 +6,6 @@ from typing import Any, Callable, Optional, Union, cast
 
 import orjson
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
-from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -219,22 +218,19 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         """
 
         async def _get_version(cur: AsyncCursor[DictRow], table: str) -> int:
-            try:
-                await cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
-                row = await cur.fetchone()
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
-                version = -1
-                await cur.execute(
-                    f"""
-                    CREATE TABLE IF NOT EXISTS {table} (
-                        v INTEGER PRIMARY KEY
-                    )
-                """
+            await cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    v INTEGER PRIMARY KEY
                 )
+            """
+            )
+            await cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
+            row = cast(dict, await cur.fetchone())
+            if row is None:
+                version = -1
+            else:
+                version = row["v"]
             return version
 
         async with self._cursor() as cur:
