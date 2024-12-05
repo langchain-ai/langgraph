@@ -80,12 +80,15 @@ class Item:
 
     def dict(self) -> dict:
         return {
-            "value": self.value,
-            "key": self.key,
             "namespace": list(self.namespace),
+            "key": self.key,
+            "value": self.value,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
+
+    def __repr__(self) -> str:
+        return f"Item({', '.join(f'{k}={v!r}' for k, v in self.dict().items())})"
 
 
 class SearchItem(Item):
