@@ -338,9 +338,9 @@ def interrupt(value: Any) -> Any:
     exception, halting execution. The provided `value` is included with the exception
     and sent to the client executing the graph.
 
-    A client resuming the graph must use the `Command` primitive to specify a value
-    for the interrupt and continue execution. The graph resumes from the start of
-    the node, **re-executing** all logic.
+    A client resuming the graph must use the [`Command`][langgraph.types.Command]
+    primitive to specify a value for the interrupt and continue execution.
+    The graph resumes from the start of the node, **re-executing** all logic.
 
     If a node contains multiple `interrupt` calls, LangGraph matches resume values
     to interrupts based on their order in the node. This list of resume values
@@ -349,25 +349,70 @@ def interrupt(value: Any) -> Any:
     To use an `interrupt`, you must enable a checkpointer, as the feature relies
     on persisting the graph state.
 
-    Examples:
+    Example: Basic interrupt and resume
 
-        ```python
-        async def some_node(state: State):
-            # Surface a value as part of the interrupt
-            question = {"question": "how old are you?"}
-            answer = interrupt(question)
-            # Continue execution with the provided answer
-        ```
+    ```python
+    import uuid
+    from typing import TypedDict, Optional
 
-        A client resuming the graph:
-        ```python
-        for chunk in graph.astream(
-            Command(resume="25"),
-            config,
-            stream_mode="updates"
-        ):
-            print(chunk)
-        ```
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.constants import START
+    from langgraph.graph import StateGraph
+    from langgraph.types import interrupt
+
+
+    class State(TypedDict):
+        \"\"\"The graph state.\"\"\"
+
+        foo: str
+        human_value: Optional[str]
+        \"\"\"Human value will be updated using an interrupt.\"\"\"
+
+
+    def node(state: State):
+        answer = interrupt(
+            # This value will be sent to the client
+            # as part of the interrupt information.
+            \"what is your age?\"
+        )
+        print(f\"> Received an input from the interrupt: {answer}\")
+        return {\"human_value\": answer}
+
+
+    builder = StateGraph(State)
+    builder.add_node(\"node\", node)
+    builder.add_edge(START, \"node\")
+
+    # A checkpointer must be enabled for interrupts to work!
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {
+        \"configurable\": {
+            \"thread_id\": uuid.uuid4(),
+        }
+    }
+
+    for chunk in graph.stream({\"foo\": \"abc\"}, config):
+        print(chunk)
+    ```
+
+    ```pycon
+    {'__interrupt__': (Interrupt(value='what is your age?', resumable=True, ns=['node:62e598fa-8653-9d6d-2046-a70203020e37'], when='during'),)}
+    ```
+
+    ```python
+    command = Command(resume=\"some input from a human!!!\")
+
+    for chunk in graph.stream(Command(resume=\"some input from a human!!!\"), config):
+        print(chunk)
+    ```
+
+    ```pycon
+    Received an input from the interrupt: some input from a human!!!
+    {'node': {'human_value': 'some input from a human!!!'}}
+    ```
+
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
