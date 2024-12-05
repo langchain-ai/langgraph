@@ -120,6 +120,7 @@ These guides show how to use the prebuilt ReAct agent:
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
+- [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
 
 ## LangGraph Platform
 
