@@ -573,6 +573,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
 
         # Search by similarity
         results = store.search(("docs",), query="python programming")
+        ```
 
     Note:
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
