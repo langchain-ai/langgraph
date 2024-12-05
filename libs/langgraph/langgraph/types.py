@@ -245,7 +245,22 @@ N = TypeVar("N", bound=Hashable)
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Command(Generic[N]):
-    """One or more commands to update the graph's state and send messages to nodes."""
+    """One or more commands to update the graph's state and send messages to nodes.
+
+    Args:
+        graph: graph to send the command to. Supported values are:
+
+            - None: the current graph (default)
+            - GraphCommand.PARENT: closest parent graph
+        update: update to apply to the graph's state.
+        resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+        goto: can be one of the following:
+
+            - name of the node to navigate to next (any node that belongs to the specified `graph`)
+            - sequence of node names to navigate to next
+            - `Send` object (to execute a node with the input provided)
+            - sequence of `Send` objects
+    """
 
     graph: Optional[str] = None
     update: Optional[dict[str, Any]] = None
