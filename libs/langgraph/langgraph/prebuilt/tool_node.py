@@ -309,40 +309,9 @@ class ToolNode(RunnableCallable):
             # invoke the tool with raw args to return raw value instead of a ToolMessage
             response = tool.invoke(call["args"])
             if isinstance(response, Command):
-                updated_command = deepcopy(response)
-                if isinstance(updated_command.update, dict):
-                    if output_type != "dict":
-                        raise ValueError(
-                            f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
-                        )
-
-                    state_update = updated_command.update or {}
-                    messages_update = state_update.get(self.messages_key, [])
-                else:
-                    if output_type != "list":
-                        raise ValueError(
-                            f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {response.update} for tool '{call['name']}'"
-                        )
-
-                    channels, messages_updates = zip(*updated_command.update)
-                    if len(channels) != 1 or channels[0] != "__root__":
-                        raise ValueError(
-                            f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
-                        )
-
-                    messages_update = messages_updates[0]
-
-                if len(messages_update) != 1 or not isinstance(
-                    messages_update[0], ToolMessage
-                ):
-                    raise ValueError(
-                        f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
-                    )
-
-                tool_message = messages_update[0]
-                tool_message.name = call["name"]
-                tool_message.tool_call_id = cast(str, call["id"])
-                return updated_command
+                return self._add_tool_call_name_and_id_to_command(
+                    response, call, output_type
+                )
             else:
                 return ToolMessage(
                     content=cast(Union[str, list], msg_content_output(response)),
@@ -402,40 +371,9 @@ class ToolNode(RunnableCallable):
             # invoke the tool with raw args to return raw value instead of a ToolMessage
             response = await tool.ainvoke(call["args"])
             if isinstance(response, Command):
-                updated_command = deepcopy(response)
-                if isinstance(updated_command.update, dict):
-                    if output_type != "dict":
-                        raise ValueError(
-                            f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
-                        )
-
-                    state_update = updated_command.update or {}
-                    messages_update = state_update.get(self.messages_key, [])
-                else:
-                    if output_type != "list":
-                        raise ValueError(
-                            f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {response.update} for tool '{call['name']}'"
-                        )
-
-                    channels, messages_updates = zip(*updated_command.update)
-                    if len(channels) != 1 or channels[0] != "__root__":
-                        raise ValueError(
-                            f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
-                        )
-
-                    messages_update = messages_updates[0]
-
-                if len(messages_update) != 1 or not isinstance(
-                    messages_update[0], ToolMessage
-                ):
-                    raise ValueError(
-                        f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
-                    )
-
-                tool_message = messages_update[0]
-                tool_message.name = call["name"]
-                tool_message.tool_call_id = cast(str, call["id"])
-                return updated_command
+                return self._add_tool_call_name_and_id_to_command(
+                    response, call, output_type
+                )
             else:
                 return ToolMessage(
                     content=cast(Union[str, list], msg_content_output(response)),
@@ -591,6 +529,45 @@ class ToolNode(RunnableCallable):
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
         return tool_call_with_store
+
+    def _add_tool_call_name_and_id_to_command(
+        self, command: Command, call: ToolCall, output_type: Literal["list", "dict"]
+    ) -> Command:
+        if isinstance(command.update, dict):
+            if output_type != "dict":
+                raise ValueError(
+                    f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+                )
+
+            updated_command = deepcopy(command)
+            state_update = cast(dict[str, Any], updated_command.update) or {}
+            messages_update = state_update.get(self.messages_key, [])
+        elif isinstance(command.update, list):
+            if output_type != "list":
+                raise ValueError(
+                    f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {command.update} for tool '{call['name']}'"
+                )
+
+            updated_command = deepcopy(command)
+            channels, messages_updates = zip(*updated_command.update)
+            if len(channels) != 1 or channels[0] != "__root__":
+                raise ValueError(
+                    f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
+                )
+
+            messages_update = messages_updates[0]
+        else:
+            return command
+
+        if len(messages_update) != 1 or not isinstance(messages_update[0], ToolMessage):
+            raise ValueError(
+                f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
+            )
+
+        tool_message: ToolMessage = messages_update[0]
+        tool_message.name = call["name"]
+        tool_message.tool_call_id = cast(str, call["id"])
+        return updated_command
 
 
 def tools_condition(
