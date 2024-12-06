@@ -1015,38 +1015,64 @@ async def test_tool_node_command():
         async def _arun(*args: Any, **kwargs: Any):
             return command
 
-    custom_tool = MyCustomTool(name="transfer_to_bob", description="Transfer to bob")
+    custom_tool = MyCustomTool(
+        name="custom_transfer_to_bob", description="Transfer to bob"
+    )
     async_custom_tool = MyCustomTool(
-        name="async_transfer_to_bob", description="Transfer to bob"
+        name="async_custom_transfer_to_bob", description="Transfer to bob"
     )
 
     # test mixing regular tools and tools returning commands
-    with pytest.raises(ValueError):
+    def add(a: int, b: int) -> int:
+        """Add two numbers"""
+        return a + b
 
-        def add(a: int, b: int) -> int:
-            """Add two numbers"""
-            return a + b
+    result = ToolNode([add, transfer_to_bob]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {"args": {"a": 1, "b": 2}, "id": "1", "name": "add"},
+                        {"args": {}, "id": "2", "name": "transfer_to_bob"},
+                    ],
+                )
+            ]
+        }
+    )
 
-        ToolNode([add, transfer_to_bob]).invoke(
-            {
+    assert result == [
+        Command(
+            update={
                 "messages": [
-                    AIMessage(
-                        "",
-                        tool_calls=[
-                            {"args": {"a": 1, "b": 2}, "id": "1", "name": "add"},
-                            {"args": {}, "id": "2", "name": "transfer_to_bob"},
-                        ],
+                    ToolMessage(
+                        content="3",
+                        tool_call_id="1",
+                        name="add",
                     )
                 ]
             }
-        )
+        ),
+        Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="2",
+                        name="transfer_to_bob",
+                    )
+                ]
+            },
+            goto="bob",
+            graph=Command.PARENT,
+        ),
+    ]
 
     # test tools returning commands
 
     # test sync tools
     for tool in [transfer_to_bob, custom_tool]:
-        tool_node = ToolNode([tool])
-        result = tool_node.invoke(
+        result = ToolNode([tool]).invoke(
             {
                 "messages": [
                     AIMessage(
@@ -1073,8 +1099,7 @@ async def test_tool_node_command():
 
     # test async tools
     for tool in [async_transfer_to_bob, async_custom_tool]:
-        tool_node = ToolNode([tool])
-        result = await tool_node.ainvoke(
+        result = await ToolNode([tool]).ainvoke(
             {
                 "messages": [
                     AIMessage(
@@ -1100,20 +1125,47 @@ async def test_tool_node_command():
         ]
 
     # test multiple commands
-    # with pytest.raises(ValueError):
-    ToolNode([transfer_to_bob]).invoke(
+    result = ToolNode([transfer_to_bob, custom_tool]).invoke(
         {
             "messages": [
                 AIMessage(
                     "",
                     tool_calls=[
                         {"args": {}, "id": "1", "name": "transfer_to_bob"},
-                        {"args": {}, "id": "2", "name": "transfer_to_bob"},
+                        {"args": {}, "id": "2", "name": "custom_transfer_to_bob"},
                     ],
                 )
             ]
         }
     )
+    assert result == [
+        Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="1",
+                        name="transfer_to_bob",
+                    )
+                ]
+            },
+            goto="bob",
+            graph=Command.PARENT,
+        ),
+        Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="2",
+                        name="custom_transfer_to_bob",
+                    )
+                ]
+            },
+            goto="bob",
+            graph=Command.PARENT,
+        ),
+    ]
 
 
 def test_react_agent_update_state():

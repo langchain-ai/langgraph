@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import json
-from copy import copy
+from copy import copy, deepcopy
 from typing import (
     Any,
     Callable,
@@ -216,21 +216,23 @@ class ToolNode(RunnableCallable):
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
 
-        commands: list[Command] = [
-            output for output in outputs if isinstance(output, Command)
-        ]
-        if len(commands) > 0:
-            if len(commands) != len(outputs):
-                raise ValueError(
-                    f"Cannot mix Command and non-command (message) tool outputs, got the following outputs: {outputs}"
+        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        if not any(isinstance(output, Command) for output in outputs):
+            # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
+            return outputs if output_type == "list" else {self.messages_key: outputs}
+
+        # combine commands and non-command outputs
+        combined_commands: list[Command] = []
+        for output in outputs:
+            if isinstance(output, Command):
+                combined_commands.append(output)
+            else:
+                update = (
+                    [output] if output_type == "list" else {self.messages_key: [output]}
                 )
+                combined_commands.append(Command(update=update))
 
-            # Users that want to include ToolMessages in the state update
-            # will need to explicitly add them to the Command.update
-            return commands
-
-        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {self.messages_key: outputs}
+        return combined_commands
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -261,21 +263,24 @@ class ToolNode(RunnableCallable):
         outputs = await asyncio.gather(
             *(self._arun_one(call, config) for call in tool_calls)
         )
-        commands: list[Command] = [
-            output for output in outputs if isinstance(output, Command)
-        ]
-        if len(commands) > 0:
-            if len(commands) != len(outputs):
-                raise ValueError(
-                    f"Cannot mix Command and non-command (message) tool outputs, got the following outputs: {outputs}"
+
+        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        if not any(isinstance(output, Command) for output in outputs):
+            # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
+            return outputs if output_type == "list" else {self.messages_key: outputs}
+
+        # combine commands and non-command outputs
+        combined_commands: list[Command] = []
+        for output in outputs:
+            if isinstance(output, Command):
+                combined_commands.append(output)
+            else:
+                update = (
+                    [output] if output_type == "list" else {self.messages_key: [output]}
                 )
+                combined_commands.append(Command(update=update))
 
-            # Users that want to include ToolMessages in the state update
-            # will need to explicitly add them to the Command.update
-            return commands
-
-        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {self.messages_key: outputs}
+        return combined_commands
 
     def _run_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -301,14 +306,20 @@ class ToolNode(RunnableCallable):
                         f"Tools that return Command must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
                     )
 
-                state_update = response.update or {}
+                updated_command = deepcopy(response)
+                state_update = updated_command.update or {}
                 messages_update = state_update.get(self.messages_key, [])
-                for message in messages_update:
-                    # assign tool call ID & name
-                    if isinstance(message, ToolMessage):
-                        message.name = call["name"]
-                        message.tool_call_id = cast(str, call["id"])
-                return response
+                if len(messages_update) != 1 or not isinstance(
+                    messages_update[0], ToolMessage
+                ):
+                    raise ValueError(
+                        f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
+                    )
+
+                tool_message = messages_update[0]
+                tool_message.name = call["name"]
+                tool_message.tool_call_id = cast(str, call["id"])
+                return updated_command
             else:
                 return ToolMessage(
                     content=cast(Union[str, list], msg_content_output(response)),
@@ -368,14 +379,20 @@ class ToolNode(RunnableCallable):
                         f"Tools that return Command must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
                     )
 
-                state_update = response.update or {}
+                updated_command = deepcopy(response)
+                state_update = updated_command.update or {}
                 messages_update = state_update.get(self.messages_key, [])
-                for message in messages_update:
-                    # assign tool call ID & name
-                    if isinstance(message, ToolMessage):
-                        message.name = call["name"]
-                        message.tool_call_id = cast(str, call["id"])
-                return response
+                if len(messages_update) != 1 or not isinstance(
+                    messages_update[0], ToolMessage
+                ):
+                    raise ValueError(
+                        f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
+                    )
+
+                tool_message = messages_update[0]
+                tool_message.name = call["name"]
+                tool_message.tool_call_id = cast(str, call["id"])
+                return updated_command
             else:
                 return ToolMessage(
                     content=cast(Union[str, list], msg_content_output(response)),
