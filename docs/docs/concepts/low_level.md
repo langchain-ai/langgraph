@@ -349,7 +349,7 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
 !!! important
 
-    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph compilation and rendering, and tells LangGraph that `my_node` can navigate to `my_other_node`.
+    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph rendering and tells LangGraph that `my_node` can navigate to `my_other_node`.
 
 Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
