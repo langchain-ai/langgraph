@@ -2,10 +2,11 @@
 
 !!! tip "This guide uses the new `interrupt` function."
 
-    As of LangGraph 0.2.57, the recommended way to set breakpoints is using `interrupt` function as it significantly
+    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [interrupt](../reference/types.md#langgraph.types.interrupt) function as it significantly
     simpifies **human-in-the-loop** patterns.
 
-    If you're looking for the previous version of this conceptual guide, which uses static breakpoints and `NodeInterrupt` exception, it is available [here](./low_level.md#breakpoints).
+    If you're looking for the previous version of this conceptual guide, which relied on static breakpoints and and `NodeInterrupt` exception, it is available [here](v0-human-in-the-loop.md). 
+
 
 **Human-in-the-loop** (or "on-the-loop") workflows enhance agent capabilities by incorporating human interactions at key points. Common interaction patterns include:
 
@@ -20,222 +21,99 @@ Use-cases for these interaction patterns include:
 
 ## Persistence
 
-**Human-in-the-loop** patterns are enabled by LangGraph's built-in [persistence](./persistence.md) layer, which writes a checkpoint of the graph state at each step, allowing for resumption of execution. You **must compile** your graph with a checkpointer to use breakpoints.
+The [persistence](./persistence.md) layer in LangGraph writes a **checkpoint** of the graph state at each step, enabling the graph to **pause** and **resume** execution. This functionality is essential for supporting **human-in-the-loop** workflows.
 
-## Breakpoints 
+## Breakpoints
 
-Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution.
-
-1. [**Interrupt function**](#interrupt-function): Pause the graph from **inside** a node. This is the recommended way to set breakpoints for human-in-the-loop workflows.
-1. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
-2. [**Using the `interrupt` function**](#interrupt-function): Pause the graph from **inside** a node.
-
-## Interrupt
-
-An `interrupt` is a particularly convenient way to support human-in-the-loop workflows. To use an `interrupt`, you must enable a checkpointer, as the feature relies on persisting the graph state. An `interrupt` can be used within a node to pause execution and wait for input, as shown in this example:
-
-You can think of an `interrupt` as similar to how the `input` function works, but with the difference
-that graph execution always **resumes** from the **beginning** of the node where the `interrupt` was called. This means that you have to:
-
-1. Be cautious of side effects, such as API calls that mutate data, as these may inadvertently be triggered multiple times.
-2. Be aware that the node will be re-run with the same graph state, so you may need to update the state to avoid the same `interrupt` being triggered again.
+The recommended method to set breakpoints in LangGraph is using the [interrupt](../reference/types.md/#langgraph.types.interrupt) function. The `interrupt` function pauses execution **from inside a node** and surfaces interrupt information to the client. To use the `interrupt` function, the graph must be compiled with a [checkpointer](./persistence.md) to maintain state persistence.
 
 ```python
 from langgraph.types import interrupt
 
 def node(state: State):
+    ...
+    # Pause the graph and wait for user input.
     answer = interrupt(
-        # This value will be sent to the client.
         {
             "question": "What is your age?",
-            "options": ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
         }
     )
-    print(f"> Received an input from the interrupt: {answer}")
-    return {"human_value": answer}
+    # Answer is the value provided by the client via `Command(resume=answer)`
+    print(f"Value received from interrupt: {answer}")
+    # Do something with the answer.
+    ...
+
+graph_builder.add_node("node", node)
+
+# The checkpointer is required for the `interrupt` function to work.
+graph = graph_builder.compile(checkpointer=checkpointer)
 ```
 
+??? warning "Graph execution resumes from the beginning of the node not the exact point of the `interrupt`"
 
+    Execution always resumes from the **beginning** of the **graph node**, not the exact point of the `interrupt`, unlike a traditional breakpoint or Python's `input()` function. Keep the following considerations in mind when using the `interrupt` function:
 
+    1. **Side effects**: Place side-effecting code, such as API calls, **after** the `interrupt` to avoid duplication, as these are re-triggered every time the node resumes.
+    2. **Multiple interrupts**: Using multiple `interrupt` calls in a node is useful (e.g., for run-time validation), but the order and number of calls must remain consistent to prevent mismatched resume values.
 
-
-Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution. 
-
-The recommended way to set breakpoints is to use the `interrupt` function. This function allows you to pause the graph from **inside** a node, and surface a value to the client as part of the interrupt information.
-
-You have a few options for setting breakpoints, but the recommended approach for newer versions of LangGraph is to use the `interrupt` function.
-
-1. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
-2. [**Using the `interrupt` function**](#interrupt-function): Pause the graph from **inside** a node.
-
-### Using the `interrupt` function
-
+Now, we can run the graph and observe that it pauses at the `interrupt` function:
 
 ```python
-# A checkpointer must be enabled for interrupts to work!
-checkpointer = MemorySaver()
-graph = builder.compile(checkpointer=checkpointer)
-```
-
-
-### Static Breakpoints
-
-Use static breakpoints if you want to **ALWAYS** pause the graph either **before** or **after** one or more nodes execute.
-
-To set static breakpoints, specify the `interrupt_before` and/or `interrupt_after` key when [compiling your graph](#compiling-your-graph).
-
-```python
-# Compile our graph with a checkpointer and a breakpoint before "node_a" and after "node_b" and "node_c"
-graph = graph_builder.compile(
-    interrupt_before=["node_a"], 
-    interrupt_after=["node_b", "node_c"],
-    checkpointer=checkpointer, # Required
-)
-```
-
-When using sub-graphs, specify the `interrupt_before` and `interrupt_after` values when compiling the subgraph.
-
-
-Here, we compile our graph with a checkpointer and a breakpoint at the node we want to interrupt before, `step_for_human_in_the_loop`. We then perform one of the above interaction patterns, which will create a new checkpoint if a human edits the graph state. The new checkpoint is saved to the `thread` and we can resume the graph execution from there by passing in `None` as the input.
-
-```python
-# Compile our graph with a checkpointer and a breakpoint before "step_for_human_in_the_loop"
-graph = builder.compile(checkpointer=checkpointer, interrupt_before=["step_for_human_in_the_loop"])
-
 # Run the graph up to the breakpoint
-thread_config = {"configurable": {"thread_id": "1"}}
+thread_config = {"configurable": {"thread_id": "some_id"}}
 for event in graph.stream(inputs, thread_config, stream_mode="values"):
     print(event)
-    
-# Perform some action that requires human in the loop
-
-# Continue the graph execution from the current checkpoint 
-for event in graph.stream(None, thread_config, stream_mode="values"):
-    print(event)
 ```
 
-### Dynamic Breakpoints
-
-Alternatively, you may want to raise a breakpoint from inside a node, potentially based on some condition that is not known until runtime. This is called a dynamic breakpoint.
-
-This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
-
-There are two ways to interrupt the graph dynamically:
-
-1. `interrupt` **function (recommended)**: Interrupts the graph within a node and surfaces a value to the client as part of the interrupt information.
-2. `NodeInterrupt` exception: An older, less flexible method for interrupting.
-
-Alternatively, the developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
-
-```python
-def my_node(state: State) -> State:
-    if len(state['input']) > 5:
-        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
-    return state
-```
-
-Let's assume we run the graph with an input that triggers the dynamic breakpoint and then attempt to resume the graph execution simply by passing in `None` for the input.
-
-```python
-# Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint 
-for event in graph.stream(None, thread_config, stream_mode="values"):
-    print(event)
-```
-
-The graph will *interrupt* again because this node will be *re-run* with the same graph state. We need to change the graph state such that the condition that triggers the dynamic breakpoint is no longer met. So, we can simply edit the graph state to an input that meets the condition of our dynamic breakpoint (< 5 characters) and re-run the node.
-
-```python 
-# Update the state to pass the dynamic breakpoint
-graph.update_state(config=thread_config, values={"input": "foo"})
-for event in graph.stream(None, thread_config, stream_mode="values"):
-    print(event)
-```
-
-Alternatively, what if we want to keep our current input and skip the node (`my_node`) that performs the check? To do this, we can simply perform the graph update with `as_node="my_node"` and pass in `None` for the values. This will make no update the graph state, but run the update as `my_node`, effectively skipping the node and bypassing the dynamic breakpoint.
-
-```python
-# This update will skip the node `my_node` altogether
-graph.update_state(config=thread_config, values=None, as_node="my_node")
-for event in graph.stream(None, thread_config, stream_mode="values"):
-    print(event)
-```
-
-See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a detailed how-to on doing this!
-
-### Dynamic Breakpoints
-
-There are two ways to interrupt the graph dynamically:
-
-1. `interrupt` **function (recommended)**: Interrupts the graph within a node and surfaces a value to the client as part of the interrupt information.
-2. `NodeInterrupt` exception: An older, less flexible method for interrupting.
-
-#### `interrupt`
-
-```python
-from langgraph.types import interrupt
-
-def node(state: State):
-    ...
-    client_value = interrupt(
-        # This value will be sent to the client.
-        # It can be any JSON serializable value.
-        {"key": "value"}
+```pycon
+{'__interrupt__': (
+        Interrupt(
+            value={'question': 'what is your age?'}, 
+            resumable=True, 
+            ns=['node:5df255f7-d683-1a99-b7c8-00dd534aed8e'], 
+            when='during'
+        ),
     )
-    ...
+}
 ```
 
-#### `NodeInterrupt`
+??? note "Using other types of breakpoints"
 
-Throw a `NodeInterrupt` exception to interrupt the graph.
+    The `interrupt` function was introduced to address difficulties with the older methods that necessitated updating the graph state when resuming execution. You can read more about these methods in the [low-level guide](./low_level.md#breakpoints). A [previous version of this guide](v0-human-in-the-loop.md) covers the older method of setting breakpoints using **static breakpoints** and the `NodeInterrupt` exception. 
+
+    See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
+
+
+## Resuming
+
+After an `interrupt`, graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive. The `Command` primitive provides several options to control and modify the graph's state during resumption:
+
+1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
+2. **Update the graph state**: Modify the graph state using `Command(update=update)`. Note that resumption starts from the beginning of the node where the `interrupt` was used. Execution resumes from the beginning of the node where the `interrupt` was used, but with the updated state.
+3. **Navigate to another node**: Direct the graph to continue execution at a different node using `Command(goto="node_name")`.
+
+Here’s how resumption works in practice:
 
 ```python
-def my_node(state: State) -> State:
-    if len(state['input']) > 5:
-        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
-
-    return state
+# Resume graph execution with the user's input.
+graph.invoke(Command(resume={"age": "25"}), thread_config)
 ```
 
-### Resuming
+By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state or flow.
 
-When a breakpoint is hit, graph execution will pause.
+### Usage with invoke/ainvoke
 
-=== "Command"
 
-    Resume execution using the new `Command` primitive.
+The `invoke` and `ainvoke` methods differ from `stream` and `astream` in how they handle interrupts. While these methods pause execution at the `interrupt` function, they do not return interrupt information directly. To retrieve this information, you need to access the graph state using the `get_state` method.
 
-    ```python
-    graph.invoke(inputs, config=config) # This will pause at the breakpoint
-    ...
-    # Do something (e.g., get human input)
-    ...
-    graph.invoke(
-        Command(
-            # Use `resume` to pass a value to the `interrupt`.
-            resume=resume, 
-            # For other kinds of breakpoints, use `update` to update the state.
-            update=update,
-        ), 
-        config=config
-    )
-    ```
-
-=== "Without the Command Primitive"
-
-    Resume execution without the `Command` primitive (older versions of LangGraph).
-
-    ```python
-    graph.invoke(inputs, config=config) # This will pause at the breakpoint
-    ...
-    # Do something (e.g., get human input)
-    ...
-
-    graph.update_state(update, config=config)
-    graph.invoke(None, config=config)
-    ```
-
-See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
-
+```python
+# Run the graph up to the breakpoint
+result = graph.invoke(inputs, thread_config)
+# Get the graph state to get interrupt information.
+state = graph.get_state(thread_config) 
+# Resume the graph with the user's input.
+graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
 
 ## Interaction Patterns
 
