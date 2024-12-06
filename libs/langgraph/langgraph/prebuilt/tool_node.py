@@ -213,28 +213,29 @@ class ToolNode(RunnableCallable):
     ) -> Any:
         tool_calls, output_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
+        output_types = [output_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
-            outputs = [*executor.map(self._run_one, tool_calls, config_list)]
+            outputs = [
+                *executor.map(self._run_one, tool_calls, output_types, config_list)
+            ]
 
         # preserve existing behavior for non-command tool outputs for backwards compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
             return outputs if output_type == "list" else {self.messages_key: outputs}
 
-        # combine commands and non-command outputs
-        combined_commands: list[Command] = []
+        # LangGraph will automatically handle list of Command and non-command node updates
+        combined_outputs: list[
+            Command | list[ToolMessage] | dict[str, list[ToolMessage]]
+        ] = []
         for output in outputs:
             if isinstance(output, Command):
-                combined_commands.append(output)
+                combined_outputs.append(output)
             else:
-                update = (
-                    [("__root__", output)]
-                    if output_type == "list"
-                    else {self.messages_key: [output]}
+                combined_outputs.append(
+                    [output] if output_type == "list" else {self.messages_key: [output]}
                 )
-                combined_commands.append(Command(update=update))
-
-        return combined_commands
+        return combined_outputs
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -263,7 +264,7 @@ class ToolNode(RunnableCallable):
     ) -> Any:
         tool_calls, output_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
-            *(self._arun_one(call, config) for call in tool_calls)
+            *(self._arun_one(call, output_type, config) for call in tool_calls)
         )
 
         # preserve existing behavior for non-command tool outputs for backwards compatibility
@@ -271,22 +272,25 @@ class ToolNode(RunnableCallable):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
             return outputs if output_type == "list" else {self.messages_key: outputs}
 
-        # combine commands and non-command outputs
-        combined_commands: list[Command] = []
+        # LangGraph will automatically handle list of Command and non-command node updates
+        combined_outputs: list[
+            Command | list[ToolMessage] | dict[str, list[ToolMessage]]
+        ] = []
         for output in outputs:
             if isinstance(output, Command):
-                combined_commands.append(output)
+                combined_outputs.append(output)
             else:
-                update = (
-                    [("__root__", output)]
-                    if output_type == "list"
-                    else {self.messages_key: [output]}
+                combined_outputs.append(
+                    [output] if output_type == "list" else {self.messages_key: [output]}
                 )
-                combined_commands.append(Command(update=update))
+        return combined_outputs
 
-        return combined_commands
-
-    def _run_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
+    def _run_one(
+        self,
+        call: ToolCall,
+        output_type: Literal["list", "dict"],
+        config: RunnableConfig,
+    ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
@@ -305,14 +309,29 @@ class ToolNode(RunnableCallable):
             # invoke the tool with raw args to return raw value instead of a ToolMessage
             response = tool.invoke(call["args"])
             if isinstance(response, Command):
-                if not isinstance(response.update, dict):
-                    raise ValueError(
-                        f"Tools that return Command must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
-                    )
-
                 updated_command = deepcopy(response)
-                state_update = cast(dict[str, Any], updated_command.update) or {}
-                messages_update = state_update.get(self.messages_key, [])
+                if isinstance(updated_command.update, dict):
+                    if output_type != "dict":
+                        raise ValueError(
+                            f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
+                        )
+
+                    state_update = updated_command.update or {}
+                    messages_update = state_update.get(self.messages_key, [])
+                else:
+                    if output_type != "list":
+                        raise ValueError(
+                            f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {response.update} for tool '{call['name']}'"
+                        )
+
+                    channels, messages_updates = zip(*updated_command.update)
+                    if len(channels) != 1 or channels[0] != "__root__":
+                        raise ValueError(
+                            f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
+                        )
+
+                    messages_update = messages_updates[0]
+
                 if len(messages_update) != 1 or not isinstance(
                     messages_update[0], ToolMessage
                 ):
@@ -359,7 +378,12 @@ class ToolNode(RunnableCallable):
             content=content, name=call["name"], tool_call_id=call["id"], status="error"
         )
 
-    async def _arun_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
+    async def _arun_one(
+        self,
+        call: ToolCall,
+        output_type: Literal["list", "dict"],
+        config: RunnableConfig,
+    ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
@@ -378,14 +402,29 @@ class ToolNode(RunnableCallable):
             # invoke the tool with raw args to return raw value instead of a ToolMessage
             response = await tool.ainvoke(call["args"])
             if isinstance(response, Command):
-                if not isinstance(response.update, dict):
-                    raise ValueError(
-                        f"Tools that return Command must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
-                    )
-
                 updated_command = deepcopy(response)
-                state_update = cast(dict[str, Any], updated_command.update) or {}
-                messages_update = state_update.get(self.messages_key, [])
+                if isinstance(updated_command.update, dict):
+                    if output_type != "dict":
+                        raise ValueError(
+                            f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
+                        )
+
+                    state_update = updated_command.update or {}
+                    messages_update = state_update.get(self.messages_key, [])
+                else:
+                    if output_type != "list":
+                        raise ValueError(
+                            f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {response.update} for tool '{call['name']}'"
+                        )
+
+                    channels, messages_updates = zip(*updated_command.update)
+                    if len(channels) != 1 or channels[0] != "__root__":
+                        raise ValueError(
+                            f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
+                        )
+
+                    messages_update = messages_updates[0]
+
                 if len(messages_update) != 1 or not isinstance(
                     messages_update[0], ToolMessage
                 ):

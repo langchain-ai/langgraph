@@ -1042,17 +1042,15 @@ async def test_tool_node_command():
     )
 
     assert result == [
-        Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content="3",
-                        tool_call_id="1",
-                        name="add",
-                    )
-                ]
-            }
-        ),
+        {
+            "messages": [
+                ToolMessage(
+                    content="3",
+                    tool_call_id="1",
+                    name="add",
+                )
+            ]
+        },
         Command(
             update={
                 "messages": [
