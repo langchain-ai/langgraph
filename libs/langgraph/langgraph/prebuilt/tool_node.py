@@ -48,7 +48,7 @@ def msg_content_output(output: Any) -> Union[str, list[dict]]:
     recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
         return output
-    elif all(
+    elif isinstance(output, list) and all(
         [
             isinstance(x, dict) and x.get("type") in recognized_content_block_types
             for x in output
@@ -283,34 +283,39 @@ class ToolNode(RunnableCallable):
 
         try:
             tool = self.tools_by_name[call["name"]]
-            # check if the Tool.func / Tool._run method returns a Command in the type annotation
-            tool_func = getattr(tool, "func", tool._run)
-            if (return_type := tool_func.__annotations__.get("return")) and (
-                return_type is Command or get_origin(return_type) is Command
-            ):
-                # invoke with the raw tool call args to return a Command directly
-                # instead of a ToolMessage
-                command: Command = tool.invoke(call["args"])
-                if not isinstance(command.update, dict):
+            if tool.response_format != "content":
+                # handle "content_and_artifact"
+                tool_message: ToolMessage = tool.invoke(
+                    {**call, **{"type": "tool_call"}}
+                )
+                tool_message.content = cast(
+                    Union[str, list], msg_content_output(tool_message.content)
+                )
+                return tool_message
+
+            # invoke the tool with raw args to return raw value instead of a ToolMessage
+            response = tool.invoke(call["args"])
+            if isinstance(response, Command):
+                if not isinstance(response.update, dict):
                     raise ValueError(
-                        f"Tools that return Command must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+                        f"Tools that return Command must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
                     )
 
-                state_update = command.update or {}
+                state_update = response.update or {}
                 messages_update = state_update.get(self.messages_key, [])
                 for message in messages_update:
                     # assign tool call ID & name
                     if isinstance(message, ToolMessage):
                         message.name = call["name"]
                         message.tool_call_id = cast(str, call["id"])
-                return command
+                return response
             else:
-                # invoke with the full input to return a ToolMessage
-                tool_message: ToolMessage = tool.invoke(call, config)
-            tool_message.content = cast(
-                Union[str, list], msg_content_output(tool_message.content)
-            )
-            return tool_message
+                return ToolMessage(
+                    content=cast(Union[str, list], msg_content_output(response)),
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                )
+
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
@@ -345,39 +350,38 @@ class ToolNode(RunnableCallable):
 
         try:
             tool = self.tools_by_name[call["name"]]
-            # check if the Tool.coroutine / Tool._arun method returns a Command in the type annotation
-            tool_coroutine_or_func = (
-                getattr(tool, "coroutine", None)
-                # fallback on "func" annotations in case we're invoking a sync tool asynchronously
-                or getattr(tool, "func", None)
-                or tool._arun
-            )
-            if (
-                return_type := tool_coroutine_or_func.__annotations__.get("return")
-            ) and (return_type is Command or get_origin(return_type) is Command):
-                # invoke with the raw tool call args to return a Command directly
-                # instead of a ToolMessage
-                command: Command = await tool.ainvoke(call["args"])
-                if not isinstance(command.update, dict):
+            if tool.response_format != "content":
+                # handle "content_and_artifact"
+                tool_message: ToolMessage = await tool.ainvoke(
+                    {**call, **{"type": "tool_call"}}
+                )
+                tool_message.content = cast(
+                    Union[str, list], msg_content_output(tool_message.content)
+                )
+                return tool_message
+
+            # invoke the tool with raw args to return raw value instead of a ToolMessage
+            response = await tool.ainvoke(call["args"])
+            if isinstance(response, Command):
+                if not isinstance(response.update, dict):
                     raise ValueError(
-                        f"Tools that return Command must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+                        f"Tools that return Command must provide a dict in Command.update, got: {response.update} for tool '{call['name']}'"
                     )
 
-                state_update = command.update or {}
+                state_update = response.update or {}
                 messages_update = state_update.get(self.messages_key, [])
                 for message in messages_update:
                     # assign tool call ID & name
                     if isinstance(message, ToolMessage):
                         message.name = call["name"]
                         message.tool_call_id = cast(str, call["id"])
-                return command
+                return response
             else:
-                # invoke with the full input to return a ToolMessage
-                tool_message: ToolMessage = await tool.ainvoke(call, config)
-            tool_message.content = cast(
-                Union[str, list], msg_content_output(tool_message.content)
-            )
-            return tool_message
+                return ToolMessage(
+                    content=cast(Union[str, list], msg_content_output(response)),
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                )
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
