@@ -1,4 +1,5 @@
 # type: ignore
+import asyncio
 import itertools
 import sys
 import uuid
@@ -61,6 +62,106 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
             admin_conn_string, autocommit=True
         ) as conn:
             await conn.execute(f"DROP DATABASE {database}")
+
+
+async def test_large_batches(store: AsyncPostgresStore) -> None:
+    N = 100
+    M = 10
+    coros = []
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for m in range(M):
+            ops = []
+            for i in range(N):
+                for i in range(N):
+                    coros.append(
+                        executor.submit(
+                            store.put,
+                            ("test", "foo", "bar", "baz", str(m % 2)),
+                            f"key{i}",
+                            value={"foo": "bar" + str(i)},
+                        )
+                    )
+                    coros.append(
+                        executor.submit(
+                            store.get,
+                            ("test", "foo", "bar", "baz", str(m % 2)),
+                            f"key{i}",
+                        )
+                    )
+                    coros.append(
+                        executor.submit(
+                            store.list_namespaces,
+                            prefix=None,
+                            max_depth=m + 1,
+                        )
+                    )
+                    coros.append(
+                        executor.submit(
+                            store.search,
+                            ("test",),
+                        )
+                    )
+                    coros.append(
+                        executor.submit(
+                            store.put,
+                            ("test", "foo", "bar", "baz", str(m % 2)),
+                            f"key{i}",
+                            value={"foo": "bar" + str(i)},
+                        )
+                    )
+                    coros.append(
+                        executor.submit(
+                            store.put,
+                            ("test", "foo", "bar", "baz", str(m % 2)),
+                            f"key{i}",
+                            None,
+                        )
+                    )
+                # ops.extend(
+                #     [
+                #         PutOp(
+                #             namespace=("test", "foo", "bar", "baz", str(m % 2)),
+                #             key=f"key{i}",  # {m}",
+                #             value=None,
+                #         ),
+                #         GetOp(namespace=("test",), key=f"key{i}{m}"),
+                #         ListNamespacesOp(
+                #             match_conditions=None, max_depth=i + 1, limit=m, offset=0
+                #         ),
+                #         SearchOp(
+                #             namespace_prefix=("test",),
+                #             filter=None,
+                #             limit=10,
+                #             offset=0,
+                #         ),
+                #     ]
+                #
+                # ops.extend(
+                #     [
+                #         # PutOp(
+                #         #     namespace=("test", "foo", "bar", "baz", str(m % 2)),
+                #         #     key=f"key{i}",  # {m}",
+                #         #     value={"data": f"value{i}{m}"},
+                #         # ),
+                #         # GetOp(namespace=("test",), key=f"key{i}{m}"),
+                #         # ListNamespacesOp(
+                #         #     match_conditions=None, max_depth=i + 1, limit=m, offset=0
+                #         # ),
+                #         # SearchOp(
+                #         #     namespace_prefix=("test",),
+                #         #     filter={"data": f"value{i}{m}"},
+                #         #     limit=10,
+                #         #     offset=0,
+                #         # ),
+                #     ]
+                # )
+
+            # coros.extend(ops)
+        # executor.map(store.batch, [[op] for op in coros])
+
+        # await asyncio.gather(*coros)  # *[store.abatch(ops) for ops in coros])
 
 
 async def test_abatch_order(store: AsyncPostgresStore) -> None:

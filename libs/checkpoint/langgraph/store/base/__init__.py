@@ -808,6 +808,8 @@ class BaseStore(ABC):
             # [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
             ```
         """
+        if max_depth is not None and max_depth <= 0:
+            raise ValueError("If provided, max_depth must be greater than 0")
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
@@ -1004,6 +1006,8 @@ class BaseStore(ABC):
             # Returns: [("a", "b", "c"), ("a", "b", "d"), ("a", "b", "f")]
             ```
         """
+        if max_depth is not None and max_depth <= 0:
+            raise ValueError("If provided, max_depth must be greater than 0")
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
