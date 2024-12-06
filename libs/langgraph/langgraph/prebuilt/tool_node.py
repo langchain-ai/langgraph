@@ -228,7 +228,9 @@ class ToolNode(RunnableCallable):
                 combined_commands.append(output)
             else:
                 update = (
-                    [output] if output_type == "list" else {self.messages_key: [output]}
+                    [("__root__", output)]
+                    if output_type == "list"
+                    else {self.messages_key: [output]}
                 )
                 combined_commands.append(Command(update=update))
 
@@ -276,7 +278,9 @@ class ToolNode(RunnableCallable):
                 combined_commands.append(output)
             else:
                 update = (
-                    [output] if output_type == "list" else {self.messages_key: [output]}
+                    [("__root__", output)]
+                    if output_type == "list"
+                    else {self.messages_key: [output]}
                 )
                 combined_commands.append(Command(update=update))
 
@@ -307,7 +311,7 @@ class ToolNode(RunnableCallable):
                     )
 
                 updated_command = deepcopy(response)
-                state_update = updated_command.update or {}
+                state_update = cast(dict[str, Any], updated_command.update) or {}
                 messages_update = state_update.get(self.messages_key, [])
                 if len(messages_update) != 1 or not isinstance(
                     messages_update[0], ToolMessage
@@ -380,7 +384,7 @@ class ToolNode(RunnableCallable):
                     )
 
                 updated_command = deepcopy(response)
-                state_update = updated_command.update or {}
+                state_update = cast(dict[str, Any], updated_command.update) or {}
                 messages_update = state_update.get(self.messages_key, [])
                 if len(messages_update) != 1 or not isinstance(
                     messages_update[0], ToolMessage
