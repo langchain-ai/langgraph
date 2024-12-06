@@ -5,27 +5,33 @@
     As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [interrupt](../reference/types.md#langgraph.types.interrupt) function as it significantly
     simpifies **human-in-the-loop** patterns.
 
-    If you're looking for the previous version of this conceptual guide, which relied on static breakpoints and and `NodeInterrupt` exception, it is available [here](v0-human-in-the-loop.md). 
+    If you're looking for the previous version of this conceptual guide, which relied on static breakpoints and `NodeInterrupt` exception, it is available [here](v0-human-in-the-loop.md). 
 
+A **human-in-the-loop** (or "on-the-loop") workflow integrates human input into automated processes, allowing for decisions, validation, or corrections at key stages. This is especially useful in **LLM-based applications**, where the underlying model may generate occasional inaccuracies. In low-error-tolerance scenarios like compliance, decision-making, or content generation, human involvement ensures reliability by enabling review, correction, or override of model outputs.
 
-**Human-in-the-loop** (or "on-the-loop") workflows enhance agent capabilities by incorporating human interactions at key points. Common interaction patterns include:
+## Use cases
 
-1. ✅ **Approval**: Pause the agent, present its current state to the user, and allow the user to approve or reject a proposed action.
-2. 📝 **Editing**: Pause the agent, present its current state to the user, and allow the user to make modifications to the agent's state.
-3. 💬 **Input**: Introduce a dedicated graph node to explicitly collect user input, which is then integrated into the agent's state.
+Key use cases for **human-in-the-loop** workflows in LLM-based applications include:
 
-Use-cases for these interaction patterns include:
+1. **🛠️ [Reviewing tool calls](#reviewing-tool-calls)**: Humans can review, edit, or approve tool calls requested by the LLM before tool execution.
+2. **✅ Validating LLM outputs**: Ensure accuracy by reviewing, editing, or approving the LLM's generated outputs.
+3. **💡 Providing context**: Enable the LLM to explicitly request human input for clarification or additional details, improving decision-making and accuracy. 
+4. **🔍 Debugging**: Investigate and correct errors in the LLM's decision-making process. This is mostly developer facing.
 
-1. [**Reviewing tool calls**](#reviewing-tool-calls): Pause the agent to review and edit the results of tool executions.
-2. [**Time travel**](#time-travel): Replay or fork the agent's past actions for further exploration.
+## Interrupt & Resume
 
-## Persistence
+**Human-in-the-loop** works in the following manner:
 
-The [persistence](./persistence.md) layer in LangGraph writes a **checkpoint** of the graph state at each step, enabling the graph to **pause** and **resume** execution. This functionality is essential for supporting **human-in-the-loop** workflows.
+1. [**Persistence**](./persistence.md): the graph state is saved after each graph step, enabling **pausing** and **resuming** execution.
+2. [**Interrupting execution**](#interrupting-execution): the [`interrupt`](../reference/types.md#langgraph.types.interrupt) function is used to **pause** the graph at specific points for user input.
+3. [**Running the graph**](#run): the graph is executed until it reaches the **breakpoint**.
+4. [**Resuming execution**](#resuming-execution): the [`Command`](../reference/types.md#langgraph.types.Command) primitive allows **resuming** execution based on user input.
 
-## Breakpoints
+> **Note:** While there are other ways to set breakpoints (e.g., static breakpoints or dynamic exceptions) and resume execution (e.g., by relying on state updates `graph.update_state`), this guide focuses on the `interrupt` function and `Command` primitive as the recommended methods.
 
-The recommended method to set breakpoints in LangGraph is using the [interrupt](../reference/types.md/#langgraph.types.interrupt) function. The `interrupt` function pauses execution **from inside a node** and surfaces interrupt information to the client. To use the `interrupt` function, the graph must be compiled with a [checkpointer](./persistence.md) to maintain state persistence.
+### Interrupt
+
+Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing you to collect user input, validate the graph state, or make decisions before resuming execution. The graph must be compiled with a [checkpointer](./persistence.md) to maintain state persistence.
 
 ```python
 from langgraph.types import interrupt
@@ -38,7 +44,7 @@ def node(state: State):
             "question": "What is your age?",
         }
     )
-    # Answer is the value provided by the client via `Command(resume=answer)`
+    # Answer will be assigned a value when the graph resumes (see below).
     print(f"Value received from interrupt: {answer}")
     # Do something with the answer.
     ...
@@ -56,7 +62,9 @@ graph = graph_builder.compile(checkpointer=checkpointer)
     1. **Side effects**: Place side-effecting code, such as API calls, **after** the `interrupt` to avoid duplication, as these are re-triggered every time the node resumes.
     2. **Multiple interrupts**: Using multiple `interrupt` calls in a node is useful (e.g., for run-time validation), but the order and number of calls must remain consistent to prevent mismatched resume values.
 
-Now, we can run the graph and observe that it pauses at the `interrupt` function:
+### Run 
+
+**Run the graph** and observe the `interrupt` function in action:
 
 ```python
 # Run the graph up to the breakpoint
@@ -77,14 +85,34 @@ for event in graph.stream(inputs, thread_config, stream_mode="values"):
 }
 ```
 
-??? note "Using other types of breakpoints"
+??? note "Using with `invoke` and `ainvoke`"
 
-    The `interrupt` function was introduced to address difficulties with the older methods that necessitated updating the graph state when resuming execution. You can read more about these methods in the [low-level guide](./low_level.md#breakpoints). A [previous version of this guide](v0-human-in-the-loop.md) covers the older method of setting breakpoints using **static breakpoints** and the `NodeInterrupt` exception. 
+    `invoke` and `ainvoke` do not return the interrupt information. To access this information, you must use the `get_state` method to retrieve the graph state after calling `invoke` or `ainvoke`.
 
-    See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
+    ```python
+    # Run the graph up to the breakpoint
+    result = graph.invoke(inputs, thread_config)
+    # Get the graph state to get interrupt information.
+    state = graph.get_state(thread_config) 
+    # Resume the graph with the user's input.
+    graph.invoke(Command(resume={"age": "25"}), thread_config)
+    ```
 
+### Resume
 
-## Resuming
+Once you have collected user input, you can **resume** the graph execution using the [Command](../reference/types.md#langgraph.types.Command) primitive. The `Command` primitive provides several options to control and modify the graph's state during resumption:
+
+```python
+graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
+
+You should see the following output printed by to the `print` function in the `node` function:
+
+```pycon
+Value received from interrupt: {'age': '25'}
+```
+
+## Options for resuming execution
 
 After an `interrupt`, graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive. The `Command` primitive provides several options to control and modify the graph's state during resumption:
 
@@ -101,19 +129,13 @@ graph.invoke(Command(resume={"age": "25"}), thread_config)
 
 By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state or flow.
 
-### Usage with invoke/ainvoke
 
+??? note "Using other types of breakpoints"
 
-The `invoke` and `ainvoke` methods differ from `stream` and `astream` in how they handle interrupts. While these methods pause execution at the `interrupt` function, they do not return interrupt information directly. To retrieve this information, you need to access the graph state using the `get_state` method.
+    The `interrupt` function was introduced to address difficulties with the older methods that necessitated updating the graph state when resuming execution. You can read more about these methods in the [low-level guide](./low_level.md#breakpoints). A [previous version of this guide](v0-human-in-the-loop.md) covers the older method of setting breakpoints using **static breakpoints** and the `NodeInterrupt` exception. 
 
-```python
-# Run the graph up to the breakpoint
-result = graph.invoke(inputs, thread_config)
-# Get the graph state to get interrupt information.
-state = graph.get_state(thread_config) 
-# Resume the graph with the user's input.
-graph.invoke(Command(resume={"age": "25"}), thread_config)
-```
+    See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
+
 
 ## Interaction Patterns
 
