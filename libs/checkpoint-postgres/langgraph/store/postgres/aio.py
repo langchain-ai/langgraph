@@ -18,7 +18,9 @@ from langgraph.store.base import (
     Result,
     SearchOp,
 )
-from langgraph.store.base.batch import AsyncBatchedBaseStore
+from langgraph.store.base.batch import (
+    BatchedBaseStore,
+)
 from langgraph.store.postgres.base import (
     _PLACEHOLDER,
     BasePostgresStore,
@@ -35,7 +37,7 @@ from langgraph.store.postgres.base import (
 logger = logging.getLogger(__name__)
 
 
-class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Conn]):
+class AsyncPostgresStore(BatchedBaseStore, BasePostgresStore[_ainternal.Conn]):
     """Asynchronous Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"
