@@ -350,20 +350,15 @@ See [this guide](../how-tos/human_in_the_loop/wait-user-input.ipynb) for a detai
 
 ### Reviewing Tool Calls
 
-Some user interaction patterns combine the above ideas.
+Some user interaction patterns combine the concepts outlined above.
 
-For example, many agents use [tool calling](https://python.langchain.com/docs/how_to/tool_calling/) to make decisions. 
+For example, many agents rely on [tool calling](https://python.langchain.com/docs/how_to/tool_calling/) to make decisions. Tool calling introduces unique challenges because the agent must get multiple aspects right:
 
-Tool calling presents a challenge because the agent must get two things right: 
+1. **Selecting the correct tool**: The agent must choose the appropriate tool to call.
+2. **Providing accurate arguments**: The agent must pass the correct parameters to the tool.
+3. **Ensuring discretion**: Even if the tool call is technically correct, it might involve sensitive operations that require human approval.
 
-1. The name of the tool to call 
-2. The arguments to pass to the tool
-
-Even if the tool call is correct, we may also want to apply discretion: 
-
-(3) The tool call may be a sensitive operation that we want to approve 
-
-With these points in mind, we can combine the above ideas to create a human-in-the-loop review of a tool call.
+By addressing these challenges, we can integrate **human-in-the-loop** processes to review and approve tool calls effectively.
 
 ```python
 # Compile our graph with a checkpointer and a breakpoint before the step to review the tool call from the LLM 
@@ -385,7 +380,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
     print(event)
 ```
 
-See [this guide](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a detailed how-to on doing this!
+See [the how to review tool calls guide](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a details.
 
 ### Time Travel
 
