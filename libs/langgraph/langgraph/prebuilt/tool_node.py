@@ -219,21 +219,15 @@ class ToolNode(RunnableCallable):
         commands: list[Command] = [
             output for output in outputs if isinstance(output, Command)
         ]
-        # This can be relaxed by moving to a design where there is a single node per tool
-        # In that case multiple Commands can be handled natively by LangGraph
-        # (including concurrent state updates via reducers, multiple goto destinations, etc.)
-        if len(commands) > 1:
-            raise ValueError(
-                "Currently only one Command update per ToolNode is supported, got multiple Commands."
-            )
-
-        if len(commands) == 1:
-            if len(outputs) > 1:
-                raise ValueError("Cannot mix Command returns with ToolMessages.")
+        if len(commands) > 0:
+            if len(commands) != len(outputs):
+                raise ValueError(
+                    f"Cannot mix Command and non-command (message) tool outputs, got the following outputs: {outputs}"
+                )
 
             # Users that want to include ToolMessages in the state update
             # will need to explicitly add them to the Command.update
-            return commands[0]
+            return commands
 
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {self.messages_key: outputs}
@@ -270,23 +264,15 @@ class ToolNode(RunnableCallable):
         commands: list[Command] = [
             output for output in outputs if isinstance(output, Command)
         ]
-        # This can be relaxed by moving to a design where there is a single node per tool
-        # In that case multiple Commands can be handled natively by LangGraph
-        # (including concurrent state updates via reducers, multiple goto destinations, etc.)
-        if len(commands) > 1:
-            raise ValueError(
-                "Currently only one Command update per ToolNode is supported, got multiple Commands."
-            )
-
-        if len(commands) == 1:
-            if len(outputs) > 1:
+        if len(commands) > 0:
+            if len(commands) != len(outputs):
                 raise ValueError(
-                    "Cannot mix Command and non-command (message) tool outputs."
+                    f"Cannot mix Command and non-command (message) tool outputs, got the following outputs: {outputs}"
                 )
 
             # Users that want to include ToolMessages in the state update
             # will need to explicitly add them to the Command.update
-            return commands[0]
+            return commands
 
         # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {self.messages_key: outputs}
@@ -296,8 +282,8 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            # check if the Tool.func / Tool._run method returns a Command in the type annotation
             tool = self.tools_by_name[call["name"]]
+            # check if the Tool.func / Tool._run method returns a Command in the type annotation
             tool_func = getattr(tool, "func", tool._run)
             if (return_type := tool_func.__annotations__.get("return")) and (
                 return_type is Command or get_origin(return_type) is Command
@@ -307,6 +293,11 @@ class ToolNode(RunnableCallable):
                 # instead of a ToolMessage
                 raw_tool_call = {**call, **{"type": None}}
                 command: Command = tool.invoke(raw_tool_call)
+                if not isinstance(command.update, dict):
+                    raise ValueError(
+                        f"Tools that return Command must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+                    )
+
                 state_update = command.update or {}
                 messages_update = state_update.get(self.messages_key, [])
                 for message in messages_update:
@@ -355,17 +346,27 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            # check if the Tool.coroutine / Tool._arun method returns a Command in the type annotation
             tool = self.tools_by_name[call["name"]]
-            tool_coroutine = getattr(tool, "coroutine", tool._arun)
-            if (return_type := tool_coroutine.__annotations__.get("return")) and (
-                return_type is Command or get_origin(return_type) is Command
-            ):
+            # check if the Tool.coroutine / Tool._arun method returns a Command in the type annotation
+            tool_coroutine_or_func = (
+                getattr(tool, "coroutine", None)
+                # fallback on "func" annotations in case we're invoking a sync tool asynchronously
+                or getattr(tool, "func", None)
+                or tool._arun
+            )
+            if (
+                return_type := tool_coroutine_or_func.__annotations__.get("return")
+            ) and (return_type is Command or get_origin(return_type) is Command):
                 # invoke with the raw tool call to return a Command directly
                 # NOTE: we remove type = "tool_call" to allow returning raw tool result
                 # instead of a ToolMessage
                 raw_tool_call = {**call, **{"type": None}}
                 command: Command = await tool.ainvoke(raw_tool_call)
+                if not isinstance(command.update, dict):
+                    raise ValueError(
+                        f"Tools that return Command must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+                    )
+
                 state_update = command.update or {}
                 messages_update = state_update.get(self.messages_key, [])
                 for message in messages_update:

@@ -1054,17 +1054,21 @@ async def test_tool_node_command():
                 ]
             }
         )
-        assert result == Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content="Transferred to Bob", tool_call_id="1", name=tool.name
-                    )
-                ]
-            },
-            goto="bob",
-            graph=Command.PARENT,
-        )
+        assert result == [
+            Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="1",
+                            name=tool.name,
+                        )
+                    ]
+                },
+                goto="bob",
+                graph=Command.PARENT,
+            )
+        ]
 
     # test async tools
     for tool in [async_transfer_to_bob, async_custom_tool]:
@@ -1078,33 +1082,37 @@ async def test_tool_node_command():
                 ]
             }
         )
-        assert result == Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content="Transferred to Bob", tool_call_id="1", name=tool.name
-                    )
-                ]
-            },
-            goto="bob",
-            graph=Command.PARENT,
-        )
+        assert result == [
+            Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="1",
+                            name=tool.name,
+                        )
+                    ]
+                },
+                goto="bob",
+                graph=Command.PARENT,
+            )
+        ]
 
     # test multiple commands
-    with pytest.raises(ValueError):
-        await ToolNode([transfer_to_bob, async_transfer_to_bob]).ainvoke(
-            {
-                "messages": [
-                    AIMessage(
-                        "",
-                        tool_calls=[
-                            {"args": {}, "id": "1", "name": "transfer_to_bob"},
-                            {"args": {}, "id": "2", "name": "async_transfer_to_bob"},
-                        ],
-                    )
-                ]
-            }
-        )
+    # with pytest.raises(ValueError):
+    ToolNode([transfer_to_bob]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {"args": {}, "id": "1", "name": "transfer_to_bob"},
+                        {"args": {}, "id": "2", "name": "transfer_to_bob"},
+                    ],
+                )
+            ]
+        }
+    )
 
 
 def test_react_agent_update_state():
