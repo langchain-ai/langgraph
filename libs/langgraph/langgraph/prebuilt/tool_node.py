@@ -20,6 +20,7 @@ from langchain_core.messages import (
     AnyMessage,
     ToolCall,
     ToolMessage,
+    convert_to_messages,
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
@@ -536,7 +537,8 @@ class ToolNode(RunnableCallable):
         if isinstance(command.update, dict):
             if output_type != "dict":
                 raise ValueError(
-                    f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+                    f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, "
+                    f"got: {command.update} for tool '{call['name']}'"
                 )
 
             updated_command = deepcopy(command)
@@ -545,27 +547,35 @@ class ToolNode(RunnableCallable):
         elif isinstance(command.update, list):
             if output_type != "list":
                 raise ValueError(
-                    f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {command.update} for tool '{call['name']}'"
+                    f"When using list of messages as ToolNode input, tools must provide `[('__root__', message_list)]` in Command.update, "
+                    f"got: {command.update} for tool '{call['name']}'"
                 )
 
             updated_command = deepcopy(command)
             channels, messages_updates = zip(*updated_command.update)
             if len(channels) != 1 or channels[0] != "__root__":
                 raise ValueError(
-                    f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
+                    f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', message_list)]`, "
+                    f"got: {updated_command.update} for tool '{call['name']}'"
                 )
 
             messages_update = messages_updates[0]
         else:
             return command
 
+        # convert to message objects if updates are in a dict format
+        messages_update = convert_to_messages(messages_update)
         if len(messages_update) != 1 or not isinstance(messages_update[0], ToolMessage):
             raise ValueError(
-                f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
+                f"Expected exactly one message (ToolMessage) in Command.update for tool '{call['name']}', got: {messages_update}. "
+                "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
+                'You can fix it by modifying the tool to return `Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id)], ...}, ...)`.'
             )
 
         tool_message: ToolMessage = messages_update[0]
         tool_message.name = call["name"]
+        # TODO: update this to validate that the tool call id matches the tool call id in the command (instead of assigning)
+        # once propagating tool_call_id is supported in langchain_core tools
         tool_message.tool_call_id = cast(str, call["id"])
         return updated_command
 
