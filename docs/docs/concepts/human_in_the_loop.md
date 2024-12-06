@@ -1,5 +1,12 @@
 # Human-in-the-loop
 
+!!! tip "This guide uses the new `interrupt` function."
+
+    As of LangGraph 0.2.57, the recommended way to set breakpoints is using `interrupt` function as it significantly
+    simpifies **human-in-the-loop** patterns.
+
+    If you're looking for the previous version of this conceptual guide, which uses static breakpoints and `NodeInterrupt` exception, it is available [here](./low_level.md#breakpoints).
+
 **Human-in-the-loop** (or "on-the-loop") workflows enhance agent capabilities by incorporating human interactions at key points. Common interaction patterns include:
 
 1. ✅ **Approval**: Pause the agent, present its current state to the user, and allow the user to approve or reject a proposed action.
@@ -13,25 +20,63 @@ Use-cases for these interaction patterns include:
 
 ## Persistence
 
-Human-in-the-loop patterns are enabled by LangGraph's built-in [persistence](./persistence.md) layer, which writes a checkpoint of the graph state at each step. 
-Persistence allows pausing graph execution so that a human can review and / or edit the current state of the graph and then resume with the human's input.
+**Human-in-the-loop** patterns are enabled by LangGraph's built-in [persistence](./persistence.md) layer, which writes a checkpoint of the graph state at each step, allowing for resumption of execution. You **must compile** your graph with a checkpointer to use breakpoints.
 
-## Breakpoints
+## Breakpoints 
 
-Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution. This functionality is enabled by LangGraph's built-in [checkpointer](./persistence.md), which writes a checkpoint of the graph state at each step.
+Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution.
 
-You have a few options for setting breakpoints:
+1. [**Interrupt function**](#interrupt-function): Pause the graph from **inside** a node. This is the recommended way to set breakpoints for human-in-the-loop workflows.
+1. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
+2. [**Using the `interrupt` function**](#interrupt-function): Pause the graph from **inside** a node.
 
-1. [**Using the `interrupt` function**](./#interrupts): Pause the graph **inside** a node.
-2. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
-3. [**Dynamic breakpoints**](#dynamic-breakpoints): Pause the graph from **inside** typically based on a condition.
- 
-!!! important "Checkpointer Required"
+## Interrupt
 
-    You must compile your graph with a checkpointer to use breakpoints.
+An `interrupt` is a particularly convenient way to support human-in-the-loop workflows. To use an `interrupt`, you must enable a checkpointer, as the feature relies on persisting the graph state. An `interrupt` can be used within a node to pause execution and wait for input, as shown in this example:
+
+You can think of an `interrupt` as similar to how the `input` function works, but with the difference
+that graph execution always **resumes** from the **beginning** of the node where the `interrupt` was called. This means that you have to:
+
+1. Be cautious of side effects, such as API calls that mutate data, as these may inadvertently be triggered multiple times.
+2. Be aware that the node will be re-run with the same graph state, so you may need to update the state to avoid the same `interrupt` being triggered again.
+
+```python
+from langgraph.types import interrupt
+
+def node(state: State):
+    answer = interrupt(
+        # This value will be sent to the client.
+        {
+            "question": "What is your age?",
+            "options": ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
+        }
+    )
+    print(f"> Received an input from the interrupt: {answer}")
+    return {"human_value": answer}
+```
 
 
-### `Interrupt` function
+
+
+
+Breakpoints allow **pausing** graph execution to allow for human review before **resuming** execution. 
+
+The recommended way to set breakpoints is to use the `interrupt` function. This function allows you to pause the graph from **inside** a node, and surface a value to the client as part of the interrupt information.
+
+You have a few options for setting breakpoints, but the recommended approach for newer versions of LangGraph is to use the `interrupt` function.
+
+1. [**Static breakpoints**](#static-breakpoints): Pause the graph **before** or **after** a node executes.
+2. [**Using the `interrupt` function**](#interrupt-function): Pause the graph from **inside** a node.
+
+### Using the `interrupt` function
+
+
+```python
+# A checkpointer must be enabled for interrupts to work!
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+```
+
 
 ### Static Breakpoints
 
@@ -311,9 +356,8 @@ For example, many agents use [tool calling](https://python.langchain.com/docs/ho
 
 Tool calling presents a challenge because the agent must get two things right: 
 
-(1) The name of the tool to call 
-
-(2) The arguments to pass to the tool
+1. The name of the tool to call 
+2. The arguments to pass to the tool
 
 Even if the tool call is correct, we may also want to apply discretion: 
 
@@ -322,7 +366,7 @@ Even if the tool call is correct, we may also want to apply discretion:
 With these points in mind, we can combine the above ideas to create a human-in-the-loop review of a tool call.
 
 ```python
-# Compile our graph with a checkpointer and a breakpoint before the step to to review the tool call from the LLM 
+# Compile our graph with a checkpointer and a breakpoint before the step to review the tool call from the LLM 
 graph = builder.compile(checkpointer=checkpointer, interrupt_before=["human_review"])
 
 # Run the graph up to the breakpoint
@@ -405,25 +449,21 @@ See see [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a detai
 
 ![](./img/human_in_the_loop/forking.png)
 
-Sometimes we want to fork past actions of an agent, and explore different paths through the graph.
+Forking allows us to revisit an agent's past actions and explore alternative paths through the graph.
 
-`Editing`, as discussed above, is *exactly* how we do this for the *current* state of the graph! 
+The **Editing** pattern, as described earlier, enables modifications to the *current* state of the graph. But what if you want to fork from a *past* state?
 
-But, what if we want to fork *past* states of the graph?
-
-For example, let's say we want to edit a particular checkpoint, `xxx`.
-
-We pass this `checkpoint_id` when we update the state of the graph.
+For instance, suppose you want to edit a specific checkpoint, such as `xyz`. You can achieve this by providing the relevant `checkpoint_id` when updating the graph's state.
 
 ```python
-config = {"configurable": {"thread_id": "1", "checkpoint_id": "xxx"}}
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "xyz"}}
 graph.update_state(config, {"state": "updated state"}, )
 ```
 
-This creates a new forked checkpoint, `xxx-fork`, which we can then run the graph from.
+This creates a new forked checkpoint, `xyz-fork`, which we can then run the graph from.
 
 ```python
-config = {'configurable': {'thread_id': '1', 'checkpoint_id': 'xxx-fork'}}
+config = {'configurable': {'thread_id': '1', 'checkpoint_id': 'xyz-fork'}}
 for event in graph.stream(None, config, stream_mode="values"):
     print(event)
 ```
