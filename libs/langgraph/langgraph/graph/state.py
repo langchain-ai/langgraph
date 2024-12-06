@@ -630,6 +630,7 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(i._update_as_tuples())
                     else:
                         updates.append(("__root__", i))
+                return updates
             elif input is not None:
                 return [("__root__", input)]
 
