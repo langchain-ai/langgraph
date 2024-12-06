@@ -384,6 +384,38 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
 Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
+### Human-in-the-loop
+
+`Command` is an important part of human-in-the-loop workflows: when using `interrupt()` to collect user input, `Command` is then used to supply the input and resume execution via `Command(resume="User input")`. Check out [this conceptual guide](./human_in_the_loop.md) for more information.
+
+### Using inside the tools
+
+A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
+
+```python
+from langchain_core.messages import ToolMessage
+from langgraph.graph import MessagesState
+
+class CustomState(MessagesState):
+    # custom state key to update from the tool
+    customer_id: str
+
+@tool
+def lookup_customer_id(customer_name: str):
+    customer_id = get_customer_id(customer_name)
+    return Command(update={
+        # update the state key
+        "customer_id": customer_id,
+        # update the message history
+        "messages": [ToolMessage(content="Successfully looked up customer ID")]
+    })
+```
+
+!!! important
+    You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
+
+If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
+
 ## Persistence
 
 LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the
