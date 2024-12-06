@@ -339,15 +339,6 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
     )
 ```
 
-`Command` has the following properties:
-
-| Property | Description |
-| --- | --- |
-| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `Command.PARENT`: closest parent graph |
-| `update` | Update to apply to the graph's state. |
-| `resume` | Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt]. |
-| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- sequence of node names to navigate to next<br>- `Send` object (to execute a node with the input provided)<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
-
 ```python
 from langgraph.graph import StateGraph, START
 from langgraph.types import Command
