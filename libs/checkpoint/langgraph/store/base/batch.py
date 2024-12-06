@@ -14,6 +14,7 @@ from langgraph.store.base import (
     NamespacePath,
     Op,
     PutOp,
+    Result,
     SearchItem,
     SearchOp,
     _validate_namespace,
@@ -22,6 +23,10 @@ from langgraph.store.base import (
 
 class AsyncBatchedBaseStoreMixin:
     """Efficiently batch operations in a background task."""
+
+    _loop: asyncio.AbstractEventLoop
+    _aqueue: dict[asyncio.Future, Op]
+    _task: asyncio.Task
 
     async def aget(
         self,
@@ -92,14 +97,6 @@ class AsyncBatchedBaseStoreMixin:
         self._aqueue[fut] = op
         return await fut
 
-    # def batch(self, ops: Iterable[Op]) -> list[Result]:
-    #     futures = []
-    #     for op in ops:
-    #         fut = self._loop.create_future()
-    #         self._aqueue[fut] = op
-    #         futures.append(fut)
-    #     return [fut.result() for fut in asyncio.as_completed(futures)]
-
 
 class AsyncBatchedBaseStore(AsyncBatchedBaseStoreMixin, BaseStore):
     """Efficiently batch operations in a background task."""
@@ -114,6 +111,14 @@ class AsyncBatchedBaseStore(AsyncBatchedBaseStoreMixin, BaseStore):
 
     def __del__(self) -> None:
         self._task.cancel()
+
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
+        futures = []
+        for op in ops:
+            fut = self._loop.create_future()
+            self._aqueue[fut] = op
+            futures.append(fut)
+        return [fut.result() for fut in asyncio.as_completed(futures)]
 
 
 def _dedupe_ops(values: list[Op]) -> tuple[Optional[list[int]], list[Op]]:
@@ -195,13 +200,16 @@ async def _run(
 class SyncBatchedBaseStoreMixin(BaseStore):
     """Efficiently batch operations in a background thread."""
 
+    _sync_queue: dict[Future, Op]
+    _sync_thread: threading.Thread
+
     def get(
         self,
         namespace: tuple[str, ...],
         key: str,
     ) -> Optional[Item]:
-        fut = Future()
-        self._queue[fut] = GetOp(namespace, key)
+        fut: Future[Optional[Item]] = Future()
+        self._sync_queue[fut] = GetOp(namespace, key)
         return fut.result()
 
     def search(
@@ -214,8 +222,8 @@ class SyncBatchedBaseStoreMixin(BaseStore):
         limit: int = 10,
         offset: int = 0,
     ) -> list[SearchItem]:
-        fut = Future()
-        self._queue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
+        fut: Future[list[SearchItem]] = Future()
+        self._sync_queue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
         return fut.result()
 
     def put(
@@ -226,8 +234,8 @@ class SyncBatchedBaseStoreMixin(BaseStore):
         index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         _validate_namespace(namespace)
-        fut = Future()
-        self._queue[fut] = PutOp(namespace, key, value, index)
+        fut: Future[None] = Future()
+        self._sync_queue[fut] = PutOp(namespace, key, value, index)
         return fut.result()
 
     def delete(
@@ -235,8 +243,8 @@ class SyncBatchedBaseStoreMixin(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
-        fut = Future()
-        self._queue[fut] = PutOp(namespace, key, None)
+        fut: Future[None] = Future()
+        self._sync_queue[fut] = PutOp(namespace, key, None)
         return fut.result()
 
     def list_namespaces(
@@ -248,7 +256,7 @@ class SyncBatchedBaseStoreMixin(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
-        fut = Future()
+        fut: Future[list[tuple[str, ...]]] = Future()
         match_conditions = []
         if prefix:
             match_conditions.append(MatchCondition(match_type="prefix", path=prefix))
@@ -261,7 +269,7 @@ class SyncBatchedBaseStoreMixin(BaseStore):
             limit=limit,
             offset=offset,
         )
-        self._queue[fut] = op
+        self._sync_queue[fut] = op
         return fut.result()
 
 
@@ -283,9 +291,17 @@ class SyncBatchedBaseStore(SyncBatchedBaseStoreMixin, BaseStore):
     def __del__(self) -> None:
         # Signal the thread to stop
         if self._sync_thread.is_alive():
-            empty_future = Future()
+            empty_future: Future = Future()
             self._sync_queue[empty_future] = None  # type: ignore
             self._sync_thread.join()
+
+    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
+        futures = []
+        for op in ops:
+            fut: Future[Result] = Future()
+            self._sync_queue[fut] = op
+            futures.append(fut)
+        return [fut.result() for fut in futures]
 
 
 class BatchedBaseStore(
@@ -317,7 +333,7 @@ class BatchedBaseStore(
     def __del__(self) -> None:
         # Signal the thread to stop
         if self._sync_thread.is_alive():
-            empty_future = Future()
+            empty_future: Future[None] = Future()
             self._sync_queue[empty_future] = None  # type: ignore
             self._sync_thread.join()
 

@@ -1,5 +1,7 @@
 # type: ignore
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Any, Optional
 from uuid import uuid4
@@ -17,11 +19,7 @@ from langgraph.store.base import (
     SearchOp,
 )
 from langgraph.store.postgres import PostgresStore
-from tests.conftest import (
-    DEFAULT_URI,
-    VECTOR_TYPES,
-    CharacterEmbeddings,
-)
+from tests.conftest import DEFAULT_URI, VECTOR_TYPES, CharacterEmbeddings
 
 
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
@@ -57,6 +55,96 @@ def store(request) -> PostgresStore:
     finally:
         with Connection.connect(admin_conn_string, autocommit=True) as conn:
             conn.execute(f"DROP DATABASE {database}")
+
+
+def test_large_batches(store: PostgresStore) -> None:
+    N = 1000
+    M = 10
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for m in range(M):
+            for i in range(N):
+                _ = [
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        value={"foo": "bar" + str(i)},
+                    ),
+                    executor.submit(
+                        store.get,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                    ),
+                    executor.submit(
+                        store.list_namespaces,
+                        prefix=None,
+                        max_depth=m + 1,
+                    ),
+                    executor.submit(
+                        store.search,
+                        ("test",),
+                    ),
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        value={"foo": "bar" + str(i)},
+                    ),
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        None,
+                    ),
+                ]
+
+
+async def test_large_batches_async(store: PostgresStore) -> None:
+    N = 1000
+    M = 10
+    coros = []
+    for m in range(M):
+        for i in range(N):
+            coros.append(
+                store.aput(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                    value={"foo": "bar" + str(i)},
+                )
+            )
+            coros.append(
+                store.aget(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                )
+            )
+            coros.append(
+                store.alist_namespaces(
+                    prefix=None,
+                    max_depth=m + 1,
+                )
+            )
+            coros.append(
+                store.asearch(
+                    ("test",),
+                )
+            )
+            coros.append(
+                store.aput(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                    value={"foo": "bar" + str(i)},
+                )
+            )
+            coros.append(
+                store.adelete(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                )
+            )
+
+    await asyncio.gather(*coros)
 
 
 def test_batch_order(store: PostgresStore) -> None:

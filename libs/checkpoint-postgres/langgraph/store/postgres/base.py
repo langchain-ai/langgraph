@@ -30,7 +30,6 @@ from typing_extensions import TypedDict
 from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
-    BaseStore,
     GetOp,
     IndexConfig,
     Item,
@@ -44,6 +43,7 @@ from langgraph.store.base import (
     get_text_at_path,
     tokenize_path,
 )
+from langgraph.store.base.batch import SyncBatchedBaseStore
 
 if TYPE_CHECKING:
     from langchain_core.embeddings import Embeddings
@@ -533,7 +533,7 @@ class BasePostgresStore(Generic[C]):
             raise ValueError(f"Unsupported operator: {op}")
 
 
-class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
+class PostgresStore(SyncBatchedBaseStore, BasePostgresStore[_pg_internal.Conn]):
     """Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"

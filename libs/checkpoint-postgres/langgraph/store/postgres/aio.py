@@ -21,8 +21,6 @@ from langgraph.store.base import (
 )
 from langgraph.store.base.batch import (
     BatchedBaseStore,
-    AsyncBatchedBaseStore,
-    SyncBatchedBaseStore,
 )
 from langgraph.store.postgres.base import (
     _PLACEHOLDER,
@@ -40,7 +38,7 @@ from langgraph.store.postgres.base import (
 logger = logging.getLogger(__name__)
 
 
-class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Conn]):
+class AsyncPostgresStore(BatchedBaseStore, BasePostgresStore[_ainternal.Conn]):
     """Asynchronous Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"
@@ -160,15 +158,8 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
 
         return results
 
-    # def batch(self, ops: Iterable[Op]) -> list[Result]:
-    #     return asyncio.run_coroutine_threadsafe(self.abatch(ops), self.loop).result()
     def batch(self, ops: Iterable[Op]) -> list[Result]:
-        futures = []
-        for op in ops:
-            fut = self._loop.create_future()
-            self._aqueue[fut] = op
-            futures.append(fut)
-        return [fut.result() for fut in asyncio.as_completed(futures)]
+        return asyncio.run_coroutine_threadsafe(self.abatch(ops), self.loop).result()
 
     @classmethod
     @asynccontextmanager
