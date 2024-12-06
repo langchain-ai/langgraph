@@ -12,7 +12,13 @@ import pytest
 from langchain_core.embeddings import Embeddings
 from psycopg import AsyncConnection
 
-from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
+from langgraph.store.base import (
+    GetOp,
+    Item,
+    ListNamespacesOp,
+    PutOp,
+    SearchOp,
+)
 from langgraph.store.postgres import AsyncPostgresStore
 from tests.conftest import (
     DEFAULT_URI,
@@ -65,14 +71,30 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
             await conn.execute(f"DROP DATABASE {database}")
 
 
-async def test_large_batches(store: AsyncPostgresStore) -> None:
-    N = 1000
+async def test_no_running_loop(store: AsyncPostgresStore) -> None:
+    with pytest.raises(asyncio.InvalidStateError):
+        store.put(("foo", "bar"), "baz", {"val": "baz"})
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(store.put, ("foo", "bar"), "baz", {"val": "baz"})
+        result = await asyncio.wrap_future(future)
+        assert result is None
+        future = executor.submit(store.get, ("foo", "bar"), "baz")
+        result = await asyncio.wrap_future(future)
+        assert result.value == {"val": "baz"}
+        result = await asyncio.wrap_future(
+            executor.submit(store.list_namespaces, prefix=("foo",))
+        )
+
+
+async def test_large_batches(request: Any, store: AsyncPostgresStore) -> None:
+    N = 100  # less important that we are performant here
     M = 10
 
     with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
         for m in range(M):
             for i in range(N):
-                _ = [
+                futures += [
                     executor.submit(
                         store.put,
                         ("test", "foo", "bar", "baz", str(m % 2)),
@@ -106,6 +128,11 @@ async def test_large_batches(store: AsyncPostgresStore) -> None:
                         None,
                     ),
                 ]
+
+        results = await asyncio.gather(
+            *(asyncio.wrap_future(future) for future in futures)
+        )
+    assert len(results) == M * N * 6
 
 
 async def test_large_batches_async(store: AsyncPostgresStore) -> None:
@@ -152,7 +179,8 @@ async def test_large_batches_async(store: AsyncPostgresStore) -> None:
                 )
             )
 
-    await asyncio.gather(*coros)
+    results = await asyncio.gather(*coros)
+    assert len(results) == M * N * 6
 
 
 async def test_abatch_order(store: AsyncPostgresStore) -> None:
