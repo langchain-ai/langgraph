@@ -52,7 +52,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     ERROR,
@@ -107,11 +107,11 @@ pytestmark = pytest.mark.anyio
 
 
 async def test_checkpoint_errors() -> None:
-    class FaultyGetCheckpointer(MemorySaver):
+    class FaultyGetCheckpointer(InMemorySaver):
         async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
-    class FaultyPutCheckpointer(MemorySaver):
+    class FaultyPutCheckpointer(InMemorySaver):
         async def aput(
             self,
             config: RunnableConfig,
@@ -121,13 +121,13 @@ async def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
-    class FaultyPutWritesCheckpointer(MemorySaver):
+    class FaultyPutWritesCheckpointer(InMemorySaver):
         async def aput_writes(
             self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
-    class FaultyVersionCheckpointer(MemorySaver):
+    class FaultyVersionCheckpointer(InMemorySaver):
         def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
             raise ValueError("Faulty get_next_version")
 
@@ -12558,7 +12558,7 @@ async def test_debug_retry():
     builder.add_edge("one", "two")
     builder.add_edge("two", END)
 
-    saver = MemorySaver()
+    saver = InMemorySaver()
 
     graph = builder.compile(checkpointer=saver)
 
@@ -12631,7 +12631,7 @@ async def test_debug_subgraphs():
     parent.add_edge("p_one", "p_two")
     parent.add_edge("p_two", END)
 
-    graph = parent.compile(checkpointer=MemorySaver())
+    graph = parent.compile(checkpointer=InMemorySaver())
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
@@ -12706,7 +12706,7 @@ async def test_debug_nested_subgraphs():
     grand_parent.add_edge("gp_one", "gp_two")
     grand_parent.add_edge("gp_two", END)
 
-    graph = grand_parent.compile(checkpointer=MemorySaver())
+    graph = grand_parent.compile(checkpointer=InMemorySaver())
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
