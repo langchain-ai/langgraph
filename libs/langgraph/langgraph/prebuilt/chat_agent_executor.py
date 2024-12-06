@@ -1,4 +1,5 @@
 from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+from pydantic import BaseModel
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -206,6 +207,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    response_format: Optional[Type[BaseModel]] = None,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -247,6 +249,7 @@ def create_react_agent(
             Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        response_format: restrict the chat model to return output in the provided structured format 
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
@@ -544,7 +547,9 @@ def create_react_agent(
     tool_calling_enabled = len(tool_classes) > 0
 
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+        model = cast(BaseChatModel, model).bind_tools(tool_classes, response_format=response_format)
+    elif response_format:
+        model = cast(BaseChatModel, model).bind(response_format=response_format)
 
     # we're passing store here for validation
     preprocessor = _get_model_preprocessing_runnable(
