@@ -613,21 +613,24 @@ class CompiledStateGraph(CompiledGraph):
             ]
 
         def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
-            if (
-                isinstance(input, (list, tuple))
-                and input
-                and all(isinstance(i, Command) for i in input)
-            ):
-                updates: list[tuple[str, Any]] = []
-                for i in input:
-                    if i.graph == Command.PARENT:
-                        continue
-                    updates.extend(i._update_as_tuples())
-                return updates
-            elif isinstance(input, Command):
+            if isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return ()
                 return input._update_as_tuples()
+            elif (
+                isinstance(input, (list, tuple))
+                and input
+                and any(isinstance(i, Command) for i in input)
+            ):
+                updates: list[tuple[str, Any]] = []
+                for i in input:
+                    if isinstance(i, Command):
+                        if i.graph == Command.PARENT:
+                            continue
+                        updates.extend(i._update_as_tuples())
+                    else:
+                        updates.append(("__root__", i))
+                return updates
             elif input is not None:
                 return [("__root__", input)]
 
@@ -645,13 +648,16 @@ class CompiledStateGraph(CompiledGraph):
             elif (
                 isinstance(input, (list, tuple))
                 and input
-                and all(isinstance(i, Command) for i in input)
+                and any(isinstance(i, Command) for i in input)
             ):
                 updates: list[tuple[str, Any]] = []
                 for i in input:
-                    if i.graph == Command.PARENT:
-                        continue
-                    updates.extend(i._update_as_tuples())
+                    if isinstance(i, Command):
+                        if i.graph == Command.PARENT:
+                            continue
+                        updates.extend(i._update_as_tuples())
+                    else:
+                        updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
                 return [

@@ -9670,14 +9670,14 @@ async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None
             ),
             (FloatBetween(0.2, 0.4), ((), {"outer_1": {"my_key": " and parallel"}})),
             (
-                FloatBetween(0.5, 0.7),
+                FloatBetween(0.5, 0.8),
                 (
                     (AnyStr("inner:"),),
                     {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
                 ),
             ),
-            (FloatBetween(0.5, 0.7), ((), {"inner": {"my_key": "got here and there"}})),
-            (FloatBetween(0.5, 0.7), ((), {"outer_2": {"my_key": " and back again"}})),
+            (FloatBetween(0.5, 0.8), ((), {"inner": {"my_key": "got here and there"}})),
+            (FloatBetween(0.5, 0.8), ((), {"outer_2": {"my_key": " and back again"}})),
         ]
 
 
