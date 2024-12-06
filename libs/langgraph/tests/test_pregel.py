@@ -14807,3 +14807,31 @@ def test_interrupt_loop(request: pytest.FixtureRequest, checkpointer_name: str):
     assert [event for event in graph.stream(Command(resume="19"), thread1)] == [
         {"node": {"age": 19}},
     ]
+
+
+def test_root_mixed_return() -> None:
+    def my_node(state: list[str]):
+        return [Command(update=["a"]), ["b"]]
+
+    graph = StateGraph(Annotated[list[str], operator.add])
+
+    graph.add_node(my_node)
+    graph.add_edge(START, "my_node")
+    graph = graph.compile()
+
+    assert graph.invoke([]) == ["a", "b"]
+
+
+def test_dict_mixed_return() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def my_node(state: State):
+        return [Command(update={"foo": "a"}), {"foo": "b"}]
+
+    graph = StateGraph(State)
+    graph.add_node(my_node)
+    graph.add_edge(START, "my_node")
+    graph = graph.compile()
+
+    assert graph.invoke({"foo": ""}) == {"foo": "ab"}
