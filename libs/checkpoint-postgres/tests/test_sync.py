@@ -57,9 +57,8 @@ def _pipe_saver():
             prepare_threshold=0,
             row_factory=dict_row,
         ) as conn:
-            with conn.pipeline() as pipe:
-                checkpointer = PostgresSaver(conn, pipe=pipe)
-                checkpointer.setup()
+            checkpointer = PostgresSaver(conn)
+            checkpointer.setup()
             with conn.pipeline() as pipe:
                 checkpointer = PostgresSaver(conn, pipe=pipe)
                 yield checkpointer

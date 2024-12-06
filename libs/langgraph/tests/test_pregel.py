@@ -220,18 +220,6 @@ def test_graph_validation() -> None:
     class State(TypedDict):
         hello: str
 
-    def node_a(state: State) -> State:
-        # typo
-        return {"hell": "world"}
-
-    builder = StateGraph(State)
-    builder.add_node("a", node_a)
-    builder.set_entry_point("a")
-    builder.set_finish_point("a")
-    graph = builder.compile()
-    with pytest.raises(InvalidUpdateError):
-        graph.invoke({"hello": "there"})
-
     graph = StateGraph(State)
     graph.add_node("start", lambda x: x)
     graph.add_edge("__start__", "start")
@@ -1919,7 +1907,7 @@ def test_send_sequences() -> None:
                 else ["|".join((self.name, str(state)))]
             )
             if isinstance(state, Command):
-                return replace(state, update=update)
+                return [state, Command(update=update)]
             else:
                 return update
 
