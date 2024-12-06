@@ -74,6 +74,16 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
 async def test_no_running_loop(store: AsyncPostgresStore) -> None:
     with pytest.raises(asyncio.InvalidStateError):
         store.put(("foo", "bar"), "baz", {"val": "baz"})
+    with pytest.raises(asyncio.InvalidStateError):
+        store.get(("foo", "bar"), "baz")
+    with pytest.raises(asyncio.InvalidStateError):
+        store.delete(("foo", "bar"), "baz")
+    with pytest.raises(asyncio.InvalidStateError):
+        store.search(("foo", "bar"))
+    with pytest.raises(asyncio.InvalidStateError):
+        store.list_namespaces(prefix=("foo",))
+    with pytest.raises(asyncio.InvalidStateError):
+        store.batch([PutOp(namespace=("foo", "bar"), key="baz", value={"val": "baz"})])
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(store.put, ("foo", "bar"), "baz", {"val": "baz"})
         result = await asyncio.wrap_future(future)

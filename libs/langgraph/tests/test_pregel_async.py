@@ -12488,7 +12488,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         item = store.get(("not", "interesting"), "key")
         assert item is not None
         assert item.value == {"val": "val"}
-        return {"count": 1}
+        return {"count": 0}
 
     builder = StateGraph(State)
     builder.add_node("node", Node())

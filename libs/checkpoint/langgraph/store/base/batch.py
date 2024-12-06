@@ -1,6 +1,7 @@
 import asyncio
+import functools
 import weakref
-from typing import Any, Iterable, Literal, Optional, Union
+from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, Union
 
 from langgraph.store.base import (
     BaseStore,
@@ -16,6 +17,33 @@ from langgraph.store.base import (
     SearchOp,
     _validate_namespace,
 )
+
+F = TypeVar("F", bound=Callable)
+
+
+def _check_loop(func: F) -> F:
+    @functools.wraps(func)
+    def wrapper(store: "AsyncBatchedBaseStore", *args: Any, **kwargs: Any) -> Any:
+        method_name: str = func.__name__
+        try:
+            current_loop = asyncio.get_running_loop()
+            if current_loop is store._loop:
+                replacement_str = (
+                    f"Specifically, replace `store.{method_name}(...)` with `await store.a{method_name}(...)"
+                    if method_name
+                    else "For example, replace `store.get(...)` with `await store.aget(...)`"
+                )
+                raise asyncio.InvalidStateError(
+                    f"Synchronous calls to {store.__class__.__name__} detected in the main event loop. "
+                    "This can lead to deadlocks or performance issues. "
+                    "Please use the asynchronous interface for main thread operations. "
+                    f"{replacement_str} "
+                )
+        except RuntimeError:
+            pass
+        return func(store, *args, **kwargs)
+
+    return wrapper
 
 
 class AsyncBatchedBaseStore(BaseStore):
@@ -101,20 +129,21 @@ class AsyncBatchedBaseStore(BaseStore):
         self._aqueue[fut] = op
         return await fut
 
+    @_check_loop
     def batch(self, ops: Iterable[Op]) -> list[Result]:
-        _check_loop(self, "batch")
         return asyncio.run_coroutine_threadsafe(self.abatch(ops), self._loop).result()
 
+    @_check_loop
     def get(
         self,
         namespace: tuple[str, ...],
         key: str,
     ) -> Optional[Item]:
-        _check_loop(self, "get")
         return asyncio.run_coroutine_threadsafe(
             self.aget(namespace, key=key), self._loop
         ).result()
 
+    @_check_loop
     def search(
         self,
         namespace_prefix: tuple[str, ...],
@@ -125,7 +154,6 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 10,
         offset: int = 0,
     ) -> list[SearchItem]:
-        _check_loop(self, "search")
         return asyncio.run_coroutine_threadsafe(
             self.asearch(
                 namespace_prefix, query=query, filter=filter, limit=limit, offset=offset
@@ -133,6 +161,7 @@ class AsyncBatchedBaseStore(BaseStore):
             self._loop,
         ).result()
 
+    @_check_loop
     def put(
         self,
         namespace: tuple[str, ...],
@@ -141,21 +170,21 @@ class AsyncBatchedBaseStore(BaseStore):
         index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         _validate_namespace(namespace)
-        _check_loop(self, "put")
         asyncio.run_coroutine_threadsafe(
             self.aput(namespace, key=key, value=value, index=index), self._loop
         ).result()
 
+    @_check_loop
     def delete(
         self,
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
-        _check_loop(self, "delete")
         asyncio.run_coroutine_threadsafe(
             self.adelete(namespace, key=key), self._loop
         ).result()
 
+    @_check_loop
     def list_namespaces(
         self,
         *,
@@ -252,22 +281,3 @@ async def _run(
             break
         # remove strong ref to store
         del s
-
-
-def _check_loop(store: AsyncBatchedBaseStore, method: Optional[str] = None) -> None:
-    try:
-        current_loop = asyncio.get_running_loop()
-        if current_loop is store._loop:
-            replacement_str = (
-                f"Specifically, replace `store.{method}(...)` with `await store.a{method}(...)"
-                if method
-                else "For example, replace `store.get(...)` with `await store.aget(...)`"
-            )
-            raise asyncio.InvalidStateError(
-                f"Synchronous calls to {store.__class__.__name__} detected in the main event loop. "
-                "This can lead to deadlocks or performance issues. "
-                "Please use the asynchronous interface for main thread operations. "
-                f"{replacement_str} "
-            )
-    except RuntimeError:
-        pass
