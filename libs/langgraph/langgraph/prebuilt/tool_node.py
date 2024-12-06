@@ -288,11 +288,9 @@ class ToolNode(RunnableCallable):
             if (return_type := tool_func.__annotations__.get("return")) and (
                 return_type is Command or get_origin(return_type) is Command
             ):
-                # invoke with the raw tool call to return a Command directly
-                # NOTE: we remove type = "tool_call" to allow returning raw tool result
+                # invoke with the raw tool call args to return a Command directly
                 # instead of a ToolMessage
-                raw_tool_call = {**call, **{"type": None}}
-                command: Command = tool.invoke(raw_tool_call)
+                command: Command = tool.invoke(call["args"])
                 if not isinstance(command.update, dict):
                     raise ValueError(
                         f"Tools that return Command must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
@@ -357,11 +355,9 @@ class ToolNode(RunnableCallable):
             if (
                 return_type := tool_coroutine_or_func.__annotations__.get("return")
             ) and (return_type is Command or get_origin(return_type) is Command):
-                # invoke with the raw tool call to return a Command directly
-                # NOTE: we remove type = "tool_call" to allow returning raw tool result
+                # invoke with the raw tool call args to return a Command directly
                 # instead of a ToolMessage
-                raw_tool_call = {**call, **{"type": None}}
-                command: Command = await tool.ainvoke(raw_tool_call)
+                command: Command = await tool.ainvoke(call["args"])
                 if not isinstance(command.update, dict):
                     raise ValueError(
                         f"Tools that return Command must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
