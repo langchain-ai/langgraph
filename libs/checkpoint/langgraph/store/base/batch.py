@@ -1,6 +1,7 @@
 import asyncio
+import functools
 import weakref
-from typing import Any, Literal, Optional, Union
+from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, Union
 
 from langgraph.store.base import (
     BaseStore,
@@ -11,10 +12,38 @@ from langgraph.store.base import (
     NamespacePath,
     Op,
     PutOp,
+    Result,
     SearchItem,
     SearchOp,
     _validate_namespace,
 )
+
+F = TypeVar("F", bound=Callable)
+
+
+def _check_loop(func: F) -> F:
+    @functools.wraps(func)
+    def wrapper(store: "AsyncBatchedBaseStore", *args: Any, **kwargs: Any) -> Any:
+        method_name: str = func.__name__
+        try:
+            current_loop = asyncio.get_running_loop()
+            if current_loop is store._loop:
+                replacement_str = (
+                    f"Specifically, replace `store.{method_name}(...)` with `await store.a{method_name}(...)"
+                    if method_name
+                    else "For example, replace `store.get(...)` with `await store.aget(...)`"
+                )
+                raise asyncio.InvalidStateError(
+                    f"Synchronous calls to {store.__class__.__name__} detected in the main event loop. "
+                    "This can lead to deadlocks or performance issues. "
+                    "Please use the asynchronous interface for main thread operations. "
+                    f"{replacement_str} "
+                )
+        except RuntimeError:
+            pass
+        return func(store, *args, **kwargs)
+
+    return wrapper
 
 
 class AsyncBatchedBaseStore(BaseStore):
@@ -23,6 +52,7 @@ class AsyncBatchedBaseStore(BaseStore):
     __slots__ = ("_loop", "_aqueue", "_task")
 
     def __init__(self) -> None:
+        super().__init__()
         self._loop = asyncio.get_running_loop()
         self._aqueue: dict[asyncio.Future, Op] = {}
         self._task = self._loop.create_task(_run(self._aqueue, weakref.ref(self)))
@@ -99,6 +129,82 @@ class AsyncBatchedBaseStore(BaseStore):
         self._aqueue[fut] = op
         return await fut
 
+    @_check_loop
+    def batch(self, ops: Iterable[Op]) -> list[Result]:
+        return asyncio.run_coroutine_threadsafe(self.abatch(ops), self._loop).result()
+
+    @_check_loop
+    def get(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+    ) -> Optional[Item]:
+        return asyncio.run_coroutine_threadsafe(
+            self.aget(namespace, key=key), self._loop
+        ).result()
+
+    @_check_loop
+    def search(
+        self,
+        namespace_prefix: tuple[str, ...],
+        /,
+        *,
+        query: Optional[str] = None,
+        filter: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> list[SearchItem]:
+        return asyncio.run_coroutine_threadsafe(
+            self.asearch(
+                namespace_prefix, query=query, filter=filter, limit=limit, offset=offset
+            ),
+            self._loop,
+        ).result()
+
+    @_check_loop
+    def put(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
+    ) -> None:
+        _validate_namespace(namespace)
+        asyncio.run_coroutine_threadsafe(
+            self.aput(namespace, key=key, value=value, index=index), self._loop
+        ).result()
+
+    @_check_loop
+    def delete(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+    ) -> None:
+        asyncio.run_coroutine_threadsafe(
+            self.adelete(namespace, key=key), self._loop
+        ).result()
+
+    @_check_loop
+    def list_namespaces(
+        self,
+        *,
+        prefix: Optional[NamespacePath] = None,
+        suffix: Optional[NamespacePath] = None,
+        max_depth: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[tuple[str, ...]]:
+        return asyncio.run_coroutine_threadsafe(
+            self.alist_namespaces(
+                prefix=prefix,
+                suffix=suffix,
+                max_depth=max_depth,
+                limit=limit,
+                offset=offset,
+            ),
+            self._loop,
+        ).result()
+
 
 def _dedupe_ops(values: list[Op]) -> tuple[Optional[list[int]], list[Op]]:
     """Dedupe operations while preserving order for results.
@@ -144,7 +250,8 @@ def _dedupe_ops(values: list[Op]) -> tuple[Optional[list[int]], list[Op]]:
 
 
 async def _run(
-    aqueue: dict[asyncio.Future, Op], store: weakref.ReferenceType[BaseStore]
+    aqueue: dict[asyncio.Future, Op],
+    store: weakref.ReferenceType[BaseStore],
 ) -> None:
     while True:
         await asyncio.sleep(0)

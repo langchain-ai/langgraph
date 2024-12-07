@@ -1,8 +1,10 @@
 # type: ignore
+import asyncio
 import itertools
 import sys
 import uuid
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -10,7 +12,13 @@ import pytest
 from langchain_core.embeddings import Embeddings
 from psycopg import AsyncConnection
 
-from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
+from langgraph.store.base import (
+    GetOp,
+    Item,
+    ListNamespacesOp,
+    PutOp,
+    SearchOp,
+)
 from langgraph.store.postgres import AsyncPostgresStore
 from tests.conftest import (
     DEFAULT_URI,
@@ -61,6 +69,128 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
             admin_conn_string, autocommit=True
         ) as conn:
             await conn.execute(f"DROP DATABASE {database}")
+
+
+async def test_no_running_loop(store: AsyncPostgresStore) -> None:
+    with pytest.raises(asyncio.InvalidStateError):
+        store.put(("foo", "bar"), "baz", {"val": "baz"})
+    with pytest.raises(asyncio.InvalidStateError):
+        store.get(("foo", "bar"), "baz")
+    with pytest.raises(asyncio.InvalidStateError):
+        store.delete(("foo", "bar"), "baz")
+    with pytest.raises(asyncio.InvalidStateError):
+        store.search(("foo", "bar"))
+    with pytest.raises(asyncio.InvalidStateError):
+        store.list_namespaces(prefix=("foo",))
+    with pytest.raises(asyncio.InvalidStateError):
+        store.batch([PutOp(namespace=("foo", "bar"), key="baz", value={"val": "baz"})])
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(store.put, ("foo", "bar"), "baz", {"val": "baz"})
+        result = await asyncio.wrap_future(future)
+        assert result is None
+        future = executor.submit(store.get, ("foo", "bar"), "baz")
+        result = await asyncio.wrap_future(future)
+        assert result.value == {"val": "baz"}
+        result = await asyncio.wrap_future(
+            executor.submit(store.list_namespaces, prefix=("foo",))
+        )
+
+
+async def test_large_batches(request: Any, store: AsyncPostgresStore) -> None:
+    N = 100  # less important that we are performant here
+    M = 10
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for m in range(M):
+            for i in range(N):
+                futures += [
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        value={"foo": "bar" + str(i)},
+                    ),
+                    executor.submit(
+                        store.get,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                    ),
+                    executor.submit(
+                        store.list_namespaces,
+                        prefix=None,
+                        max_depth=m + 1,
+                    ),
+                    executor.submit(
+                        store.search,
+                        ("test",),
+                    ),
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        value={"foo": "bar" + str(i)},
+                    ),
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        None,
+                    ),
+                ]
+
+        results = await asyncio.gather(
+            *(asyncio.wrap_future(future) for future in futures)
+        )
+    assert len(results) == M * N * 6
+
+
+async def test_large_batches_async(store: AsyncPostgresStore) -> None:
+    N = 1000
+    M = 10
+    coros = []
+    for m in range(M):
+        for i in range(N):
+            coros.append(
+                store.aput(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                    value={"foo": "bar" + str(i)},
+                )
+            )
+            coros.append(
+                store.aget(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                )
+            )
+            coros.append(
+                store.alist_namespaces(
+                    prefix=None,
+                    max_depth=m + 1,
+                )
+            )
+            coros.append(
+                store.asearch(
+                    ("test",),
+                )
+            )
+            coros.append(
+                store.aput(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                    value={"foo": "bar" + str(i)},
+                )
+            )
+            coros.append(
+                store.adelete(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                )
+            )
+
+    results = await asyncio.gather(*coros)
+    assert len(results) == M * N * 6
 
 
 async def test_abatch_order(store: AsyncPostgresStore) -> None:
