@@ -51,6 +51,7 @@ from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
     InjectedStore,
+    InvalidToolCommandError,
     _get_state_args,
     _infer_handled_types,
 )
@@ -1164,6 +1165,77 @@ async def test_tool_node_command():
             graph=Command.PARENT,
         ),
     ]
+
+    # test validation (missing tool message in the update)
+    with pytest.raises(InvalidToolCommandError):
+
+        @dec_tool
+        def no_update_tool():
+            """My tool"""
+            return Command(update={"messages": []})
+
+        ToolNode([no_update_tool], handle_tool_errors=False).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "",
+                        tool_calls=[{"args": {}, "id": "1", "name": "no_update_tool"}],
+                    )
+                ]
+            }
+        )
+
+    # test validation (missing tool message in the parent graph command.update is OK)
+    @dec_tool
+    def node_update_parent_tool():
+        """No update"""
+        return Command(update={"messages": []}, graph=Command.PARENT)
+
+    assert ToolNode([node_update_parent_tool], handle_tool_errors=False).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {"args": {}, "id": "1", "name": "node_update_parent_tool"}
+                    ],
+                )
+            ]
+        }
+    ) == [Command(update={"messages": []}, graph=Command.PARENT)]
+
+    # test validation (multiple tool messages in the parent graph command.update)
+    with pytest.raises(InvalidToolCommandError):
+
+        @dec_tool
+        def multiple_tool_messages_tool():
+            """My tool"""
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(content="foo", tool_call_id=""),
+                        ToolMessage(content="bar", tool_call_id=""),
+                    ]
+                },
+                graph=Command.PARENT,
+            )
+
+        ToolNode([multiple_tool_messages_tool], handle_tool_errors=False).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "",
+                        tool_calls=[
+                            {
+                                "args": {},
+                                "id": "1",
+                                "name": "multiple_tool_messages_tool",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
 
 
 async def test_tool_node_command_list_input():
