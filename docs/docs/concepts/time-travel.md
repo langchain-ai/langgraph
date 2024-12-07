@@ -55,7 +55,7 @@ To edit a specific checkpoint, such as `xyz`, provide its `checkpoint_id` when u
 
 ```python
 config = {"configurable": {"thread_id": "1", "checkpoint_id": "xyz"}}
-graph.update_state(config, {"state": "updated state"}, )
+graph.update_state(config, {"state": "updated state"})
 ```
 
 This creates a new forked checkpoint, xyz-fork, from which you can continue running the graph:

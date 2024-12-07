@@ -121,113 +121,65 @@ Value received from interrupt: {'age': '25'}
 2. **Editing**: Pause the graph to review and edit the agent's state. This is useful for correcting mistakes or updating the agent's state.
 
 
-
-### Approval
-
-![](./img/human_in_the_loop/approval.png)
-
-Sometimes we want to approve certain steps in our agent's execution. 
- 
-We can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to the step that we want to approve.
-
-This is generally recommend for sensitive actions (e.g., using external APIs or writing to a database).
- 
-With persistence, we can surface the current agent state as well as the next step to a user for review and approval. 
- 
-If approved, the graph resumes execution from the last saved checkpoint, which is saved to the `thread`:
+### Approval/Rejection
 
 ```python
-# Compile our graph with a checkpointer and a breakpoint before the step to approve
-graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node_2"])
-
-# Run the graph up to the breakpoint
-for event in graph.stream(inputs, thread, stream_mode="values"):
-    print(event)
+def node(state):
+    ...
+    # Pause the graph and wait for user input.
+    approval = interrupt(
+        {
+            "question": "Do you approve this action?",
+            # Surface the current state or any other relevant information.
+            "state": state,
+        }
+    )
     
-# ... Get human approval ...
-
-# If approved, continue the graph execution from the last saved checkpoint
-for event in graph.stream(None, thread, stream_mode="values"):
-    print(event)
+    if not isinstance(approval, bool):
+        raise ValueError("Approval must be a boolean value.")
+    
+    if approval:
+        # Perform the action.
+        ...
+    else:
+        # Skip the action.
+        ...
 ```
-
-See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed how-to on doing this!
 
 ### Editing
 
-![](./img/human_in_the_loop/edit_graph_state.png)
-
-Sometimes we want to review and edit the agent's state. 
- 
-As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to the step we want to check. 
- 
-We can surface the current state to a user and allow the user to edit the agent state.
- 
-This can, for example, be used to correct the agent if it made a mistake (e.g., see the section on tool calling below).
-
-We can edit the graph state by forking the current checkpoint, which is saved to the `thread`.
-
-We can then proceed with the graph from our forked checkpoint as done before. 
-
 ```python
-# Compile our graph with a checkpointer and a breakpoint before the step to review
-graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node_2"])
-
-# Run the graph up to the breakpoint
-for event in graph.stream(inputs, thread, stream_mode="values"):
-    print(event)
+def node(state):
+    ...
+    # Pause the graph and wait for user input.
+    user_input = interrupt(
+        {
+            "question": "Please provide additional information:",
+            # Surface the current state or any other relevant information.
+            "state": state,
+        }
+    )
+    return {
+        # some state update based on user input
+    }
     
-# Review the state, decide to edit it, and create a forked checkpoint with the new state
-graph.update_state(thread, {"state": "new state"})
-
-# Continue the graph execution from the forked checkpoint
-for event in graph.stream(None, thread, stream_mode="values"):
-    print(event)
 ```
-
-See [this guide](../how-tos/human_in_the_loop/edit-graph-state.ipynb) for a detailed how-to on doing this!
 
 ### Input
 
-![](./img/human_in_the_loop/wait_for_input.png)
-
-Sometimes we want to explicitly get human input at a particular step in the graph. 
- 
-We can create a graph node designated for this (e.g., `human_input` in our example diagram).
- 
-As with approval and editing, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to this node.
- 
-We can then perform a state update that includes the human input, just as we did with editing state.
-
-But, we add one thing: 
-
-We can use `as_node=human_input` with the state update to specify that the state update *should be treated as a node*.
-
-The is subtle, but important: 
-
-With editing, the user makes a decision about whether or not to edit the graph state.
-
-With input, we explicitly define a node in our graph for collecting human input!
-
-The state update with the human input then runs *as this node*.
-
 ```python
-# Compile our graph with a checkpointer and a breakpoint before the step to to collect human input
-graph = builder.compile(checkpointer=checkpointer, interrupt_before=["human_input"])
 
-# Run the graph up to the breakpoint
-for event in graph.stream(inputs, thread, stream_mode="values"):
-    print(event)
+def node(state):
+    ...
+    # Pause the graph and wait for user input.
+    human_message = interrupt()
+    return {
+        "messages": [human_message]
+    }
     
-# Update the state with the user input as if it was the human_input node
-graph.update_state(thread, {"user_input": user_input}, as_node="human_input")
-
-# Continue the graph execution from the checkpoint created by the human_input node
-for event in graph.stream(None, thread, stream_mode="values"):
-    print(event)
 ```
 
-See [this guide](../how-tos/human_in_the_loop/wait-user-input.ipynb) for a detailed how-to on doing this!
+### 
 
 ## Use-cases
 
