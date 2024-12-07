@@ -21,6 +21,7 @@ These how-to guides show how to achieve that controllability.
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 - [How to control graph recursion limit](recursion-limit.ipynb)
 - [How to combine control flow and state updates with Command](command.ipynb)
+- [How to build a multi-agent network](multi-agent-network.ipynb)
 
 ### Persistence
 

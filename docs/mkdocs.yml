@@ -152,6 +152,7 @@ nav:
             - how-tos/map-reduce.ipynb
             - how-tos/recursion-limit.ipynb
             - how-tos/command.ipynb
+            - how-tos/multi-agent-network.ipynb
         - Persistence:
             - Persistence: how-tos#persistence
             - how-tos/persistence.ipynb
