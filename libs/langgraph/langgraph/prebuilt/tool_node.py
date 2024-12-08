@@ -20,6 +20,7 @@ from langchain_core.messages import (
     AnyMessage,
     ToolCall,
     ToolMessage,
+    convert_to_messages,
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
@@ -42,6 +43,10 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
 )
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+
+
+class InvalidToolCommandError(Exception):
+    """Raised when the Command returned by a tool is invalid."""
 
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
@@ -211,18 +216,18 @@ class ToolNode(RunnableCallable):
         *,
         store: BaseStore,
     ) -> Any:
-        tool_calls, output_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
-        output_types = [output_type] * len(tool_calls)
+        input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
             outputs = [
-                *executor.map(self._run_one, tool_calls, output_types, config_list)
+                *executor.map(self._run_one, tool_calls, input_types, config_list)
             ]
 
         # preserve existing behavior for non-command tool outputs for backwards compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-            return outputs if output_type == "list" else {self.messages_key: outputs}
+            return outputs if input_type == "list" else {self.messages_key: outputs}
 
         # LangGraph will automatically handle list of Command and non-command node updates
         combined_outputs: list[
@@ -233,7 +238,7 @@ class ToolNode(RunnableCallable):
                 combined_outputs.append(output)
             else:
                 combined_outputs.append(
-                    [output] if output_type == "list" else {self.messages_key: [output]}
+                    [output] if input_type == "list" else {self.messages_key: [output]}
                 )
         return combined_outputs
 
@@ -262,15 +267,15 @@ class ToolNode(RunnableCallable):
         *,
         store: BaseStore,
     ) -> Any:
-        tool_calls, output_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
-            *(self._arun_one(call, output_type, config) for call in tool_calls)
+            *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
 
         # preserve existing behavior for non-command tool outputs for backwards compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-            return outputs if output_type == "list" else {self.messages_key: outputs}
+            return outputs if input_type == "list" else {self.messages_key: outputs}
 
         # LangGraph will automatically handle list of Command and non-command node updates
         combined_outputs: list[
@@ -281,14 +286,14 @@ class ToolNode(RunnableCallable):
                 combined_outputs.append(output)
             else:
                 combined_outputs.append(
-                    [output] if output_type == "list" else {self.messages_key: [output]}
+                    [output] if input_type == "list" else {self.messages_key: [output]}
                 )
         return combined_outputs
 
     def _run_one(
         self,
         call: ToolCall,
-        output_type: Literal["list", "dict"],
+        input_type: Literal["list", "dict"],
         config: RunnableConfig,
     ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -310,8 +315,10 @@ class ToolNode(RunnableCallable):
             response = tool.invoke(call["args"])
             if isinstance(response, Command):
                 return self._add_tool_call_name_and_id_to_command(
-                    response, call, output_type
+                    response, call, input_type
                 )
+            elif isinstance(response, ToolMessage):
+                return response
             else:
                 return ToolMessage(
                     content=cast(Union[str, list], msg_content_output(response)),
@@ -325,7 +332,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphBubbleUp as e:
+        except (GraphBubbleUp, InvalidToolCommandError) as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -350,7 +357,7 @@ class ToolNode(RunnableCallable):
     async def _arun_one(
         self,
         call: ToolCall,
-        output_type: Literal["list", "dict"],
+        input_type: Literal["list", "dict"],
         config: RunnableConfig,
     ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -372,7 +379,7 @@ class ToolNode(RunnableCallable):
             response = await tool.ainvoke(call["args"])
             if isinstance(response, Command):
                 return self._add_tool_call_name_and_id_to_command(
-                    response, call, output_type
+                    response, call, input_type
                 )
             else:
                 return ToolMessage(
@@ -386,7 +393,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphBubbleUp as e:
+        except (GraphBubbleUp, InvalidToolCommandError) as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -418,14 +425,14 @@ class ToolNode(RunnableCallable):
         store: BaseStore,
     ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
-            output_type = "list"
+            input_type = "list"
             message: AnyMessage = input[-1]
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
-            output_type = "dict"
+            input_type = "dict"
             message = messages[-1]
         elif messages := getattr(input, self.messages_key, None):
             # Assume dataclass-like state that can coerce from dict
-            output_type = "dict"
+            input_type = "dict"
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
@@ -436,7 +443,7 @@ class ToolNode(RunnableCallable):
         tool_calls = [
             self._inject_tool_args(call, input, store) for call in message.tool_calls
         ]
-        return tool_calls, output_type
+        return tool_calls, input_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
         if (requested_tool := call["name"]) not in self.tools_by_name:
@@ -531,42 +538,62 @@ class ToolNode(RunnableCallable):
         return tool_call_with_store
 
     def _add_tool_call_name_and_id_to_command(
-        self, command: Command, call: ToolCall, output_type: Literal["list", "dict"]
+        self, command: Command, call: ToolCall, input_type: Literal["list", "dict"]
     ) -> Command:
         if isinstance(command.update, dict):
-            if output_type != "dict":
-                raise ValueError(
-                    f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, got: {command.update} for tool '{call['name']}'"
+            # input type is dict when ToolNode is invoked with a dict input (e.g. {"messages": [AIMessage(..., tool_calls=[...])]})
+            if input_type != "dict":
+                raise InvalidToolCommandError(
+                    f"Tools can provide a dict in Command.update only when using dict with '{self.messages_key}' key as ToolNode input, "
+                    f"got: {command.update} for tool '{call['name']}'"
                 )
 
             updated_command = deepcopy(command)
             state_update = cast(dict[str, Any], updated_command.update) or {}
             messages_update = state_update.get(self.messages_key, [])
         elif isinstance(command.update, list):
-            if output_type != "list":
-                raise ValueError(
-                    f"When using list of messages as ToolNode input, tools must provide `[('__root__', update)]` in Command.update, got: {command.update} for tool '{call['name']}'"
+            # input type is list when ToolNode is invoked with a list input (e.g. [AIMessage(..., tool_calls=[...])])
+            if input_type != "list":
+                raise InvalidToolCommandError(
+                    f"Tools can provide a list of messages in Command.update only when using list of messages as ToolNode input, "
+                    f"got: {command.update} for tool '{call['name']}'"
                 )
 
             updated_command = deepcopy(command)
-            channels, messages_updates = zip(*updated_command.update)
-            if len(channels) != 1 or channels[0] != "__root__":
-                raise ValueError(
-                    f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', update)]`, got: {updated_command.update} for tool '{call['name']}'"
-                )
-
-            messages_update = messages_updates[0]
+            messages_update = updated_command.update
         else:
             return command
 
-        if len(messages_update) != 1 or not isinstance(messages_update[0], ToolMessage):
-            raise ValueError(
-                f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}"
-            )
+        # convert to message objects if updates are in a dict format
+        messages_update = convert_to_messages(messages_update)
+        have_seen_tool_messages = False
+        for message in messages_update:
+            if not isinstance(message, ToolMessage):
+                continue
 
-        tool_message: ToolMessage = messages_update[0]
-        tool_message.name = call["name"]
-        tool_message.tool_call_id = cast(str, call["id"])
+            if have_seen_tool_messages:
+                raise InvalidToolCommandError(
+                    f"Expected at most one ToolMessage in Command.update for tool '{call['name']}', got multiple: {messages_update}."
+                )
+
+            message.name = call["name"]
+            # TODO: update this to validate that the tool call id matches the tool call id in the command (instead of assigning)
+            # once propagating tool_call_id is supported in langchain_core tools
+            message.tool_call_id = cast(str, call["id"])
+            have_seen_tool_messages = True
+
+        # validate that we always have exactly one ToolMessage in Command.update if command is sent to the CURRENT graph
+        if updated_command.graph is None and not have_seen_tool_messages:
+            example_update = (
+                '`Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'
+                if input_type == "dict"
+                else '`Command(update=[ToolMessage("Success", tool_call_id=tool_call_id), ...], ...)`'
+            )
+            raise InvalidToolCommandError(
+                f"Expected exactly one message (ToolMessage) in Command.update for tool '{call['name']}', got: {messages_update}. "
+                "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
+                f"You can fix it by modifying the tool to return {example_update}."
+            )
         return updated_command
 
 
