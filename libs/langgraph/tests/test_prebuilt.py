@@ -1166,7 +1166,28 @@ async def test_tool_node_command():
         ),
     ]
 
-    # test validation (missing tool message in the update)
+    # test validation (mismatch between input type and command.update type)
+    with pytest.raises(InvalidToolCommandError):
+
+        @dec_tool
+        def list_update_tool():
+            """My tool"""
+            return Command(update=[ToolMessage(content="foo", tool_call_id="")])
+
+        ToolNode([list_update_tool]).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "",
+                        tool_calls=[
+                            {"args": {}, "id": "1", "name": "list_update_tool"}
+                        ],
+                    )
+                ]
+            }
+        )
+
+    # test validation (missing tool message in the update for current graph)
     with pytest.raises(InvalidToolCommandError):
 
         @dec_tool
@@ -1174,7 +1195,7 @@ async def test_tool_node_command():
             """My tool"""
             return Command(update={"messages": []})
 
-        ToolNode([no_update_tool], handle_tool_errors=False).invoke(
+        ToolNode([no_update_tool]).invoke(
             {
                 "messages": [
                     AIMessage(
@@ -1185,13 +1206,13 @@ async def test_tool_node_command():
             }
         )
 
-    # test validation (missing tool message in the parent graph command.update is OK)
+    # test validation (missing tool message in the update for parent graph is OK)
     @dec_tool
     def node_update_parent_tool():
         """No update"""
         return Command(update={"messages": []}, graph=Command.PARENT)
 
-    assert ToolNode([node_update_parent_tool], handle_tool_errors=False).invoke(
+    assert ToolNode([node_update_parent_tool]).invoke(
         {
             "messages": [
                 AIMessage(
@@ -1204,45 +1225,44 @@ async def test_tool_node_command():
         }
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
 
-    # test validation (multiple tool messages in the parent graph command.update)
+    # test validation (multiple tool messages)
     with pytest.raises(InvalidToolCommandError):
+        for graph in (None, Command.PARENT):
 
-        @dec_tool
-        def multiple_tool_messages_tool():
-            """My tool"""
-            return Command(
-                update={
+            @dec_tool
+            def multiple_tool_messages_tool():
+                """My tool"""
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(content="foo", tool_call_id=""),
+                            ToolMessage(content="bar", tool_call_id=""),
+                        ]
+                    },
+                    graph=graph,
+                )
+
+            ToolNode([multiple_tool_messages_tool]).invoke(
+                {
                     "messages": [
-                        ToolMessage(content="foo", tool_call_id=""),
-                        ToolMessage(content="bar", tool_call_id=""),
+                        AIMessage(
+                            "",
+                            tool_calls=[
+                                {
+                                    "args": {},
+                                    "id": "1",
+                                    "name": "multiple_tool_messages_tool",
+                                }
+                            ],
+                        )
                     ]
-                },
-                graph=Command.PARENT,
+                }
             )
-
-        ToolNode([multiple_tool_messages_tool], handle_tool_errors=False).invoke(
-            {
-                "messages": [
-                    AIMessage(
-                        "",
-                        tool_calls=[
-                            {
-                                "args": {},
-                                "id": "1",
-                                "name": "multiple_tool_messages_tool",
-                            }
-                        ],
-                    )
-                ]
-            }
-        )
 
 
 async def test_tool_node_command_list_input():
     command = Command(
-        update=[
-            ("__root__", [ToolMessage(content="Transferred to Bob", tool_call_id="")])
-        ],
+        update=[ToolMessage(content="Transferred to Bob", tool_call_id="")],
         goto="bob",
         graph=Command.PARENT,
     )
@@ -1298,15 +1318,10 @@ async def test_tool_node_command_list_input():
         ],
         Command(
             update=[
-                (
-                    "__root__",
-                    [
-                        ToolMessage(
-                            content="Transferred to Bob",
-                            tool_call_id="2",
-                            name="transfer_to_bob",
-                        )
-                    ],
+                ToolMessage(
+                    content="Transferred to Bob",
+                    tool_call_id="2",
+                    name="transfer_to_bob",
                 )
             ],
             goto="bob",
@@ -1324,15 +1339,10 @@ async def test_tool_node_command_list_input():
         assert result == [
             Command(
                 update=[
-                    (
-                        "__root__",
-                        [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="1",
-                                name=tool.name,
-                            )
-                        ],
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="1",
+                        name=tool.name,
                     )
                 ],
                 goto="bob",
@@ -1348,15 +1358,10 @@ async def test_tool_node_command_list_input():
         assert result == [
             Command(
                 update=[
-                    (
-                        "__root__",
-                        [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="1",
-                                name=tool.name,
-                            )
-                        ],
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="1",
+                        name=tool.name,
                     )
                 ],
                 goto="bob",
@@ -1379,15 +1384,10 @@ async def test_tool_node_command_list_input():
     assert result == [
         Command(
             update=[
-                (
-                    "__root__",
-                    [
-                        ToolMessage(
-                            content="Transferred to Bob",
-                            tool_call_id="1",
-                            name="transfer_to_bob",
-                        )
-                    ],
+                ToolMessage(
+                    content="Transferred to Bob",
+                    tool_call_id="1",
+                    name="transfer_to_bob",
                 )
             ],
             goto="bob",
@@ -1395,21 +1395,97 @@ async def test_tool_node_command_list_input():
         ),
         Command(
             update=[
-                (
-                    "__root__",
-                    [
-                        ToolMessage(
-                            content="Transferred to Bob",
-                            tool_call_id="2",
-                            name="custom_transfer_to_bob",
-                        )
-                    ],
+                ToolMessage(
+                    content="Transferred to Bob",
+                    tool_call_id="2",
+                    name="custom_transfer_to_bob",
                 )
             ],
             goto="bob",
             graph=Command.PARENT,
         ),
     ]
+
+    # test validation (mismatch between input type and command.update type)
+    with pytest.raises(InvalidToolCommandError):
+
+        @dec_tool
+        def list_update_tool():
+            """My tool"""
+            return Command(
+                update={"messages": [ToolMessage(content="foo", tool_call_id="")]}
+            )
+
+        ToolNode([list_update_tool]).invoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[{"args": {}, "id": "1", "name": "list_update_tool"}],
+                )
+            ]
+        )
+
+    # test validation (missing tool message in the update for current graph)
+    with pytest.raises(InvalidToolCommandError):
+
+        @dec_tool
+        def no_update_tool():
+            """My tool"""
+            return Command(update=[])
+
+        ToolNode([no_update_tool]).invoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[{"args": {}, "id": "1", "name": "no_update_tool"}],
+                )
+            ]
+        )
+
+    # test validation (missing tool message in the update for parent graph is OK)
+    @dec_tool
+    def node_update_parent_tool():
+        """No update"""
+        return Command(update=[], graph=Command.PARENT)
+
+    assert ToolNode([node_update_parent_tool]).invoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[{"args": {}, "id": "1", "name": "node_update_parent_tool"}],
+            )
+        ]
+    ) == [Command(update=[], graph=Command.PARENT)]
+
+    # test validation (multiple tool messages)
+    with pytest.raises(InvalidToolCommandError):
+        for graph in (None, Command.PARENT):
+
+            @dec_tool
+            def multiple_tool_messages_tool():
+                """My tool"""
+                return Command(
+                    update=[
+                        ToolMessage(content="foo", tool_call_id=""),
+                        ToolMessage(content="bar", tool_call_id=""),
+                    ],
+                    graph=graph,
+                )
+
+            ToolNode([multiple_tool_messages_tool]).invoke(
+                [
+                    AIMessage(
+                        "",
+                        tool_calls=[
+                            {
+                                "args": {},
+                                "id": "1",
+                                "name": "multiple_tool_messages_tool",
+                            }
+                        ],
+                    )
+                ]
+            )
 
 
 def test_react_agent_update_state():

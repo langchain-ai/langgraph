@@ -317,6 +317,8 @@ class ToolNode(RunnableCallable):
                 return self._add_tool_call_name_and_id_to_command(
                     response, call, output_type
                 )
+            elif isinstance(response, ToolMessage):
+                return response
             else:
                 return ToolMessage(
                     content=cast(Union[str, list], msg_content_output(response)),
@@ -391,7 +393,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphBubbleUp as e:
+        except (GraphBubbleUp, InvalidToolCommandError) as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -541,7 +543,7 @@ class ToolNode(RunnableCallable):
         if isinstance(command.update, dict):
             if output_type != "dict":
                 raise InvalidToolCommandError(
-                    f"When using dict with '{self.messages_key}' key as ToolNode input, tools must provide a dict in Command.update, "
+                    f"Tools can provide a dict in Command.update only when using dict with '{self.messages_key}' key as ToolNode input, "
                     f"got: {command.update} for tool '{call['name']}'"
                 )
 
@@ -551,35 +553,17 @@ class ToolNode(RunnableCallable):
         elif isinstance(command.update, list):
             if output_type != "list":
                 raise InvalidToolCommandError(
-                    f"When using list of messages as ToolNode input, tools must provide `[('__root__', message_list)]` in Command.update, "
+                    f"Tools can provide a list of messages in Command.update only when using list of messages as ToolNode input, "
                     f"got: {command.update} for tool '{call['name']}'"
                 )
 
             updated_command = deepcopy(command)
-            channels, messages_updates = zip(*updated_command.update)
-            if len(channels) != 1 or channels[0] != "__root__":
-                raise InvalidToolCommandError(
-                    f"When using list of messages as ToolNode input, Command.update can only contain a single update in the following format: `[('__root__', message_list)]`, "
-                    f"got: {updated_command.update} for tool '{call['name']}'"
-                )
-
-            messages_update = messages_updates[0]
+            messages_update = updated_command.update
         else:
             return command
 
         # convert to message objects if updates are in a dict format
         messages_update = convert_to_messages(messages_update)
-
-        # validate that we always have exactly one ToolMessage in Command.update if command is sent to the current graph
-        if updated_command.graph is None and (
-            len(messages_update) != 1 or not isinstance(messages_update[0], ToolMessage)
-        ):
-            raise InvalidToolCommandError(
-                f"Expected exactly one message (ToolMessage) in Command.update for tool '{call['name']}', got: {messages_update}. "
-                "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
-                'You can fix it by modifying the tool to return `Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id)], ...}, ...)`.'
-            )
-
         have_seen_tool_messages = False
         for message in messages_update:
             if not isinstance(message, ToolMessage):
@@ -587,7 +571,7 @@ class ToolNode(RunnableCallable):
 
             if have_seen_tool_messages:
                 raise InvalidToolCommandError(
-                    f"Expected exactly one ToolMessage in Command.update for tool '{call['name']}', got multiple: {messages_update}."
+                    f"Expected at most one ToolMessage in Command.update for tool '{call['name']}', got multiple: {messages_update}."
                 )
 
             message.name = call["name"]
@@ -595,6 +579,19 @@ class ToolNode(RunnableCallable):
             # once propagating tool_call_id is supported in langchain_core tools
             message.tool_call_id = cast(str, call["id"])
             have_seen_tool_messages = True
+
+        # validate that we always have exactly one ToolMessage in Command.update if command is sent to the CURRENT graph
+        if updated_command.graph is None and not have_seen_tool_messages:
+            example_update = (
+                '`Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'
+                if output_type == "dict"
+                else '`Command(update=[ToolMessage("Success", tool_call_id=tool_call_id), ...], ...)`'
+            )
+            raise InvalidToolCommandError(
+                f"Expected exactly one message (ToolMessage) in Command.update for tool '{call['name']}', got: {messages_update}. "
+                "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
+                f"You can fix it by modifying the tool to return {example_update}."
+            )
         return updated_command
 
 
