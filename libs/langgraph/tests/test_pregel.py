@@ -7602,7 +7602,7 @@ def test_root_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000033",
+                    id="00000000-0000-4000-8000-000000000037",
                 )
             ]
         },
@@ -7625,7 +7625,7 @@ def test_root_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000041",
+                    id="00000000-0000-4000-8000-000000000045",
                 )
             ]
         },
