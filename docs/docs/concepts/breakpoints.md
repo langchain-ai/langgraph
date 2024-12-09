@@ -185,10 +185,13 @@ We recommend that you [**use the `interrupt` function instead**](#the-interrupt-
 
 ## The `Command` primitive
 
-Graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive. The `Command` primitive currently supports two ways of **resuming** graph execution after an `interrupt`:
+Graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive which can be passed through the `invoke`, `ainvoke`, `stream` or `astream` methods.
 
-1. **Pass a `resume` value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
+The `Command` primitive provides several options to control and modify the graph's state during resumption:
+
+1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
 2. **Update the graph state**: Modify the graph state using `Command(update=update)`. Note that resumption starts from the beginning of the node where the `interrupt` was used. Execution resumes from the beginning of the node where the `interrupt` was used, but with the updated state.
+3. **Navigate to another node**: Direct the graph to continue execution at a different node using `Command(goto="node_name")`.
 
 ```python
 # Resume graph execution with the user's input.
@@ -199,9 +202,8 @@ By leveraging `Command`, you can resume graph execution, handle user inputs, and
 
 ## Using with `invoke` and `ainvoke`
 
-If you use `stream` or `ainvoke` to run the graph, you will not receive the interrupt information. To access this information, you must use the [get_state](../reference/graphs.md#langgraph.graph.graph.CompiledGraph.get_state) method to retrieve the graph state after calling `invoke` or `ainvoke`.
+When you use `stream` or `astream` to run the graph, you will receive an `interrupt` event that let you know that a breakpoint has been hit.
 
-```python
 `invoke` and `ainvoke` do not return the interrupt information. To access this information, you must use the [get_state](../reference/graphs.md#langgraph.graph.graph.CompiledGraph.get_state) method to retrieve the graph state after calling `invoke` or `ainvoke`.
 
 ```python
@@ -209,8 +211,26 @@ If you use `stream` or `ainvoke` to run the graph, you will not receive the inte
 result = graph.invoke(inputs, thread_config)
 # Get the graph state to get interrupt information.
 state = graph.get_state(thread_config)
+# Print the state values
+print(state.values)
+# Print the pending tasks
+print(state.tasks)
 # Resume the graph with the user's input.
 graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
+
+```pycon
+{'foo': 'bar'} # State values
+(
+    PregelTask(
+        id='5d8ffc92-8011-0c9b-8b59-9d3545b7e553', 
+        name='node_foo', 
+        path=('__pregel_pull', 'node_foo'), 
+        error=None, 
+        interrupts=(Interrupt(value='value_in_interrupt', resumable=True, ns=['node_foo:5d8ffc92-8011-0c9b-8b59-9d3545b7e553'], when='during'),), state=None, 
+        result=None
+    ),
+) # Pending tasks. interrupts 
 ```
 
 ## How does resuming from a breakpoint work?
