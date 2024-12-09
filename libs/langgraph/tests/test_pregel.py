@@ -14904,3 +14904,43 @@ def test_dict_mixed_return() -> None:
     graph = graph.compile()
 
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
+
+
+def test_command_with_static_breakpoints() -> None:
+    """Test that we can use Command to resume and update with static breakpoints."""
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: str
+
+    def node1(state: State):
+        return {
+            "foo": state["foo"] + "|node-1",
+        }
+
+    def node2(state: State):
+        return {
+            "foo": state["foo"] + "|node-2",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_node("node2", node2)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", "node2")
+
+    # A checkpointer must be enabled for interrupts to work!
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node"])
+
+    config = {
+        "configurable": {
+            "thread_id": uuid.uuid4(),
+        }
+    }
+
+    # Start the graph and interrupt at the first node
+    graph.invoke({"foo": "abc"}, config)
+    result = graph.invoke(Command(resume="node1"), config)
+    assert result == {"foo": "abc|node-1|node-2"}
