@@ -31,7 +31,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
       # We want to keep this build stage *separate* from the release stage,
@@ -169,7 +168,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
 
       - name: Import published package
         shell: bash
@@ -256,7 +254,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
       - uses: actions/download-artifact@v4
@@ -298,7 +295,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
       - uses: actions/download-artifact@v4

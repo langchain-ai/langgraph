@@ -8,9 +8,9 @@ If you want to learn how to build an agent like this from scratch, take a look a
 
 This tutorial will use:
 
-- Anthropic for the LLM - sign up and get an API key [here](https://console.anthropic.com/)
-- Tavily for the search engine - sign up and get an API key [here](https://app.tavily.com/)
-- LangSmith for hosting - sign up and get an API key [here](https://smith.langchain.com/)
+- Anthropic for the LLM - sign up and get an API key [here](https://console.anthropic.com/).
+- Tavily for the search engine - sign up and get an API key [here](https://app.tavily.com/).
+- LangSmith for hosting - sign up and get an API key [here](https://smith.langchain.com/).
 
 ## Create and configure your app
 

@@ -374,6 +374,11 @@ class Graph:
             if source not in self.nodes and source != START:
                 raise ValueError(f"Found edge starting at unknown node '{source}'")
 
+        if START not in all_sources:
+            raise ValueError(
+                "Graph must have an entrypoint: add at least one edge from START to another node"
+            )
+
         # assemble targets
         all_targets = {end for _, end in self._all_edges}
         for start, branches in self.branches.items():
@@ -395,10 +400,6 @@ class Graph:
         for name, spec in self.nodes.items():
             if spec.ends:
                 all_targets.update(spec.ends)
-        # validate targets
-        for node in self.nodes:
-            if node not in all_targets:
-                raise ValueError(f"Node `{node}` is not reachable")
         for target in all_targets:
             if target not in self.nodes and target != END:
                 raise ValueError(f"Found edge ending at unknown node `{target}`")
@@ -628,3 +629,10 @@ class CompiledGraph(Pregel):
                     add_edge(key, end, conditional=True)
 
         return graph
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
+        """Mime bundle used by Jupyter to display the graph"""
+        return {
+            "text/plain": repr(self),
+            "image/png": self.get_graph().draw_mermaid_png(),
+        }

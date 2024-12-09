@@ -26,6 +26,7 @@ from typing_extensions import ParamSpec, Self
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -72,6 +73,7 @@ from langgraph.managed.base import (
     WritableManagedValue,
 )
 from langgraph.pregel.algo import (
+    Call,
     GetNextVersion,
     PregelTaskWrites,
     apply_writes,
@@ -110,13 +112,13 @@ from langgraph.types import (
     Command,
     LoopProtocol,
     PregelExecutableTask,
+    StreamChunk,
     StreamProtocol,
 )
 from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")
-StreamChunk = tuple[tuple[str, ...], str, Any]
 
 INPUT_DONE = object()
 INPUT_RESUMING = object()
@@ -263,21 +265,40 @@ class PregelLoop(LoopProtocol):
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        # deduplicate writes to special channels, last write wins
+        if all(w[0] in WRITES_IDX_MAP for w in writes):
+            writes = list({w[0]: w for w in writes}.values())
         # save writes
-        self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
+        for c, v in writes:
+            if (
+                c in WRITES_IDX_MAP
+                and (
+                    idx := next(
+                        (
+                            i
+                            for i, w in enumerate(self.checkpoint_pending_writes)
+                            if w[0] == task_id and w[1] == c
+                        ),
+                        None,
+                    )
+                )
+                is not None
+            ):
+                self.checkpoint_pending_writes[idx] = (task_id, c, v)
+            else:
+                self.checkpoint_pending_writes.append((task_id, c, v))
         if self.checkpointer_put_writes is not None:
             self.submit(
                 self.checkpointer_put_writes,
-                {
-                    **self.checkpoint_config,
-                    CONF: {
-                        **self.checkpoint_config[CONF],
+                patch_configurable(
+                    self.checkpoint_config,
+                    {
                         CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                             CONFIG_KEY_CHECKPOINT_NS, ""
                         ),
                         CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                     },
-                },
+                ),
                 writes,
                 task_id,
             )
@@ -286,12 +307,9 @@ class PregelLoop(LoopProtocol):
             self._output_writes(task_id, writes)
 
     def accept_push(
-        self, task: PregelExecutableTask, write_idx: int
+        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
     ) -> Optional[PregelExecutableTask]:
         """Accept a PUSH from a task, potentially returning a new task to start."""
-        # don't start if an earlier PUSH has already triggered an interrupt
-        if self.to_interrupt:
-            return
         # don't start if we should interrupt *after* the original task
         if should_interrupt(self.checkpoint, self.interrupt_after, [task]):
             self.to_interrupt.append(task)
@@ -299,7 +317,7 @@ class PregelLoop(LoopProtocol):
         if pushed := cast(
             Optional[PregelExecutableTask],
             prepare_single_task(
-                (PUSH, task.path, write_idx, task.id),
+                (PUSH, task.path, write_idx, task.id, call),
                 None,
                 checkpoint=self.checkpoint,
                 pending_writes=[(task.id, *w) for w in task.writes],
@@ -328,9 +346,8 @@ class PregelLoop(LoopProtocol):
             # match any pending writes to the new task
             if self.skip_done_tasks:
                 self._match_writes({pushed.id: pushed})
-            # return the new task, to be started, if not run before
-            if not pushed.writes:
-                return pushed
+            # return the new task, to be started if not run before
+            return pushed
 
     def tick(
         self,
@@ -536,7 +553,7 @@ class PregelLoop(LoopProtocol):
         elif isinstance(self.input, Command):
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(self.input):
+            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
                 writes[tid].append((c, v))
             if not writes:
                 raise EmptyInputError("Received empty Command input")
