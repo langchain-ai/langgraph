@@ -4,14 +4,12 @@ import random
 import sys
 import time
 from dataclasses import replace
-from functools import partial
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
-    CONFIG_KEY_SEND,
     NS_SEP,
 )
 from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphBubbleUp, ParentCommand
@@ -25,25 +23,21 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Optional[RetryPolicy],
-    writer: Optional[
-        Callable[[PregelExecutableTask, Sequence[tuple[str, Any]]], None]
-    ] = None,
+    configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     config = task.config
-    if writer is not None:
-        config = patch_configurable(config, {CONFIG_KEY_SEND: partial(writer, task)})
+    if configurable is not None:
+        config = patch_configurable(config, configurable)
     while True:
         try:
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            task.proc.invoke(task.input, config)
-            # if successful, end
-            break
+            return task.proc.invoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -115,17 +109,15 @@ async def arun_with_retry(
     task: PregelExecutableTask,
     retry_policy: Optional[RetryPolicy],
     stream: bool = False,
-    writer: Optional[
-        Callable[[PregelExecutableTask, Sequence[tuple[str, Any]]], None]
-    ] = None,
+    configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     config = task.config
-    if writer is not None:
-        config = patch_configurable(config, {CONFIG_KEY_SEND: partial(writer, task)})
+    if configurable is not None:
+        config = patch_configurable(config, configurable)
     while True:
         try:
             # clear any writes from previous attempts
@@ -134,10 +126,10 @@ async def arun_with_retry(
             if stream:
                 async for _ in task.proc.astream(task.input, config):
                     pass
+                # if successful, end
+                break
             else:
-                await task.proc.ainvoke(task.input, config)
-            # if successful, end
-            break
+                return await task.proc.ainvoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
