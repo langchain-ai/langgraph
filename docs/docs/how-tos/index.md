@@ -21,7 +21,6 @@ These how-to guides show how to achieve that controllability.
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 - [How to control graph recursion limit](recursion-limit.ipynb)
 - [How to combine control flow and state updates with Command](command.ipynb)
-- [How to build a multi-agent network](multi-agent-network.ipynb)
 
 ### Persistence
 
@@ -91,6 +90,12 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to add and use subgraphs](subgraph.ipynb)
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
 - [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
+
+### Multi-agent
+
+- [How to build a multi-agent network](multi-agent-network.ipynb)
+
+For more examples of multi-agent architectures implementations check out [these tutorials](../tutorials/index.md#multi-agent-systems).
 
 ### State Management
 
