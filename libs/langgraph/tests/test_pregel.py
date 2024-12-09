@@ -8235,7 +8235,7 @@ def test_root_graph(
         "__root__": [
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000070",
+                id="00000000-0000-4000-8000-000000000078",
             ),
             AIMessage(
                 content="",
@@ -8255,7 +8255,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000092"
+                content="an extra message", id="00000000-0000-4000-8000-0000000000100"
             ),
             HumanMessage(content="what is weather in la"),
         ],
