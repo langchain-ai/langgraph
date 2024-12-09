@@ -14932,7 +14932,7 @@ def test_command_with_static_breakpoints() -> None:
 
     # A checkpointer must be enabled for interrupts to work!
     checkpointer = MemorySaver()
-    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node"])
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
 
     config = {
         "configurable": {
