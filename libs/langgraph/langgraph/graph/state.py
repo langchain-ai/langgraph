@@ -559,6 +559,7 @@ class StateGraph(Graph):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
+        compiled.attach_branch(START, SELF, CONTROL_BRANCH, with_reader=False)
         for key, node in self.nodes.items():
             compiled.attach_branch(key, SELF, CONTROL_BRANCH, with_reader=False)
 

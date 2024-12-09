@@ -14,6 +14,8 @@ from langgraph.constants import (
     PUSH,
     RESUME,
     RETURN,
+    SELF,
+    START,
     TAG_HIDDEN,
     TASKS,
 )
@@ -79,12 +81,14 @@ def map_command(
         else:
             sends = [cmd.goto]
         for send in sends:
-            if not isinstance(send, Send):
+            if isinstance(send, Send):
+                yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+            elif isinstance(send, str):
+                yield (NULL_TASK_ID, f"branch:{START}:{SELF}:{send}", START)
+            else:
                 raise TypeError(
-                    f"In Command.goto, expected Send, got {type(send).__name__}"
+                    f"In Command.goto, expected Send/str, got {type(send).__name__}"
                 )
-            yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
-        # TODO handle goto str for state graph
     if cmd.resume:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
