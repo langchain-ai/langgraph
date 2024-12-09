@@ -95,7 +95,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 - [How to build a multi-agent network](multi-agent-network.ipynb)
 
-For more examples of multi-agent architectures implementations check out [these tutorials](../tutorials/index.md#multi-agent-systems).
+See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
 ### State Management
 

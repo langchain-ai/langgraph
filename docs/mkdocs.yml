@@ -152,7 +152,6 @@ nav:
             - how-tos/map-reduce.ipynb
             - how-tos/recursion-limit.ipynb
             - how-tos/command.ipynb
-            - how-tos/multi-agent-network.ipynb
         - Persistence:
             - Persistence: how-tos#persistence
             - how-tos/persistence.ipynb
@@ -200,6 +199,8 @@ nav:
             - how-tos/subgraph.ipynb
             - how-tos/subgraphs-manage-state.ipynb
             - how-tos/subgraph-transform-state.ipynb
+        - Multi-agent:
+            - how-tos/multi-agent-network.ipynb
         - State Management:
             - State Management: how-tos#state-management
             - how-tos/state-model.ipynb
