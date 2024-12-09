@@ -63,7 +63,6 @@ graph = graph_builder.compile(checkpointer=checkpointer)
 
 ??? warning "Graph execution resumes from the beginning of the node not the exact point of the `interrupt`"
 
-
 ### Run 
 
 **Run the graph** and observe the `interrupt` function in action:
