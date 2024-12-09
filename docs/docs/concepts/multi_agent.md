@@ -28,10 +28,10 @@ There are several ways to connect agents in a multi-agent system:
 
 ### Handoffs
 
-In multi-agent architectures agents can be represented as graph nodes. Each agent node executes its step(s) and decides what to do next — finish execution or route to another agent (including routing to itself, e.g. running in a loop). A common pattern in multi-agent interactions is **handoffs**: one agent handing off control to another agent. Handoffs allow you to specify:
+In multi-agent architectures, agents can be represented as graph nodes. Each agent node executes its step(s) and decides whether to finish execution or route to another agent, including potentially routing to itself (e.g., running in a loop). A common pattern in multi-agent interactions is handoffs, where one agent hands off control to another. Handoffs allow you to specify:
 
-- __destination__: target agent to navigate to (e.g. name of the node to go to)
-- __payload__: [what information to pass](#communication-between-agents) to that agent (e.g. state update)
+- __destination__: target agent to navigate to (e.g., name of the node to go to)
+- __payload__: [information to pass to that agent](#communication-between-agents) (e.g., state update)
 
 To implement handoffs in LangGraph, agent nodes can return [`Command`](./low_level.md#command) object that allows you to combine both control flow and state updates:
 
@@ -47,7 +47,7 @@ def agent(state) -> Command[Literal["agent", "another_agent"]]:
     )
 ```
 
-In a more complex scenario where each agent node is itself a graph (i.e. a [subgraph](./low_level.md#subgraphs)), a node in one of the agent subgraphs might want to navigate to a different agent. For example, if you have two agents `alice` and `bob` (subgraph nodes in a parent graph), and `alice` wants to navigate to `bob`, you can do so by setting `graph=Command.PARENT` in the `Command` object:
+In a more complex scenario where each agent node is itself a graph (i.e., a [subgraph](./low_level.md#subgraphs)), a node in one of the agent subgraphs might want to navigate to a different agent. For example, if you have two agents, `alice` and `bob` (subgraph nodes in a parent graph), and `alice` needs to navigate to `bob`, you can set `graph=Command.PARENT` in the `Command` object:
 
 ```python
 def some_node_inside_alice(state)
@@ -77,7 +77,7 @@ def some_node_inside_alice(state)
 
 #### Handoffs as tools
 
-One of the most common agent types is a ReAct-style tool-calling agents. For those types of agents, a common pattern would be wrapping a handoff in a tool call, e.g.:
+One of the most common agent types is a ReAct-style tool-calling agents. For those types of agents, a common pattern is wrapping a handoff in a tool call, e.g.:
 
 ```python
 def transfer_to_bob(state):
