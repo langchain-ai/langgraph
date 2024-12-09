@@ -87,6 +87,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             row = await results.fetchone()
             if row is None:
                 version = -1
+                await cur.execute("ROLLBACK AND CHAIN;")
             else:
                 version = row["v"]
             for v, migration in zip(
