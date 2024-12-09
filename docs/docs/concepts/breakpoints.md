@@ -202,7 +202,7 @@ By leveraging `Command`, you can resume graph execution, handle user inputs, and
 
 ## Using with `invoke` and `ainvoke`
 
-When you use `stream` or `astream` to run the graph, you will receive an `interrupt` event that let you know that a breakpoint has been hit.
+When you use `stream` or `astream` to run the graph, you will receive an `Interrupt` event that let you know that a breakpoint has been hit.
 
 `invoke` and `ainvoke` do not return the interrupt information. To access this information, you must use the [get_state](../reference/graphs.md#langgraph.graph.graph.CompiledGraph.get_state) method to retrieve the graph state after calling `invoke` or `ainvoke`.
 
@@ -235,21 +235,44 @@ graph.invoke(Command(resume={"age": "25"}), thread_config)
 
 ## How does resuming from a breakpoint work?
 
-Execution always resumes from the **beginning** of the **graph node**, not the exact point of the `interrupt`.
+> Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered.
 
-Please note that this is **unlike** a traditional breakpoint or Python's `input()` function. As a result, you should structure your graph nodes to handle the `interrupt` and `resume` logic effectively.
+A critical aspect of using breakpoints is understanding how resuming from a breakpoint works. When you resume execution after a breakpoint, the graph execution starts from the **beginning** of the **graph node** where the last breakpoint was triggered.
+
+**All** code from the beginning of the node to the **breakpoint** will be re-executed. 
+
+```python
+counter = 0
+def node(state: State):
+    # All the code from the beginning of the node to the breakpoint will be re-executed
+    # when the graph resumes.
+    global counter
+    counter += 1
+    print(f"> Entered the node: {counter} # of times")
+    # Pause the graph and wait for user input.
+    answer = interrupt()
+    print("The value of counter is:", counter)
+    ...
+```
+
+Upon **resuming** the graph, the counter will be incremented a second time, resulting in the following output:
+
+```pycon
+> Entered the node: 2 # of times
+The value of counter is: 2
+```
 
 Keep the following considerations in mind when using the `interrupt` function:
 
 1. **Side effects**: Place side-effecting code, such as API calls, **after** the `interrupt` to avoid duplication, as these are re-triggered every time the node resumes.
-2. **Multiple interrupts**: Using multiple `interrupt` calls in a node can be very useful (e.g., for run-time validation), but the order and number of calls must remain consistent to prevent mismatched resume values.
+2. **Multiple interrupts**: Using multiple `interrupt` calls in a node can be very useful (e.g., for run-time validation), but the order and number of calls must remain consistent to prevent mismatched resume values. As a result, we recommend that you structure your code in a way that avoids providing both a `resume` and a state `update` value (e.g., `Command(resume=resume, update=update)`) at the same time.
+3. **Subgraphs**: If you're invoking a subgraph [as a function](low_level.md#as-a-function), the **parent** graph will be re-run from the **beginning of the node** where the subgraph was invoked.
 
 ## Best practices
 
-We recommend the `interrupt` function for setting breakpoints and using `Command(resume=value)` to resume execution.
-
-This approach allows you to collect user input without having to immediately modify the graph state or add any special
-attributes to the graph state to represent the user input.
+* Use the `interrupt` function to set breakpoints and collect user input.
+* Use `Command` to resume execution and control the graph state.
+* Consider putting all side effects (e.g., API calls) after the `interrupt` to prevent duplication. See [How does resuming from a breakpoint work?](#how-does-resuming-from-a-breakpoint-work)
 
 ## Additional Resources 📚
 
