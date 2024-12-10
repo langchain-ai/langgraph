@@ -48,8 +48,8 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 [Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
 you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
 
-- [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
-- [How to add dynamic breakpoints](human_in_the_loop/dynamic_breakpoints.ipynb)
+- [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb): Use for graph execution step by step. For **human-in-the-loop** workflows, use the new [`interrupt` function](../concepts/human_in_the_loop.md) instead.
+- [How to add dynamic breakpoints with `NodeInterrupt` (not recommended)](human_in_the_loop/dynamic_breakpoints.ipynb): This guide shows how to add dynamic breakpoints to your graph using `NodeInterrupt`. Use the new [`interrupt` function](../concepts/human_in_the_loop.md) instead.
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
 - [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
 - [How to view and update past graph state](human_in_the_loop/time-travel.ipynb)
