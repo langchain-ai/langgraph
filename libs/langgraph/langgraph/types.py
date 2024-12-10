@@ -32,6 +32,12 @@ if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
 
 
+try:
+    from langchain_core.tools import ToolDirectOutputMixin
+except ImportError:
+    ToolDirectOutputMixin = object
+
+
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
@@ -244,7 +250,7 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N]):
+class Command(Generic[N], ToolDirectOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
     Args:
