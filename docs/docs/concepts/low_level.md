@@ -353,6 +353,12 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
 Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
+### When should I use Command instead of conditional edges?
+
+Use [`Command`] when you need to **both** update the graph state **and** route to a different node. For example, when implementing [multi-agent handoffs](./multi_agent.md#handoffs) where it's important to route to a different agent and pass some information to that agent.
+
+Consider using [conditional edges](#conditional-edges) to route between nodes conditionally without updating the state. Although this can be achieved with `Command(goto="node")`, overusing goto statements can make it difficult to debug and make the application’s control flow harder to follow.
+
 ### Using inside tools
 
 A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
