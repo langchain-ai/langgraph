@@ -13202,6 +13202,41 @@ async def test_interrupt_loop(checkpointer_name: str):
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_command_with_static_breakpoints(checkpointer_name: str) -> None:
+    """Test that we can use Command to resume and update with static breakpoints."""
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: str
+
+    def node1(state: State):
+        return {
+            "foo": state["foo"] + "|node-1",
+        }
+
+    def node2(state: State):
+        return {
+            "foo": state["foo"] + "|node-2",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_node("node2", node2)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", "node2")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
+        config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+        # Start the graph and interrupt at the first node
+        await graph.ainvoke({"foo": "abc"}, config)
+        result = await graph.ainvoke(Command(update={"foo": "def"}), config)
+        assert result == {"foo": "def|node-1|node-2"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multistep_plan(checkpointer_name: str):
     from langchain_core.messages import AnyMessage
 
