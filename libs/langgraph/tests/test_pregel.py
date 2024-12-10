@@ -14906,8 +14906,13 @@ def test_dict_mixed_return() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
 
 
-def test_command_with_static_breakpoints() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_command_with_static_breakpoints(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
     """Test that we can use Command to resume and update with static breakpoints."""
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class State(TypedDict):
         """The graph state."""
@@ -14930,20 +14935,13 @@ def test_command_with_static_breakpoints() -> None:
     builder.add_edge(START, "node1")
     builder.add_edge("node1", "node2")
 
-    # A checkpointer must be enabled for interrupts to work!
-    checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
-
-    config = {
-        "configurable": {
-            "thread_id": uuid.uuid4(),
-        }
-    }
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
     # Start the graph and interrupt at the first node
     graph.invoke({"foo": "abc"}, config)
-    result = graph.invoke(Command(resume="node1"), config)
-    assert result == {"foo": "abc|node-1|node-2"}
+    result = graph.invoke(Command(update={"foo": "def"}), config)
+    assert result == {"foo": "def|node-1|node-2"}
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

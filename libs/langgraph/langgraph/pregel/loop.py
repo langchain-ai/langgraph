@@ -422,18 +422,6 @@ class PregelLoop(LoopProtocol):
             self.status = "out_of_steps"
             return False
 
-        # apply NULL writes
-        if null_writes := [
-            w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
-        ]:
-            mv_writes = apply_writes(
-                self.checkpoint,
-                self.channels,
-                [PregelTaskWrites((), INPUT, null_writes, [])],
-                self.checkpointer_get_next_version,
-            )
-            for key, values in mv_writes.items():
-                self._update_mv(key, values)
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
@@ -552,6 +540,18 @@ class PregelLoop(LoopProtocol):
             # save writes
             for tid, ws in writes.items():
                 self.put_writes(tid, ws)
+        # apply NULL writes
+        if null_writes := [
+            w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
+        ]:
+            mv_writes = apply_writes(
+                self.checkpoint,
+                self.channels,
+                [PregelTaskWrites((), INPUT, null_writes, [])],
+                self.checkpointer_get_next_version,
+            )
+            for key, values in mv_writes.items():
+                self._update_mv(key, values)
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
