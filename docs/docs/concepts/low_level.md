@@ -339,37 +339,6 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
     )
 ```
 
-`Command` has the following properties:
-
-| Property | Description |
-| --- | --- |
-| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `Command.PARENT`: closest parent graph |
-| `update` | Update to apply to the graph's state. |
-| `resume` | Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt]. |
-| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- sequence of node names to navigate to next<br>- `Send` object (to execute a node with the input provided)<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
-
-```python
-from langgraph.graph import StateGraph, START
-from langgraph.types import Command
-from typing_extensions import Literal, TypedDict
-
-class State(TypedDict):
-    foo: str
-
-def my_node(state: State) -> Command[Literal["my_other_node"]]:
-    return Command(update={"foo": "bar"}, goto="my_other_node")
-
-def my_other_node(state: State):
-    return {"foo": state["foo"] + "baz"}
-
-builder = StateGraph(State)
-builder.add_edge(START, "my_node")
-builder.add_node("my_node", my_node)
-builder.add_node("my_other_node", my_other_node)
-
-graph = builder.compile()
-```
-
 With `Command` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
 
 ```python
@@ -380,7 +349,7 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
 !!! important
 
-    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["node_b", "node_c"]]`. This is necessary for the graph compilation and rendering, and tells LangGraph that `node_a` can navigate to `node_b` and `node_c`.
+    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph rendering and tells LangGraph that `my_node` can navigate to `my_other_node`.
 
 Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
 
