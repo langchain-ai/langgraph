@@ -535,9 +535,23 @@ class PregelLoop(LoopProtocol):
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
         configurable = self.config.get(CONF, {})
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
-            configurable.get(CONFIG_KEY_RESUMING, self.input is None)
+            configurable.get(
+                CONFIG_KEY_RESUMING,
+                self.input is None or isinstance(self.input, Command),
+            )
         )
 
+        # map command to writes
+        if isinstance(self.input, Command):
+            writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
+            # group writes by task ID
+            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
+                writes[tid].append((c, v))
+            if not writes:
+                raise EmptyInputError("Received empty Command input")
+            # save writes
+            for tid, ws in writes.items():
+                self.put_writes(tid, ws)
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
@@ -549,17 +563,6 @@ class PregelLoop(LoopProtocol):
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
             )
-        # map command to writes
-        elif isinstance(self.input, Command):
-            writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
-            # group writes by task ID
-            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
-                writes[tid].append((c, v))
-            if not writes:
-                raise EmptyInputError("Received empty Command input")
-            # save writes
-            for tid, ws in writes.items():
-                self.put_writes(tid, ws)
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
             # TODO shouldn't these writes be passed to put_writes too?
