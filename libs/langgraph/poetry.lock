@@ -1382,7 +1382,7 @@ url = "../checkpoint-duckdb"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.7"
+version = "2.0.8"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1418,7 +1418,7 @@ url = "../checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.42"
+version = "0.1.43"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3413,4 +3413,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "2df4d5d5e61917bdfff0ba430067a17662666eedee2858d841fa02e594cf69d0"
+content-hash = "936530a5f00f329aeff2e6e921fe64480be317fad2c0a59cd54ea9018d089304"
