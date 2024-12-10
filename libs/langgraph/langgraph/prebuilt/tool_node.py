@@ -300,8 +300,8 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            tool = self.tools_by_name[call["name"]]
-            response = tool.invoke({**call, **{"type": "tool_call"}})
+            input = {**call, **{"type": "tool_call"}}
+            response = self.tools_by_name[call["name"]].invoke(input)
             if isinstance(response, Command):
                 return self._validate_tool_command(response, call, input_type)
             elif isinstance(response, ToolMessage):
@@ -352,8 +352,8 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            tool = self.tools_by_name[call["name"]]
-            response = await tool.ainvoke({**call, **{"type": "tool_call"}})
+            input = {**call, **{"type": "tool_call"}}
+            response = await self.tools_by_name[call["name"]].ainvoke(input)
             if isinstance(response, Command):
                 return self._validate_tool_command(response, call, input_type)
             elif isinstance(response, ToolMessage):

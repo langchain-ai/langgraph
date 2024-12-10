@@ -989,6 +989,10 @@ def test_tool_node_node_interrupt():
     assert task.interrupts == (Interrupt(value="foo", when="during"),)
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 async def test_tool_node_command():
     @dec_tool
     def transfer_to_bob(tool_call_id: str):
@@ -1289,6 +1293,10 @@ async def test_tool_node_command():
             )
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 async def test_tool_node_command_list_input():
     @dec_tool
     def transfer_to_bob(tool_call_id: str):
@@ -1537,6 +1545,10 @@ async def test_tool_node_command_list_input():
             )
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 def test_react_agent_update_state():
     class State(AgentState):
         user_name: str
