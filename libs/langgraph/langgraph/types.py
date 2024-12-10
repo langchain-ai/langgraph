@@ -35,7 +35,9 @@ if TYPE_CHECKING:
 try:
     from langchain_core.messages.tool import ToolOutputMixin
 except ImportError:
-    ToolOutputMixin = object
+
+    class ToolOutputMixin:  # type: ignore[no-redef]
+        pass
 
 
 All = Literal["*"]
