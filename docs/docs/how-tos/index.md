@@ -92,6 +92,12 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
 - [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
 
+### Multi-agent
+
+- [How to build a multi-agent network](multi-agent-network.ipynb)
+
+See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
+
 ### State Management
 
 - [How to use Pydantic model as state](state-model.ipynb)
