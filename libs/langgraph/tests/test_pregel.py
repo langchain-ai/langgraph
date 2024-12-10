@@ -12901,7 +12901,7 @@ def test_send_to_nested_graphs(
         metadata={
             "step": 1,
             "source": "loop",
-            "writes": {"edit": None},
+            "writes": None,
             "parents": {"": AnyStr()},
             "thread_id": "1",
             "checkpoint_ns": AnyStr("generate_joke:"),
@@ -12946,7 +12946,7 @@ def test_send_to_nested_graphs(
         metadata={
             "step": 1,
             "source": "loop",
-            "writes": {"edit": None},
+            "writes": None,
             "parents": {"": AnyStr()},
             "thread_id": "1",
             "checkpoint_ns": AnyStr("generate_joke:"),
