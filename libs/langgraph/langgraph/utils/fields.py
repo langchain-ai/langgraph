@@ -110,7 +110,7 @@ def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
 
 def get_enhanced_type_hints(
     type: Type[Any],
-) -> Generator[tuple[str, Any, Any, Optional[str]], None]:
+) -> Generator[tuple[str, Any, Any, Optional[str]], None, None]:
     """Attempt to extract default values and descriptions from provided type, used for config schema."""
     for name, typ in get_type_hints(type).items():
         default = None
@@ -126,6 +126,12 @@ def get_enhanced_type_hints(
 
                 if hasattr(field, "default") and field.default is not None:
                     default = field.default
+                    if (
+                        hasattr(default, "__class__")
+                        and getattr(default.__class__, "__name__", "")
+                        == "PydanticUndefinedType"
+                    ):
+                        default = None
 
         except (AttributeError, KeyError, TypeError):
             pass
