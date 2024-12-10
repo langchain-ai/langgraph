@@ -13295,3 +13295,39 @@ async def test_multistep_plan(checkpointer_name: str):
             ],
             "plan": [],
         }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_command_goto_with_static_breakpoints(checkpointer_name: str) -> None:
+    """Use Command goto with static breakpoints."""
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: Annotated[str, operator.add]
+
+    def node1(state: State):
+        return {
+            "foo": "|node-1",
+        }
+
+    def node2(state: State):
+        return {
+            "foo": "|node-2",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_node("node2", node2)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", "node2")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
+
+        config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+        # Start the graph and interrupt at the first node
+        await graph.ainvoke({"foo": "abc"}, config)
+        result = await graph.ainvoke(Command(goto=["node2"]), config)
+        assert result == {"foo": "abc|node-1|node-2|node-2"}
