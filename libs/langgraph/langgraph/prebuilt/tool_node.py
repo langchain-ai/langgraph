@@ -45,10 +45,6 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-class InvalidToolCommandError(Exception):
-    """Raised when the Command returned by a tool is invalid."""
-
-
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
     recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
@@ -302,17 +298,6 @@ class ToolNode(RunnableCallable):
         try:
             input = {**call, **{"type": "tool_call"}}
             response = self.tools_by_name[call["name"]].invoke(input)
-            if isinstance(response, Command):
-                return self._validate_tool_command(response, call, input_type)
-            elif isinstance(response, ToolMessage):
-                response.content = cast(
-                    Union[str, list], msg_content_output(response.content)
-                )
-                return response
-            else:
-                raise TypeError(
-                    f"Tool {call['name']} returned unexpected type: {type(response)}"
-                )
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
@@ -320,7 +305,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except (GraphBubbleUp, InvalidToolCommandError) as e:
+        except GraphBubbleUp as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -337,10 +322,24 @@ class ToolNode(RunnableCallable):
             # Handled
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
+            )
 
-        return ToolMessage(
-            content=content, name=call["name"], tool_call_id=call["id"], status="error"
-        )
+        if isinstance(response, Command):
+            return self._validate_tool_command(response, call, input_type)
+        elif isinstance(response, ToolMessage):
+            response.content = cast(
+                Union[str, list], msg_content_output(response.content)
+            )
+            return response
+        else:
+            raise TypeError(
+                f"Tool {call['name']} returned unexpected type: {type(response)}"
+            )
 
     async def _arun_one(
         self,
@@ -354,17 +353,6 @@ class ToolNode(RunnableCallable):
         try:
             input = {**call, **{"type": "tool_call"}}
             response = await self.tools_by_name[call["name"]].ainvoke(input)
-            if isinstance(response, Command):
-                return self._validate_tool_command(response, call, input_type)
-            elif isinstance(response, ToolMessage):
-                response.content = cast(
-                    Union[str, list], msg_content_output(response.content)
-                )
-                return response
-            else:
-                raise TypeError(
-                    f"Tool {call['name']} returned unexpected type: {type(response)}"
-                )
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
@@ -372,7 +360,7 @@ class ToolNode(RunnableCallable):
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except (GraphBubbleUp, InvalidToolCommandError) as e:
+        except GraphBubbleUp as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -390,9 +378,24 @@ class ToolNode(RunnableCallable):
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
 
-        return ToolMessage(
-            content=content, name=call["name"], tool_call_id=call["id"], status="error"
-        )
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
+            )
+
+        if isinstance(response, Command):
+            return self._validate_tool_command(response, call, input_type)
+        elif isinstance(response, ToolMessage):
+            response.content = cast(
+                Union[str, list], msg_content_output(response.content)
+            )
+            return response
+        else:
+            raise TypeError(
+                f"Tool {call['name']} returned unexpected type: {type(response)}"
+            )
 
     def _parse_input(
         self,
@@ -522,7 +525,7 @@ class ToolNode(RunnableCallable):
         if isinstance(command.update, dict):
             # input type is dict when ToolNode is invoked with a dict input (e.g. {"messages": [AIMessage(..., tool_calls=[...])]})
             if input_type != "dict":
-                raise InvalidToolCommandError(
+                raise ValueError(
                     f"Tools can provide a dict in Command.update only when using dict with '{self.messages_key}' key as ToolNode input, "
                     f"got: {command.update} for tool '{call['name']}'"
                 )
@@ -533,7 +536,7 @@ class ToolNode(RunnableCallable):
         elif isinstance(command.update, list):
             # input type is list when ToolNode is invoked with a list input (e.g. [AIMessage(..., tool_calls=[...])])
             if input_type != "list":
-                raise InvalidToolCommandError(
+                raise ValueError(
                     f"Tools can provide a list of messages in Command.update only when using list of messages as ToolNode input, "
                     f"got: {command.update} for tool '{call['name']}'"
                 )
@@ -551,12 +554,12 @@ class ToolNode(RunnableCallable):
                 continue
 
             if have_seen_tool_messages:
-                raise InvalidToolCommandError(
+                raise ValueError(
                     f"Expected at most one ToolMessage in Command.update for tool '{call['name']}', got multiple: {messages_update}."
                 )
 
             if message.tool_call_id != call["id"]:
-                raise InvalidToolCommandError(
+                raise ValueError(
                     f"ToolMessage.tool_call_id must match the tool call id. Expected: {call['id']}, got: {message.tool_call_id} for tool '{call['name']}'."
                 )
 
@@ -570,7 +573,7 @@ class ToolNode(RunnableCallable):
                 if input_type == "dict"
                 else '`Command(update=[ToolMessage("Success", tool_call_id=tool_call_id), ...], ...)`'
             )
-            raise InvalidToolCommandError(
+            raise ValueError(
                 f"Expected exactly one message (ToolMessage) in Command.update for tool '{call['name']}', got: {messages_update}. "
                 "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
                 f"You can fix it by modifying the tool to return {example_update}."
