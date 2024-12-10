@@ -18,7 +18,6 @@ from typing import (
     Type,
     Union,
     cast,
-    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -117,6 +116,7 @@ from langgraph.utils.config import (
     patch_config,
     patch_configurable,
 )
+from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
@@ -319,8 +319,15 @@ class Pregel(PregelProtocol):
                 )
                 + (
                     [
-                        ConfigurableFieldSpec(id=name, annotation=typ)
-                        for name, typ in get_type_hints(self.config_type).items()
+                        ConfigurableFieldSpec(
+                            id=name,
+                            annotation=typ,
+                            default=default,
+                            description=description,
+                        )
+                        for name, typ, default, description in get_enhanced_type_hints(
+                            self.config_type
+                        )
                     ]
                     if self.config_type is not None
                     else []
