@@ -89,7 +89,7 @@ def transfer_to_bob(state):
     )
 ```
 
-This is a special case of [updating the graph state from tools](../how-tos/update-state-from-tools.ipynb) where in addition the state update, the control flow is included as well.
+This is a special case of updating the graph state from tools where in addition the state update, the control flow is included as well.
 
 !!! important
 
