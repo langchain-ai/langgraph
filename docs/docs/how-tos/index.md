@@ -94,7 +94,10 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 ### Multi-agent
 
+[Multi-agent systems](../concepts/multi_agent.md) are useful to break down complex LLM applications into multiple agents, each responsible for a different part of the application. These how-to guides show how to implement multi-agent systems in LangGraph:
+
 - [How to build a multi-agent network](multi-agent-network.ipynb)
+- [How to add multi-turn conversation in a multi-agent application](multi-agent-multi-turn-convo.ipynb)
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
