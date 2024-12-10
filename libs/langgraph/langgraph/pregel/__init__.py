@@ -11,7 +11,6 @@ from typing import (
     AsyncIterator,
     Callable,
     Dict,
-    Generator,
     Iterator,
     Mapping,
     Optional,
@@ -19,7 +18,6 @@ from typing import (
     Type,
     Union,
     cast,
-    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -118,6 +116,7 @@ from langgraph.utils.config import (
     patch_config,
     patch_configurable,
 )
+from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
@@ -309,44 +308,6 @@ class Pregel(PregelProtocol):
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
-        # TODO: shouldn't this be in langchain_core?
-        def get_enhanced_type_hints(
-            type: Type[Any],
-        ) -> Generator[tuple[str, Any, Any, Optional[str]], None]:
-            """Attempt to extract default values and descriptions from provided config spec"""
-            for name, typ in get_type_hints(type).items():
-                default = None
-                description = None
-
-                # Pydantic models
-                try:
-                    if hasattr(type, "__fields__") and name in type.__fields__:
-                        field = type.__fields__[name]
-
-                        if (
-                            hasattr(field, "description")
-                            and field.description is not None
-                        ):
-                            description = field.description
-
-                        if hasattr(field, "default") and field.default is not None:
-                            default = field.default
-
-                except (AttributeError, KeyError, TypeError):
-                    pass
-
-                # TypedDict, dataclass
-                try:
-                    if hasattr(type, "__dict__"):
-                        type_dict = getattr(type, "__dict__")
-
-                        if name in type_dict:
-                            default = type_dict[name]
-                except (AttributeError, KeyError, TypeError):
-                    pass
-
-                yield name, typ, default, description
-
         return [
             spec
             for spec in get_unique_config_specs(
