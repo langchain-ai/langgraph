@@ -14940,9 +14940,8 @@ def test_command_with_static_breakpoints(
 
     # Start the graph and interrupt at the first node
     graph.invoke({"foo": "abc"}, config)
-    result = graph.invoke(Command(update={"foo": "def"}), config)
-    assert result == {"foo": "def|node-1|node-2"}
-
+    result = graph.invoke(Command(resume="node1"), config)
+    assert result == {"foo": "abc|node-1|node-2"}
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_multistep_plan(request: pytest.FixtureRequest, checkpointer_name: str):
