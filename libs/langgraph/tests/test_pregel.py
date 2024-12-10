@@ -65,6 +65,7 @@ from langgraph.constants import (
     START,
 )
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
+from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.managed.shared_value import SharedValue
@@ -1958,6 +1959,85 @@ def test_send_sequences() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    mapper_calls = 0
+
+    @task()
+    def mapper(input: int) -> str:
+        nonlocal mapper_calls
+        mapper_calls += 1
+        time.sleep(input / 100)
+        return str(input) * 2
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(input: list[int]) -> list[str]:
+        futures = [mapper(i) for i in input]
+        mapped = [f.result() for f in futures]
+        answer = interrupt("question")
+        return [m + answer for m in mapped]
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert [*graph.stream([0, 1], thread1)] == [
+        {"mapper": "00"},
+        {"mapper": "11"},
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="question",
+                    resumable=True,
+                    ns=[AnyStr("graph:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+    assert mapper_calls == 2
+
+    assert graph.invoke(Command(resume="answer"), thread1) == [
+        "00answer",
+        "11answer",
+    ]
+    assert mapper_calls == 2
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_imp_stream_order(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    @task()
+    def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo", "b": "bar"}
+
+    @task()
+    def bar(state: dict) -> dict:
+        return {"a": state["a"] + state["b"], "c": "bark"}
+
+    @task()
+    def baz(state: dict) -> dict:
+        return {"a": state["a"] + "baz", "c": "something else"}
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(state: dict) -> dict:
+        fut_foo = foo(state)
+        fut_bar = bar(fut_foo.result())
+        fut_baz = baz(fut_bar.result())
+        return fut_baz.result()
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert [c for c in graph.stream({"a": "0"}, thread1)] == [
+        {"foo": {"a": "0foo", "b": "bar"}},
+        {"bar": {"a": "0foobar", "c": "bark"}},
+        {"baz": {"a": "0foobarbaz", "c": "something else"}},
+        {"graph": {"a": "0foobarbaz", "c": "something else"}},
+    ]
+
+    assert graph.get_state(thread1).values == {"a": "0foobarbaz", "c": "something else"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_dedupe_on_resume(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -2484,7 +2564,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -2641,7 +2721,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -2728,7 +2808,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", (), 0, AnyStr()),
+                path=("__pregel_push", (), 0),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -2953,7 +3033,7 @@ def test_send_react_interrupt_control(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", ("__pregel_pull", "agent"), 2, AnyStr()),
+                path=("__pregel_push", ("__pregel_pull", "agent"), 2),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -5745,6 +5825,7 @@ def test_state_graph_packets(
     @tool()
     def search_api(query: str) -> str:
         """Searches the API for the query."""
+        time.sleep(0.1)
         return f"result for {query}"
 
     tools = [search_api]
@@ -6031,9 +6112,7 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
         ),
         next=("tools",),
         config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
@@ -6073,7 +6152,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -6202,12 +6281,8 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
         ),
         next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -6354,9 +6429,7 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
         ),
         next=("tools",),
         config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
@@ -6396,7 +6469,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0, AnyStr())),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -6525,12 +6598,8 @@ def test_state_graph_packets(
                     )
                 },
             ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2, AnyStr())
-            ),
-            PregelTask(
-                AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3, AnyStr())
-            ),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
+            PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
         ),
         next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -12774,7 +12843,7 @@ def test_send_to_nested_graphs(
             PregelTask(
                 AnyStr(),
                 "generate_joke",
-                (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
+                (PUSH, ("__pregel_pull", "__start__"), 1),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -12785,7 +12854,7 @@ def test_send_to_nested_graphs(
             PregelTask(
                 AnyStr(),
                 "generate_joke",
-                (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
+                (PUSH, ("__pregel_pull", "__start__"), 2),
                 state={
                     "configurable": {
                         "thread_id": "1",
@@ -12838,7 +12907,7 @@ def test_send_to_nested_graphs(
             "checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_node": "generate_joke",
-            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 1, AnyStr()],
+            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 1],
             "langgraph_step": 0,
             "langgraph_triggers": [PUSH],
         },
@@ -12883,7 +12952,7 @@ def test_send_to_nested_graphs(
             "checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_checkpoint_ns": AnyStr("generate_joke:"),
             "langgraph_node": "generate_joke",
-            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 2, AnyStr()],
+            "langgraph_path": [PUSH, ["__pregel_pull", "__start__"], 2],
             "langgraph_step": 0,
             "langgraph_triggers": [PUSH],
         },
@@ -13009,7 +13078,7 @@ def test_send_to_nested_graphs(
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 1, AnyStr()),
+                    (PUSH, ("__pregel_pull", "__start__"), 1),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -13021,7 +13090,7 @@ def test_send_to_nested_graphs(
                 PregelTask(
                     AnyStr(),
                     "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 2, AnyStr()),
+                    (PUSH, ("__pregel_pull", "__start__"), 2),
                     state={
                         "configurable": {
                             "thread_id": "1",
@@ -14835,3 +14904,43 @@ def test_dict_mixed_return() -> None:
     graph = graph.compile()
 
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
+
+
+def test_command_with_static_breakpoints() -> None:
+    """Test that we can use Command to resume and update with static breakpoints."""
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: str
+
+    def node1(state: State):
+        return {
+            "foo": state["foo"] + "|node-1",
+        }
+
+    def node2(state: State):
+        return {
+            "foo": state["foo"] + "|node-2",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_node("node2", node2)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", "node2")
+
+    # A checkpointer must be enabled for interrupts to work!
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
+
+    config = {
+        "configurable": {
+            "thread_id": uuid.uuid4(),
+        }
+    }
+
+    # Start the graph and interrupt at the first node
+    graph.invoke({"foo": "abc"}, config)
+    result = graph.invoke(Command(resume="node1"), config)
+    assert result == {"foo": "abc|node-1|node-2"}

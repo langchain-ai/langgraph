@@ -73,6 +73,7 @@ from langgraph.managed.base import (
     WritableManagedValue,
 )
 from langgraph.pregel.algo import (
+    Call,
     GetNextVersion,
     PregelTaskWrites,
     apply_writes,
@@ -289,16 +290,15 @@ class PregelLoop(LoopProtocol):
         if self.checkpointer_put_writes is not None:
             self.submit(
                 self.checkpointer_put_writes,
-                {
-                    **self.checkpoint_config,
-                    CONF: {
-                        **self.checkpoint_config[CONF],
+                patch_configurable(
+                    self.checkpoint_config,
+                    {
                         CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                             CONFIG_KEY_CHECKPOINT_NS, ""
                         ),
                         CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                     },
-                },
+                ),
                 writes,
                 task_id,
             )
@@ -307,12 +307,9 @@ class PregelLoop(LoopProtocol):
             self._output_writes(task_id, writes)
 
     def accept_push(
-        self, task: PregelExecutableTask, write_idx: int
+        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
     ) -> Optional[PregelExecutableTask]:
         """Accept a PUSH from a task, potentially returning a new task to start."""
-        # don't start if an earlier PUSH has already triggered an interrupt
-        if self.to_interrupt:
-            return
         # don't start if we should interrupt *after* the original task
         if should_interrupt(self.checkpoint, self.interrupt_after, [task]):
             self.to_interrupt.append(task)
@@ -320,7 +317,7 @@ class PregelLoop(LoopProtocol):
         if pushed := cast(
             Optional[PregelExecutableTask],
             prepare_single_task(
-                (PUSH, task.path, write_idx, task.id),
+                (PUSH, task.path, write_idx, task.id, call),
                 None,
                 checkpoint=self.checkpoint,
                 pending_writes=[(task.id, *w) for w in task.writes],
@@ -349,9 +346,8 @@ class PregelLoop(LoopProtocol):
             # match any pending writes to the new task
             if self.skip_done_tasks:
                 self._match_writes({pushed.id: pushed})
-            # return the new task, to be started, if not run before
-            if not pushed.writes:
-                return pushed
+            # return the new task, to be started if not run before
+            return pushed
 
     def tick(
         self,
@@ -539,9 +535,23 @@ class PregelLoop(LoopProtocol):
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
         configurable = self.config.get(CONF, {})
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
-            configurable.get(CONFIG_KEY_RESUMING, self.input is None)
+            configurable.get(
+                CONFIG_KEY_RESUMING,
+                self.input is None or isinstance(self.input, Command),
+            )
         )
 
+        # map command to writes
+        if isinstance(self.input, Command):
+            writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
+            # group writes by task ID
+            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
+                writes[tid].append((c, v))
+            if not writes:
+                raise EmptyInputError("Received empty Command input")
+            # save writes
+            for tid, ws in writes.items():
+                self.put_writes(tid, ws)
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
@@ -553,17 +563,6 @@ class PregelLoop(LoopProtocol):
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
             )
-        # map command to writes
-        elif isinstance(self.input, Command):
-            writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
-            # group writes by task ID
-            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
-                writes[tid].append((c, v))
-            if not writes:
-                raise EmptyInputError("Received empty Command input")
-            # save writes
-            for tid, ws in writes.items():
-                self.put_writes(tid, ws)
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
             # TODO shouldn't these writes be passed to put_writes too?
