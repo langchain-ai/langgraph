@@ -629,3 +629,10 @@ class CompiledGraph(Pregel):
                     add_edge(key, end, conditional=True)
 
         return graph
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
+        """Mime bundle used by Jupyter to display the graph"""
+        return {
+            "text/plain": repr(self),
+            "image/png": self.get_graph().draw_mermaid_png(),
+        }

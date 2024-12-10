@@ -192,6 +192,7 @@ nav:
             - how-tos/tool-calling.ipynb
             - how-tos/tool-calling-errors.ipynb
             - how-tos/pass-run-time-values-to-tools.ipynb
+            - how-tos/update-state-from-tools.ipynb
             - how-tos/pass-config-to-tools.ipynb
             - how-tos/many-tools.ipynb
         - Subgraphs:
@@ -199,6 +200,8 @@ nav:
             - how-tos/subgraph.ipynb
             - how-tos/subgraphs-manage-state.ipynb
             - how-tos/subgraph-transform-state.ipynb
+        - Multi-agent:
+            - how-tos/multi-agent-network.ipynb
         - State Management:
             - State Management: how-tos#state-management
             - how-tos/state-model.ipynb

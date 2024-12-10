@@ -13,6 +13,7 @@ from langgraph.constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
+    RETURN,
     TAG_HIDDEN,
     TASKS,
 )
@@ -95,11 +96,7 @@ def map_command(
         else:
             yield (NULL_TASK_ID, RESUME, cmd.resume)
     if cmd.update:
-        if not isinstance(cmd.update, dict):
-            raise TypeError(
-                f"Expected cmd.update to be a dict mapping channel names to update values, got {type(cmd.update).__name__}"
-            )
-        for k, v in cmd.update.items():
+        for k, v in cmd._update_as_tuples():
             yield (NULL_TASK_ID, k, v)
 
 
@@ -171,22 +168,21 @@ def map_output_updates(
     ]
     if not output_tasks:
         return
-    if isinstance(output_channels, str):
-        updated = (
-            (task.name, value)
-            for task, writes in output_tasks
-            for chan, value in writes
-            if chan == output_channels
-        )
-    else:
-        updated = (
-            (
-                task.name,
-                {chan: value for chan, value in writes if chan in output_channels},
+    updated: list[tuple[str, Any]] = []
+    for task, writes in output_tasks:
+        if rtn := next((value for chan, value in writes if chan == RETURN), None):
+            updated.append((task.name, rtn))
+        elif isinstance(output_channels, str):
+            updated.extend(
+                (task.name, value) for chan, value in writes if chan == output_channels
             )
-            for task, writes in output_tasks
-            if any(chan in output_channels for chan, _ in writes)
-        )
+        elif any(chan in output_channels for chan, _ in writes):
+            updated.append(
+                (
+                    task.name,
+                    {chan: value for chan, value in writes if chan in output_channels},
+                )
+            )
     grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)

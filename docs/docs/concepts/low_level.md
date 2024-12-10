@@ -339,37 +339,6 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
     )
 ```
 
-`Command` has the following properties:
-
-| Property | Description |
-| --- | --- |
-| `graph` | Graph to send the command to. Supported values:<br>- `None`: the current graph (default)<br>- `Command.PARENT`: closest parent graph |
-| `update` | Update to apply to the graph's state. |
-| `resume` | Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt]. |
-| `goto` | Can be one of the following:<br>- name of the node to navigate to next (any node that belongs to the specified `graph`)<br>- sequence of node names to navigate to next<br>- `Send` object (to execute a node with the input provided)<br>- sequence of `Send` objects<br>If `goto` is not specified and there are no other tasks left in the graph, the graph will halt after executing the current superstep. |
-
-```python
-from langgraph.graph import StateGraph, START
-from langgraph.types import Command
-from typing_extensions import Literal, TypedDict
-
-class State(TypedDict):
-    foo: str
-
-def my_node(state: State) -> Command[Literal["my_other_node"]]:
-    return Command(update={"foo": "bar"}, goto="my_other_node")
-
-def my_other_node(state: State):
-    return {"foo": state["foo"] + "baz"}
-
-builder = StateGraph(State)
-builder.add_edge(START, "my_node")
-builder.add_node("my_node", my_node)
-builder.add_node("my_other_node", my_other_node)
-
-graph = builder.compile()
-```
-
 With `Command` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
 
 ```python
@@ -380,9 +349,33 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
 !!! important
 
-    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["node_b", "node_c"]]`. This is necessary for the graph compilation and rendering, and tells LangGraph that `node_a` can navigate to `node_b` and `node_c`.
+    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph rendering and tells LangGraph that `my_node` can navigate to `my_other_node`.
 
 Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
+
+### Using inside tools
+
+A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
+
+```python
+@tool
+def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: RunnableConfig):
+    """Use this to look up user information to better assist them with their questions."""
+    user_info = get_user_info(config.get("configurable", {}).get("user_id"))
+    return Command(
+        update={
+            # update the state keys
+            "user_info": user_info,
+            # update the message history
+            "messages": [ToolMessage("Successfully looked up user information", tool_call_id=tool_call_id)]
+        }
+    )
+```
+
+!!! important
+    You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
+
+If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
 
 ## Persistence
 

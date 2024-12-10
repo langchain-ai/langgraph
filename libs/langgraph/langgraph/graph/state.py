@@ -51,7 +51,11 @@ from langgraph.managed.base import (
     is_writable_managed_value,
 )
 from langgraph.pregel.read import ChannelRead, PregelNode
-from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
+from langgraph.pregel.write import (
+    ChannelWrite,
+    ChannelWriteEntry,
+    ChannelWriteTupleEntry,
+)
 from langgraph.store.base import BaseStore
 from langgraph.types import All, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default
@@ -608,33 +612,59 @@ class CompiledStateGraph(CompiledGraph):
                 if is_writable_managed_value(v)
             ]
 
-        def _get_root(input: Any) -> Any:
+        def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
             if isinstance(input, Command):
                 if input.graph == Command.PARENT:
-                    return SKIP_WRITE
-                return input.update
-            else:
-                return input
+                    return ()
+                return input._update_as_tuples()
+            elif (
+                isinstance(input, (list, tuple))
+                and input
+                and any(isinstance(i, Command) for i in input)
+            ):
+                updates: list[tuple[str, Any]] = []
+                for i in input:
+                    if isinstance(i, Command):
+                        if i.graph == Command.PARENT:
+                            continue
+                        updates.extend(i._update_as_tuples())
+                    else:
+                        updates.append(("__root__", i))
+                return updates
+            elif input is not None:
+                return [("__root__", input)]
 
-        # to avoid name collision below
-        node_key = key
-
-        def _get_state_key(input: Union[None, dict, Any], *, key: str) -> Any:
+        def _get_updates(
+            input: Union[None, dict, Any],
+        ) -> Optional[Sequence[tuple[str, Any]]]:
             if input is None:
-                return SKIP_WRITE
+                return None
             elif isinstance(input, dict):
-                if all(k not in output_keys for k in input):
-                    raise InvalidUpdateError(
-                        f"Expected node {node_key} to update at least one of {output_keys}, got {input}"
-                    )
-                return input.get(key, SKIP_WRITE)
+                return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
-                    return SKIP_WRITE
-                return _get_state_key(input.update, key=key)
+                    return None
+                return input._update_as_tuples()
+            elif (
+                isinstance(input, (list, tuple))
+                and input
+                and any(isinstance(i, Command) for i in input)
+            ):
+                updates: list[tuple[str, Any]] = []
+                for i in input:
+                    if isinstance(i, Command):
+                        if i.graph == Command.PARENT:
+                            continue
+                        updates.extend(i._update_as_tuples())
+                    else:
+                        updates.extend(_get_updates(i) or ())
+                return updates
             elif get_type_hints(type(input)):
-                value = getattr(input, key, SKIP_WRITE)
-                return value if value is not None else SKIP_WRITE
+                return [
+                    (k, getattr(input, k))
+                    for k in output_keys
+                    if getattr(input, k, None) is not None
+                ]
             else:
                 msg = create_error_message(
                     message=f"Expected dict, got {input}",
@@ -643,14 +673,11 @@ class CompiledStateGraph(CompiledGraph):
                 raise InvalidUpdateError(msg)
 
         # state updaters
-        write_entries = (
-            [ChannelWriteEntry("__root__", skip_none=True, mapper=_get_root)]
-            if output_keys == ["__root__"]
-            else [
-                ChannelWriteEntry(key, mapper=partial(_get_state_key, key=key))
-                for key in output_keys
-            ]
-        )
+        write_entries: list[Union[ChannelWriteEntry, ChannelWriteTupleEntry]] = [
+            ChannelWriteTupleEntry(
+                mapper=_get_root if output_keys == ["__root__"] else _get_updates
+            )
+        ]
 
         # add node and output channel
         if key == START:
@@ -685,7 +712,7 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
-                        [ChannelWriteEntry(key, key)] + write_entries,
+                        write_entries + [ChannelWriteEntry(key, key)],
                         tags=[TAG_HIDDEN],
                     ),
                 ],
@@ -811,34 +838,54 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, Command):
-        return EMPTY_SEQ
-    if value.graph == Command.PARENT:
-        raise ParentCommand(value)
-    rtn: list[Union[str, Send]] = []
-    if isinstance(value.goto, Send):
-        rtn.append(value.goto)
-    elif isinstance(value.goto, str):
-        rtn.append(value.goto)
+    commands: list[Command] = []
+    if isinstance(value, Command):
+        commands.append(value)
+    elif (
+        isinstance(value, (list, tuple))
+        and value
+        and all(isinstance(i, Command) for i in value)
+    ):
+        commands.extend(value)
     else:
-        rtn.extend(value.goto)
+        return EMPTY_SEQ
+    rtn: list[Union[str, Send]] = []
+    for command in commands:
+        if command.graph == Command.PARENT:
+            raise ParentCommand(command)
+        if isinstance(command.goto, Send):
+            rtn.append(command.goto)
+        elif isinstance(command.goto, str):
+            rtn.append(command.goto)
+        else:
+            rtn.extend(command.goto)
     return rtn
 
 
 async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     if isinstance(value, Send):
         return [value]
-    if not isinstance(value, Command):
-        return EMPTY_SEQ
-    if value.graph == Command.PARENT:
-        raise ParentCommand(value)
-    rtn: list[Union[str, Send]] = []
-    if isinstance(value.goto, Send):
-        rtn.append(value.goto)
-    elif isinstance(value.goto, str):
-        rtn.append(value.goto)
+    commands: list[Command] = []
+    if isinstance(value, Command):
+        commands.append(value)
+    elif (
+        isinstance(value, (list, tuple))
+        and value
+        and all(isinstance(i, Command) for i in value)
+    ):
+        commands.extend(value)
     else:
-        rtn.extend(value.goto)
+        return EMPTY_SEQ
+    rtn: list[Union[str, Send]] = []
+    for command in commands:
+        if command.graph == Command.PARENT:
+            raise ParentCommand(command)
+        if isinstance(command.goto, Send):
+            rtn.append(command.goto)
+        elif isinstance(command.goto, str):
+            rtn.append(command.goto)
+        else:
+            rtn.extend(command.goto)
     return rtn
 
 

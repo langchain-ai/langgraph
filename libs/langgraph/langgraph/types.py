@@ -32,6 +32,14 @@ if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
 
 
+try:
+    from langchain_core.messages.tool import ToolOutputMixin
+except ImportError:
+
+    class ToolOutputMixin:  # type: ignore[no-redef]
+        pass
+
+
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
@@ -244,14 +252,14 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N]):
+class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
     Args:
         graph: graph to send the command to. Supported values are:
 
             - None: the current graph (default)
-            - GraphCommand.PARENT: closest parent graph
+            - Command.PARENT: closest parent graph
         update: update to apply to the graph's state.
         resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
         goto: can be one of the following:
@@ -263,7 +271,7 @@ class Command(Generic[N]):
     """
 
     graph: Optional[str] = None
-    update: Optional[dict[str, Any]] = None
+    update: Union[dict[str, Any], Sequence[tuple[str, Any]]] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
@@ -275,6 +283,17 @@ class Command(Generic[N]):
             if value
         )
         return f"Command({contents})"
+
+    def _update_as_tuples(self) -> Sequence[tuple[str, Any]]:
+        if isinstance(self.update, dict):
+            return list(self.update.items())
+        elif isinstance(self.update, (list, tuple)) and all(
+            isinstance(t, tuple) and len(t) == 2 and isinstance(t[0], str)
+            for t in self.update
+        ):
+            return self.update
+        else:
+            return [("__root__", self.update)]
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 

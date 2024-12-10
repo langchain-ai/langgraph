@@ -81,6 +81,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
 - [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
+- [How to update graph state from tools](update-state-from-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
 ### Subgraphs
@@ -90,6 +91,12 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to add and use subgraphs](subgraph.ipynb)
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
 - [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
+
+### Multi-agent
+
+- [How to build a multi-agent network](multi-agent-network.ipynb)
+
+See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
 ### State Management
 

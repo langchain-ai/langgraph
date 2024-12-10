@@ -21,7 +21,6 @@ from typing import (
 
 import orjson
 from psycopg import Capabilities, Connection, Cursor, Pipeline
-from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -73,7 +72,7 @@ CREATE TABLE IF NOT EXISTS store (
 """,
     """
 -- For faster lookups by prefix
-CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
 """,
 ]
 
@@ -107,7 +106,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     ),
     Migration(
         """
-CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
     USING %(index_type)s (embedding %(ops)s)%(index_params)s;
 """,
         condition=lambda store: bool(
@@ -573,6 +572,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
 
         # Search by similarity
         results = store.search(("docs",), query="python programming")
+        ```
 
     Note:
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
@@ -846,22 +846,19 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         """
 
         def _get_version(cur: Cursor[dict[str, Any]], table: str) -> int:
-            try:
-                cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
-                row = cast(dict, cur.fetchone())
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
-                version = -1
-                cur.execute(
-                    f"""
-                    CREATE TABLE IF NOT EXISTS {table} (
-                        v INTEGER PRIMARY KEY
-                    )
-                """
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    v INTEGER PRIMARY KEY
                 )
+            """
+            )
+            cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
+            row = cast(dict, cur.fetchone())
+            if row is None:
+                version = -1
+            else:
+                version = row["v"]
             return version
 
         with self._cursor() as cur:

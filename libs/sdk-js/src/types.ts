@@ -40,9 +40,11 @@ export interface Command {
   resume?: unknown;
 
   /**
-   * A single, or array of `Send` commands to trigger nodes.
+   * Determine the next node to navigate to. Can be one of the following:
+   * - Name(s) of the node names to navigate to next.
+   * - `Send` command(s) to execute node(s) with provided input.
    */
-  send?: Send | Send[];
+  goto?: Send | Send[] | string | string[];
 }
 
 interface RunsInvokePayload {
