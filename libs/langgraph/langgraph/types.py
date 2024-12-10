@@ -33,9 +33,9 @@ if TYPE_CHECKING:
 
 
 try:
-    from langchain_core.tools import ToolDirectOutputMixin
+    from langchain_core.messages.tool import ToolOutputMixin
 except ImportError:
-    ToolDirectOutputMixin = object
+    ToolOutputMixin = object
 
 
 All = Literal["*"]
@@ -250,7 +250,7 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N], ToolDirectOutputMixin):
+class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
     Args:
