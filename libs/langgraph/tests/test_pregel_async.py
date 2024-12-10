@@ -13199,3 +13199,64 @@ async def test_interrupt_loop(checkpointer_name: str):
         ] == [
             {"node": {"age": 19}},
         ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multistep_plan(checkpointer_name: str):
+    from langchain_core.messages import AnyMessage
+
+    class State(TypedDict, total=False):
+        plan: list[Union[str, list[str]]]
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    def planner(state: State):
+        if state.get("plan") is None:
+            # create plan somehow
+            plan = ["step1", ["step2", "step3"], "step4"]
+            # pick the first step to execute next
+            first_step, *plan = plan
+            # put the rest of plan in state
+            return Command(goto=first_step, update={"plan": plan})
+        elif state["plan"]:
+            # go to the next step of the plan
+            next_step, *next_plan = state["plan"]
+            return Command(goto=next_step, update={"plan": next_plan})
+        else:
+            # the end of the plan
+            pass
+
+    def step1(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step1")]})
+
+    def step2(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step2")]})
+
+    def step3(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step3")]})
+
+    def step4(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step4")]})
+
+    builder = StateGraph(State)
+    builder.add_node(planner)
+    builder.add_node(step1)
+    builder.add_node(step2)
+    builder.add_node(step3)
+    builder.add_node(step4)
+    builder.add_edge(START, "planner")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+
+        config = {"configurable": {"thread_id": "1"}}
+
+        assert await graph.ainvoke({"messages": [("human", "start")]}, config) == {
+            "messages": [
+                _AnyIdHumanMessage(content="start"),
+                _AnyIdHumanMessage(content="step1"),
+                _AnyIdHumanMessage(content="step2"),
+                _AnyIdHumanMessage(content="step3"),
+                _AnyIdHumanMessage(content="step4"),
+            ],
+            "plan": [],
+        }
