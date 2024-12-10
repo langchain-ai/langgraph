@@ -323,7 +323,10 @@ class ToolNode(RunnableCallable):
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
             return ToolMessage(
-                content=content, name=call["name"], tool_call_id=call["id"], status="error"
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
             )
 
         if isinstance(response, Command):
@@ -376,7 +379,10 @@ class ToolNode(RunnableCallable):
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
 
             return ToolMessage(
-                content=content, name=call["name"], tool_call_id=call["id"], status="error"
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
             )
 
         if isinstance(response, Command):
