@@ -300,30 +300,18 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            tool = self.tools_by_name[call["name"]]
-            if tool.response_format != "content":
-                # handle "content_and_artifact"
-                tool_message: ToolMessage = tool.invoke(
-                    {**call, **{"type": "tool_call"}}
-                )
-                tool_message.content = cast(
-                    Union[str, list], msg_content_output(tool_message.content)
-                )
-                return tool_message
-
-            # invoke the tool with raw args to return raw value instead of a ToolMessage
-            response = tool.invoke(call["args"])
+            input = {**call, **{"type": "tool_call"}}
+            response = self.tools_by_name[call["name"]].invoke(input)
             if isinstance(response, Command):
-                return self._add_tool_call_name_and_id_to_command(
-                    response, call, input_type
-                )
+                return self._validate_tool_command(response, call, input_type)
             elif isinstance(response, ToolMessage):
+                response.content = cast(
+                    Union[str, list], msg_content_output(response.content)
+                )
                 return response
             else:
-                return ToolMessage(
-                    content=cast(Union[str, list], msg_content_output(response)),
-                    name=call["name"],
-                    tool_call_id=call["id"],
+                raise TypeError(
+                    f"Tool {call['name']} returned unexpected type: {type(response)}"
                 )
 
         # GraphInterrupt is a special exception that will always be raised.
@@ -364,29 +352,20 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            tool = self.tools_by_name[call["name"]]
-            if tool.response_format != "content":
-                # handle "content_and_artifact"
-                tool_message: ToolMessage = await tool.ainvoke(
-                    {**call, **{"type": "tool_call"}}
-                )
-                tool_message.content = cast(
-                    Union[str, list], msg_content_output(tool_message.content)
-                )
-                return tool_message
-
-            # invoke the tool with raw args to return raw value instead of a ToolMessage
-            response = await tool.ainvoke(call["args"])
+            input = {**call, **{"type": "tool_call"}}
+            response = await self.tools_by_name[call["name"]].ainvoke(input)
             if isinstance(response, Command):
-                return self._add_tool_call_name_and_id_to_command(
-                    response, call, input_type
+                return self._validate_tool_command(response, call, input_type)
+            elif isinstance(response, ToolMessage):
+                response.content = cast(
+                    Union[str, list], msg_content_output(response.content)
                 )
+                return response
             else:
-                return ToolMessage(
-                    content=cast(Union[str, list], msg_content_output(response)),
-                    name=call["name"],
-                    tool_call_id=call["id"],
+                raise TypeError(
+                    f"Tool {call['name']} returned unexpected type: {type(response)}"
                 )
+
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
@@ -537,7 +516,7 @@ class ToolNode(RunnableCallable):
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
         return tool_call_with_store
 
-    def _add_tool_call_name_and_id_to_command(
+    def _validate_tool_command(
         self, command: Command, call: ToolCall, input_type: Literal["list", "dict"]
     ) -> Command:
         if isinstance(command.update, dict):
@@ -576,10 +555,12 @@ class ToolNode(RunnableCallable):
                     f"Expected at most one ToolMessage in Command.update for tool '{call['name']}', got multiple: {messages_update}."
                 )
 
+            if message.tool_call_id != call["id"]:
+                raise InvalidToolCommandError(
+                    f"ToolMessage.tool_call_id must match the tool call id. Expected: {call['id']}, got: {message.tool_call_id} for tool '{call['name']}'."
+                )
+
             message.name = call["name"]
-            # TODO: update this to validate that the tool call id matches the tool call id in the command (instead of assigning)
-            # once propagating tool_call_id is supported in langchain_core tools
-            message.tool_call_id = cast(str, call["id"])
             have_seen_tool_messages = True
 
         # validate that we always have exactly one ToolMessage in Command.update if command is sent to the CURRENT graph

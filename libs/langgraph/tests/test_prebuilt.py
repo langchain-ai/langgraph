@@ -31,6 +31,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
+from langchain_core.tools.base import InjectedToolCallId
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
@@ -877,8 +878,7 @@ def test_tool_node_individual_tool_error_handling():
 
     tool_message: ToolMessage = result_individual_tool_error_handler["messages"][-1]
     assert tool_message.type == "tool"
-    # TODO: figure out how to propagate this properly
-    # assert tool_message.status == "error"
+    assert tool_message.status == "error"
     assert tool_message.content == "foo"
     assert tool_message.tool_call_id == "some 0"
 
@@ -990,37 +990,78 @@ def test_tool_node_node_interrupt():
     assert task.interrupts == (Interrupt(value="foo", when="during"),)
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 async def test_tool_node_command():
-    command = Command(
-        update={
-            "messages": [ToolMessage(content="Transferred to Bob", tool_call_id="")]
-        },
-        goto="bob",
-        graph=Command.PARENT,
-    )
+    @dec_tool
+    def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Transfer to Bob"""
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(content="Transferred to Bob", tool_call_id=tool_call_id)
+                ]
+            },
+            goto="bob",
+            graph=Command.PARENT,
+        )
 
     @dec_tool
-    def transfer_to_bob():
+    async def async_transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
         """Transfer to Bob"""
-        return command
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(content="Transferred to Bob", tool_call_id=tool_call_id)
+                ]
+            },
+            goto="bob",
+            graph=Command.PARENT,
+        )
 
-    @dec_tool
-    async def async_transfer_to_bob():
-        """Transfer to Bob"""
-        return command
+    class CustomToolSchema(BaseModel):
+        tool_call_id: Annotated[str, InjectedToolCallId]
 
     class MyCustomTool(BaseTool):
         def _run(*args: Any, **kwargs: Any):
-            return command
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id=kwargs["tool_call_id"],
+                        )
+                    ]
+                },
+                goto="bob",
+                graph=Command.PARENT,
+            )
 
         async def _arun(*args: Any, **kwargs: Any):
-            return command
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id=kwargs["tool_call_id"],
+                        )
+                    ]
+                },
+                goto="bob",
+                graph=Command.PARENT,
+            )
 
     custom_tool = MyCustomTool(
-        name="custom_transfer_to_bob", description="Transfer to bob"
+        name="custom_transfer_to_bob",
+        description="Transfer to bob",
+        args_schema=CustomToolSchema,
     )
     async_custom_tool = MyCustomTool(
-        name="async_custom_transfer_to_bob", description="Transfer to bob"
+        name="async_custom_transfer_to_bob",
+        description="Transfer to bob",
+        args_schema=CustomToolSchema,
     )
 
     # test mixing regular tools and tools returning commands
@@ -1170,9 +1211,11 @@ async def test_tool_node_command():
     with pytest.raises(InvalidToolCommandError):
 
         @dec_tool
-        def list_update_tool():
+        def list_update_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
             """My tool"""
-            return Command(update=[ToolMessage(content="foo", tool_call_id="")])
+            return Command(
+                update=[ToolMessage(content="foo", tool_call_id=tool_call_id)]
+            )
 
         ToolNode([list_update_tool]).invoke(
             {
@@ -1260,35 +1303,70 @@ async def test_tool_node_command():
             )
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 async def test_tool_node_command_list_input():
-    command = Command(
-        update=[ToolMessage(content="Transferred to Bob", tool_call_id="")],
-        goto="bob",
-        graph=Command.PARENT,
-    )
+    @dec_tool
+    def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Transfer to Bob"""
+        return Command(
+            update=[
+                ToolMessage(content="Transferred to Bob", tool_call_id=tool_call_id)
+            ],
+            goto="bob",
+            graph=Command.PARENT,
+        )
 
     @dec_tool
-    def transfer_to_bob():
+    async def async_transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
         """Transfer to Bob"""
-        return command
+        return Command(
+            update=[
+                ToolMessage(content="Transferred to Bob", tool_call_id=tool_call_id)
+            ],
+            goto="bob",
+            graph=Command.PARENT,
+        )
 
-    @dec_tool
-    async def async_transfer_to_bob():
-        """Transfer to Bob"""
-        return command
+    class CustomToolSchema(BaseModel):
+        tool_call_id: Annotated[str, InjectedToolCallId]
 
     class MyCustomTool(BaseTool):
         def _run(*args: Any, **kwargs: Any):
-            return command
+            return Command(
+                update=[
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id=kwargs["tool_call_id"],
+                    )
+                ],
+                goto="bob",
+                graph=Command.PARENT,
+            )
 
         async def _arun(*args: Any, **kwargs: Any):
-            return command
+            return Command(
+                update=[
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id=kwargs["tool_call_id"],
+                    )
+                ],
+                goto="bob",
+                graph=Command.PARENT,
+            )
 
     custom_tool = MyCustomTool(
-        name="custom_transfer_to_bob", description="Transfer to bob"
+        name="custom_transfer_to_bob",
+        description="Transfer to bob",
+        args_schema=CustomToolSchema,
     )
     async_custom_tool = MyCustomTool(
-        name="async_custom_transfer_to_bob", description="Transfer to bob"
+        name="async_custom_transfer_to_bob",
+        description="Transfer to bob",
+        args_schema=CustomToolSchema,
     )
 
     # test mixing regular tools and tools returning commands
@@ -1410,10 +1488,12 @@ async def test_tool_node_command_list_input():
     with pytest.raises(InvalidToolCommandError):
 
         @dec_tool
-        def list_update_tool():
+        def list_update_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
             """My tool"""
             return Command(
-                update={"messages": [ToolMessage(content="foo", tool_call_id="")]}
+                update={
+                    "messages": [ToolMessage(content="foo", tool_call_id=tool_call_id)]
+                }
             )
 
         ToolNode([list_update_tool]).invoke(
@@ -1488,19 +1568,25 @@ async def test_tool_node_command_list_input():
             )
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
 def test_react_agent_update_state():
     class State(AgentState):
         user_name: str
 
     @dec_tool
-    def get_user_name():
+    def get_user_name(tool_call_id: Annotated[str, InjectedToolCallId]):
         """Retrieve user name"""
         user_name = interrupt("Please provider user name:")
         return Command(
             update={
                 "user_name": user_name,
                 "messages": [
-                    ToolMessage("Successfully retrieved user name", tool_call_id="")
+                    ToolMessage(
+                        "Successfully retrieved user name", tool_call_id=tool_call_id
+                    )
                 ],
             }
         )
