@@ -31,7 +31,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
-from langchain_core.tools.base import InjectedToolCallId
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
@@ -994,6 +993,8 @@ def test_tool_node_node_interrupt():
     reason="Langchain core 0.3.0 or greater is required",
 )
 async def test_tool_node_command():
+    from langchain_core.tools.base import InjectedToolCallId
+
     @dec_tool
     def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
         """Transfer to Bob"""
@@ -1307,6 +1308,8 @@ async def test_tool_node_command():
     reason="Langchain core 0.3.0 or greater is required",
 )
 async def test_tool_node_command_list_input():
+    from langchain_core.tools.base import InjectedToolCallId
+
     @dec_tool
     def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
         """Transfer to Bob"""
@@ -1572,6 +1575,8 @@ async def test_tool_node_command_list_input():
     reason="Langchain core 0.3.0 or greater is required",
 )
 def test_react_agent_update_state():
+    from langchain_core.tools.base import InjectedToolCallId
+
     class State(AgentState):
         user_name: str
 
