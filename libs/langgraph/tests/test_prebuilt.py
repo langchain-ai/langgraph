@@ -52,7 +52,6 @@ from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
     InjectedStore,
-    InvalidToolCommandError,
     _get_state_args,
     _infer_handled_types,
 )
@@ -1208,7 +1207,7 @@ async def test_tool_node_command():
     ]
 
     # test validation (mismatch between input type and command.update type)
-    with pytest.raises(InvalidToolCommandError):
+    with pytest.raises(ValueError):
 
         @dec_tool
         def list_update_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1231,7 +1230,7 @@ async def test_tool_node_command():
         )
 
     # test validation (missing tool message in the update for current graph)
-    with pytest.raises(InvalidToolCommandError):
+    with pytest.raises(ValueError):
 
         @dec_tool
         def no_update_tool():
@@ -1269,7 +1268,7 @@ async def test_tool_node_command():
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
 
     # test validation (multiple tool messages)
-    with pytest.raises(InvalidToolCommandError):
+    with pytest.raises(ValueError):
         for graph in (None, Command.PARENT):
 
             @dec_tool
@@ -1485,7 +1484,7 @@ async def test_tool_node_command_list_input():
     ]
 
     # test validation (mismatch between input type and command.update type)
-    with pytest.raises(InvalidToolCommandError):
+    with pytest.raises(ValueError):
 
         @dec_tool
         def list_update_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1506,7 +1505,7 @@ async def test_tool_node_command_list_input():
         )
 
     # test validation (missing tool message in the update for current graph)
-    with pytest.raises(InvalidToolCommandError):
+    with pytest.raises(ValueError):
 
         @dec_tool
         def no_update_tool():
@@ -1538,7 +1537,7 @@ async def test_tool_node_command_list_input():
     ) == [Command(update=[], graph=Command.PARENT)]
 
     # test validation (multiple tool messages)
-    with pytest.raises(InvalidToolCommandError):
+    with pytest.raises(ValueError):
         for graph in (None, Command.PARENT):
 
             @dec_tool
