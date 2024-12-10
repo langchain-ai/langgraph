@@ -78,40 +78,47 @@ critical in applications where the tool calls requested by the LLM may be sensit
 </figure>
 
 
-```python
-from langgraph.types import interrupt
+=== "Review tool calls"
 
-def human_editing(state: State):
-    ...
-    result = interrupt(
-        # Interrupt information to surface to the client.
-        # Can be any JSON serializable value.
-        {
-            "task": "Review the output from the LLM and make any necessary edits.",
-            "llm_output": state["llm_output"]
+    TODO: Create an example for tool call review.
+
+
+=== "Review text output from the LLM and make any necessary edits."
+
+    ```python
+    from langgraph.types import interrupt
+
+    def human_editing(state: State):
+        ...
+        result = interrupt(
+            # Interrupt information to surface to the client.
+            # Can be any JSON serializable value.
+            {
+                "task": "Review the output from the LLM and make any necessary edits.",
+                "llm_output": state["llm_output"]
+            }
+        )
+
+        # Update the state with the edited text
+        return {
+            "llm_output": result["edited_text"] 
         }
+
+    # Add the node to the graph in an appropriate location
+    # and connect it to the relevant nodes.
+    graph_builder.add_node("human_editing", human_editing)
+    graph = graph_builder.compile(checkpointer=checkpointer)
+
+    ...
+
+    # After running the graph and hitting the breakpoint, the graph will pause.
+    # Resume it with the edited text.
+    thread_config = {"configurable": {"thread_id": "some_id"}}
+    graph.invoke(
+        Command(resume={"edited_text": "The edited text"}), 
+        config=thread_config
     )
-
-    # Update the state with the edited text
-    return {
-        "llm_output": result["edited_text"] 
-    }
-
-# Add the node to the graph in an appropriate location
-# and connect it to the relevant nodes.
-graph_builder.add_node("human_editing", human_editing)
-graph = graph_builder.compile(checkpointer=checkpointer)
-
-...
-
-# After running the graph and hitting the breakpoint, the graph will pause.
-# Resume it with the edited text.
-thread_config = {"configurable": {"thread_id": "some_id"}}
-graph.invoke(
-    Command(resume={"edited_text": "The edited text"}), 
-    config=thread_config
-)
-```
+    ```
 
 ### Multi-turn conversation (Input)
 
