@@ -454,6 +454,7 @@ class MemorySaver(
             task_id (str): Identifier for the task creating the writes.
         return self.put_writes(config, writes, task_id)
         """
+        return self.put_writes(config, writes, task_id)
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
