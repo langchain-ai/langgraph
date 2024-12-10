@@ -153,7 +153,7 @@ network = builder.compile()
 
 ### Supervisor
 
-In this architecture, we define agents as nodes and add a supervisor node (LLM) that decides which agent nodes should be called next. We use [conditional edges](./low_level.md#conditional-edges) to route execution to the appropriate agent node based on supervisor's decision. This architecture also lends itself well to running multiple agents in parallel or using [map-reduce](../how-tos/map-reduce.ipynb) pattern.
+In this architecture, we define agents as nodes and add a supervisor node (LLM) that decides which agent nodes should be called next. We use [`Command`](./low_level.md#command) to route execution to the appropriate agent node based on supervisor's decision. This architecture also lends itself well to running multiple agents in parallel or using [map-reduce](../how-tos/map-reduce.ipynb) pattern.
 
 ```python
 from typing import Literal
