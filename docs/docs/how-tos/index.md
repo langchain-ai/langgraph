@@ -81,6 +81,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
 - [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
+- [How to update graph state from tools](update-state-from-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
 ### Subgraphs
