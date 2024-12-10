@@ -100,6 +100,7 @@ class StateNodeSpec(NamedTuple):
     metadata: Optional[dict[str, Any]]
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
     ends: Optional[tuple[str, ...]] = EMPTY_SEQ
 
 
@@ -404,8 +405,8 @@ class StateGraph(Graph):
             metadata,
             input=input or self.schema,
             retry_policy=retry,
+            cache_policy=cache,
             ends=ends,
-            cache=cache,
         )
         return self
 

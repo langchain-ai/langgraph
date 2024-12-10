@@ -26,6 +26,7 @@ from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
+from langgraph.pregel.types import CachePolicy
 
 READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
 
@@ -139,6 +140,11 @@ class PregelNode(Runnable):
     retry_policy: Optional[RetryPolicy]
     """The retry policy to use when invoking the node."""
 
+    cache_policy: Optional[CachePolicy]
+    """The cache policy to use when invoking the node. Determines `task_id` and 
+    whether a node that has already been invoked will be invoked again, under
+    specified constraints"""
+
     tags: Optional[Sequence[str]]
     """Tags to attach to the node for tracing."""
 
@@ -156,6 +162,7 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        cache_policy: Optional[CachePolicy] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -165,6 +172,7 @@ class PregelNode(Runnable):
         self.retry_policy = retry_policy
         self.tags = tags
         self.metadata = metadata
+        self.cache_policy: cache_policy
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
