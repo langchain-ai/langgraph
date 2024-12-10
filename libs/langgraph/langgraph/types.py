@@ -106,10 +106,10 @@ class RetryPolicy(NamedTuple):
 
 class CachePolicy(NamedTuple):
     """Configuration for caching nodes."""
-    cache_key: Callable[[Any], str]
-    """a function that generates a hash from a subset of the input of a task"""
+    cache_key: Optional[Callable[[Any], str]]
+    """A function that generates a hash from a subset of the input of a task, defining cached writes for a task. If not provided, all writes are cached."""
     ttl: Optional[float]
-    """Time to live (sec) for the cached write corresponding to a task. Default is forever."""
+    """Time to live (sec) for the cached write corresponding to a task. If not provided, writes are cached forever"""
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
