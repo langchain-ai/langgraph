@@ -15016,16 +15016,16 @@ def test_command_goto_with_static_breakpoints(
     class State(TypedDict):
         """The graph state."""
 
-        foo: str
+        foo: Annotated[str, operator.add]
 
     def node1(state: State):
         return {
-            "foo": state["foo"] + "|node-1",
+            "foo": "|node-1",
         }
 
     def node2(state: State):
         return {
-            "foo": state["foo"] + "|node-2",
+            "foo": "|node-2",
         }
 
     builder = StateGraph(State)
@@ -15041,4 +15041,4 @@ def test_command_goto_with_static_breakpoints(
     # Start the graph and interrupt at the first node
     graph.invoke({"foo": "abc"}, config)
     result = graph.invoke(Command(goto=["node2"]), config)
-    assert result == {"foo": "abc|node-2"}
+    assert result == {"foo": "abc|node-1|node-2|node-2"}
