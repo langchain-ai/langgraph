@@ -172,7 +172,7 @@ class PregelNode(Runnable):
         self.retry_policy = retry_policy
         self.tags = tags
         self.metadata = metadata
-        self.cache_policy: cache_policy
+        self.cache_policy = cache_policy
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
