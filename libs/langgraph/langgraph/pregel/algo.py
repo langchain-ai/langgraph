@@ -475,19 +475,30 @@ def prepare_single_task(
                     f"Ignoring unknown node name {packet.node} in pending sends"
                 )
                 return
+            
             # create task id
+            # -- if task is enabled for caching, create task_id based on node identifier and cache key
             triggers = [PUSH]
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                str(idx),
-            )
+            proc = processes[packet.node]
+            if proc.cache_policy:
+                cache_key = proc.cache_policy.cache_key,
+                task_id = _uuid5_str(
+                    b"",
+                    packet.node,
+                    cache_key
+                )
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    str(idx),
+                )
         elif len(task_path) == 4:
             # new PUSH tasks, executed in superstep n
             # (PUSH, parent task path, idx of PUSH write, id of parent task)
@@ -509,20 +520,31 @@ def prepare_single_task(
                     f"Ignoring unknown node name {packet.node} in pending writes"
                 )
                 return
+            
             # create task id
+            # -- if task is enabled for caching, create task_id based on node identifier and cache key
             triggers = [PUSH]
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                _tuple_str(task_path[1]),
-                str(task_path[2]),
-            )
+            proc = processes[packet.node]
+            if proc.cache_policy:
+                cache_key = proc.cache_policy.cache_key,
+                task_id = _uuid5_str(
+                    b"",
+                    packet.node,
+                    cache_key
+                )
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    _tuple_str(task_path[1]),
+                    str(task_path[2]),
+                )
         else:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
@@ -599,7 +621,7 @@ def prepare_single_task(
                     ),
                     triggers,
                     proc.retry_policy,
-                    None,
+                    proc.cache_policy,
                     task_id,
                     task_path,
                 )
@@ -635,15 +657,25 @@ def prepare_single_task(
                 return
 
             # create task id
+            # -- if task is enabled for caching, create task_id based on node identifier and cache key
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                name,
-                PULL,
-                *triggers,
-            )
+  
+            if proc.cache_policy:
+                cache_key = proc.cache_policy.cache_key,
+                task_id = _uuid5_str(
+                    b"",
+                    name,
+                    cache_key
+                )
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    name,
+                    PULL,
+                    *triggers,
+                )
             task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
             metadata = {
                 "langgraph_step": step,
@@ -717,7 +749,7 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        None,
+                        proc.cache_policy,
                         task_id,
                         task_path,
                     )
