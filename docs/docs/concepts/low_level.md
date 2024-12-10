@@ -355,7 +355,7 @@ Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end exampl
 
 ### When should I use Command instead of conditional edges?
 
-Use [`Command`] when you need to **both** update the graph state **and** route to a different node. For example, when implementing [multi-agent handoffs](./multi_agent.md#handoffs) where it's important to route to a different agent and pass some information to that agent.
+Use `Command` when you need to **both** update the graph state **and** route to a different node. For example, when implementing [multi-agent handoffs](./multi_agent.md#handoffs) where it's important to route to a different agent and pass some information to that agent.
 
 Consider using [conditional edges](#conditional-edges) to route between nodes conditionally without updating the state. Although this can be achieved with `Command(goto="node")`, overusing goto statements can make it difficult to debug and make the application’s control flow harder to follow.
 
