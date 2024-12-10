@@ -50,7 +50,7 @@ from langgraph.managed.base import (
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, All, Checkpointer, Command, N, RetryPolicy
+from langgraph.types import _DC_KWARGS, All, Checkpointer, Command, N, RetryPolicy, CachePolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
@@ -265,6 +265,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CachePolicy] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -288,6 +289,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CachePolicy] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -403,6 +405,7 @@ class StateGraph(Graph):
             input=input or self.schema,
             retry_policy=retry,
             ends=ends,
+            cache=cache,
         )
         return self
 
