@@ -11,6 +11,7 @@ from typing import (
     AsyncIterator,
     Callable,
     Dict,
+    Generator,
     Iterator,
     Mapping,
     Optional,
@@ -308,6 +309,44 @@ class Pregel(PregelProtocol):
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
+        # TODO: shouldn't this be in langchain_core?
+        def get_enhanced_type_hints(
+            type: Type[Any],
+        ) -> Generator[tuple[str, Any, Any, Optional[str]], None]:
+            """Attempt to extract default values and descriptions from provided config spec"""
+            for name, typ in get_type_hints(type).items():
+                default = None
+                description = None
+
+                # Pydantic models
+                try:
+                    if hasattr(type, "__fields__") and name in type.__fields__:
+                        field = type.__fields__[name]
+
+                        if (
+                            hasattr(field, "description")
+                            and field.description is not None
+                        ):
+                            description = field.description
+
+                        if hasattr(field, "default") and field.default is not None:
+                            default = field.default
+
+                except (AttributeError, KeyError, TypeError):
+                    pass
+
+                # TypedDict, dataclass
+                try:
+                    if hasattr(type, "__dict__"):
+                        type_dict = getattr(type, "__dict__")
+
+                        if name in type_dict:
+                            default = type_dict[name]
+                except (AttributeError, KeyError, TypeError):
+                    pass
+
+                yield name, typ, default, description
+
         return [
             spec
             for spec in get_unique_config_specs(
@@ -319,8 +358,15 @@ class Pregel(PregelProtocol):
                 )
                 + (
                     [
-                        ConfigurableFieldSpec(id=name, annotation=typ)
-                        for name, typ in get_type_hints(self.config_type).items()
+                        ConfigurableFieldSpec(
+                            id=name,
+                            annotation=typ,
+                            default=default,
+                            description=description,
+                        )
+                        for name, typ, default, description in get_enhanced_type_hints(
+                            self.config_type
+                        )
                     ]
                     if self.config_type is not None
                     else []
