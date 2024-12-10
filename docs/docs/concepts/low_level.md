@@ -359,7 +359,7 @@ A common use case is updating graph state from inside a tool. For example, in a 
 
 ```python
 @tool
-def lookup_user_info(tool_call_id: InjectedToolCallId, config: RunnableConfig):
+def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: RunnableConfig):
     """Use this to look up user information to better assist them with their questions."""
     user_info = get_user_info(config.get("configurable", {}).get("user_id"))
     return Command(
