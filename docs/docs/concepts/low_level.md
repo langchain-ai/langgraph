@@ -383,6 +383,10 @@ def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: R
 
 If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
 
+### Human-in-the-loop
+
+`Command` is an important part of human-in-the-loop workflows: when using `interrupt()` to collect user input, `Command` is then used to supply the input and resume execution via `Command(resume="User input")`. Check out [this conceptual guide](./human_in_the_loop.md) for more information.
+
 ## Persistence
 
 LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the
@@ -448,35 +452,32 @@ graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthr
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
 
+## `interrupt`
+
+Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing the developer to collect user input, validate the graph state, or make decisions before resuming execution.
+
+```python
+from langgraph.types import interrupt
+
+def human_approval_node(state: State):
+    ...
+    answer = interrupt(
+        # This value will be sent to the client.
+        # It can be any JSON serializable value.
+        {"question": "is it ok to continue?"},
+    )
+    ...
+```
+
+Resuming the graph is done by passing a [`Command`](#command) object to the graph with the `resume` key set to the value returned by the `interrupt` function.
+
+Read more about how the `interrupt` is used for **human-in-the-loop** workflows in the [Human-in-the-loop conceptual guide](./human_in_the_loop.md).
+
 ## Breakpoints
 
-It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
+Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt-function) for this purpose.
 
-You **MUST** use a [checkpointer](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
-
-In order to resume execution, you can just invoke your graph with `None` as the input.
-
-```python
-# Initial run of graph
-graph.invoke(inputs, config=config)
-
-# Let's assume it hit a breakpoint somewhere, you can then resume by passing in None
-graph.invoke(None, config=config)
-```
-
-See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
-
-### Dynamic Breakpoints
-
-It may be helpful to **dynamically** interrupt the graph from inside a given node based on some condition. In `LangGraph` you can do so by using `NodeInterrupt` -- a special exception that can be raised from inside a node.
-
-```python
-def my_node(state: State) -> State:
-    if len(state['input']) > 5:
-        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
-
-    return state
-```
+Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
 ## Subgraphs
 
@@ -517,7 +518,7 @@ The simplest way to create subgraph nodes is by using a [compiled subgraph](#com
     If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
 
 ```python
-from langgraph.graph import START, StateGraph
+from langgraph.graph import StateGraph
 from typing import TypedDict
 
 class State(TypedDict):
