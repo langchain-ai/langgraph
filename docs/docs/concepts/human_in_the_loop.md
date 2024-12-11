@@ -2,7 +2,7 @@
 
 !!! tip "This guide uses the new `interrupt` function."
 
-    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [interrupt](../reference/types.md#langgraph.types.interrupt) function as it significantly simpifies **human-in-the-loop** patterns. Please see the [Breakpoints](breakpoints.md) guide for more information.
+    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [interrupt](../reference/types.md#langgraph.types.interrupt) function as it significantly simplifies **human-in-the-loop** patterns. Please see the [Breakpoints](breakpoints.md) guide for more information.
 
     If you're looking for the previous version of this conceptual guide, which relied on static breakpoints and `NodeInterrupt` exception, it is available [here](v0-human-in-the-loop.md). 
 
@@ -164,15 +164,15 @@ def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
     review_action, review_data = human_review
 
     # Approve the tool call and continue
-    if review_data == "approve":
+    if review_action == "continue":
         return Command(goto="run_tool")
 
     # Modify the tool call manually and then continue
     elif review_action == "update":
         ...
         updated_msg = get_updated_msg(review_data)
-        # Remember that modify an existing message you will need
-        # pass the message with a matching ID.
+        # Remember that to modify an existing message you will need
+        # to pass the message with a matching ID.
         return Command(goto="run_tool", update={"messages": [updated_message]})
 
     # Give natural language feedback, and then pass that back to the agent

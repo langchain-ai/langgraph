@@ -191,7 +191,7 @@ Graph execution can be resumed using the [Command](../reference/types.md#langgra
 
 The `Command` primitive provides several options to control and modify the graph's state during resumption:
 
-1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph. THe `resume` value is only used when using `interrupt` as a breakpoint.
+1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph. The `resume` value is only used when using `interrupt` as a breakpoint.
  
        ```python
        # Resume graph execution with the user's input.
