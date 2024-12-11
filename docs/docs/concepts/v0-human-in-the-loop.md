@@ -29,7 +29,7 @@ All of these interaction patterns are enabled by LangGraph's built-in [persisten
 
 ### Breakpoints
 
-Adding a [breakpoint](./low_level.md#breakpoints) a specific location in the graph flow is one way to enable human-in-the-loop. In this case, the developer knows *where* in the workflow human input is needed and simply places a breakpoint prior to or following that particular graph node.
+Adding a [breakpoint](./breakpoints.md) a specific location in the graph flow is one way to enable human-in-the-loop. In this case, the developer knows *where* in the workflow human input is needed and simply places a breakpoint prior to or following that particular graph node.
 
 Here, we compile our graph with a checkpointer and a breakpoint at the node we want to interrupt before, `step_for_human_in_the_loop`. We then perform one of the above interaction patterns, which will create a new checkpoint if a human edits the graph state. The new checkpoint is saved to the `thread` and we can resume the graph execution from there by passing in `None` as the input.
 
@@ -127,7 +127,7 @@ See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed h
 
 Sometimes we want to review and edit the agent's state. 
  
-As with approval, we can interrupt our agent at a [breakpoint](./breakpoints) prior to the step we want to check. 
+As with approval, we can interrupt our agent at a [breakpoint](./breakpoints.md) prior to the step we want to check. 
  
 We can surface the current state to a user and allow the user to edit the agent state.
  
@@ -163,7 +163,7 @@ Sometimes we want to explicitly get human input at a particular step in the grap
  
 We can create a graph node designated for this (e.g., `human_input` in our example diagram).
  
-As with approval and editing, we can interrupt our agent at a [breakpoint](./breakpoints) prior to this node.
+As with approval and editing, we can interrupt our agent at a [breakpoint](./breakpoints.md) prior to this node.
  
 We can then perform a state update that includes the human input, just as we did with editing state.
 
