@@ -450,33 +450,37 @@ Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-li
 
 ## Breakpoints
 
-It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
+Breakpoints pause graph execution at specific points, enabling [**human-in-the-loop**](./human_in_the_loop.md) workflows and debugging. Breakpoints are powered by  LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. 
 
-You **MUST** use a [checkpointer](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
+You **MUST** use a [checkpointer](./persistence.md) when using breakpoints as breakpoints require the ability to save the state of the graph at the time of pausing.
 
-In order to resume execution, you can just invoke your graph with `None` as the input.
+There are two places where you can set breakpoints:
 
-```python
-# Initial run of graph
-graph.invoke(inputs, config=config)
+1. **Inside** a node using the [`interrupt` function](#the-interrupt-function) (or the older [`NodeInterrupt` exception](#nodeinterrupt-exception)).
+2. **Before** or **after** a node executes by setting breakpoints at **compile time** or **run time**. We call these [**static breakpoints**](#static-breakpoints).
 
-# Let's assume it hit a breakpoint somewhere, you can then resume by passing in None
-graph.invoke(None, config=config)
-```
+Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
-See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
+## `interrupt`
 
-### Dynamic Breakpoints
-
-It may be helpful to **dynamically** interrupt the graph from inside a given node based on some condition. In `LangGraph` you can do so by using `NodeInterrupt` -- a special exception that can be raised from inside a node.
+Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing the developer to collect user input, validate the graph state, or make decisions before resuming execution.
 
 ```python
-def my_node(state: State) -> State:
-    if len(state['input']) > 5:
-        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
+from langgraph.types import interrupt
 
-    return state
+def human_approval_node(state: State):
+    ...
+    answer = interrupt(
+        # This value will be sent to the client.
+        # It can be any JSON serializable value.
+        {"question": "is it ok to continue?"},
+    )
+    ...
 ```
+
+Resuming the graph is done by passing a [`Command`](#command) object to the graph with the `resume` key set to the value returned by the `interrupt` function.
+
+Read more about how the `interrupt` is used for **human-in-the-loop** workflows in the [Human-in-the-loop conceptual guide](./human_in_the_loop.md).
 
 ## Subgraphs
 
