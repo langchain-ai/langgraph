@@ -444,120 +444,37 @@ Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-li
 
 ## Breakpoints
 
-Breakpoints enable **human-in-the-loop** workflows by **pausing** graph execution to allow for human review before continuing.
+Breakpoints pause graph execution at specific points, enabling [**human-in-the-loop**](./human_in_the_loop.md) workflows and debugging. Breakpoints are powered by  LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. 
 
 You **MUST** use a [checkpointer](./persistence.md) when using breakpoints as breakpoints require the ability to save the state of the graph at the time of pausing.
 
-There are two types of breakpoints:
+There are two places where you can set breakpoints:
 
-1. **Static breakpoints**: Pause the graph **before** or **after** a node executes.
-2. **Dynamic breakpoints**: Pause the graph from **inside** a node.
+1. **Inside** a node using the [`interrupt` function](#the-interrupt-function) (or the older [`NodeInterrupt` exception](#nodeinterrupt-exception)).
+2. **Before** or **after** a node executes by setting breakpoints at **compile time** or **run time**. We call these [**static breakpoints**](#static-breakpoints).
 
-## Breakpoints
+Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
-Breakpoints enable **human-in-the-loop** workflows by **pausing** graph execution to allow for human review before continuing.
+## `interrupt`
 
-There are two types of breakpoints:
-
-1. **Static breakpoints**: Pause the graph **before** or **after** a node executes. This is achieved by specifying the `interrupt_before` and `interrupt_after` keys when [compiling your graph](#compiling-your-graph).
-2. **Dynamic breakpoints**: Pause the graph from **inside** a node. This is achieved by using the `interrupt` function or raising a `NodeInterrupt` exception.
-
-Please see the [Human-in-the-Loop guide](../human_in_the_loop) for information about breakpoints.
-
-1. **Static breakpoints**: Pause the graph **before** or **after** a node executes.
-2. **Dynamic breakpoints**: Pause the graph from **inside** a node.
-
-### Static Breakpoints
-
-To set static breakpoints, specify the `interrupt_before` and/or `interrupt_after` key when [compiling your graph](#compiling-your-graph).
-
-```python
-graph = graph_builder.compile(
-    interrupt_before=["node_a"], 
-    interrupt_after=["node_b", "node_c"],
-    checkpointer=..., # Required
-)
-```
-
-When using sub-graphs, specify the `interrupt_before` and `interrupt_after` values when compiling the subgraph.
-
-### Dynamic Breakpoints
-
-There are two ways to interrupt the graph dynamically:
-
-1. `interrupt` **function (recommended)**: Interrupts the graph within a node and surfaces a value to the client as part of the interrupt information.
-2. `NodeInterrupt` exception: An older, less flexible method for interrupting.
-
-#### `interrupt`
+Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing the developer to collect user input, validate the graph state, or make decisions before resuming execution.
 
 ```python
 from langgraph.types import interrupt
 
-def node(state: State):
+def human_approval_node(state: State):
     ...
-    client_value = interrupt(
+    answer = interrupt(
         # This value will be sent to the client.
         # It can be any JSON serializable value.
-        {"key": "value"}
+        {"question": "is it ok to continue?"},
     )
     ...
 ```
 
-#### `NodeInterrupt`
+Resuming the graph is done by passing a [`Command`](#command) object to the graph with the `resume` key set to the value returned by the `interrupt` function.
 
-Throw a `NodeInterrupt` exception to interrupt the graph.
-
-```python
-def my_node(state: State) -> State:
-    if len(state['input']) > 5:
-        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
-
-    return state
-```
-
-### Resuming
-1. **Static breakpoints**: Pause the graph **before** or **after** a node executes. This is achieved by specifying the `interrupt_before` and `interrupt_after` keys when [compiling your graph](#compiling-your-graph).
-2. **Dynamic breakpoints**: Pause the graph from **inside** a node. This is achieved by using the `interrupt` function or raising a `NodeInterrupt` exception.
-
-When a breakpoint is hit, graph execution will pause.
-Please see the [Human-in-the-Loop guide](../human_in_the_loop) for conceptual information about breakpoints.
-
-=== "Command"
-
-    Resume execution using the new `Command` primitive.
-
-    ```python
-    graph.invoke(inputs, config=config) # This will pause at the breakpoint
-    ...
-    # Do something (e.g., get human input)
-    ...
-    graph.invoke(
-        Command(
-            # Use `resume` to pass a value to the `interrupt`.
-            resume=resume, 
-            # For other kinds of breakpoints, use `update` to update the state.
-            update=update,
-        ), 
-        config=config
-    )
-    ```
-
-=== "Without the Command Primitive"
-
-    Resume execution without the `Command` primitive (older versions of LangGraph).
-
-    ```python
-    graph.invoke(inputs, config=config) # This will pause at the breakpoint
-    ...
-    # Do something (e.g., get human input)
-    ...
-
-    graph.update_state(update, config=config)
-    graph.invoke(None, config=config)
-    ```
-
-See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
-
+Read more about how the `interrupt` is used for **human-in-the-loop** workflows in the [Human-in-the-loop conceptual guide](./human_in_the_loop.md).
 
 ## Subgraphs
 
