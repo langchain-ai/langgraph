@@ -57,7 +57,7 @@ Key workflows:
 
 Other methods:
 
-- [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb): Use for debugging purposes. For [**human-in-the-loop**](../concepts/human_in_the_loop.md) workflows, we recommend the [`interrupt()`](../../../reference/types/#langgraph.types.interrupt) function instead.
+- [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb): Use for debugging purposes. For [**human-in-the-loop**](../concepts/human_in_the_loop.md) workflows, we recommend the [`interrupt` function][langgraph.types.interrupt] instead.
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb): Edit graph state using `graph.update_state` method. Use this if implementing a **human-in-the-loop** workflow via **static breakpoints**.
 - [How to add dynamic breakpoints with `NodeInterrupt`](human_in_the_loop/dynamic_breakpoints.ipynb): **Not recommended**: Use the [`interrupt` function](../concepts/human_in_the_loop.md) instead.
 
