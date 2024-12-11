@@ -46,106 +46,136 @@ Please read the [Breakpoints](breakpoints.md) guide for more information on usin
 
 ## Design Patterns
 
-1. **Approval**: Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action.
-2. **Editing**: Pause the graph to review and edit the agent's state. This is useful for correcting mistakes or updating the agent's state.
+There are typically three different things that you might want to do when you interrupt a graph:
+
+1. **Approval/Rejection**: Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action. This pattern often involve **routing** the graph based on the human's input.
+2. **Editing**: Pause the graph to review and edit the graph state. This is useful for correcting mistakes or updating the state with additional information. This pattern often involves **updating** the state with the human's input.
 3. **Input**: Explicitly request human input at a particular step in the graph. This is useful for collecting additional information or context to inform the agent's decision-making process or for supporting **multi-turn conversations**.
 
 
-=== "Approval"
+### Approve or Reject
 
-    <figure markdown="1">
-    ![image](img/human_in_the_loop/approve-or-reject.png){: style="max-height:400px"}
-    <figcaption>Depending on the human's approval or rejection, the graph can proceed with the action or take an alternative path.</figcaption>
-    </figure>
+<figure markdown="1">
+![image](img/human_in_the_loop/approve-or-reject.png){: style="max-height:400px"}
+<figcaption>Depending on the human's approval or rejection, the graph can proceed with the action or take an alternative path.</figcaption>
+</figure>
 
-    Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action. 
+Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action.
 
-    ```python
-    from langgraph.types import interrupt
+```python
 
-    def human_approval(state: State):
-        ...
-        is_approved = interrupt(
-            {
-                "question": "Is this correct?",
-                # Surface the output that should be
-                # reviewed and approved by the human.
-                "llm_output": state["llm_output"]
-            }
-        )
+from typing import Literal
+from langgraph.types import interrupt, Command
 
-        if is_approved:
-            # Proceed with the action
-            ...
-        else:
-            # Do something else
-            ...
+def human_approval(state: State) -> Command[Literal["some_node", "another_node"]]:
+    is_approved = interrupt(
+        {
+            "question": "Is this correct?",
+            # Surface the output that should be
+            # reviewed and approved by the human.
+            "llm_output": state["llm_output"]
+        }
+    )
 
-    # Add the node to the graph in an appropriate location
-    # and connect it to the relevant nodes.
-    graph_builder.add_node("human_approval", human_approval)
-    graph = graph_builder.compile(checkpointer=checkpointer)
+    if is_approved:
+        return Command(goto="some_node")
+    else:
+        return Command(goto="another_node")
 
+# Add the node to the graph in an appropriate location
+# and connect it to the relevant nodes.
+graph_builder.add_node("human_approval", human_approval)
+graph = graph_builder.compile(checkpointer=checkpointer)
+
+# After running the graph and hitting the breakpoint, the graph will pause.
+# Resume it with either an approval or rejection.
+thread_config = {"configurable": {"thread_id": "some_id"}}
+graph.invoke(Command(resume=True), config=thread_config)
+```
+
+### Review & Edit State
+
+<figure markdown="1">
+![image](img/human_in_the_loop/edit-graph-state-simple.png){: style="max-height:400px"}
+<figcaption>A human can review and edit the state of the graph. This is useful for correcting mistakes or updating the state with additional information.
+</figcaption>
+</figure>
+
+```python
+from langgraph.types import interrupt
+
+def human_editing(state: State):
     ...
+    result = interrupt(
+        # Interrupt information to surface to the client.
+        # Can be any JSON serializable value.
+        {
+            "task": "Review the output from the LLM and make any necessary edits.",
+            "llm_generated_summary": state["llm_generated_summary"]
+        }
+    )
 
-    # After running the graph and hitting the breakpoint, the graph will pause.
-    # Resume it with either an approval or rejection.
-    thread_config = {"configurable": {"thread_id": "some_id"}}
-    graph.invoke(Command(resume=True), config=thread_config)
-    ```
+    # Update the state with the edited text
+    return {
+        "llm_generated_summary": result["edited_text"] 
+    }
 
+# Add the node to the graph in an appropriate location
+# and connect it to the relevant nodes.
+graph_builder.add_node("human_editing", human_editing)
+graph = graph_builder.compile(checkpointer=checkpointer)
 
-=== "Review & Edit"
+...
 
-    <figure markdown="1">
-    ![image](img/human_in_the_loop/tool-call-review.png){: style="max-height:400px"}
-    <figcaption>A human can review and edit the output from the LLM before proceeding. This is particularly
-    critical in applications where the tool calls requested by the LLM may be sensitive or require human oversight.
-    </figcaption>
-    </figure>
+# After running the graph and hitting the breakpoint, the graph will pause.
+# Resume it with the edited text.
+thread_config = {"configurable": {"thread_id": "some_id"}}
+graph.invoke(
+    Command(resume={"edited_text": "The edited text"}), 
+    config=thread_config
+)
+```
 
+### Review Tool Call
 
-    === "Review tool calls"
+<figure markdown="1">
+![image](img/human_in_the_loop/tool-call-review.png){: style="max-height:400px"}
+<figcaption>A human can review and edit the output from the LLM before proceeding. This is particularly
+critical in applications where the tool calls requested by the LLM may be sensitive or require human oversight.
+</figcaption>
+</figure>
 
-        TODO: Create an example for tool call review.
+```python
+def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
+    # This is the value we'll be providing via Command(resume=<human_review>)
+    human_review = interrupt(
+        {
+            "question": "Is this correct?",
+            # Surface tool calls for review
+            "tool_call": tool_call
+        }
+    )
 
+    review_action, review_data = human_review
 
-    === "Review text output from the LLM and make any necessary edits."
+    # Approve the tool call and continue
+    if review_data == "approve":
+        return Command(goto="run_tool")
 
-        ```python
-        from langgraph.types import interrupt
-
-        def human_editing(state: State):
-            ...
-            result = interrupt(
-                # Interrupt information to surface to the client.
-                # Can be any JSON serializable value.
-                {
-                    "task": "Review the output from the LLM and make any necessary edits.",
-                    "llm_output": state["llm_output"]
-                }
-            )
-
-            # Update the state with the edited text
-            return {
-                "llm_output": result["edited_text"] 
-            }
-
-        # Add the node to the graph in an appropriate location
-        # and connect it to the relevant nodes.
-        graph_builder.add_node("human_editing", human_editing)
-        graph = graph_builder.compile(checkpointer=checkpointer)
-
+    # Modify the tool call manually and then continue
+    elif review_action == "update":
         ...
+        updated_msg = get_updated_msg(review_data)
+        # Remember that modify an existing message you will need
+        # pass the message with a matching ID.
+        return Command(goto="run_tool", update={"messages": [updated_message]})
 
-        # After running the graph and hitting the breakpoint, the graph will pause.
-        # Resume it with the edited text.
-        thread_config = {"configurable": {"thread_id": "some_id"}}
-        graph.invoke(
-            Command(resume={"edited_text": "The edited text"}), 
-            config=thread_config
-        )
-        ```
+    # Give natural language feedback, and then pass that back to the agent
+    elif review_action == "feedback":
+        ...
+        feedback_msg = get_feedback_msg(review_data)
+        return Command(goto="call_llm", update={"messages": [feedback_msg]})
+```
 
 ### Multi-turn conversation
 
@@ -181,7 +211,6 @@ def agent(state: State):
 graph_builder.add_node("human_input", human_input)
 graph_builder.add_edge("human_input", "agent")
 graph = graph_builder.compile(checkpointer=checkpointer)
-
 
 # After running the graph and hitting the breakpoint, the graph will pause.
 # Resume it with the human's input.
