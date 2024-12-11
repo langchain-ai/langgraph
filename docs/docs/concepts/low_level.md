@@ -377,6 +377,10 @@ def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: R
 
 If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
 
+### Human-in-the-loop
+
+`Command` is an important part of human-in-the-loop workflows: when using `interrupt()` to collect user input, `Command` is then used to supply the input and resume execution via `Command(resume="User input")`. Check out [this conceptual guide](./human_in_the_loop.md) for more information.
+
 ## Persistence
 
 LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the
@@ -515,7 +519,7 @@ The simplest way to create subgraph nodes is by using a [compiled subgraph](#com
     If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
 
 ```python
-from langgraph.graph import START, StateGraph
+from langgraph.graph import StateGraph
 from typing import TypedDict
 
 class State(TypedDict):
