@@ -438,8 +438,7 @@ def interrupt(value: Any) -> Any:
         Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
 
     Raises:
-        GraphInterrupt: On the first invocation within the node, halts execution
-        and surfaces the provided value to the client.
+        GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
