@@ -1,6 +1,6 @@
 # Breakpoints
 
-Breakpoints pause graph execution at specific points, enabling [**human-in-the-loop**](./human_in_the_loop.md) workflows and debugging. Breakpoints are powered by  LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. 
+Breakpoints pause graph execution at specific points, enabling [**human-in-the-loop**](./human_in_the_loop.md) workflows and debugging. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. 
 
 ## Requirements
 
@@ -8,7 +8,7 @@ To use breakpoints, you will need to:
 
 1. [**Specify a checkpointer**](persistence.md#checkpoints) to save the graph state after each step.
 2. [**Set breakpoints**](#setting-breakpoints) to specify where execution should pause.
-3. Run the graph with a [**thread ID**](./persistence.md#threads) to pause execution at the breakpoint.
+3. **Run the graph** with a [**thread ID**](./persistence.md#threads) to pause execution at the breakpoint.
 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#the-command-primitive)).
 
 ## Setting breakpoints
@@ -185,20 +185,28 @@ We recommend that you [**use the `interrupt` function instead**](#the-interrupt-
 
 ## The `Command` primitive
 
+When using the `interrupt` function, the graph will pause at the breakpoint and wait for user input.
+
 Graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive which can be passed through the `invoke`, `ainvoke`, `stream` or `astream` methods.
 
 The `Command` primitive provides several options to control and modify the graph's state during resumption:
 
-1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
+1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph. THe `resume` value is only used when using `interrupt` as a breakpoint.
+ 
+       ```python
+       # Resume graph execution with the user's input.
+       graph.invoke(Command(resume={"age": "25"}), thread_config)
+       ```
+
 2. **Update the graph state**: Modify the graph state using `Command(update=update)`. Note that resumption starts from the beginning of the node where the `interrupt` was used. Execution resumes from the beginning of the node where the `interrupt` was used, but with the updated state.
-3. **Navigate to another node**: Direct the graph to continue execution at a different node using `Command(goto="node_name")`.
 
-```python
-# Resume graph execution with the user's input.
-graph.invoke(Command(resume={"age": "25"}), thread_config)
-```
+      ```python
+      # Update the graph state and resume.
+      # You must provide a `resume` value if using an `interrupt`.
+      graph.invoke(Command(update={"foo": "bar"}, resume="Let's go!!!"), thread_config)
+      ```
 
-By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state or flow.
+By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state.
 
 ## Using with `invoke` and `ainvoke`
 
@@ -235,7 +243,7 @@ graph.invoke(Command(resume={"age": "25"}), thread_config)
 
 ## How does resuming from a breakpoint work?
 
-> Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered.
+> Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered or where the `input()` function was called.
 
 A critical aspect of using breakpoints is understanding how resuming from a breakpoint works. When you resume execution after a breakpoint, the graph execution starts from the **beginning** of the **graph node** where the last breakpoint was triggered.
 
@@ -270,8 +278,8 @@ Keep the following considerations in mind when using the `interrupt` function:
 
 ## Best practices
 
-* Use the `interrupt` function to set breakpoints and collect user input.
-* Use `Command` to resume execution and control the graph state.
+* Use the [`interrupt`](#the-interrupt-function) function to set breakpoints and collect user input.
+* Use [`Command`](#the-command-primitive) to resume execution and control the graph state.
 * Consider putting all side effects (e.g., API calls) after the `interrupt` to prevent duplication. See [How does resuming from a breakpoint work?](#how-does-resuming-from-a-breakpoint-work)
 
 ## Additional Resources 📚
