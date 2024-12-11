@@ -32,6 +32,14 @@ if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
 
 
+try:
+    from langchain_core.messages.tool import ToolOutputMixin
+except ImportError:
+
+    class ToolOutputMixin:  # type: ignore[no-redef]
+        pass
+
+
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
@@ -244,7 +252,7 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N]):
+class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
     Args:
@@ -339,6 +347,99 @@ class PregelScratchpad(TypedDict, total=False):
 
 
 def interrupt(value: Any) -> Any:
+    """Interrupt the graph with a resumable exception from within a node.
+
+    The `interrupt` function enables human-in-the-loop workflows by pausing graph
+    execution and surfacing a value to the client. This value can communicate context
+    or request input required to resume execution.
+
+    In a given node, the first invocation of this function raises a `GraphInterrupt`
+    exception, halting execution. The provided `value` is included with the exception
+    and sent to the client executing the graph.
+
+    A client resuming the graph must use the [`Command`][langgraph.types.Command]
+    primitive to specify a value for the interrupt and continue execution.
+    The graph resumes from the start of the node, **re-executing** all logic.
+
+    If a node contains multiple `interrupt` calls, LangGraph matches resume values
+    to interrupts based on their order in the node. This list of resume values
+    is scoped to the specific task executing the node and is not shared across tasks.
+
+    To use an `interrupt`, you must enable a checkpointer, as the feature relies
+    on persisting the graph state.
+
+    Example:
+        ```python
+        import uuid
+        from typing import TypedDict, Optional
+
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.constants import START
+        from langgraph.graph import StateGraph
+        from langgraph.types import interrupt
+
+
+        class State(TypedDict):
+            \"\"\"The graph state.\"\"\"
+
+            foo: str
+            human_value: Optional[str]
+            \"\"\"Human value will be updated using an interrupt.\"\"\"
+
+
+        def node(state: State):
+            answer = interrupt(
+                # This value will be sent to the client
+                # as part of the interrupt information.
+                \"what is your age?\"
+            )
+            print(f\"> Received an input from the interrupt: {answer}\")
+            return {\"human_value\": answer}
+
+
+        builder = StateGraph(State)
+        builder.add_node(\"node\", node)
+        builder.add_edge(START, \"node\")
+
+        # A checkpointer must be enabled for interrupts to work!
+        checkpointer = MemorySaver()
+        graph = builder.compile(checkpointer=checkpointer)
+
+        config = {
+            \"configurable\": {
+                \"thread_id\": uuid.uuid4(),
+            }
+        }
+
+        for chunk in graph.stream({\"foo\": \"abc\"}, config):
+            print(chunk)
+        ```
+
+        ```pycon
+        {'__interrupt__': (Interrupt(value='what is your age?', resumable=True, ns=['node:62e598fa-8653-9d6d-2046-a70203020e37'], when='during'),)}
+        ```
+
+        ```python
+        command = Command(resume=\"some input from a human!!!\")
+
+        for chunk in graph.stream(Command(resume=\"some input from a human!!!\"), config):
+            print(chunk)
+        ```
+
+        ```pycon
+        Received an input from the interrupt: some input from a human!!!
+        {'node': {'human_value': 'some input from a human!!!'}}
+        ```
+
+    Args:
+        value: The value to surface to the client when the graph is interrupted.
+
+    Returns:
+        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
+
+    Raises:
+        GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+    """
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,

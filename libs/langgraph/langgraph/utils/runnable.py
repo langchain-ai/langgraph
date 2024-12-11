@@ -404,12 +404,10 @@ class RunnableSeq(Runnable):
                 config = patch_config(
                     config, callbacks=run_manager.get_child(f"seq:step:{i+1}")
                 )
-                context = copy_context()
-                context.run(_set_config_context, config)
                 if i == 0:
-                    input = context.run(step.invoke, input, config, **kwargs)
+                    input = step.invoke(input, config, **kwargs)
                 else:
-                    input = context.run(step.invoke, input, config)
+                    input = step.invoke(input, config)
         # finish the root run
         except BaseException as e:
             run_manager.on_chain_error(e)
@@ -443,16 +441,10 @@ class RunnableSeq(Runnable):
                 config = patch_config(
                     config, callbacks=run_manager.get_child(f"seq:step:{i+1}")
                 )
-                context = copy_context()
-                context.run(_set_config_context, config)
                 if i == 0:
-                    coro = step.ainvoke(input, config, **kwargs)
+                    input = await step.ainvoke(input, config, **kwargs)
                 else:
-                    coro = step.ainvoke(input, config)
-                if ASYNCIO_ACCEPTS_CONTEXT:
-                    input = await asyncio.create_task(coro, context=context)
-                else:
-                    input = await asyncio.create_task(coro)
+                    input = await step.ainvoke(input, config)
         # finish the root run
         except BaseException as e:
             await run_manager.on_chain_error(e)

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 import pickle
@@ -6,7 +5,6 @@ import random
 import shutil
 from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
-from functools import partial
 from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type
 
@@ -395,9 +393,7 @@ class MemorySaver(
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.get_tuple, config
-        )
+        return self.get_tuple(config)
 
     async def alist(
         self,
@@ -418,24 +414,8 @@ class MemorySaver(
         Yields:
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
         """
-        loop = asyncio.get_running_loop()
-        iter = await loop.run_in_executor(
-            None,
-            partial(
-                self.list,
-                before=before,
-                limit=limit,
-                filter=filter,
-            ),
-            config,
-        )
-        while True:
-            # handling StopIteration exception inside coroutine won't work
-            # as expected, so using next() with default value to break the loop
-            if item := await loop.run_in_executor(None, next, iter, None):
-                yield item
-            else:
-                break
+        for item in self.list(config, filter=filter, before=before, limit=limit):
+            yield item
 
     async def aput(
         self,
@@ -455,9 +435,7 @@ class MemorySaver(
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint, metadata, new_versions
-        )
+        return self.put(config, checkpoint, metadata, new_versions)
 
     async def aput_writes(
         self,
@@ -474,10 +452,9 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the writes.
             writes (List[Tuple[str, Any]]): The writes to save, each as a (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+        return self.put_writes(config, writes, task_id)
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put_writes, config, writes, task_id
-        )
+        return self.put_writes(config, writes, task_id)
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:

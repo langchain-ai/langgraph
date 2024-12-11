@@ -48,12 +48,24 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 [Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
 you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
 
-- [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
-- [How to add dynamic breakpoints](human_in_the_loop/dynamic_breakpoints.ipynb)
-- [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
-- [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
+
+Key workflows:
+
+- [How to wait for user input](human_in_the_loop/wait-user-input.ipynb): A basic example that shows how to implement a human-in-the-loop workflow in your graph using the `interrupt` function.
+- [How to review tool calls](human_in_the_loop/review-tool-calls.ipynb): Incorporate human-in-the-loop for reviewing/editing/accepting tool call requests before they executed using the `interrupt` function.
+ 
+
+Other methods:
+
+- [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb): Use for debugging purposes. For [**human-in-the-loop**](../concepts/human_in_the_loop.md) workflows, we recommend the [`interrupt` function][langgraph.types.interrupt] instead.
+- [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb): Edit graph state using `graph.update_state` method. Use this if implementing a **human-in-the-loop** workflow via **static breakpoints**.
+- [How to add dynamic breakpoints with `NodeInterrupt`](human_in_the_loop/dynamic_breakpoints.ipynb): **Not recommended**: Use the [`interrupt` function](../concepts/human_in_the_loop.md) instead.
+
+### Time Travel
+
+[Time travel](../concepts/time-travel.md) allows you to replay past actions in your LangGraph application to explore alternative paths and debug issues. These how-to guides show how to use time travel in your graph.
+
 - [How to view and update past graph state](human_in_the_loop/time-travel.ipynb)
-- [How to review tool calls](human_in_the_loop/review-tool-calls.ipynb)
 
 ### Streaming
 
@@ -81,6 +93,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
 - [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
+- [How to update graph state from tools](update-state-from-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
 ### Subgraphs
@@ -90,6 +103,15 @@ These how-to guides show common patterns for tool calling with LangGraph:
 - [How to add and use subgraphs](subgraph.ipynb)
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
 - [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
+
+### Multi-agent
+
+[Multi-agent systems](../concepts/multi_agent.md) are useful to break down complex LLM applications into multiple agents, each responsible for a different part of the application. These how-to guides show how to implement multi-agent systems in LangGraph:
+
+- [How to build a multi-agent network](multi-agent-network.ipynb)
+- [How to add multi-turn conversation in a multi-agent application](multi-agent-multi-turn-convo.ipynb)
+
+See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
 ### State Management
 

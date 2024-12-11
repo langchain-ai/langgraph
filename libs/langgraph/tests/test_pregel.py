@@ -7602,7 +7602,7 @@ def test_root_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000033",
+                    id="00000000-0000-4000-8000-000000000037",
                 )
             ]
         },
@@ -7625,7 +7625,7 @@ def test_root_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000041",
+                    id="00000000-0000-4000-8000-000000000045",
                 )
             ]
         },
@@ -8235,7 +8235,7 @@ def test_root_graph(
         "__root__": [
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000070",
+                id="00000000-0000-4000-8000-000000000078",
             ),
             AIMessage(
                 content="",
@@ -8255,7 +8255,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000092"
+                content="an extra message", id="00000000-0000-4000-8000-000000000100"
             ),
             HumanMessage(content="what is weather in la"),
         ],
@@ -12901,7 +12901,7 @@ def test_send_to_nested_graphs(
         metadata={
             "step": 1,
             "source": "loop",
-            "writes": {"edit": None},
+            "writes": None,
             "parents": {"": AnyStr()},
             "thread_id": "1",
             "checkpoint_ns": AnyStr("generate_joke:"),
@@ -12946,7 +12946,7 @@ def test_send_to_nested_graphs(
         metadata={
             "step": 1,
             "source": "loop",
-            "writes": {"edit": None},
+            "writes": None,
             "parents": {"": AnyStr()},
             "thread_id": "1",
             "checkpoint_ns": AnyStr("generate_joke:"),
@@ -14904,3 +14904,141 @@ def test_dict_mixed_return() -> None:
     graph = graph.compile()
 
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_command_with_static_breakpoints(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    """Test that we can use Command to resume and update with static breakpoints."""
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: str
+
+    def node1(state: State):
+        return {
+            "foo": state["foo"] + "|node-1",
+        }
+
+    def node2(state: State):
+        return {
+            "foo": state["foo"] + "|node-2",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_node("node2", node2)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", "node2")
+
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    # Start the graph and interrupt at the first node
+    graph.invoke({"foo": "abc"}, config)
+    result = graph.invoke(Command(resume="node1"), config)
+    assert result == {"foo": "abc|node-1|node-2"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multistep_plan(request: pytest.FixtureRequest, checkpointer_name: str):
+    from langchain_core.messages import AnyMessage
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict, total=False):
+        plan: list[Union[str, list[str]]]
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    def planner(state: State):
+        if state.get("plan") is None:
+            # create plan somehow
+            plan = ["step1", ["step2", "step3"], "step4"]
+            # pick the first step to execute next
+            first_step, *plan = plan
+            # put the rest of plan in state
+            return Command(goto=first_step, update={"plan": plan})
+        elif state["plan"]:
+            # go to the next step of the plan
+            next_step, *next_plan = state["plan"]
+            return Command(goto=next_step, update={"plan": next_plan})
+        else:
+            # the end of the plan
+            pass
+
+    def step1(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step1")]})
+
+    def step2(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step2")]})
+
+    def step3(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step3")]})
+
+    def step4(state: State):
+        return Command(goto="planner", update={"messages": [("human", "step4")]})
+
+    builder = StateGraph(State)
+    builder.add_node(planner)
+    builder.add_node(step1)
+    builder.add_node(step2)
+    builder.add_node(step3)
+    builder.add_node(step4)
+    builder.add_edge(START, "planner")
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert graph.invoke({"messages": [("human", "start")]}, config) == {
+        "messages": [
+            _AnyIdHumanMessage(content="start"),
+            _AnyIdHumanMessage(content="step1"),
+            _AnyIdHumanMessage(content="step2"),
+            _AnyIdHumanMessage(content="step3"),
+            _AnyIdHumanMessage(content="step4"),
+        ],
+        "plan": [],
+    }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_command_goto_with_static_breakpoints(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    """Use Command goto with static breakpoints."""
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: Annotated[str, operator.add]
+
+    def node1(state: State):
+        return {
+            "foo": "|node-1",
+        }
+
+    def node2(state: State):
+        return {
+            "foo": "|node-2",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_node("node2", node2)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", "node2")
+
+    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["node1"])
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    # Start the graph and interrupt at the first node
+    graph.invoke({"foo": "abc"}, config)
+    result = graph.invoke(Command(goto=["node2"]), config)
+    assert result == {"foo": "abc|node-1|node-2|node-2"}

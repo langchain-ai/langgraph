@@ -155,9 +155,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
 
         return results
 
-    def batch(self, ops: Iterable[Op]) -> list[Result]:
-        return asyncio.run_coroutine_threadsafe(self.abatch(ops), self.loop).result()
-
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
