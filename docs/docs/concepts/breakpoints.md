@@ -9,7 +9,7 @@ To use breakpoints, you will need to:
 1. [**Specify a checkpointer**](persistence.md#checkpoints) to save the graph state after each step.
 2. [**Set breakpoints**](#setting-breakpoints) to specify where execution should pause.
 3. Run the graph with a [**thread ID**](./persistence.md#threads) to pause execution at the breakpoint.
-4. [**Resume execution**](#resuming) from the paused state.
+4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#the-command-primitive)).
 
 ## Setting breakpoints
 
