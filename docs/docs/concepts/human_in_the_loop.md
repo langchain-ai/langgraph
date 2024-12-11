@@ -395,14 +395,6 @@ The value of counter is: 2
 
 ## Common Pitfalls
 
-!!! warning
-
-    Resuming from a interrupt is **different** from using Python's `input()` function, where execution resumes from the exact point where `input()` was called.
-
-A critical aspect of using `interrupt` is understanding how resuming works. When you resume execution, the graph execution starts from the **beginning** of the **graph node** where the `interrupt` was triggered.
-
-**All** code from the beginning of the node to the `interrupt` will be re-executed. 
-
 ### Side-effects
 
 Place code with side effects, such as API calls, **after** the `interrupt` to avoid duplication, as these are re-triggered every time the node is resumed. 
