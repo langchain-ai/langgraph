@@ -2,7 +2,7 @@
 
 !!! tip "This guide uses the new `interrupt` function."
 
-    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [interrupt](../reference/types.md#langgraph.types.interrupt) function as it significantly simplifies **human-in-the-loop** patterns. Please see the [Breakpoints](breakpoints.md) guide for more information.
+    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [`interrupt` function][langgraph.types.interrupt] as it simplifies **human-in-the-loop** patterns. Please see the [Breakpoints](breakpoints.md) guide for more information.
 
     If you're looking for the previous version of this conceptual guide, which relied on static breakpoints and `NodeInterrupt` exception, it is available [here](v0-human-in-the-loop.md). 
 
@@ -105,7 +105,7 @@ thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(Command(resume=True), config=thread_config)
 ```
 
-See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls) for a more detailed example.
+See [how to review tool calls](../../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a more detailed example.
 
 ### Review & Edit State
 
@@ -150,7 +150,7 @@ graph.invoke(
 )
 ```
 
-See [How to wait for user input using interrupt](../how-tos/human_in_the_loop/wait-user-input) for a more detailed example.
+See [How to wait for user input using interrupt](../../how-tos/human_in_the_loop/wait-user-input) for a more detailed example.
 
 ### Review Tool Calls
 
@@ -193,7 +193,7 @@ def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
         return Command(goto="call_llm", update={"messages": [feedback_msg]})
 ```
 
-See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls) for a more detailed example.
+See [how to review tool calls](../../how-tos/human_in_the_loop/review-tool-calls) for a more detailed example.
 
 ### Multi-turn conversation
 
