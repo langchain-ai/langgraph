@@ -243,7 +243,9 @@ graph.invoke(Command(resume={"age": "25"}), thread_config)
 
 ## How does resuming from a breakpoint work?
 
-> Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered or where the `input()` function was called.
+!!! warning
+
+   Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered or where the `input()` function was called.
 
 A critical aspect of using breakpoints is understanding how resuming from a breakpoint works. When you resume execution after a breakpoint, the graph execution starts from the **beginning** of the **graph node** where the last breakpoint was triggered.
 

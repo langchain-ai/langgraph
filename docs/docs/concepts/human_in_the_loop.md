@@ -197,7 +197,7 @@ A **multi-turn conversation** involves multiple back-and-forth interactions betw
 This design pattern is useful in an LLM application consisting of [multiple agents](./multi_agent.md). One or more agents may need to carry out multi-turn conversations with a human, where the human provides input or feedback at different stages of the conversation. For simplicity, the agent implementation below is illustrated as a single node, but in reality 
 it may be part of a larger graph consisting of multiple nodes and include a conditional edge.
 
-=== "One human node per agent"
+=== "Using a human node per agent"
 
     In this pattern, each agent has its own human node for collecting user input. 
     This can be achieved by either naming the human nodes with unique names (e.g., "human for agent 1", "human for agent 2") or by
@@ -234,7 +234,7 @@ it may be part of a larger graph consisting of multiple nodes and include a cond
     ```
 
 
-=== "Single human node shared across multiple agents"
+=== "Sharing human node across multiple agents"
 
     In this pattern, a single human node is used to collect user input for multiple agents. The active agent is determined from the state, so after human input is collected, the graph can route to the correct agent.
 
@@ -263,6 +263,186 @@ it may be part of a larger graph consisting of multiple nodes and include a cond
     ```
 
 See [how to implement multi-turn conversations](../how-tos/multi-agent-multi-turn-convo.ipynb) for a more detailed example.
+
+### Validating human input
+
+If you need to validate the input provided by the human within the graph itself (rather than on the client side), you can achieve this by using multiple interrupt calls within a single node.
+
+```python
+from langgraph.types import interrupt
+
+def human_node(state: State):
+    """Human node with validation."""
+    question = "What is your age?"
+
+    while True:
+        answer = interrupt(question)
+
+        # Validate answer, if the answer isn't valid ask for input again.
+        if not isinstance(answer, int) or answer < 0:
+            question = f"'{answer} is not a valid age. What is your age?"
+            answer = None
+            continue
+        else:
+            # If the answer is valid, we can proceed.
+            break
+            
+    print(f"The human in the loop is {answer} years old.")
+    return {
+        "age": answer
+    }
+```
+
+## Gotchyas
+
+!!! warning
+
+    Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered or where the `input()` function was called.
+
+A critical aspect of using `interrupt` is understanding how resuming works. When you resume execution, the graph execution starts from the **beginning** of the **graph node** where the last breakpoint was triggered.
+
+**All** code from the beginning of the node to the **breakpoint** will be re-executed. 
+
+### Side-effects
+
+Place code with side effects, such as API calls, **after** the `interrupt` to avoid duplication, as these are re-triggered every time the node is resumed. 
+
+=== "Side effects before interrupt (BAD)"
+
+    This code will re-execute the API call another time when the node is resumed from
+    the `interrupt`.
+
+    This can be problematic if the API call is not idempotent or is just expensive.
+
+    ```python
+    from langgraph.types import interrupt
+
+    def human_node(state: State):
+        """Human node with validation."""
+        api_call(...) # This code will be re-executed when the node is resumed.
+        answer = interrupt(question)
+    ```
+
+=== "Side effects after interrupt (OK)"
+
+    ```python
+    from langgraph.types import interrupt
+
+    def human_node(state: State):
+        """Human node with validation."""
+        
+        answer = interrupt(question)
+        
+        api_call(answer) # OK as it's after the interrupt
+    ```
+
+=== "Side effects in a separate node (OK)"
+
+    ```python
+    from langgraph.types import interrupt
+
+    def human_node(state: State):
+        """Human node with validation."""
+        
+        answer = interrupt(question)
+        
+        return {
+            "answer": answer
+        }
+
+    def api_call_node(state: State):
+        api_call(...) # OK as it's in a separate node
+    ```
+
+### Subgraphs called as functions
+
+
+**Subgraphs**: If you're invoking a subgraph [as a function](low_level.md#as-a-function), the **parent** graph will be re-run from the **beginning of the node** where the subgraph was invoked.
+
+```python
+def some_node(state: State):
+    some_code() # <-- This code will be re-executed when the subgraph is resumed.
+    # Using a subgraph as a function.
+    # The subgraph has an `interrupt` call
+    subgraph_result = subgraph.invoke(some_input)
+    ...
+```
+
+
+### Using multiple interrupts
+
+Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](#validating-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
+
+When a node contains multiple interrupt calls, LangGraph keeps a list of resume values specific to the task executing the node. Whenever execution resumes, it starts at the beginning of the node. For each interrupt encountered, LangGraph checks if a matching value exists in the task's resume list. Matching is **strictly index-based**, so the order of interrupt calls within the node is critical.
+
+To avoid issues, refrain from dynamically changing the node's structure between executions. This includes adding, removing, or reordering interrupt calls, as such changes can result in mismatched indices. These problems often arise from unconventional patterns, such as mutating state via `Command(resume=..., update=SOME_STATE_MUTATION)` or relying on global variables to modify the node’s structure dynamically.
+
+??? "Example of incorrect code"
+
+    ```python
+    import uuid
+    from typing import TypedDict, Optional
+
+    from langgraph.graph import StateGraph
+    from langgraph.constants import START 
+    from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import MemorySaver
+
+
+    class State(TypedDict):
+        """The graph state."""
+
+        age: Optional[str]
+        name: Optional[str]
+
+
+    def human_node(state: State):
+        if not state.get('name'):
+            name = interrupt("what is your name?")
+        else:
+            name = "N/A"
+
+        if not state.get('age'):
+            age = interrupt("what is your age?")
+        else:
+            age = "N/A"
+            
+        print(f"Name: {name}. Age: {age}")
+        
+        return {
+            "age": age,
+            "name": name,
+        }
+
+
+    builder = StateGraph(State)
+    builder.add_node("human_node", human_node)
+    builder.add_edge(START, "human_node")
+
+    # A checkpointer must be enabled for interrupts to work!
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {
+        "configurable": {
+            "thread_id": uuid.uuid4(),
+        }
+    }
+
+    for chunk in graph.stream({"age": None, "name": None}, config):
+        print(chunk)
+
+    for chunk in graph.stream(Command(resume="John", update={"name": "foo"}), config):
+        print(chunk)
+    ```
+
+    ```pycon
+    {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['human_node:3a007ef9-c30d-c357-1ec1-86a1a70d8fba'], when='during'),)}
+    Name: N/A. Age: John
+    {'human_node': {'age': 'John', 'name': 'N/A'}}
+    ```
+
+
 
 ## Best practices
 
