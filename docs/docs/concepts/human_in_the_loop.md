@@ -34,7 +34,11 @@ def human_node(state: State):
     # Update the state with the human's input or route the graph based on the input.
     ...
 
-# Run the graph and hit the breakpoint
+graph = graph_builder.compile(
+    checkpointer=checkpointer # Required for `interrupt` to work
+)
+
+# Run the graph until the interrupt
 thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(some_input, config=thread_config)
     
@@ -42,7 +46,14 @@ graph.invoke(some_input, config=thread_config)
 graph.invoke(Command(resume=value_from_human), config=thread_config)
 ```
 
-Please read the [Breakpoints](breakpoints.md) guide for more information on using the `interrupt` function.
+## Requirements
+
+To use `interrupt` in your graph, you need to:
+
+1. [**Specify a checkpointer**](persistence.md#checkpoints) to save the graph state after each step.
+2. **Call `interrupt()`** in the appropriate place. See the [Design Patterns](#design-patterns) section for examples.
+3. **Run the graph** with a [**thread ID**](./persistence.md#threads) until the `interrupt` is hit.
+4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#the-command-primitive)).
 
 ## Design Patterns
 
@@ -88,7 +99,7 @@ def human_approval(state: State) -> Command[Literal["some_node", "another_node"]
 graph_builder.add_node("human_approval", human_approval)
 graph = graph_builder.compile(checkpointer=checkpointer)
 
-# After running the graph and hitting the breakpoint, the graph will pause.
+# After running the graph and hitting the interrupt, the graph will pause.
 # Resume it with either an approval or rejection.
 thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(Command(resume=True), config=thread_config)
@@ -130,7 +141,7 @@ graph = graph_builder.compile(checkpointer=checkpointer)
 
 ...
 
-# After running the graph and hitting the breakpoint, the graph will pause.
+# After running the graph and hitting the interrupt, the graph will pause.
 # Resume it with the edited text.
 thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(
@@ -225,7 +236,7 @@ it may be part of a larger graph consisting of multiple nodes and include a cond
     graph_builder.add_edge("human_input", "agent")
     graph = graph_builder.compile(checkpointer=checkpointer)
 
-    # After running the graph and hitting the breakpoint, the graph will pause.
+    # After running the graph and hitting the interrupt, the graph will pause.
     # Resume it with the human's input.
     graph.invoke(
         Command(resume="hello!"),
@@ -293,15 +304,96 @@ def human_node(state: State):
     }
 ```
 
-## Gotchyas
+## The `Command` primitive
+
+When using the `interrupt` function, the graph will pause at the interrupt and wait for user input.
+
+Graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive which can be passed through the `invoke`, `ainvoke`, `stream` or `astream` methods.
+
+The `Command` primitive provides several options to control and modify the graph's state during resumption:
+
+1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
+
+       ```python
+       # Resume graph execution with the user's input.
+       graph.invoke(Command(resume={"age": "25"}), thread_config)
+       ```
+
+2. **Update the graph state**: Modify the graph state using `Command(update=update)`. Note that resumption starts from the beginning of the node where the `interrupt` was used. Execution resumes from the beginning of the node where the `interrupt` was used, but with the updated state.
+
+      ```python
+      # Update the graph state and resume.
+      # You must provide a `resume` value if using an `interrupt`.
+      graph.invoke(Command(update={"foo": "bar"}, resume="Let's go!!!"), thread_config)
+      ```
+
+By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state.
+
+## Using with `invoke` and `ainvoke`
+
+When you use `stream` or `astream` to run the graph, you will receive an `Interrupt` event that let you know the `interrupt` was triggered. 
+
+`invoke` and `ainvoke` do not return the interrupt information. To access this information, you must use the [get_state](../reference/graphs.md#langgraph.graph.graph.CompiledGraph.get_state) method to retrieve the graph state after calling `invoke` or `ainvoke`.
+
+```python
+# Run the graph up to the interrupt 
+result = graph.invoke(inputs, thread_config)
+# Get the graph state to get interrupt information.
+state = graph.get_state(thread_config)
+# Print the state values
+print(state.values)
+# Print the pending tasks
+print(state.tasks)
+# Resume the graph with the user's input.
+graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
+
+```pycon
+{'foo': 'bar'} # State values
+(
+    PregelTask(
+        id='5d8ffc92-8011-0c9b-8b59-9d3545b7e553', 
+        name='node_foo', 
+        path=('__pregel_pull', 'node_foo'), 
+        error=None, 
+        interrupts=(Interrupt(value='value_in_interrupt', resumable=True, ns=['node_foo:5d8ffc92-8011-0c9b-8b59-9d3545b7e553'], when='during'),), state=None, 
+        result=None
+    ),
+) # Pending tasks. interrupts 
+```
+
+## How does resuming from an interrupt work?
 
 !!! warning
 
-    Resuming from a breakpoint is **different** from traditional breakpoints or Python's `input()` function, where execution resumes from the exact point where the breakpoint was triggered or where the `input()` function was called.
+    Resuming from an `interrupt` is **different** from Python's `input()` function, where execution resumes from the exact point where the `input()` function was called.
 
-A critical aspect of using `interrupt` is understanding how resuming works. When you resume execution, the graph execution starts from the **beginning** of the **graph node** where the last breakpoint was triggered.
+A critical aspect of using `interrupt` is understanding how resuming works. When you resume execution after an `interrupt`, graph execution starts from the **beginning** of the **graph node** where the last `interrupt` was triggered.
 
-**All** code from the beginning of the node to the **breakpoint** will be re-executed. 
+**All** code from the beginning of the node to the `interrupt` will be re-executed.
+
+```python
+counter = 0
+def node(state: State):
+    # All the code from the beginning of the node to the interrupt will be re-executed
+    # when the graph resumes.
+    global counter
+    counter += 1
+    print(f"> Entered the node: {counter} # of times")
+    # Pause the graph and wait for user input.
+    answer = interrupt()
+    print("The value of counter is:", counter)
+    ...
+```
+
+Upon **resuming** the graph, the counter will be incremented a second time, resulting in the following output:
+
+```pycon
+> Entered the node: 2 # of times
+The value of counter is: 2
+```
+
+## Common Pitfalls
 
 ### Side-effects
 
@@ -442,18 +534,8 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     {'human_node': {'age': 'John', 'name': 'N/A'}}
     ```
 
-
-
-## Best practices
-
-* Use the [`interrupt`](breakpoints.md#the-interrupt-function) function to set breakpoints and collect user input.
-* Use [`Command`](breakpoints.md#the-command-primitive) to resume execution and control the graph state.
-* Consider putting all side effects (e.g., API calls) after the `interrupt` to prevent duplication. 
-* Understand [how resuming from a breakpoint works](breakpoints.md#how-does-resuming-from-a-breakpoint-work) to avoid common gotchas.
-
 ## Additional Resources 📚
 
 - [**Conceptual Guide: Persistence**](persistence.md#replay): Read the persistence guide for more context on replaying.
-- [**Conceptual Guide: Breakpoints**](breakpoints.md): Read the breakpoints guide for more context on breakpoints.
 - [**How to Guides: Human-in-the-loop**](../how-tos/index.md#human-in-the-loop): Learn how to implement human-in-the-loop workflows in LangGraph.
 - [**How to implement multi-turn conversations**](../how-tos/multi-agent-multi-turn-convo.ipynb): Learn how to implement multi-turn conversations in LangGraph.

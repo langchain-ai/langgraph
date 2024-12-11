@@ -446,19 +446,6 @@ graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthr
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
 
-## Breakpoints
-
-Breakpoints pause graph execution at specific points, enabling [**human-in-the-loop**](./human_in_the_loop.md) workflows and debugging. Breakpoints are powered by  LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. 
-
-You **MUST** use a [checkpointer](./persistence.md) when using breakpoints as breakpoints require the ability to save the state of the graph at the time of pausing.
-
-There are two places where you can set breakpoints:
-
-1. **Inside** a node using the [`interrupt` function](#the-interrupt-function) (or the older [`NodeInterrupt` exception](#nodeinterrupt-exception)).
-2. **Before** or **after** a node executes by setting breakpoints at **compile time** or **run time**. We call these [**static breakpoints**](#static-breakpoints).
-
-Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
-
 ## `interrupt`
 
 Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing the developer to collect user input, validate the graph state, or make decisions before resuming execution.
@@ -479,6 +466,12 @@ def human_approval_node(state: State):
 Resuming the graph is done by passing a [`Command`](#command) object to the graph with the `resume` key set to the value returned by the `interrupt` function.
 
 Read more about how the `interrupt` is used for **human-in-the-loop** workflows in the [Human-in-the-loop conceptual guide](./human_in_the_loop.md).
+
+## Breakpoints
+
+Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt-function) for this purpose.
+
+Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
 ## Subgraphs
 
