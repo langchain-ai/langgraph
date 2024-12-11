@@ -105,6 +105,8 @@ thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(Command(resume=True), config=thread_config)
 ```
 
+See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a more detailed example.
+
 ### Review & Edit State
 
 <figure markdown="1">
@@ -148,6 +150,8 @@ graph.invoke(
 )
 ```
 
+See [How to wait for user input using interrupt](../how-tos/human_in_the_loop/wait-user-input.ipynb) for a more detailed example.
+
 ### Review Tool Calls
 
 <figure markdown="1">
@@ -188,6 +192,8 @@ def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
         feedback_msg = get_feedback_msg(review_data)
         return Command(goto="call_llm", update={"messages": [feedback_msg]})
 ```
+
+See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a more detailed example.
 
 ### Multi-turn conversation
 
@@ -266,6 +272,8 @@ it may be part of a larger graph consisting of multiple nodes and include a cond
             goto=active_agent,
         )
     ```
+
+See [how to implement multi-turn conversations](../how-tos/multi-agent-multi-turn-convo.ipynb) for a more detailed example.
 
 ### Validating human input
 
