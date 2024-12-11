@@ -43,6 +43,12 @@ See the [how-to guide](../cloud/deployment/cloud.md#create-new-revision) for cre
 
 Infrastructure for [deployments](#deployment) and [revisions](#revision) are provisioned and deployed asynchronously. They are not deployed immediately after submission. Currently, deployment can take up to several minutes.
 
+- When a new deployment is created, a new database is created for the deployment. Database creation is a one-time step. This step contributes to a longer deployment time for the initial revision of the deployment.
+- When a subsequent revision is created for a deployment, there is no database creation step. The deployment time for a subsequent revision is significantly faster compared to the deployment time of the initial revision.
+- The deployment process for each revision contains a build step, which can take up to a few minutes.
+
+!!! info "Database creation for `Development` type deployments takes longer than database creation for `Production` type deployments."
+
 ## Architecture
 
 !!! warning "Subject to Change"
@@ -51,7 +57,6 @@ The Cloud SaaS deployment architecture may change in the future.
 A high-level diagram of a Cloud SaaS deployment.
 
 ![diagram](img/langgraph_cloud_architecture.png)
-
 
 ## Related
 
