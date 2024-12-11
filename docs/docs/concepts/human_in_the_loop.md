@@ -2,7 +2,7 @@
 
 !!! tip "This guide uses the new `interrupt` function."
 
-    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [`interrupt` function][langgraph.types.interrupt] as it simplifies **human-in-the-loop** patterns. Please see the [Breakpoints](breakpoints.md) guide for more information.
+    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [`interrupt` function][langgraph.types.interrupt] as it simplifies **human-in-the-loop** patterns.
 
     If you're looking for the previous version of this conceptual guide, which relied on static breakpoints and `NodeInterrupt` exception, it is available [here](v0-human-in-the-loop.md). 
 

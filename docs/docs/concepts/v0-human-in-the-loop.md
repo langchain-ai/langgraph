@@ -1,5 +1,12 @@
 # Human-in-the-loop
 
+!!! note "Use the `interrupt` function instead."
+
+    As of LangGraph 0.2.57, the recommended way to set breakpoints is using the [`interrupt` function][langgraph.types.interrupt] as it simplifies **human-in-the-loop** patterns.
+
+    Please see the revised [human-in-the-loop guide](./human_in_the_loop.md) for the latest version that uses the `interrupt` function.
+
+
 Human-in-the-loop (or "on-the-loop") enhances agent capabilities through several common user interaction patterns.
 
 Common interaction patterns include:
@@ -44,7 +51,7 @@ for event in graph.stream(None, thread_config, stream_mode="values"):
 
 ### Dynamic Breakpoints
 
-Alternatively, the developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
+Alternatively, the developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of [dynamic breakpoints](./breakpoints.md) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
 
 ```python
 def my_node(state: State) -> State:
@@ -89,7 +96,7 @@ See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a de
 
 Sometimes we want to approve certain steps in our agent's execution. 
  
-We can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to the step that we want to approve.
+We can interrupt our agent at a [breakpoint](./breakpoints.md) prior to the step that we want to approve.
 
 This is generally recommend for sensitive actions (e.g., using external APIs or writing to a database).
  
@@ -120,7 +127,7 @@ See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed h
 
 Sometimes we want to review and edit the agent's state. 
  
-As with approval, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to the step we want to check. 
+As with approval, we can interrupt our agent at a [breakpoint](./breakpoints) prior to the step we want to check. 
  
 We can surface the current state to a user and allow the user to edit the agent state.
  
@@ -156,7 +163,7 @@ Sometimes we want to explicitly get human input at a particular step in the grap
  
 We can create a graph node designated for this (e.g., `human_input` in our example diagram).
  
-As with approval and editing, we can interrupt our agent at a [breakpoint](./low_level.md#breakpoints) prior to this node.
+As with approval and editing, we can interrupt our agent at a [breakpoint](./breakpoints) prior to this node.
  
 We can then perform a state update that includes the human input, just as we did with editing state.
 
@@ -319,4 +326,4 @@ for event in graph.stream(None, config, stream_mode="values"):
 
 See [this additional conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#update-state) for related context on forking.
 
-See see [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a detailed how-to on doing time-travel!
+See [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a detailed how-to on doing time-travel!
