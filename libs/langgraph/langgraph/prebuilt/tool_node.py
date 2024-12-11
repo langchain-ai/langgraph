@@ -297,7 +297,7 @@ class ToolNode(RunnableCallable):
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            response = self.tools_by_name[call["name"]].invoke(input)
+            response = self.tools_by_name[call["name"]].invoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
@@ -352,7 +352,7 @@ class ToolNode(RunnableCallable):
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            response = await self.tools_by_name[call["name"]].ainvoke(input)
+            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
