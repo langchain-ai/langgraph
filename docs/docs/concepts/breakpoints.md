@@ -1,6 +1,6 @@
 # Breakpoints
 
-Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#the-interrupt-function) for this purpose.
+Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](./human_in_the_loop.md#interrupt) for this purpose.
 
 ## Requirements
 
@@ -9,7 +9,7 @@ To use breakpoints, you will need to:
 1. [**Specify a checkpointer**](persistence.md#checkpoints) to save the graph state after each step.
 2. [**Set breakpoints**](#setting-breakpoints) to specify where execution should pause.
 3. **Run the graph** with a [**thread ID**](./persistence.md#threads) to pause execution at the breakpoint.
-4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#the-command-primitive)).
+4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](./human_in_the_loop.md#the-command-primitive)).
 
 ## Setting breakpoints
 
