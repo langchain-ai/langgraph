@@ -5228,13 +5228,21 @@ def test_streaming_from_subgraph_with_interrupt(
 
         foo: str
 
+    counter_sub_node1 = 0
+
     def sub_node1(state: State):
         """A node in the sub-graph."""
+        nonlocal counter_sub_node1
+        counter_sub_node1 += 1
         return {
             "foo": "sub_node1",
         }
 
+    counter_human_node = 0
+
     def sub_human_node(state: State):
+        nonlocal counter_human_node
+        counter_human_node += 1
         answer = interrupt("what is your name?")
         return {
             "foo": answer,
@@ -5255,9 +5263,12 @@ def test_streaming_from_subgraph_with_interrupt(
     subgraph = subgraph_builder.compile(checkpointer=checkpointer)
 
     chunks_streamed_from_subgraph = []
+    parent_counter = 0
 
     def parent_node(state: State):
         """This parent node will invoke the subgraph."""
+        nonlocal parent_counter
+        parent_counter += 1
         for chunk in subgraph.stream(
             state, stream_mode="updates"
         ):  # <-- has interrupt inside
@@ -5282,6 +5293,9 @@ def test_streaming_from_subgraph_with_interrupt(
     # Run until the first interrupt
     # invoke returns the state of the graph at the time of interrupt
     assert graph.invoke({"foo": "start_parent"}, config) == {"foo": "start_parent"}
+    assert parent_counter == 1
+    assert counter_sub_node1 == 1
+    assert counter_human_node == 1
     assert chunks_streamed_from_subgraph == [
         {
             "foo": "start_parent",  # value invoked with
@@ -5296,6 +5310,9 @@ def test_streaming_from_subgraph_with_interrupt(
     assert graph.invoke(Command(resume=interrupt_value), config) == {
         "foo": "end_parent"
     }
+    assert parent_counter == 2
+    assert counter_sub_node1 == 1
+    assert counter_human_node == 2
     # What should be the expected chunks here after a resume?
     assert chunks_streamed_from_subgraph == [
         {
