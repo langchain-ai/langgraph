@@ -19,6 +19,8 @@ from typing import (
     cast,
 )
 
+from pydantic import BaseModel
+
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
 
@@ -271,7 +273,7 @@ class Command(Generic[N], ToolOutputMixin):
     """
 
     graph: Optional[str] = None
-    update: Union[dict[str, Any], Sequence[tuple[str, Any]]] = ()
+    update: Union[dict[str, Any], Sequence[tuple[str, Any]], BaseModel] = ()
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
@@ -287,6 +289,8 @@ class Command(Generic[N], ToolOutputMixin):
     def _update_as_tuples(self) -> Sequence[tuple[str, Any]]:
         if isinstance(self.update, dict):
             return list(self.update.items())
+        elif isinstance(self.update, BaseModel):
+            return list(self.update.model_dump().items())
         elif isinstance(self.update, (list, tuple)) and all(
             isinstance(t, tuple) and len(t) == 2 and isinstance(t[0], str)
             for t in self.update
@@ -296,9 +300,6 @@ class Command(Generic[N], ToolOutputMixin):
             return [("__root__", self.update)]
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
-
-
-StreamChunk = tuple[tuple[str, ...], str, Any]
 
 
 class StreamProtocol:
