@@ -448,17 +448,144 @@ Place code with side effects, such as API calls, **after** the `interrupt` to av
 
 ### Subgraphs called as functions
 
+When invoking a subgraph [as a function](low_level.md#as-a-function), the **parent graph** will resume execution from the **beginning of the node** where the subgraph was invoked (and where an `interrupt` was triggered). Similarly, the **subgraph**, will resume from the **beginning of the node** where the `interrupt()` function was called.
 
-**Subgraphs**: If you're invoking a subgraph [as a function](low_level.md#as-a-function), the **parent** graph will be re-run from the **beginning of the node** where the subgraph was invoked.
+For example,
 
 ```python
-def some_node(state: State):
-    some_code() # <-- This code will be re-executed when the subgraph is resumed.
-    # Using a subgraph as a function.
-    # The subgraph has an `interrupt` call
+def node_in_parent_graph(state: State):
+    some_code()  # <-- This will re-execute when the subgraph is resumed.
+    # Invoke a subgraph as a function.
+    # The subgraph contains an `interrupt` call.
     subgraph_result = subgraph.invoke(some_input)
     ...
 ```
+
+---- 
+
+**Example: Parent and Subgraph Execution Flow**
+
+If the parent graph has 3 nodes:
+
+**Parent Graph**: `node_1` → `node_2` (subgraph call) → `node_3`
+
+And the subgraph has 3 nodes, where the second node contains an `interrupt`:
+
+**Subgraph**: `sub_node_1` → `sub_node_2` (`interrupt`) → `sub_node_3`
+
+When resuming the graph, the execution will proceed as follows:
+
+1. **Skip `node_1`** in the parent graph (already executed, graph state was saved in snapshot).
+2. **Re-execute `node_2`** in the parent graph from the start.
+3. **Skip `sub_node_1`** in the subgraph (already executed, graph state was saved in snapshot).
+4. **Re-execute `sub_node_2`** in the subgraph from the beginning.
+5. Continue with `sub_node_3` and subsequent nodes.
+
+??? "An example of a subgraph with an interrupt with a parent graph"
+
+      This is an example that you can play with to understand how subgraphs work with interrupts.
+      It counts the number of times each node is entered and prints the count.
+
+      ```python
+      import uuid
+      from typing import TypedDict
+
+      from langgraph.graph import StateGraph
+      from langgraph.constants import START
+      from langgraph.types import interrupt, Command
+      from langgraph.checkpoint.memory import MemorySaver
+
+
+      class State(TypedDict):
+         """The graph state."""
+         state_counter: int
+
+
+      counter_node_in_subgraph = 0
+
+      def node_in_subgraph(state: State):
+         """A node in the sub-graph."""
+         global counter_node_in_subgraph
+         counter_node_in_subgraph += 1  # This code will **NOT** run again!
+         print(f"Entered `node_in_subgraph` a total of {counter_node_in_subgraph} times")
+
+      counter_human_node = 0
+
+      def human_node(state: State):
+         global counter_human_node
+         counter_human_node += 1 # This code will run again!
+         print(f"Entered human_node in sub-graph a total of {counter_human_node} times")
+         answer = interrupt("what is your name?")
+         print(f"Got an answer of {answer}")
+
+
+      checkpointer = MemorySaver()
+
+      subgraph_builder = StateGraph(State)
+      subgraph_builder.add_node("some_node", node_in_subgraph)
+      subgraph_builder.add_node("human_node", human_node)
+      subgraph_builder.add_edge(START, "some_node")
+      subgraph_builder.add_edge("some_node", "human_node")
+      subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+
+
+      counter_parent_node = 0
+
+      def parent_node(state: State):
+         """This parent node will invoke the subgraph."""
+         global counter_parent_node
+
+         counter_parent_node += 1 # This code will run again on resuming!
+         print(f"Entered `parent_node` a total of {counter_parent_node} times")
+  
+         # Please note that we're intentionally incrementing the state counter
+         # in the graph state as well to demonstrate that the subgraph update
+         # of the same key will not conflict with the parent graph (until
+         subgraph_state = subgraph.invoke(state)
+         return subgraph_state
+
+
+      builder = StateGraph(State)
+      builder.add_node("parent_node", parent_node)
+      builder.add_edge(START, "parent_node")
+
+      # A checkpointer must be enabled for interrupts to work!
+      checkpointer = MemorySaver()
+      graph = builder.compile(checkpointer=checkpointer)
+
+      config = {
+         "configurable": {
+            "thread_id": uuid.uuid4(),
+         }
+      }
+
+      for chunk in graph.stream({"state_counter": 1}, config):
+         print(chunk)
+
+      print('--- Resuming ---')
+
+      for chunk in graph.stream(Command(resume="35"), config):
+         print(chunk)
+      ```
+
+      This will print out
+
+      ```pycon
+      --- First invocation ---
+      In parent node: {'foo': 'bar'}
+      Entered `parent_node` a total of 1 times
+      Entered `node_in_subgraph` a total of 1 times
+      Entered human_node in sub-graph a total of 1 times
+      {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['parent_node:0b23d72f-aaba-0329-1a59-ca4f3c8bad3b', 'human_node:25df717c-cb80-57b0-7410-44e20aac8f3c'], when='during'),)}
+
+      --- Resuming ---
+      In parent node: {'foo': 'bar'}
+      Entered `parent_node` a total of 2 times
+      Entered human_node in sub-graph a total of 2 times
+      Got an answer of 35
+      {'parent_node': None} 
+      ```
+
 
 
 ### Using multiple interrupts
