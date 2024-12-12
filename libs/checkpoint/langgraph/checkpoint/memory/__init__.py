@@ -8,7 +8,7 @@ from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type, List
 
 from langchain_core.runnables import RunnableConfig
 
@@ -105,6 +105,9 @@ class MemorySaver(
         __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
+    
+    def get_writes(self, task_id: str) -> Optional[List[Any]]:
+        pass
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the in-memory storage.

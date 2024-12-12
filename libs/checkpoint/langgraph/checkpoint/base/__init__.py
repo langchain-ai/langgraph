@@ -238,6 +238,7 @@ class BaseCheckpointSaver(Generic[V]):
         """
         if value := self.get_tuple(config):
             return value.checkpoint
+        
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Fetch a checkpoint tuple using the given configuration.
@@ -251,6 +252,18 @@ class BaseCheckpointSaver(Generic[V]):
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
         """
+        raise NotImplementedError
+    
+    def get_writes(self, task_id: str) -> Optional[List[Any]]:
+        """Fetch pending writes from a checkpoint determined by the `task_id`.
+        The `task_id` should be the identifier of a `PregelTask` corresponding to a cached node.
+        
+        Args:
+            task_id (str): The identifer of the `PregelTask` corresponding to a cached node.
+            
+        Returns:
+            List[Any]: A list of checkpoint pending writes"""
+        
         raise NotImplementedError
 
     def list(

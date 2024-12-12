@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional, Sequence, Union
+from typing import Any, Iterator, Optional, Sequence, Union, List
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -179,6 +179,33 @@ class PostgresSaver(BasePostgresSaver):
                     ),
                     self._load_writes(value["pending_writes"]),
                 )
+
+    def get_writes(self, task_id) -> List[Any]:
+        #MKTODO: add documentation
+        #Only getting results for task_id pending writes in 1 arbitrary checkpoint now
+
+        results = []
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] order by task_id, idx) as pending_writes
+                FROM checkpoint_writes
+                WHERE task_id = %s
+                """,
+                (task_id,),
+                binary=True
+            )
+
+            for row in cur:
+                results.extend(
+                    self._load_writes(row["pending_writes"])
+                )
+
+        return results
+
+        
+
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.

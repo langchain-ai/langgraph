@@ -259,6 +259,8 @@ class PregelLoop(LoopProtocol):
         )
         self.prev_checkpoint_config = None
 
+        self.exists_cached_node = any([node.cache_policy for node in self.nodes.values()])
+
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
@@ -466,6 +468,21 @@ class PregelLoop(LoopProtocol):
                     "input": None,
                 }
             )
+        
+        if self.exists_cached_node and self.checkpointer:
+            for tid, task in self.tasks.items():
+                if task.cache_policy:
+                    cached_writes = self.checkpointer.get_writes(tid)
+                    if cached_writes:
+                        print("Cache Hit: ", cached_writes)
+                        print()
+
+                        task = self.tasks[tid]
+                        task.writes.extend(
+                            [(channel, value) for _, channel, value in cached_writes]
+                        )
+
+                        self._output_writes(tid, task.writes, cached=True)
 
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
