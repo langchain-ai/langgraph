@@ -30,7 +30,7 @@ These how-to guides show how to achieve that controllability.
 - [How to add thread-level persistence to subgraphs](subgraph-persistence.ipynb)
 - [How to add cross-thread persistence to your graph](cross-thread-persistence.ipynb)
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
-- [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
+- [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
 
 ### Memory
