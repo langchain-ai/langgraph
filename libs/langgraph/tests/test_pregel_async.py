@@ -6160,6 +6160,10 @@ async def test_parallel_node_execution():
     assert duration < 3.0
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupt_state_persistence(checkpointer_name: str) -> None:
     """Test that state is preserved correctly across multiple interrupts."""
