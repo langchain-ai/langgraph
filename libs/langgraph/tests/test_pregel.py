@@ -5252,7 +5252,7 @@ def test_streaming_from_subgraph_with_interrupt(
     subgraph_builder.add_edge(START, "sub_node1")
     subgraph_builder.add_edge("sub_node1", "sub_human_node")
     subgraph_builder.add_edge("sub_human_node", "sub_node3")
-    subgraph = subgraph_builder.compile()
+    subgraph = subgraph_builder.compile(checkpointer=checkpointer)
 
     chunks_streamed_from_subgraph = []
 
