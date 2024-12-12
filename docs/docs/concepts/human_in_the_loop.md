@@ -461,29 +461,25 @@ def node_in_parent_graph(state: State):
     ...
 ```
 
----- 
+??? "**Example: Parent and Subgraph Execution Flow**"
 
-**Example: Parent and Subgraph Execution Flow**
+      Say we have a parent graph with 3 nodes:
 
-If the parent graph has 3 nodes:
+      **Parent Graph**: `node_1` → `node_2` (subgraph call) → `node_3`
 
-**Parent Graph**: `node_1` → `node_2` (subgraph call) → `node_3`
+      And the subgraph has 3 nodes, where the second node contains an `interrupt`:
 
-And the subgraph has 3 nodes, where the second node contains an `interrupt`:
+      **Subgraph**: `sub_node_1` → `sub_node_2` (`interrupt`) → `sub_node_3`
 
-**Subgraph**: `sub_node_1` → `sub_node_2` (`interrupt`) → `sub_node_3`
+      When resuming the graph, the execution will proceed as follows:
 
-When resuming the graph, the execution will proceed as follows:
+      1. **Skip `node_1`** in the parent graph (already executed, graph state was saved in snapshot).
+      2. **Re-execute `node_2`** in the parent graph from the start.
+      3. **Skip `sub_node_1`** in the subgraph (already executed, graph state was saved in snapshot).
+      4. **Re-execute `sub_node_2`** in the subgraph from the beginning.
+      5. Continue with `sub_node_3` and subsequent nodes.
 
-1. **Skip `node_1`** in the parent graph (already executed, graph state was saved in snapshot).
-2. **Re-execute `node_2`** in the parent graph from the start.
-3. **Skip `sub_node_1`** in the subgraph (already executed, graph state was saved in snapshot).
-4. **Re-execute `sub_node_2`** in the subgraph from the beginning.
-5. Continue with `sub_node_3` and subsequent nodes.
-
-??? "An example of a subgraph with an interrupt with a parent graph"
-
-      This is an example that you can play with to understand how subgraphs work with interrupts.
+      Here is abbreviated example code that you can use to understand how subgraphs work with interrupts.
       It counts the number of times each node is entered and prints the count.
 
       ```python
