@@ -5215,3 +5215,98 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_interrupt_state_persistence() -> None:
+    """Test that state is preserved correctly across multiple interrupts."""
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: str
+
+    def sub_node1(state: State):
+        """A node in the sub-graph."""
+        return {
+            "foo": "sub_node1",
+        }
+
+    def sub_human_node(state: State):
+        answer = interrupt("what is your name?")
+        return {
+            "foo": answer,
+        }
+
+    def sub_node3(state: State):
+        return {
+            "foo": "sub_node3",
+        }  # Not updating anything for this example
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("sub_node1", sub_node1)
+    subgraph_builder.add_node("sub_human_node", sub_human_node)
+    subgraph_builder.add_node("sub_node3", sub_node3)
+    subgraph_builder.add_edge(START, "sub_node1")
+    subgraph_builder.add_edge("sub_node1", "sub_human_node")
+    subgraph_builder.add_edge("sub_human_node", "sub_node3")
+    subgraph = subgraph_builder.compile()
+
+    chunks_streamed_from_subgraph = []
+
+    def parent_node(state: State):
+        """This parent node will invoke the subgraph."""
+        for chunk in subgraph.stream(
+            state, stream_mode="updates"
+        ):  # <-- has interrupt inside
+            chunks_streamed_from_subgraph.append(chunk)
+        return {
+            "foo": "end_parent",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("parent_node", parent_node)
+    builder.add_edge(START, "parent_node")
+
+    # A checkpointer must be enabled for interrupts to work!
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {
+        "configurable": {
+            "thread_id": uuid.uuid4(),
+        }
+    }
+
+    # Run until the first interrupt
+    # invoke returns the state of the graph at the time of interrupt
+    assert graph.invoke({"foo": "start_parent"}, config) == {"foo": "start_parent"}
+    assert chunks_streamed_from_subgraph == [
+        {
+            "foo": "start_parent",  # value invoked with
+        },
+        {
+            "foo": "sub_node1",
+        },
+    ]
+
+    # Resume after the first interrupt
+    interrupt_value = "sub_human_node_interrupt_value"
+    assert graph.invoke(Command(resume=interrupt_value), config) == {
+        "foo": "end_parent"
+    }
+    # What should be the expected chunks here after a resume?
+    assert chunks_streamed_from_subgraph == [
+        {
+            "foo": "start_parent",  # Value invoked with
+        },
+        {
+            "foo": "sub_node1",
+        },
+        {
+            "foo": interrupt_value,
+        },
+        {
+            "foo": "sub_node3",
+        },
+    ]
