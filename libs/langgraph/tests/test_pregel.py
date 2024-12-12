@@ -5218,8 +5218,10 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_interrupt_state_persistence() -> None:
-    """Test that state is preserved correctly across multiple interrupts."""
+def test_streaming_from_subgraph_with_interrupt(
+    request: pytest.FixtureRequest, checkpointer_name: str
+):
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class State(TypedDict):
         """The graph state."""
@@ -5269,7 +5271,6 @@ def test_multiple_interrupt_state_persistence() -> None:
     builder.add_edge(START, "parent_node")
 
     # A checkpointer must be enabled for interrupts to work!
-    checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     config = {
