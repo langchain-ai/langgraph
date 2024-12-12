@@ -468,7 +468,7 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
     elif code == EXT_PYDANTIC_V1:
         try:
-            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook, strict_map_key=False)
             # module, name, kwargs
             cls = getattr(importlib.import_module(tup[0]), tup[1])
             try:
@@ -479,7 +479,7 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
     elif code == EXT_PYDANTIC_V2:
         try:
-            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook)
+            tup = msgpack.unpackb(data, ext_hook=_msgpack_ext_hook, strict_map_key=False)
             # module, name, kwargs, method
             cls = getattr(importlib.import_module(tup[0]), tup[1])
             try:
