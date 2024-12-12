@@ -181,21 +181,20 @@ class PostgresSaver(BasePostgresSaver):
                 )
 
     def get_writes(self, task_id) -> List[Any]:
-        #MKTODO: add documentation
-        #Only getting results for task_id pending writes in 1 arbitrary checkpoint now
+        # MKTODO: add documentation
+        # Only getting results for task_id pending writes in 1 arbitrary checkpoint now
 
-        results = []
-        with self._cursor() as cur:
-            cur.execute(
-                """
+        query = """
                 SELECT
                     array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] order by task_id, idx) as pending_writes
                 FROM checkpoint_writes
                 WHERE task_id = %s
-                """,
-                (task_id,),
-                binary=True
-            )
+                """
+        args = (task_id,)
+
+        results = []
+        with self._cursor() as cur:
+            cur.execute(query, args, binary=True)
 
             for row in cur:
                 results.extend(

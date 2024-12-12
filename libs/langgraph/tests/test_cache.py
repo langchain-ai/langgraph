@@ -4,6 +4,7 @@ from langgraph.types import CachePolicy
 from typing import TypedDict
 import pytest
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 
 
@@ -43,8 +44,6 @@ def test_dict_cache():
     graph = builder.compile(checkpointer=memory)
     graph.invoke({"foo": 1, "bar": 1}, config, debug=True)
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
-
 @pytest.mark.parametrize("checkpointer_name", ["postgres"])
 def test_postgres(request: pytest.FixtureRequest, checkpointer_name: str):
     checkpointer: PostgresSaver = request.getfixturevalue(
@@ -80,8 +79,8 @@ def test_postgres(request: pytest.FixtureRequest, checkpointer_name: str):
         bar: int
         ra: int
 
-    def cache_key(inputs: State, config: RunnableConfig = None):
-        return str(inputs["bar"])
+    def cache_key(inputs: State):
+        return str(inputs["ra"])
 
     cache = CachePolicy(cache_key=cache_key)
     builder = StateGraph(State)
@@ -93,5 +92,42 @@ def test_postgres(request: pytest.FixtureRequest, checkpointer_name: str):
     
     graph = builder.compile(checkpointer=checkpointer)
     graph.invoke({"foo": 1, "bar": 1, "ra": 1}, config, debug=True)
+
+@pytest.mark.parametrize("checkpointer_name", ["postgres"])
+def test_call_count(request: pytest.FixtureRequest, checkpointer_name: str):
+    checkpointer: PostgresSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
+
+    node_call_count = 0
+
+    config = {"configurable": {"thread_id": "thread-1"}}
+
+    class State(TypedDict):
+        foo: int
+        bar: int
+        ra: int
+
+    def add_two(state: State):
+        nonlocal node_call_count 
+        node_call_count += 1
+        return {"ra": state["ra"] + 1}
+
+    def cache_key(inputs: State):
+        return "" #str(inputs["ra"])
+
+    cache = CachePolicy(cache_key=cache_key)
+    builder = StateGraph(State)
+    builder.add_node("add_two", add_two, cache=cache)
+    builder.add_node("subtract_one", lambda x: {"foo": x["foo"] + 2, "ra": x["ra"] + 2})
+    builder.add_edge("add_two", "subtract_one")
+    builder.add_conditional_edges("subtract_one", lambda x: END if x["foo"] >= 10 else "add_two")
+    builder.set_entry_point("add_two")
     
+    graph = builder.compile(checkpointer=checkpointer)
+    graph.invoke({"foo": 1, "bar": 1, "ra": 1}, config, debug=True)
+
+    print("NODE CALL COUNT: ", node_call_count)
+
+
 
