@@ -28,11 +28,14 @@ def human_node(state: State):
     value = interrupt(
         # Any JSON serializable value to surface to the human.
         # For example, a question or a piece of text or a set of keys in the state
-        some_data
+       {
+          "text_to_revise": state["some_text"]
+       }
     )
-    ...
     # Update the state with the human's input or route the graph based on the input.
-    ...
+    return {
+        "some_text": value
+    }
 
 graph = graph_builder.compile(
     checkpointer=checkpointer # Required for `interrupt` to work
@@ -45,6 +48,80 @@ graph.invoke(some_input, config=thread_config)
 # Resume the graph with the human's input
 graph.invoke(Command(resume=value_from_human), config=thread_config)
 ```
+
+```pycon
+{'some_text': 'Edited text'}
+```
+
+!!! warning
+      Interrupts are both powerful and ergonomic. However, while they may resemble Python's input() function in terms of developer experience, it's important to note that they do not automatically resume execution from the interruption point. Instead, they rerun the entire node where the interrupt was used.
+      For this reason, interrupts are typically best placed at the start of a node or in a dedicated node. Please read the [resuming from an interrupt](#how-does-resuming-from-an-interrupt-work) section for more details. 
+
+??? "Full Code"
+
+      Here's a full example of how to use `interrupt` in a graph, if you'd like
+      to see the code in action.
+
+      ```python
+      from typing import TypedDict
+
+      from langgraph.checkpoint.memory import MemorySaver
+      from langgraph.constants import START
+      from langgraph.graph import StateGraph
+      from langgraph.types import interrupt, Command
+
+      class State(TypedDict):
+         """The graph state."""
+         some_text: str
+
+      def human_node(state: State):
+         value = interrupt(
+            # Any JSON serializable value to surface to the human.
+            # For example, a question or a piece of text or a set of keys in the state
+            {
+               "text_to_revise": state["some_text"]
+            }
+         )
+         return {
+            # Update the state with the human's input
+            "some_text": value
+         }
+
+
+      # Build the graph
+      graph_builder = StateGraph(State)
+      # Add the human-node to the graph
+      graph_builder.add_node("human_node", human_node)
+      graph_builder.add_edge(START, "human_node")
+
+      # A checkpointer is required for `interrupt` to work.
+      checkpointer = MemorySaver()
+      graph = graph_builder.compile(
+         checkpointer=checkpointer
+      )
+
+
+      # Using stream() to directly surface the `__interrupt__` information.
+      for chunk in graph.stream({"some_text": "Original text"}, config=thread_config):
+         print(chunk)
+
+      # Resume using Command
+      for chunk in graph.stream(Command(resume="Edited text"), config=thread_config):
+         print(chunk)
+      ```
+
+      ```pycon
+      {'__interrupt__': (
+            Interrupt(
+               value={'question': 'Please revise the text', 'some_text': 'Original text'}, 
+               resumable=True, 
+               ns=['human_node:10fe492f-3688-c8c6-0d0a-ec61a43fecd6'], 
+               when='during'
+            ),
+         )
+      }
+      {'human_node': {'some_text': 'Edited text'}}
+      ```
 
 ## Requirements
 
