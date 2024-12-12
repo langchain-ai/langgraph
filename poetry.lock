@@ -3035,7 +3035,7 @@ langchain-core = ">=0.3.0,<0.4.0"
 
 [[package]]
 name = "langgraph"
-version = "0.2.57"
+version = "0.2.59"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -3067,6 +3067,23 @@ msgpack = "^1.1.0"
 [package.source]
 type = "directory"
 url = "libs/checkpoint"
+
+[[package]]
+name = "langgraph-checkpoint-mongodb"
+version = "0.1.0"
+description = "Library with a MongoDB implementation of LangGraph checkpoint saver."
+optional = false
+python-versions = "<4.0.0,>=3.9.0"
+files = [
+    {file = "langgraph_checkpoint_mongodb-0.1.0-py3-none-any.whl", hash = "sha256:52f20956b36e0275ff805a1eea1db4c1a7e5e0ffe0a1ade65969004fa1654703"},
+    {file = "langgraph_checkpoint_mongodb-0.1.0.tar.gz", hash = "sha256:3165c134ad5c82a3fe02fef04c81dcd48a3f5d031e07a9d1cb84457241f76793"},
+]
+
+[package.dependencies]
+langgraph = ">=0.2.38,<0.3.0"
+langgraph-checkpoint = ">=2.0.0,<3.0.0"
+motor = ">3.5.0"
+pymongo = ">=4.9.0,<4.10.0"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
@@ -7468,4 +7485,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "cf18eed5e183fc4f7786d095540b6c9261e130750f2d1fcc427e08b78d522c61"
+content-hash = "367f5fb480a8fa5d8ab1c0964a1e9450dbb28e6998097e7536966e7a5fe30c90"
