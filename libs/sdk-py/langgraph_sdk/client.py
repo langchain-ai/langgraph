@@ -1318,7 +1318,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -1503,7 +1505,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -1672,7 +1676,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -3477,7 +3483,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3662,7 +3670,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3828,7 +3838,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
