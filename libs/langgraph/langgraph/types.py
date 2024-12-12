@@ -302,6 +302,8 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
+StreamChunk = tuple[tuple[str, ...], str, Any]
+
 class StreamProtocol:
     __slots__ = ("modes", "__call__")
 
