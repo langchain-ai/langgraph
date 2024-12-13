@@ -578,6 +578,13 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
         when creating the store. Without this configuration, all `index` arguments passed to
         `put` or `aput`will have no effect.
+        
+    Tip:
+        This class is available in the [`langgraph-checkpoint-postgres` package](https://pypi.org/project/langgraph-checkpoint-postgres/).
+        Install with:
+        ```bash
+        pip install langgraph-checkpoint-postgres
+        ```
 
     Warning:
         Make sure to call `setup()` before first use to create necessary tables and indexes.

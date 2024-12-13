@@ -611,6 +611,11 @@ class BaseStore(ABC):
         by providing an `index` configuration at creation time. Without this
         configuration, semantic search is disabled and any `index` arguments
         to storage operations will have no effect.
+    
+    Note:
+        When deploying to the LangGraph Platform, your store (and checkpointer)
+        are managed by the platform. Do not manually create a store, as it will
+        be ignored.
     """
 
     __slots__ = ("__weakref__",)
