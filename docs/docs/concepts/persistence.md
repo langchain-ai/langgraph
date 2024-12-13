@@ -168,7 +168,7 @@ Importantly, LangGraph knows whether a particular checkpoint has been executed p
 
 ### Update state
 
-In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method three different arguments:
+In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method accepts three different arguments:
 
 #### `config`
 
