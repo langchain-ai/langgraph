@@ -304,6 +304,7 @@ class Command(Generic[N], ToolOutputMixin):
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
 
+
 class StreamProtocol:
     __slots__ = ("modes", "__call__")
 
