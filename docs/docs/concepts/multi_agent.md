@@ -98,7 +98,7 @@ This is a special case of updating the graph state from tools where in addition 
 ```python
 def call_tools(state):
     ...
-    commands = [tools_by_name[call["name"].invoke(call, config={"coerce_tool_content": False}) for tool_call in tool_calls]
+    commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
     return commands
 ```
 
