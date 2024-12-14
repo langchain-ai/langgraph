@@ -47,9 +47,42 @@ class StoreConfig(TypedDict, total=False):
     """Configuration for vector embeddings in store."""
 
 
+class SecurityConfig(TypedDict, total=False):
+    securitySchemes: dict
+    security: list
+    # path => {method => security}
+    paths: dict[str, dict[str, list]]
+
+
 class AuthConfig(TypedDict, total=False):
     path: str
+    """Path to the authentication function in a Python file."""
     disable_studio_auth: bool
+    """Whether to disable auth when connecting from the LangSmith Studio."""
+    openapi: SecurityConfig
+    """The schema to use for updating the openapi spec.
+
+    Example:
+        {
+            "securitySchemes": {
+                "OAuth2": {
+                    "type": "oauth2",
+                    "flows": {
+                        "password": {
+                            "tokenUrl": "/token",
+                            "scopes": {
+                                "me": "Read information about the current user",
+                                "items": "Access to create and manage items"
+                            }
+                        }
+                    }
+                }
+            },
+            "security": [
+                {"OAuth2": ["me"]}  # Default security requirement for all endpoints
+            ]
+        }
+    """
 
 
 class Config(TypedDict, total=False):
