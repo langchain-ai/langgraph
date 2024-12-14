@@ -47,6 +47,11 @@ class StoreConfig(TypedDict, total=False):
     """Configuration for vector embeddings in store."""
 
 
+class AuthConfig(TypedDict, total=False):
+    path: str
+    disable_studio_auth: bool
+
+
 class Config(TypedDict, total=False):
     python_version: str
     node_version: Optional[str]
@@ -56,6 +61,7 @@ class Config(TypedDict, total=False):
     graphs: dict[str, str]
     env: Union[dict[str, str], str]
     store: Optional[StoreConfig]
+    auth: Optional[AuthConfig]
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -88,6 +94,7 @@ def validate_config(config: Config) -> Config:
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
+            "auth": config.get("auth"),
         }
         if config.get("node_version")
         else {
@@ -98,6 +105,7 @@ def validate_config(config: Config) -> Config:
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
+            "auth": config.get("auth"),
         }
     )
 
@@ -400,6 +408,10 @@ RUN set -ex && \\
 ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -445,6 +457,10 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
 ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}

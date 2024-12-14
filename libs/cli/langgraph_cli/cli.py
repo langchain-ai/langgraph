@@ -576,16 +576,18 @@ def dev(
         from langgraph_api.cli import run_server
     except ImportError:
         try:
-            import pkg_resources
+            from importlib import util
 
-            pkg_resources.require("langgraph-api-inmem")
-        except (ImportError, pkg_resources.DistributionNotFound):
+            if not util.find_spec("langgraph_api"):
+                raise click.UsageError(
+                    "Required package 'langgraph-api' is not installed.\n"
+                    "Please install it with:\n\n"
+                    '    pip install -U "langgraph-cli[inmem]"\n\n'
+                ) from None
+        except ImportError:
             raise click.UsageError(
-                "Required package 'langgraph-api-inmem' is not installed.\n"
-                "Please install it with:\n\n"
-                '    pip install -U "langgraph-cli[inmem]"\n\n'
-                "If you're developing the langgraph-cli package locally, you can install in development mode:\n"
-                "    pip install -e ."
+                "Could not verify package installation. Please ensure Python is up to date and\n"
+                "langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
             ) from None
         raise click.UsageError(
             "Could not import run_server. This likely means your installation is incomplete.\n"
@@ -614,6 +616,7 @@ def dev(
         env=config_json.get("env"),
         store=config_json.get("store"),
         wait_for_client=wait_for_client,
+        auth=config_json.get("auth"),
     )
 
 
