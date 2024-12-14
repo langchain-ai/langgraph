@@ -61,7 +61,7 @@ class Config(TypedDict, total=False):
     graphs: dict[str, str]
     env: Union[dict[str, str], str]
     store: Optional[StoreConfig]
-    auth: Optional[dict[str, str]]
+    auth: Optional[AuthConfig]
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
