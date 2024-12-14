@@ -554,13 +554,13 @@ langgraph-sdk = ">=0.1.42,<0.2.0"
 
 [[package]]
 name = "langgraph-api"
-version = "0.0.7"
+version = "0.0.8"
 description = ""
 optional = true
 python-versions = "<4.0,>=3.11.0"
 files = [
-    {file = "langgraph_api-0.0.7-py3-none-any.whl", hash = "sha256:c94bcdce10a1a4f9e65c85d1c76268a6777e3e7ee71e1e6d5dae5d2da98a87c3"},
-    {file = "langgraph_api-0.0.7.tar.gz", hash = "sha256:e43291825a183fa221215bd0b04067812b18266e846290dec651f3cba6b796f0"},
+    {file = "langgraph_api-0.0.8-py3-none-any.whl", hash = "sha256:ab9b4a5ec8393d17ef921b94f3f019f49f3f17910ba9351beb1e1f962b02a33e"},
+    {file = "langgraph_api-0.0.8.tar.gz", hash = "sha256:b1304beb9d72392ce5d5602cd524a4f57839f1dcd1da6f4e1391832fb4a6edc5"},
 ]
 
 [package.dependencies]
@@ -1549,4 +1549,4 @@ inmem = ["langgraph-api", "python-dotenv"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "bf6d77426279e01cf63f774fa9623d9791ac368f322845b441a5d03f246b784f"
+content-hash = "c36514f708e8b2b32c20ad9b7a3ba6fca41f043ced0149f0aae4eef43fc6c10b"
