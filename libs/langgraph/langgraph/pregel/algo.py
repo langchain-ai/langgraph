@@ -489,7 +489,7 @@ def prepare_single_task(
                 task_id = _uuid5_str(
                     b"",
                     packet.node,
-                    cache_key
+                    cache_key,
                 )
             else:
                 task_id = _uuid5_str(
@@ -534,7 +534,7 @@ def prepare_single_task(
                 task_id = _uuid5_str(
                     b"",
                     packet.node,
-                    cache_key
+                    cache_key,
                 )
             else:
                 task_id = _uuid5_str(
@@ -666,7 +666,7 @@ def prepare_single_task(
                 task_id = _uuid5_str(
                     b"",
                     name,
-                    cache_key
+                    cache_key,
                 )
             else:
                 task_id = _uuid5_str(

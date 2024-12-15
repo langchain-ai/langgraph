@@ -180,17 +180,53 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_writes(self, task_id) -> List[Any]:
+    def get_writes(self, task_id, ttl=None) -> List[Any]:
         # MKTODO: add documentation
         # Only getting results for task_id pending writes in 1 arbitrary checkpoint now
 
-        query = """
+        # query = """
+        #         SELECT
+        #             array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] order by task_id, idx) as pending_writes
+        #         FROM checkpoint_writes
+        #         WHERE task_id = %s
+        #         """
+
+        query = ""
+        
+        if not ttl:
+            query += """
                 SELECT
-                    array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] order by task_id, idx) as pending_writes
+                    array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] ORDER BY task_id, idx) AS pending_writes
                 FROM checkpoint_writes
                 WHERE task_id = %s
                 """
-        args = (task_id,)
+            args = (task_id,)
+        
+        else:
+            query += """
+                WITH task_data AS (
+                    SELECT
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_id,
+                        array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] ORDER BY task_id, idx) AS pending_writes
+                    FROM checkpoint_writes 
+                    WHERE task_id = %s
+                    GROUP BY 1, 2, 3
+                )
+
+                SELECT
+                    extract(epoch FROM now()) as now,
+                    extract(epoch FROM (c.checkpoint->>'ts')::timestamp at time zone 'utc') checkpoint,
+                    abs(extract(epoch FROM now()) - extract(epoch FROM (c.checkpoint->>'ts')::timestamp at time zone 'utc')) as elapsed,
+                    cw.pending_writes
+                FROM task_data cw
+                INNER JOIN checkpoints c
+                    ON (cw.thread_id = c.thread_id AND cw.checkpoint_ns = c.checkpoint_ns AND cw.checkpoint_id = c.checkpoint_id)
+                WHERE extract(epoch FROM now()) - extract(epoch FROM (c.checkpoint->>'ts')::timestamp AT TIME ZONE 'UTC') <= %s
+                """
+
+        args = (task_id,) if not ttl else (task_id, ttl)
 
         results = []
         with self._cursor() as cur:
@@ -200,7 +236,6 @@ class PostgresSaver(BasePostgresSaver):
                 results.extend(
                     self._load_writes(row["pending_writes"])
                 )
-
         return results
 
         
