@@ -254,15 +254,17 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
     
-    def get_writes(self, task_id: str) -> Optional[List[Any]]:
-        """Fetch pending writes from a checkpoint determined by the `task_id`.
-        The `task_id` should be the identifier of a `PregelTask` corresponding to a cached node.
+    def get_writes(self, task_id: str, ttl: int = None) -> Optional[List[Any]]:
+        """"Retrieve pending writes given a task_id and optionally a ttl (in seconds). Used for retrieving pending writes for cached nodes.
+        If ttl is specified, only retrieves pending writes such that the timestamp of the corresponding checkpoint is within ttl seconds 
+        of the query.
         
         Args:
-            task_id (str): The identifer of the `PregelTask` corresponding to a cached node.
+            task_id: a task identifier, usually generated from a cache key for a task deriving from a cached node
+            ttl: the time to live of the cached writes in seconds
             
         Returns:
-            List[Any]: A list of checkpoint pending writes"""
+            a list of decoded pending writes for the specified task id, optionally recorded within ttl seconds of this query being made"""
         
         raise NotImplementedError
 

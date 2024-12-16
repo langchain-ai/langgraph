@@ -190,7 +190,7 @@ class PostgresSaver(BasePostgresSaver):
             ttl: the time to live of the cached writes in seconds
             
         Returns:
-            a list decoded pending writes for the specified task id, optionally recorded within ttl seconds of this query being made
+            a list of decoded pending writes for the specified task id, optionally recorded within ttl seconds of this query being made
         """
 
         query = ""
