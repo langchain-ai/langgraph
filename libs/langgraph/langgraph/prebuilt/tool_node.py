@@ -566,7 +566,7 @@ class ToolNode(RunnableCallable):
                 else '`Command(update=[ToolMessage("Success", tool_call_id=tool_call_id), ...], ...)`'
             )
             raise ValueError(
-                f"Expected to have a ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}. "
+                f"Expected to have a matching ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}. "
                 "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
                 f"You can fix it by modifying the tool to return {example_update}."
             )
