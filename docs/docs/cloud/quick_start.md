@@ -1,4 +1,4 @@
-# Deploy on LangGraph Cloud
+# Quickstart: Deploy on LangGraph Cloud
 
 !!! note "Prerequisites"
 
@@ -264,7 +264,8 @@ Congratulations! If you've worked your way through this tutorial you are well on
 
 Expand your knowledge with these resources:
 
-- **[Launch Local LangGraph Server](../tutorials/langgraph-platform/local-server.md)**: This quick start guide shows how to start a LangGraph Server locally for the **ReAct Agent** template. The steps are similar for other templates.
 - **[LangGraph Platform Concepts](../concepts/index.md#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.
 - **[LangGraph Platform How-to Guides](../how-tos/index.md#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+- **[Launch Local LangGraph Server](../tutorials/langgraph-platform/local-server.md)**: This quick start guide shows how to start a LangGraph Server locally for the **ReAct Agent** template. The steps are similar for other templates.
+
 
