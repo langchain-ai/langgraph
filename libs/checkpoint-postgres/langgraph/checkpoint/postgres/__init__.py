@@ -180,16 +180,18 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_writes(self, task_id, ttl=None) -> List[Any]:
-        # MKTODO: add documentation
-        # Only getting results for task_id pending writes in 1 arbitrary checkpoint now
-
-        # query = """
-        #         SELECT
-        #             array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] order by task_id, idx) as pending_writes
-        #         FROM checkpoint_writes
-        #         WHERE task_id = %s
-        #         """
+    def get_writes(self, task_id: str, ttl: int = None) -> List[Any]:
+        """Retrieve pending writes given a task_id and optionally a ttl (in seconds). Used for retrieving pending writes for cached nodes.
+        If ttl is specified, only retrieves pending writes such that the timestamp of the corresponding checkpoint is within ttl seconds 
+        of the query.
+        
+        Args:
+            task_id: a task identifier, usually generated from a cache key for a task deriving from a cached node
+            ttl: the time to live of the cached writes in seconds
+            
+        Returns:
+            a list decoded pending writes for the specified task id, optionally recorded within ttl seconds of this query being made
+        """
 
         query = ""
         

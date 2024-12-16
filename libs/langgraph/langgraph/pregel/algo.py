@@ -458,7 +458,6 @@ def prepare_single_task(
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
     if task_path[0] == PUSH:
-        #MKTODO: Does caching differ from push vs pull?
         if len(task_path) == 2:  # TODO: remove branch in 1.0
             # legacy SEND tasks, executed in superstep n+1
             # (PUSH, idx of pending send)
@@ -484,8 +483,9 @@ def prepare_single_task(
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
             proc = processes[packet.node]
+            
             if proc.cache_policy:
-                cache_key = proc.cache_policy.cache_key(packet.arg)
+                cache_key = proc.cache_policy.cache_key(packet.arg, config)
                 task_id = _uuid5_str(
                     b"",
                     packet.node,
@@ -530,7 +530,7 @@ def prepare_single_task(
             )
             proc = processes[packet.node]
             if proc.cache_policy:
-                cache_key = proc.cache_policy.cache_key(packet.arg)
+                cache_key = proc.cache_policy.cache_key(packet.arg, config)
                 task_id = _uuid5_str(
                     b"",
                     packet.node,
@@ -662,7 +662,7 @@ def prepare_single_task(
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
   
             if proc.cache_policy:
-                cache_key = proc.cache_policy.cache_key(val)
+                cache_key = proc.cache_policy.cache_key(val, config)
                 task_id = _uuid5_str(
                     b"",
                     name,
