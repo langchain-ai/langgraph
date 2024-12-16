@@ -1,4 +1,4 @@
-# Adding nodes to a dataset in Studio
+# Adding nodes as dataset examples in Studio
 
 In LangGraph Studio you can create dataset examples from the thread history in the right-hand pane. This can be especially useful when you want to evaluate intermediate steps of the agent.
 

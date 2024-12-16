@@ -284,6 +284,7 @@ nav:
               - cloud/how-tos/test_local_deployment.md
               - cloud/how-tos/invoke_studio.md
               - cloud/how-tos/threads_studio.md
+              - cloud/how-tos/datasets_studio.md
       - Troubleshooting:
           - Troubleshooting: how-tos#troubleshooting
           - troubleshooting/errors/index.md
