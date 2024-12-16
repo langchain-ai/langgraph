@@ -5,29 +5,18 @@ request handling in LangGraph. It includes user protocols, authentication contex
 and typed dictionaries for various API operations.
 
 Note:
-    All TypedDict classes use total=False to make all fields optional by default.
+    All typing.TypedDict classes use total=False to make all fields optional by default.
 """
 
 import functools
 import sys
+import typing
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import (
-    Any,
-    Dict,
-    Literal,
-    Optional,
-    Protocol,
-    TypedDict,
-    TypeVar,
-    Union,
-    final,
-    runtime_checkable,
-)
 from uuid import UUID
 
-RunStatus = Literal["pending", "error", "success", "timeout", "interrupted"]
+RunStatus = typing.Literal["pending", "error", "success", "timeout", "interrupted"]
 """Status of a run execution.
 
 Values:
@@ -38,7 +27,7 @@ Values:
     - interrupted: Run was manually interrupted
 """
 
-MultitaskStrategy = Literal["reject", "rollback", "interrupt", "enqueue"]
+MultitaskStrategy = typing.Literal["reject", "rollback", "interrupt", "enqueue"]
 """Strategy for handling multiple concurrent tasks.
 
 Values:
@@ -48,7 +37,7 @@ Values:
     - enqueue: Queue new tasks to run after current one
 """
 
-OnConflictBehavior = Literal["raise", "do_nothing"]
+OnConflictBehavior = typing.Literal["raise", "do_nothing"]
 """Behavior when encountering conflicts.
 
 Values:
@@ -56,7 +45,7 @@ Values:
     - do_nothing: Silently ignore conflicts
 """
 
-IfNotExists = Literal["create", "reject"]
+IfNotExists = typing.Literal["create", "reject"]
 """Behavior when an entity doesn't exist.
 
 Values:
@@ -64,8 +53,11 @@ Values:
     - reject: Reject the operation
 """
 
-FilterType = Union[
-    Dict[str, Union[str, Dict[Literal["$eq", "$contains"], str]]], Dict[str, str]
+FilterType = typing.Union[
+    typing.Dict[
+        str, typing.Union[str, typing.Dict[typing.Literal["$eq", "$contains"], str]]
+    ],
+    typing.Dict[str, str],
 ]
 """Type for filtering queries.
 
@@ -87,7 +79,7 @@ Supports exact matches and operators:
     ```
 """
 
-ThreadStatus = Literal["idle", "busy", "interrupted", "error"]
+ThreadStatus = typing.Literal["idle", "busy", "interrupted", "error"]
 """Status of a thread.
 
 Values:
@@ -97,7 +89,7 @@ Values:
     - error: Thread encountered an error
 """
 
-MetadataInput = Dict[str, Any]
+MetadataInput = typing.Dict[str, typing.Any]
 """Type for arbitrary metadata attached to entities.
 
 Allows storing custom key-value pairs with any entity.
@@ -113,7 +105,7 @@ Keys must be strings, values can be any JSON-serializable type.
     ```
 """
 
-HandlerResult = Union[None, bool, FilterType]
+HandlerResult = typing.Union[None, bool, FilterType]
 """The result of a handler can be:
 - None | True: accept the request.
 - False: reject the request with a 403 error
@@ -122,7 +114,7 @@ HandlerResult = Union[None, bool, FilterType]
 
 Handler = Callable[..., Awaitable[HandlerResult]]
 
-T = TypeVar("T")
+T = typing.TypeVar("T")
 
 
 def _slotify(fn: T) -> T:
@@ -134,8 +126,8 @@ def _slotify(fn: T) -> T:
 dataclass = _slotify(dataclass)
 
 
-@runtime_checkable
-class MinimalUser(Protocol):
+@typing.runtime_checkable
+class MinimalUser(typing.Protocol):
     """User objects must at least expose the identity property."""
 
     @property
@@ -148,7 +140,7 @@ class MinimalUser(Protocol):
         ...
 
 
-class MinimalUserDict(TypedDict, total=False):
+class MinimalUserDict(typing.TypedDict, total=False):
     """The minimal user dictionary."""
 
     identity: str
@@ -156,8 +148,8 @@ class MinimalUserDict(TypedDict, total=False):
     is_authenticated: bool
 
 
-@runtime_checkable
-class BaseUser(Protocol):
+@typing.runtime_checkable
+class BaseUser(typing.Protocol):
     """The base ASGI user protocol"""
 
     @property
@@ -177,7 +169,7 @@ class BaseUser(Protocol):
 
 
 Authenticator = Callable[
-    ..., Awaitable[tuple[list[str], Union[MinimalUser, str, MinimalUserDict]]]
+    ..., Awaitable[tuple[list[str], typing.Union[MinimalUser, str, MinimalUserDict]]]
 ]
 """Type for authentication functions.
 
@@ -276,7 +268,7 @@ class BaseAuthContext:
     """The authenticated user."""
 
 
-@final
+@typing.final
 @dataclass
 class AuthContext(BaseAuthContext):
     """Complete authentication context with resource and action information.
@@ -285,14 +277,14 @@ class AuthContext(BaseAuthContext):
     allowing for fine-grained access control decisions.
     """
 
-    resource: Literal["runs", "threads", "crons", "assistants"]
+    resource: typing.Literal["runs", "threads", "crons", "assistants"]
     """The resource being accessed."""
 
-    action: Literal["create", "read", "update", "delete", "search", "create_run"]
+    action: typing.Literal["create", "read", "update", "delete", "search", "create_run"]
     """The action being performed on the resource."""
 
 
-class ThreadsCreate(TypedDict, total=False):
+class ThreadsCreate(typing.TypedDict, total=False):
     """Parameters for creating a new thread.
 
     ???+ example "Examples"
@@ -309,13 +301,13 @@ class ThreadsCreate(TypedDict, total=False):
     """Unique identifier for the thread."""
 
     metadata: MetadataInput
-    """Optional metadata to attach to the thread."""
+    """typing.Optional metadata to attach to the thread."""
 
     if_exists: OnConflictBehavior
     """Behavior when a thread with the same ID already exists."""
 
 
-class ThreadsRead(TypedDict, total=False):
+class ThreadsRead(typing.TypedDict, total=False):
     """Parameters for reading thread state or run information.
 
     This type is used in three contexts:
@@ -326,11 +318,11 @@ class ThreadsRead(TypedDict, total=False):
     thread_id: UUID
     """Unique identifier for the thread."""
 
-    run_id: Optional[UUID]
+    run_id: typing.Optional[UUID]
     """Run ID to filter by. Only used when reading run information within a thread."""
 
 
-class ThreadsUpdate(TypedDict, total=False):
+class ThreadsUpdate(typing.TypedDict, total=False):
     """Parameters for updating a thread or run.
 
     Called for updates to a thread, thread version, or run
@@ -341,13 +333,13 @@ class ThreadsUpdate(TypedDict, total=False):
     """Unique identifier for the thread."""
 
     metadata: MetadataInput
-    """Optional metadata to update."""
+    """typing.Optional metadata to update."""
 
-    action: Optional[Literal["interrupt", "rollback"]]
-    """Optional action to perform on the thread."""
+    action: typing.Optional[typing.Literal["interrupt", "rollback"]]
+    """typing.Optional action to perform on the thread."""
 
 
-class ThreadsDelete(TypedDict, total=False):
+class ThreadsDelete(typing.TypedDict, total=False):
     """Parameters for deleting a thread.
 
     Called for deletes to a thread, thread version, or run
@@ -356,24 +348,24 @@ class ThreadsDelete(TypedDict, total=False):
     thread_id: UUID
     """Unique identifier for the thread."""
 
-    run_id: Optional[UUID]
-    """Optional run ID to filter by."""
+    run_id: typing.Optional[UUID]
+    """typing.Optional run ID to filter by."""
 
 
-class ThreadsSearch(TypedDict, total=False):
+class ThreadsSearch(typing.TypedDict, total=False):
     """Parameters for searching threads.
 
     Called for searches to threads or runs.
     """
 
     metadata: MetadataInput
-    """Optional metadata to filter by."""
+    """typing.Optional metadata to filter by."""
 
     values: MetadataInput
-    """Optional values to filter by."""
+    """typing.Optional values to filter by."""
 
-    status: Optional[ThreadStatus]
-    """Optional status to filter by."""
+    status: typing.Optional[ThreadStatus]
+    """typing.Optional status to filter by."""
 
     limit: int
     """Maximum number of results to return."""
@@ -381,11 +373,11 @@ class ThreadsSearch(TypedDict, total=False):
     offset: int
     """Offset for pagination."""
 
-    thread_id: Optional[UUID]
-    """Optional thread ID to filter by."""
+    thread_id: typing.Optional[UUID]
+    """typing.Optional thread ID to filter by."""
 
 
-class RunsCreate(TypedDict, total=False):
+class RunsCreate(typing.TypedDict, total=False):
     """Payload for creating a run.
 
     ???+ example "Examples"
@@ -406,20 +398,20 @@ class RunsCreate(TypedDict, total=False):
         ```
     """
 
-    assistant_id: Optional[UUID]
-    """Optional assistant ID to use for this run."""
+    assistant_id: typing.Optional[UUID]
+    """typing.Optional assistant ID to use for this run."""
 
-    thread_id: Optional[UUID]
-    """Optional thread ID to use for this run."""
+    thread_id: typing.Optional[UUID]
+    """typing.Optional thread ID to use for this run."""
 
-    run_id: Optional[UUID]
-    """Optional run ID to use for this run."""
+    run_id: typing.Optional[UUID]
+    """typing.Optional run ID to use for this run."""
 
-    status: Optional[RunStatus]
-    """Optional status for this run."""
+    status: typing.Optional[RunStatus]
+    """typing.Optional status for this run."""
 
     metadata: MetadataInput
-    """Optional metadata for the run."""
+    """typing.Optional metadata for the run."""
 
     prevent_insert_if_inflight: bool
     """Prevent inserting a new run if one is already in flight."""
@@ -433,14 +425,14 @@ class RunsCreate(TypedDict, total=False):
     after_seconds: int
     """Number of seconds to wait before creating the run."""
 
-    kwargs: Dict[str, Any]
+    kwargs: typing.Dict[str, typing.Any]
     """Keyword arguments to pass to the run."""
 
-    action: Optional[Literal["interrupt", "rollback"]]
+    action: typing.Optional[typing.Literal["interrupt", "rollback"]]
     """Action to take if updating an existing run."""
 
 
-class AssistantsCreate(TypedDict, total=False):
+class AssistantsCreate(typing.TypedDict, total=False):
     """Payload for creating an assistant.
 
     ???+ example "Examples"
@@ -462,11 +454,11 @@ class AssistantsCreate(TypedDict, total=False):
     graph_id: str
     """Graph ID to use for this assistant."""
 
-    config: Optional[Union[Dict[str, Any], Any]]
-    """Optional configuration for the assistant."""
+    config: typing.Optional[typing.Union[typing.Dict[str, typing.Any], typing.Any]]
+    """typing.Optional configuration for the assistant."""
 
     metadata: MetadataInput
-    """Optional metadata to attach to the assistant."""
+    """typing.Optional metadata to attach to the assistant."""
 
     if_exists: OnConflictBehavior
     """Behavior when an assistant with the same ID already exists."""
@@ -475,7 +467,7 @@ class AssistantsCreate(TypedDict, total=False):
     """Name of the assistant."""
 
 
-class AssistantsRead(TypedDict, total=False):
+class AssistantsRead(typing.TypedDict, total=False):
     """Payload for reading an assistant.
 
     ???+ example "Examples"
@@ -491,10 +483,10 @@ class AssistantsRead(TypedDict, total=False):
     """Unique identifier for the assistant."""
 
     metadata: MetadataInput
-    """Optional metadata to filter by."""
+    """typing.Optional metadata to filter by."""
 
 
-class AssistantsUpdate(TypedDict, total=False):
+class AssistantsUpdate(typing.TypedDict, total=False):
     """Payload for updating an assistant.
 
     ???+ example "Examples"
@@ -513,23 +505,23 @@ class AssistantsUpdate(TypedDict, total=False):
     assistant_id: UUID
     """Unique identifier for the assistant."""
 
-    graph_id: Optional[str]
-    """Optional graph ID to update."""
+    graph_id: typing.Optional[str]
+    """typing.Optional graph ID to update."""
 
-    config: Optional[Union[Dict[str, Any], Any]]
-    """Optional configuration to update."""
+    config: typing.Optional[typing.Union[typing.Dict[str, typing.Any], typing.Any]]
+    """typing.Optional configuration to update."""
 
     metadata: MetadataInput
-    """Optional metadata to update."""
+    """typing.Optional metadata to update."""
 
-    name: Optional[str]
-    """Optional name to update."""
+    name: typing.Optional[str]
+    """typing.Optional name to update."""
 
-    version: Optional[int]
-    """Optional version to update."""
+    version: typing.Optional[int]
+    """typing.Optional version to update."""
 
 
-class AssistantsDelete(TypedDict):
+class AssistantsDelete(typing.TypedDict):
     """Payload for deleting an assistant.
 
     ???+ example "Examples"
@@ -544,7 +536,7 @@ class AssistantsDelete(TypedDict):
     """Unique identifier for the assistant."""
 
 
-class AssistantsSearch(TypedDict):
+class AssistantsSearch(typing.TypedDict):
     """Payload for searching assistants.
 
     ???+ example "Examples"
@@ -558,11 +550,11 @@ class AssistantsSearch(TypedDict):
         ```
     """
 
-    graph_id: Optional[str]
-    """Optional graph ID to filter by."""
+    graph_id: typing.Optional[str]
+    """typing.Optional graph ID to filter by."""
 
     metadata: MetadataInput
-    """Optional metadata to filter by."""
+    """typing.Optional metadata to filter by."""
 
     limit: int
     """Maximum number of results to return."""
@@ -571,7 +563,7 @@ class AssistantsSearch(TypedDict):
     """Offset for pagination."""
 
 
-class CronsCreate(TypedDict, total=False):
+class CronsCreate(typing.TypedDict, total=False):
     """Payload for creating a cron job.
 
     ???+ example "Examples"
@@ -587,26 +579,26 @@ class CronsCreate(TypedDict, total=False):
         ```
     """
 
-    payload: Dict[str, Any]
+    payload: typing.Dict[str, typing.Any]
     """Payload for the cron job."""
 
     schedule: str
     """Schedule for the cron job."""
 
-    cron_id: Optional[UUID]
-    """Optional unique identifier for the cron job."""
+    cron_id: typing.Optional[UUID]
+    """typing.Optional unique identifier for the cron job."""
 
-    thread_id: Optional[UUID]
-    """Optional thread ID to use for this cron job."""
+    thread_id: typing.Optional[UUID]
+    """typing.Optional thread ID to use for this cron job."""
 
-    user_id: Optional[str]
-    """Optional user ID to use for this cron job."""
+    user_id: typing.Optional[str]
+    """typing.Optional user ID to use for this cron job."""
 
-    end_time: Optional[datetime]
-    """Optional end time for the cron job."""
+    end_time: typing.Optional[datetime]
+    """typing.Optional end time for the cron job."""
 
 
-class CronsDelete(TypedDict):
+class CronsDelete(typing.TypedDict):
     """Payload for deleting a cron job.
 
     ???+ example "Examples"
@@ -621,7 +613,7 @@ class CronsDelete(TypedDict):
     """Unique identifier for the cron job."""
 
 
-class CronsRead(TypedDict):
+class CronsRead(typing.TypedDict):
     """Payload for reading a cron job.
 
     ???+ example "Examples"
@@ -636,7 +628,7 @@ class CronsRead(TypedDict):
     """Unique identifier for the cron job."""
 
 
-class CronsUpdate(TypedDict, total=False):
+class CronsUpdate(typing.TypedDict, total=False):
     """Payload for updating a cron job.
 
     ???+ example "Examples"
@@ -652,14 +644,14 @@ class CronsUpdate(TypedDict, total=False):
     cron_id: UUID
     """Unique identifier for the cron job."""
 
-    payload: Optional[Dict[str, Any]]
-    """Optional payload to update."""
+    payload: typing.Optional[typing.Dict[str, typing.Any]]
+    """typing.Optional payload to update."""
 
-    schedule: Optional[str]
-    """Optional schedule to update."""
+    schedule: typing.Optional[str]
+    """typing.Optional schedule to update."""
 
 
-class CronsSearch(TypedDict, total=False):
+class CronsSearch(typing.TypedDict, total=False):
     """Payload for searching cron jobs.
 
     ???+ example "Examples"
@@ -673,11 +665,11 @@ class CronsSearch(TypedDict, total=False):
         ```
     """
 
-    assistant_id: Optional[UUID]
-    """Optional assistant ID to filter by."""
+    assistant_id: typing.Optional[UUID]
+    """typing.Optional assistant ID to filter by."""
 
-    thread_id: Optional[UUID]
-    """Optional thread ID to filter by."""
+    thread_id: typing.Optional[UUID]
+    """typing.Optional thread ID to filter by."""
 
     limit: int
     """Maximum number of results to return."""
@@ -712,12 +704,12 @@ class on:
         ```
     """
 
-    value = Dict[str, Any]
+    value = typing.Dict[str, typing.Any]
 
     class threads:
         """Types for thread-related operations."""
 
-        value = Union[
+        value = typing.Union[
             ThreadsCreate, ThreadsRead, ThreadsUpdate, ThreadsDelete, ThreadsSearch
         ]
 
@@ -754,7 +746,7 @@ class on:
     class assistants:
         """Types for assistant-related operations."""
 
-        value = Union[
+        value = typing.Union[
             AssistantsCreate,
             AssistantsRead,
             AssistantsUpdate,
@@ -790,7 +782,9 @@ class on:
     class crons:
         """Types for cron-related operations."""
 
-        value = Union[CronsCreate, CronsRead, CronsUpdate, CronsDelete, CronsSearch]
+        value = typing.Union[
+            CronsCreate, CronsRead, CronsUpdate, CronsDelete, CronsSearch
+        ]
 
         class create:
             """Type for cron creation parameters."""

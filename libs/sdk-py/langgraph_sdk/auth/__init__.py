@@ -1,23 +1,13 @@
 from __future__ import annotations
 
 import inspect
+import typing
 from collections.abc import Callable, Sequence
-from typing import (
-    Any,
-    Generic,
-    Literal,
-    Optional,
-    Protocol,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
 
-from langgraph_sdk.auth import types
+from langgraph_sdk.auth import exceptions, types
 
-TH = TypeVar("TH", bound=types.Handler)
-AH = TypeVar("AH", bound=types.Authenticator)
+TH = typing.TypeVar("TH", bound=types.Handler)
+AH = typing.TypeVar("AH", bound=types.Authenticator)
 
 
 class Auth:
@@ -77,13 +67,19 @@ class Auth:
     Provides access to all type definitions used in the auth system,
     like ThreadsCreate, AssistantsRead, etc."""
 
+    exceptions = exceptions
+    """Reference to auth exception definitions.
+    
+    Provides access to all exception definitions used in the auth system,
+    like HTTPException, etc."""
+
     def __init__(self) -> None:
         self.on = _On(self)
         # These are accessed by the API. Changes to their names or types is
         # will be considered a breaking change.
         self._handlers: dict[tuple[str, str], list[types.Handler]] = {}
         self._global_handlers: list[types.Handler] = []
-        self._authenticate_handler: Optional[types.Authenticator] = None
+        self._authenticate_handler: typing.Optional[types.Authenticator] = None
         self._handler_cache: dict[tuple[str, str], types.Handler] = {}
 
     def authenticate(self, fn: AH) -> AH:
@@ -145,24 +141,26 @@ class Auth:
 
 ## Helper types & utilities
 
-V = TypeVar("V", contravariant=True)
+V = typing.TypeVar("V", contravariant=True)
 
 
-class _ActionHandler(Protocol[V]):
+class _ActionHandler(typing.Protocol[V]):
     async def __call__(
         self, *, ctx: types.AuthContext, value: V
     ) -> types.HandlerResult: ...
 
 
-T = TypeVar("T", covariant=True)
+T = typing.TypeVar("T", covariant=True)
 
 
-class _ResourceActionOn(Generic[T]):
+class _ResourceActionOn(typing.Generic[T]):
     def __init__(
         self,
         auth: Auth,
-        resource: Literal["threads", "crons", "assistants"],
-        action: Literal["create", "read", "update", "delete", "search", "create_run"],
+        resource: typing.Literal["threads", "crons", "assistants"],
+        action: typing.Literal[
+            "create", "read", "update", "delete", "search", "create_run"
+        ],
         value: type[T],
     ) -> None:
         self.auth = auth
@@ -176,19 +174,19 @@ class _ResourceActionOn(Generic[T]):
         return fn
 
 
-VCreate = TypeVar("VCreate", covariant=True)
-VUpdate = TypeVar("VUpdate", covariant=True)
-VRead = TypeVar("VRead", covariant=True)
-VDelete = TypeVar("VDelete", covariant=True)
-VSearch = TypeVar("VSearch", covariant=True)
+VCreate = typing.TypeVar("VCreate", covariant=True)
+VUpdate = typing.TypeVar("VUpdate", covariant=True)
+VRead = typing.TypeVar("VRead", covariant=True)
+VDelete = typing.TypeVar("VDelete", covariant=True)
+VSearch = typing.TypeVar("VSearch", covariant=True)
 
 
-class _ResourceOn(Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
+class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     """
     Generic base class for resource-specific handlers.
     """
 
-    value: type[Union[VCreate, VUpdate, VRead, VDelete, VSearch]]
+    value: type[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]
 
     Create: type[VCreate]
     Read: type[VRead]
@@ -199,7 +197,7 @@ class _ResourceOn(Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     def __init__(
         self,
         auth: Auth,
-        resource: Literal["threads", "crons", "assistants"],
+        resource: typing.Literal["threads", "crons", "assistants"],
     ) -> None:
         self.auth = auth
         self.resource = resource
@@ -219,56 +217,58 @@ class _ResourceOn(Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
             auth, resource, "search", self.Search
         )
 
-    @overload
+    @typing.overload
     def __call__(
         self,
-        fn: Union[
-            _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-            _ActionHandler[dict[str, Any]],
+        fn: typing.Union[
+            _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+            _ActionHandler[dict[str, typing.Any]],
         ],
-    ) -> _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]]: ...
+    ) -> _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]: ...
 
-    @overload
+    @typing.overload
     def __call__(
         self,
         *,
-        resources: Union[str, Sequence[str]],
-        actions: Optional[Union[str, Sequence[str]]] = None,
+        resources: typing.Union[str, Sequence[str]],
+        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
     ) -> Callable[
-        [_ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]]],
-        _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+        [_ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]],
+        _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
     ]: ...
 
     def __call__(
         self,
-        fn: Union[
-            _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-            _ActionHandler[dict[str, Any]],
+        fn: typing.Union[
+            _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+            _ActionHandler[dict[str, typing.Any]],
             None,
         ] = None,
         *,
-        resources: Union[str, Sequence[str], None] = None,
-        actions: Optional[Union[str, Sequence[str]]] = None,
-    ) -> Union[
-        _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+        resources: typing.Union[str, Sequence[str], None] = None,
+        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
+    ) -> typing.Union[
+        _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
         Callable[
-            [_ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]]],
-            _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+            [_ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]],
+            _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
         ],
     ]:
         if fn is not None:
             _validate_handler(fn)
-            return cast(
-                _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+            return typing.cast(
+                _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
                 _register_handler(self.auth, self.resource, "*", fn),
             )
 
         def decorator(
-            handler: _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-        ) -> _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]]:
+            handler: _ActionHandler[
+                typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]
+            ],
+        ) -> _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]:
             _validate_handler(handler)
-            return cast(
-                _ActionHandler[Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+            return typing.cast(
+                _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
                 _register_handler(self.auth, self.resource, "*", handler),
             )
 
@@ -284,7 +284,7 @@ class _AssistantsOn(
         types.AssistantsSearch,
     ]
 ):
-    value = Union[
+    value = typing.Union[
         types.AssistantsCreate,
         types.AssistantsRead,
         types.AssistantsUpdate,
@@ -307,7 +307,7 @@ class _ThreadsOn(
         types.ThreadsSearch,
     ]
 ):
-    value = Union[
+    value = typing.Union[
         type[types.ThreadsCreate],
         type[types.ThreadsRead],
         type[types.ThreadsUpdate],
@@ -325,7 +325,7 @@ class _ThreadsOn(
     def __init__(
         self,
         auth: Auth,
-        resource: Literal["threads", "crons", "assistants"],
+        resource: typing.Literal["threads", "crons", "assistants"],
     ) -> None:
         super().__init__(auth, resource)
         self.create_run: _ResourceActionOn[types.RunsCreate] = _ResourceActionOn(
@@ -343,7 +343,7 @@ class _CronsOn(
     ]
 ):
     value = type[
-        Union[
+        typing.Union[
             types.CronsCreate,
             types.CronsRead,
             types.CronsUpdate,
@@ -359,7 +359,7 @@ class _CronsOn(
     Search = types.CronsSearch
 
 
-AHO = TypeVar("AHO", bound=_ActionHandler[dict[str, Any]])
+AHO = typing.TypeVar("AHO", bound=_ActionHandler[dict[str, typing.Any]])
 
 
 class _On:
@@ -381,26 +381,26 @@ class _On:
         self.assistants = _AssistantsOn(auth, "assistants")
         self.threads = _ThreadsOn(auth, "threads")
         self.crons = _CronsOn(auth, "crons")
-        self.value = dict[str, Any]
+        self.value = dict[str, typing.Any]
 
-    @overload
+    @typing.overload
     def __call__(
         self,
         *,
-        resources: Union[str, Sequence[str]],
-        actions: Optional[Union[str, Sequence[str]]] = None,
+        resources: typing.Union[str, Sequence[str]],
+        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
     ) -> Callable[[AHO], AHO]: ...
 
-    @overload
+    @typing.overload
     def __call__(self, fn: AHO) -> AHO: ...
 
     def __call__(
         self,
-        fn: Optional[AHO] = None,
+        fn: typing.Optional[AHO] = None,
         *,
-        resources: Union[str, Sequence[str], None] = None,
-        actions: Optional[Union[str, Sequence[str]]] = None,
-    ) -> Union[AHO, Callable[[AHO], AHO]]:
+        resources: typing.Union[str, Sequence[str], None] = None,
+        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
+    ) -> typing.Union[AHO, Callable[[AHO], AHO]]:
         """Register a handler for specific resources and actions.
 
         Can be used as a decorator or with explicit resource/action parameters:
@@ -439,7 +439,10 @@ class _On:
 
 
 def _register_handler(
-    auth: Auth, resource: Optional[str], action: Optional[str], fn: types.Handler
+    auth: Auth,
+    resource: typing.Optional[str],
+    action: typing.Optional[str],
+    fn: types.Handler,
 ) -> types.Handler:
     _validate_handler(fn)
     resource = resource or "*"
@@ -457,7 +460,7 @@ def _register_handler(
     return fn
 
 
-def _validate_handler(fn: Callable[..., Any]) -> None:
+def _validate_handler(fn: Callable[..., typing.Any]) -> None:
     """Validates that an auth handler function meets the required signature.
 
     Auth handlers must:
@@ -486,4 +489,4 @@ def _validate_handler(fn: Callable[..., Any]) -> None:
         )
 
 
-__all__ = ["Auth", "types"]
+__all__ = ["Auth", "types", "exceptions"]
