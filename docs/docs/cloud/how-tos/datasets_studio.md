@@ -13,5 +13,5 @@ Finally, you can customise the target dataset by clicking on the `Settings` butt
 See [Evaluating intermediate steps](https://docs.smith.langchain.com/evaluation/how_to_guides/langgraph#evaluating-intermediate-steps) for more details on how to evaluate intermediate steps.
 
 <video controls allowfullscreen="true" poster="../img/studio_datasets.jpg">
-    <source src="../img/studio_datasets.mp4" type="video/mp4">
+    <source src="https://langgraph-docs-assets.pages.dev/studio_datasets.mp4" type="video/mp4">
 </video>
