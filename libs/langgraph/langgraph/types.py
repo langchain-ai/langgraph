@@ -107,8 +107,12 @@ class RetryPolicy(NamedTuple):
 class CachePolicy(NamedTuple):
     """Configuration for caching nodes."""
 
-    cache_key: Callable[[str], str]
-    """A function that generates a hash from a subset of the input of a task at runtime, defining cached writes for a task."""
+    cache_key: Callable[[str, Optional[RunnableConfig]], str]
+    """A function that generates a hash from a subset of the input of a task at runtime, defining cached writes for a task. 
+    It must take in 2 arguments: 
+        (1) the state of the graph
+        (2) the config of the graph invocation
+    """
     ttl: Optional[int] = None
     """Time to live (sec) for the cached write corresponding to a task. If not provided, writes are cached forever"""
 
