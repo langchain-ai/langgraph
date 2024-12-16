@@ -28,7 +28,7 @@ We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-
 ??? note "1. Log in to [LangSmith](https://smith.langchain.com/)"
 
     <figure markdown="1">
-    ![Login to LangSmith](deployment/img/01_login.png){: style="max-height:300px"}
+    [![Login to LangSmith](deployment/img/01_login.png){: style="max-height:300px"}](deployment/img/01_login.png)
     <figcaption>
     Go to [LangSmith](https://smith.langchain.com/) and log in. If you don't have an account, you can sign up for free.
     </figcaption>
@@ -38,7 +38,7 @@ We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-
 ??? note "2. Click on <em>LangGraph Platform</em> (the left sidebar)"
 
     <figure markdown="1">
-    ![Login to LangSmith](deployment/img/02_langgraph_platform.png){: style="max-height:300px"}
+    [![Login to LangSmith](deployment/img/02_langgraph_platform.png){: style="max-height:300px"}](deployment/img/02_langgraph_platform.png)
     <figcaption>
     Select **LangGraph Platform** from the left sidebar.
     </figcaption>
@@ -47,7 +47,7 @@ We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-
 ??? note "3. Click on + New Deployment (top right corner)"
 
     <figure markdown="1">
-    ![Login to LangSmith](deployment/img/03_deployments_page.png){: style="max-height:300px"}
+    [![Login to LangSmith](deployment/img/03_deployments_page.png){: style="max-height:300px"}](deployment/img/03_deployments_page.png)
     <figcaption>
     Click on **+ New Deployment** to create a new deployment. This button is located in the top right corner.
     It'll open a new modal where you can fill out the required fields.
@@ -57,7 +57,7 @@ We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-
 ??? note "4. Click on Import from GitHub (first time users)"
 
     <figure markdown="1">
-    ![image](deployment/img/04_create_new_deployment.png)
+    [![image](deployment/img/04_create_new_deployment.png)](deployment/img/04_create_new_deployment.png)
     <figcaption>
     Click on **Import from GitHub** and follow the instructions to connect your GitHub account. This step is needed for **first-time users** or to add private repositories that haven't been connected before.</figcaption>
         </figure>
@@ -65,7 +65,7 @@ We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-
 ??? note "5. Select the repository, configure ENV vars etc"
 
     <figure markdown="1">
-    ![image](deployment/img/05_configure_deployment.png)
+    [![image](deployment/img/05_configure_deployment.png){: style="max-height:300px"}](deployment/img/05_configure_deployment.png)
     <figcaption>
     Select the <strong>repository</strong>, add env variables and secrets, and set other configuration options.
     </figcaption>
@@ -73,20 +73,20 @@ We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-
 
     - **Repository**: Select the repository you forked earlier (or any other repository you want to deploy).
     - Set the secrets and environment variables required by your application. For the **ReAct Agent** template, you need to set the following secrets:
-        - `ANTHROPIC_API_KEY`
-        - `TAVILY_API_KEY`
+        - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
+        - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
 
-??? note "7. Click Submit to Deploy!"
+??? note "6. Click Submit to Deploy!"
 
 
     <figure markdown="1">
-    ![image](deployment/img/05_configure_deployment.png)
+    [![image](deployment/img/05_configure_deployment.png){: style="max-height:300px"}](deployment/img/05_configure_deployment.png)
     <figcaption>
+        Please note that this step may ~15 minutes to complete. You can check the status of your deployment in the **Deployments** view.
         Click the <strong>Submit</strong> button at the top right corner to deploy your application.
     </figcaption>
     </figure>
 
-    Please note that this step may ~15 minutes to complete. You can check the status of your deployment in the **Deployments** view.
 
 ## Lagraph Studio Web UI
 
@@ -95,7 +95,7 @@ Once your application is deployed, you can test it in **LangGraph Studio**.
 ??? note "1. Click on an existing deployment"
 
     <figure markdown="1">
-    ![image](deployment/img/07_deployments_page.png){: style="max-height:300px"}
+    [![image](deployment/img/07_deployments_page.png){: style="max-height:300px"}](deployment/img/07_deployments_page.png)
     <figcaption>
         Click on the deployment you just created to view more details.
     </figcaption>
@@ -104,14 +104,14 @@ Once your application is deployed, you can test it in **LangGraph Studio**.
 ??? note "2. Click on LangGraph Studio"
 
     <figure markdown="1">
-    ![image](deployment/img/08_deployment_view.png){: style="max-height:300px"}
+    [![image](deployment/img/08_deployment_view.png){: style="max-height:300px"}](deployment/img/08_deployment_view.png)
     <figcaption>
         Click on the <strong>LangGraph Studio</strong> button to open LangGraph Studio.
     </figcaption>
     </figure>
 
 <figure markdown="1">
-![image](deployment/img/09_langgraph_studio.png){: style="max-height:400px"}
+[![image](deployment/img/09_langgraph_studio.png){: style="max-height:400px"}](deployment/img/09_langgraph_studio.png)
 <figcaption>
     Sample graph run in LangGraph Studio.
 </figcaption>
