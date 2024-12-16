@@ -414,6 +414,10 @@ class StateGraph(Graph):
         """
         if isinstance(start_key, str):
             return super().add_edge(start_key, end_key)
+        elif isinstance(start_key, list):
+            for key in start_key:
+                super().add_edge(key, end_key)  # Add edges for all items in the list
+            return  # Explicitly exit after adding all edges
 
         if self.compiled:
             logger.warning(
