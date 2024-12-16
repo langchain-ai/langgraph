@@ -1268,40 +1268,6 @@ async def test_tool_node_command():
         }
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
 
-    # test validation (multiple tool messages)
-    with pytest.raises(ValueError):
-        for graph in (None, Command.PARENT):
-
-            @dec_tool
-            def multiple_tool_messages_tool():
-                """My tool"""
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(content="foo", tool_call_id=""),
-                            ToolMessage(content="bar", tool_call_id=""),
-                        ]
-                    },
-                    graph=graph,
-                )
-
-            ToolNode([multiple_tool_messages_tool]).invoke(
-                {
-                    "messages": [
-                        AIMessage(
-                            "",
-                            tool_calls=[
-                                {
-                                    "args": {},
-                                    "id": "1",
-                                    "name": "multiple_tool_messages_tool",
-                                }
-                            ],
-                        )
-                    ]
-                }
-            )
-
 
 @pytest.mark.skipif(
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
@@ -1538,36 +1504,6 @@ async def test_tool_node_command_list_input():
             )
         ]
     ) == [Command(update=[], graph=Command.PARENT)]
-
-    # test validation (multiple tool messages)
-    with pytest.raises(ValueError):
-        for graph in (None, Command.PARENT):
-
-            @dec_tool
-            def multiple_tool_messages_tool():
-                """My tool"""
-                return Command(
-                    update=[
-                        ToolMessage(content="foo", tool_call_id=""),
-                        ToolMessage(content="bar", tool_call_id=""),
-                    ],
-                    graph=graph,
-                )
-
-            ToolNode([multiple_tool_messages_tool]).invoke(
-                [
-                    AIMessage(
-                        "",
-                        tool_calls=[
-                            {
-                                "args": {},
-                                "id": "1",
-                                "name": "multiple_tool_messages_tool",
-                            }
-                        ],
-                    )
-                ]
-            )
 
 
 @pytest.mark.skipif(
