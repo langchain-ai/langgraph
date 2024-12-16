@@ -134,7 +134,7 @@ def test_cache_key_multiple_fields(request: pytest.FixtureRequest, checkpointer_
     builder.set_entry_point("cached_node")
 
     graph = builder.compile(checkpointer=checkpointer)
-    graph.invoke({"stop_condition": 0, "dependent_field_1": 0, "dependent_field_2": 0}, config, debug=True)
+    graph.invoke({"stop_condition": 0, "dependent_field_1": 0, "dependent_field_2": 0}, config)
 
     assert call_count == 4
 
