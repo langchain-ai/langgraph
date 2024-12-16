@@ -247,6 +247,7 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 - [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
 - [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
+- [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
 
 ## Troubleshooting
 
