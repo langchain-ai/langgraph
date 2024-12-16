@@ -169,7 +169,15 @@ class BaseUser(typing.Protocol):
 
 
 Authenticator = Callable[
-    ..., Awaitable[tuple[list[str], typing.Union[MinimalUser, str, MinimalUserDict]]]
+    ...,
+    Awaitable[
+        tuple[
+            list[str],
+            typing.Union[
+                MinimalUser, str, MinimalUserDict, typing.Mapping[str, typing.Any]
+            ],
+        ]
+    ],
 ]
 """Type for authentication functions.
 
