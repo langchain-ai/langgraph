@@ -548,33 +548,25 @@ class ToolNode(RunnableCallable):
 
         # convert to message objects if updates are in a dict format
         messages_update = convert_to_messages(messages_update)
-        have_seen_tool_messages = False
+        has_matching_tool_message = False
         for message in messages_update:
             if not isinstance(message, ToolMessage):
                 continue
 
-            if have_seen_tool_messages:
-                raise ValueError(
-                    f"Expected at most one ToolMessage in Command.update for tool '{call['name']}', got multiple: {messages_update}."
-                )
+            if message.tool_call_id == call["id"]:
+                message.name = call["name"]
+                has_matching_tool_message = True
 
-            if message.tool_call_id != call["id"]:
-                raise ValueError(
-                    f"ToolMessage.tool_call_id must match the tool call id. Expected: {call['id']}, got: {message.tool_call_id} for tool '{call['name']}'."
-                )
-
-            message.name = call["name"]
-            have_seen_tool_messages = True
-
-        # validate that we always have exactly one ToolMessage in Command.update if command is sent to the CURRENT graph
-        if updated_command.graph is None and not have_seen_tool_messages:
+        # validate that we always have a ToolMessage matching the tool call in
+        # Command.update if command is sent to the CURRENT graph
+        if updated_command.graph is None and not has_matching_tool_message:
             example_update = (
                 '`Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'
                 if input_type == "dict"
                 else '`Command(update=[ToolMessage("Success", tool_call_id=tool_call_id), ...], ...)`'
             )
             raise ValueError(
-                f"Expected exactly one message (ToolMessage) in Command.update for tool '{call['name']}', got: {messages_update}. "
+                f"Expected to have a matching ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}. "
                 "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
                 f"You can fix it by modifying the tool to return {example_update}."
             )
