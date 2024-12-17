@@ -1,6 +1,6 @@
 # Setting up custom authentication
 
-Let's learn how to add custom authentication to a LangGraph Platformdeployment. We'll cover the core concepts of token-based authentication and show how to integrate with an authentication server.
+Let's learn how to add custom authentication to a LangGraph Platform deployment. We'll cover the core concepts of token-based authentication and show how to integrate with an authentication server.
 
 ??? note "Default authentication"
     When deploying to LangGraph Cloud, requests are authenticated using LangSmith API keys by default. This gates access to the server but doesn't provide fine-grained access control over threads. Self-hosted LangGraph platform has no default authentication. This guide shows how to add custom authentication handlers that work in both cases, to provide fine-grained access control over threads, runs, and other resources.
@@ -14,6 +14,21 @@ The key components in a token-based authentication system are:
 3. **LangGraph backend**: validates tokens and enforces access control to control access to your agents and data.
 
 After implementing the following steps, when a user's client application (such as their web browser or mobile app) wants to access resources in LangGraph, the following steps occur:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AuthServer as Auth Server
+    participant LangGraph
+    
+    User->>AuthServer: 1. Authenticate (username/password)
+    AuthServer-->>User: 2. Return signed JWT token
+    User->>LangGraph: 3. Request with JWT in header
+    LangGraph->>AuthServer: 4a. Validate token
+    AuthServer-->>LangGraph: 4b. Confirm token validity
+    Note over LangGraph: 4c. Apply access filters
+    LangGraph-->>User: Return authorized resources
+```
 
 1. User authenticates with the auth server (username/password, OAuth, "Sign in with Google", etc.)
 2. Auth server returns a signed JWT token attesting "I am user X with claims/roles Y"
@@ -309,6 +324,7 @@ This handler matches ALL requests to threads, runs, assistants, crons, and other
 ## Deploying to LangGraph Cloud
 
 Now that you've set everything up, you can deploy your LangGraph application to LangGraph Cloud! Simply:
+
 1. Push your code to a new github repository.
 2. Navigate to the LangGraph Platform page and click "+New Deployment".
 3. Connect to your GitHub repository and copy the contents of your `.env` file as environment variables.
