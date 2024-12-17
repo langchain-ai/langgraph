@@ -23,5 +23,8 @@
 ::: langgraph_sdk.auth.types.FilterType
     handler: python
 
+::: langgraph_sdk.auth.types.AuthContext
+    handler: python
+
 ::: langgraph_sdk.auth.exceptions
     handler: python

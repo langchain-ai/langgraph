@@ -274,8 +274,8 @@ class BaseAuthContext:
     authorization decisions.
     """
 
-    scopes: Sequence[str]
-    """The scopes granted to the authenticated user."""
+    permissions: Sequence[str]
+    """The permissions granted to the authenticated user."""
 
     user: BaseUser
     """The authenticated user."""
