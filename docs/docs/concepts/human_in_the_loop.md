@@ -64,6 +64,7 @@ graph.invoke(Command(resume=value_from_human), config=thread_config)
 
       ```python
       from typing import TypedDict
+      import uuid
 
       from langgraph.checkpoint.memory import MemorySaver
       from langgraph.constants import START
@@ -100,6 +101,8 @@ graph.invoke(Command(resume=value_from_human), config=thread_config)
          checkpointer=checkpointer
       )
 
+      # Pass a thread ID to the graph to run it.
+      thread_config = {"configurable": {"thread_id": uuid.uuid4()}}
 
       # Using stream() to directly surface the `__interrupt__` information.
       for chunk in graph.stream({"some_text": "Original text"}, config=thread_config):

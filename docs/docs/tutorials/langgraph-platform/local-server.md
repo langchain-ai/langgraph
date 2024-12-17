@@ -1,4 +1,4 @@
-# Quick Start: Launch Local LangGraph Server
+# QuickStart: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
 
@@ -10,7 +10,7 @@ This is a quick start guide to help you get a LangGraph app up and running local
 ## Install the LangGraph CLI
 
 ```bash
-pip install -U "langgraph-cli[inmem]" python-dotenv
+pip install --upgrade "langgraph-cli[inmem]"
 ```
 
 ## 🌱 Create a LangGraph App
@@ -53,21 +53,12 @@ ANTHROPIC_API_KEY=sk-
 OPENAI_API_KEY=sk-...
 ```
 
-<details><summary>Get API Keys</summary>
-    <ul>
-        <li> <b>LANGSMITH_API_KEY</b>: Go to the <a href="https://smith.langchain.com/settings">LangSmith Settings page</a>. Then clck <b>Create API Key</b>.
-        </li>
-        <li>
-            <b>ANTHROPIC_API_KEY</b>: Get an API key from <a href="https://console.anthropic.com/">Anthropic</a>.
-        </li>
-        <li>
-            <b>OPENAI_API_KEY</b>: Get an API key from <a href="https://openai.com/">OpenAI</a>.
-        </li>
-        <li>
-            <b>TAVILY_API_KEY</b>: Get an API key on the <a href="https://app.tavily.com/">Tavily website</a>.
-        </li>
-    </ul>
-</details>
+??? note "Get API Keys"
+
+    - **LANGSMITH_API_KEY**: Go to the [LangSmith Settings page](https://smith.langchain.com/settings). Then clck **Create API Key**.
+    - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
+    - **OPENAI_API_KEY**: Get an API key from [OpenAI](https://openai.com/).
+    - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
 
 ## 🚀 Launch LangGraph Server
 
@@ -79,11 +70,11 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 >    Ready!
 > 
->    - API: [http://localhost:8123](http://localhost:8123/)
+>    - API: [http://localhost:2024](http://localhost:2024/)
 >     
->    - Docs: http://localhost:8123/docs
+>    - Docs: http://localhost:2024/docs
 >     
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 
 !!! note "In-Memory Mode"
@@ -95,9 +86,9 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 ## LangGraph Studio Web UI
 
-Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph up` command.
+Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
 
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 !!! warning "Safari Compatibility"
     
@@ -118,7 +109,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="http://localhost:8123")
+    client = get_client(url="http://localhost:2024")
 
     async for chunk in client.runs.stream(
         None,  # Threadless run
@@ -149,7 +140,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```python
     from langgraph_sdk import get_sync_client
 
-    client = get_sync_client(url="http://localhost:8123")
+    client = get_sync_client(url="http://localhost:2024")
 
     for chunk in client.runs.stream(
         None,  # Threadless run
@@ -181,7 +172,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     const { Client } = await import("@langchain/langgraph-sdk");
 
     // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: "http://localhost:8123"});
+    const client = new Client({ apiUrl: "http://localhost:2024"});
 
     const streamResponse = client.runs.stream(
         null, // Threadless run
@@ -207,7 +198,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
 
     ```bash
     curl -s --request POST \
-        --url "http://localhost:8123/runs/stream" \
+        --url "http://localhost:2024/runs/stream" \
         --header 'Content-Type: application/json' \
         --data "{
             \"assistant_id\": \"agent\",
@@ -235,7 +226,7 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 ### 🌐 Deploy to LangGraph Cloud
 
-- **[LangGraph Cloud QuickStart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Cloud Quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
 
 ### 📚 Learn More about LangGraph Platform
 

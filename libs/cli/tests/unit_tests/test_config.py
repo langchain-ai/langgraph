@@ -31,6 +31,7 @@ def test_validate_config():
         "dockerfile_lines": [],
         "env": {},
         "store": None,
+        "auth": None,
         **expected_config,
     }
     actual_config = validate_config(expected_config)
@@ -48,6 +49,7 @@ def test_validate_config():
         },
         "env": env,
         "store": None,
+        "auth": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
