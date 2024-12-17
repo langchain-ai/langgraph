@@ -235,7 +235,7 @@ export LANGSMITH_API_KEY=...
 
     ```bash
     curl -s --request POST \
-        --url "http://localhost:8123/runs/stream" \
+        --url <DEPLOYMENT_URL> \
         --header 'Content-Type: application/json' \
         --data "{
             \"assistant_id\": \"agent\",
