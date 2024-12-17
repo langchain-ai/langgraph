@@ -39,10 +39,8 @@ class Auth:
 
     Then the LangGraph server will load your auth file and run it server-side whenever a request comes in.
 
-
     ???+ example "Basic Usage"
         ```python
-        # auth.py
         from langgraph_sdk import Auth
 
         my_auth = Auth()
@@ -71,14 +69,15 @@ class Auth:
         async def authorize_thread_create(params: Auth.on.threads.create.value):
             # Allow the allowed user to create a thread
             assert params.get("metadata", {}).get("owner") == "allowed_user"
+        ```
 
     ???+ note "Request Processing Flow"
         1. Authentication (your `@auth.authenticate` handler) is performed first on **every request**
         2. For authorization, the most specific matching handler is called:
-
-           - If a handler exists for the exact resource and action, it is used
-           - Otherwise, if a handler exists for the resource with any action, it is used
-           - Finally, if no specific handlers match, the global handler is used (if any)
+            * If a handler exists for the exact resource and action, it is used (e.g., `@auth.on.threads.create`)
+            * Otherwise, if a handler exists for the resource with any action, it is used (e.g., `@auth.on.threads`)
+            * Finally, if no specific handlers match, the global handler is used (e.g., `@auth.on`)
+            * If no global handler is set, the request is accepted
 
         This allows you to set default behavior with a global handler while
         overriding specific routes as needed.
@@ -572,7 +571,9 @@ class _On:
             return fn
 
         # Used with parameters, return a decorator
-        def decorator(handler: AHO) -> AHO:
+        def decorator(
+            handler: AHO,
+        ) -> AHO:
             if isinstance(resources, str):
                 resource_list = [resources]
             else:
