@@ -26,11 +26,15 @@ class Auth:
 
         auth = Auth()
 
+        async def verify_token(token: str) -> str:
+            # Verify token and return user_id
+            # This would typically be a call to your auth server
+            return "user_id"
+
         @auth.authenticate
-        async def authenticate(authorization: str) -> tuple[list[str], str]:
-            # Verify token and return (scopes, user_id)
-            user_id = verify_token(authorization)
-            return ["read", "write"], user_id
+        async def authenticate(authorization: str) -> str:
+            # Verify token and return user_id
+            return await verify_token(authorization)
 
         # Global fallback handler
         @auth.on
@@ -90,19 +94,20 @@ class Auth:
         by name:
             - request (Request): The raw ASGI request object
             - body (dict): The parsed request body
-            - path (str): The request path
-            - method (str): The HTTP method
-            - scopes (list[str]): Required scopes
-            - path_params (dict[str, str]): URL path parameters
-            - query_params (dict[str, str]): URL query parameters
-            - headers (dict[str, bytes]): Request headers
-            - authorization (str): The Authorization header value
+            - path (str): The request path, e.g., "/threads/abcd-1234-abcd-1234/runs/abcd-1234-abcd-1234/stream"
+            - method (str): The HTTP method, e.g., "GET"
+            - path_params (dict[str, str]): URL path parameters, e.g., {"thread_id": "abcd-1234-abcd-1234", "run_id": "abcd-1234-abcd-1234"}
+            - query_params (dict[str, str]): URL query parameters, e.g., {"stream": "true"}
+            - headers (dict[bytes, bytes]): Request headers
+            - authorization (str | None): The Authorization header value (e.g., "Bearer <token>")
 
         Args:
             fn (Callable): The authentication handler function to register.
-                Must return tuple[scopes, user]
-                where scopes is a list of string claims (like "runs:read", etc.)
-                and user is either a user object (or similar dict) or a user id string.
+                Must return a representation of the user. This could be a:
+                    - string (the user id)
+                    - dict containing {"identity": str, "permissions": list[str]}
+                    - or an object with identity and permissions properties
+                Permissions can be optionally used by your handlers downstream.
 
         Returns:
             The registered handler function.
@@ -114,22 +119,38 @@ class Auth:
             Basic token authentication:
             ```python
             @auth.authenticate
-            async def authenticate(authorization: str) -> tuple[list[str], str]:
+            async def authenticate(authorization: str) -> str:
                 user_id = verify_token(authorization)
-                return ["read"], user_id
+                return user_id
             ```
 
-            Complex authentication with request context:
+            Accept the full request context:
             ```python
             @auth.authenticate
             async def authenticate(
                 method: str,
                 path: str,
                 headers: dict[str, bytes]
-            ) -> tuple[list[str], MinimalUser]:
+            ) -> str:
                 user = await verify_request(method, path, headers)
-                return user.scopes, user
+                return user
             ```
+
+            Return user name and permissions:
+            ```python
+            @auth.authenticate
+            async def authenticate(
+                method: str,
+                path: str,
+                headers: dict[str, bytes]
+            ) -> Auth.types.MinimalUserDict:
+                permissions, user = await verify_request(method, path, headers)
+                # Permissions could be things like ["runs:read", "runs:write", "threads:read", "threads:write"]
+                return {
+                    "identity": user["id"],
+                    "permissions": permissions,
+                    "display_name": user["name"],
+                }
         """
         if self._authenticate_handler is not None:
             raise ValueError(
@@ -363,9 +384,58 @@ AHO = typing.TypeVar("AHO", bound=_ActionHandler[dict[str, typing.Any]])
 
 
 class _On:
+    """Entry point for authorization handlers that control access to specific resources.
+
+    The _On class provides a flexible way to define authorization rules for different resources
+    and actions in your application. It supports three main usage patterns:
+
+    1. Global handlers that run for all resources and actions
+    2. Resource-specific handlers that run for all actions on a resource
+    3. Resource and action specific handlers for fine-grained control
+
+    Each handler must be an async function that accepts two parameters:
+    - ctx (AuthContext): Contains request context and authenticated user info
+    - value: The data being authorized (type varies by endpoint)
+
+    The handler should return one of:
+    - None or True: Accept the request
+    - False: Reject with 403 error
+    - FilterType: Apply filtering rules to the response
+
+    ???+ example "Examples"
+
+        Global handler for all requests:
+        ```python
+        @auth.on
+        async def log_all_requests(ctx: AuthContext, value: Any) -> None:
+            print(f"Request to {ctx.path} by {ctx.user.identity}")
+            return True
+        ```
+
+        Resource-specific handler:
+        ```python
+        @auth.on.threads
+        async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
+            # Allow access only to threads created by the user
+            return value.get("created_by") == ctx.user.identity
+        ```
+
+        Resource and action specific handler:
+        ```python
+        @auth.on.threads.delete
+        async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
+            # Only admins can delete threads
+            return "admin" in ctx.user.permissions
+        ```
+
+        Multiple resources or actions:
+        ```python
+        @auth.on(resources=["threads", "runs"], actions=["create", "update"])
+        async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:
+            # Implement rate limiting for write operations
+            return await check_rate_limit(ctx.user.identity)
+        ```
     """
-    Entry point for @auth.on decorators.
-    Provides access to specific resources."""
 
     __slots__ = (
         "_auth",
