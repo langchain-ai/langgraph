@@ -1,4 +1,4 @@
-# Quick Start: Launch Local LangGraph Server
+# QuickStart: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
 
@@ -226,7 +226,7 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 ### 🌐 Deploy to LangGraph Cloud
 
-- **[LangGraph Cloud QuickStart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Cloud Quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
 
 ### 📚 Learn More about LangGraph Platform
 
