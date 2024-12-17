@@ -10,7 +10,7 @@ This is a quick start guide to help you get a LangGraph app up and running local
 ## Install the LangGraph CLI
 
 ```bash
-pip install -U "langgraph-cli[inmem]" python-dotenv
+pip install --upgrade "langgraph-cli[inmem]"
 ```
 
 ## 🌱 Create a LangGraph App
@@ -53,21 +53,12 @@ ANTHROPIC_API_KEY=sk-
 OPENAI_API_KEY=sk-...
 ```
 
-<details><summary>Get API Keys</summary>
-    <ul>
-        <li> <b>LANGSMITH_API_KEY</b>: Go to the <a href="https://smith.langchain.com/settings">LangSmith Settings page</a>. Then clck <b>Create API Key</b>.
-        </li>
-        <li>
-            <b>ANTHROPIC_API_KEY</b>: Get an API key from <a href="https://console.anthropic.com/">Anthropic</a>.
-        </li>
-        <li>
-            <b>OPENAI_API_KEY</b>: Get an API key from <a href="https://openai.com/">OpenAI</a>.
-        </li>
-        <li>
-            <b>TAVILY_API_KEY</b>: Get an API key on the <a href="https://app.tavily.com/">Tavily website</a>.
-        </li>
-    </ul>
-</details>
+??? note "Get API Keys"
+
+    - **LANGSMITH_API_KEY**: Go to the [LangSmith Settings page](https://smith.langchain.com/settings). Then clck **Create API Key**.
+    - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
+    - **OPENAI_API_KEY**: Get an API key from [OpenAI](https://openai.com/).
+    - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
 
 ## 🚀 Launch LangGraph Server
 

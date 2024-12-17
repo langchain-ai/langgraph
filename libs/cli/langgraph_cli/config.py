@@ -124,6 +124,7 @@ def validate_config(config: Config) -> Config:
         {
             "node_version": config.get("node_version"),
             "dockerfile_lines": config.get("dockerfile_lines", []),
+            "dependencies": config.get("dependencies", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
@@ -528,8 +529,9 @@ def config_to_compose(
         f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
     )
     if watch:
+        dependencies = config.get("dependencies") or ["."]
         watch_paths = [config_path.name] + [
-            dep for dep in config["dependencies"] if dep.startswith(".")
+            dep for dep in dependencies if dep.startswith(".")
         ]
         watch_actions = "\n".join(
             f"""- path: {path}
