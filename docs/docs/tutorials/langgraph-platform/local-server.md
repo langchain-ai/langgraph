@@ -70,11 +70,11 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 >    Ready!
 > 
->    - API: [http://localhost:8123](http://localhost:8123/)
+>    - API: [http://localhost:2024](http://localhost:2024/)
 >     
->    - Docs: http://localhost:8123/docs
+>    - Docs: http://localhost:2024/docs
 >     
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 
 !!! note "In-Memory Mode"
@@ -86,9 +86,9 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 ## LangGraph Studio Web UI
 
-Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph up` command.
+Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
 
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 !!! warning "Safari Compatibility"
     
@@ -109,7 +109,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="http://localhost:8123")
+    client = get_client(url="http://localhost:2024")
 
     async for chunk in client.runs.stream(
         None,  # Threadless run
@@ -140,7 +140,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```python
     from langgraph_sdk import get_sync_client
 
-    client = get_sync_client(url="http://localhost:8123")
+    client = get_sync_client(url="http://localhost:2024")
 
     for chunk in client.runs.stream(
         None,  # Threadless run
@@ -172,7 +172,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     const { Client } = await import("@langchain/langgraph-sdk");
 
     // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: "http://localhost:8123"});
+    const client = new Client({ apiUrl: "http://localhost:2024"});
 
     const streamResponse = client.runs.stream(
         null, // Threadless run
@@ -198,7 +198,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
 
     ```bash
     curl -s --request POST \
-        --url "http://localhost:8123/runs/stream" \
+        --url "http://localhost:2024/runs/stream" \
         --header 'Content-Type: application/json' \
         --data "{
             \"assistant_id\": \"agent\",
