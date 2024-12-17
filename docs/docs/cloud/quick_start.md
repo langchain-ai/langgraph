@@ -2,26 +2,28 @@
 
 !!! note "Prerequisites"
 
-    Before you start, make sure you have the following:
+    Before you begin, ensure you have the following:
 
-    - [A GitHub account](https://github.com/)
-    - [A LangSmith account](https://smith.langchain.com/)
-
-In this quickstart, we'll deploy a **pre-built** LangGraph application into LangGraph cloud.
+    - [GitHub account](https://github.com/)
+    - [LangSmith account](https://smith.langchain.com/)
 
 ## Create a repository on GitHub
 
-To deploy a LangGraph application to **LangGraph Cloud**, you need to have your application code in a GitHub repository. Either a public or private repository will work.
+To deploy a LangGraph application to **LangGraph Cloud**, your application code must reside in a GitHub repository. Both public and private repositories are supported.
 
-We will use the pre-built python [**ReAct Agent**](https://github.com/langchain-ai/react-agent) template for this quickstart. This application requires two API keys (`ANTHROPIC_API_KEY` and `TAVILY_API_KEY`) to run. 
+You can deploy any [LangGraph Application](../concepts/application_structure.md) to LangGraph Cloud.
+
+For this guide, we'll use the pre-built Python [**ReAct Agent**](https://github.com/langchain-ai/react-agent) template.
+
+??? note "Get Required API Keys for the ReAct Agent template"
+
+    This **ReAct Agent** application requires an API key from [Anthropic](https://console.anthropic.com/) and [Tavily](https://app.tavily.com/). You can get these API keys by signing up on their respective websites.
+
+    **Alternative**: If you'd prefer a scaffold application that doesn't require API keys, use the [**New LangGraph Project**](https://github.com/langchain-ai/new-langgraph-project) template instead of the **ReAct Agent** template.
+
 
 1. Go to the [ReAct Agent](https://github.com/langchain-ai/react-agent) repository.
 2. Fork the repository to your GitHub account by clicking the `Fork` button in the top right corner.
-
-??? note "Get API Keys for the ReAct Agent template"
-
-    - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
-    - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
 
 ## Deploy to LangGraph Cloud
 
@@ -123,7 +125,7 @@ Once your application is deployed, you can test it in **LangGraph Studio**.
 
     The API calls below are for the **ReAct Agent** template. If you're deploying a different application, you may need to adjust the API calls accordingly.
 
-Before using, you need to get the URL of your LangGraph deployment. You can find this in the `Deployment` view. Click the URL to copy it to the clipboard.
+Before using, you need to get the `URL` of your LangGraph deployment. You can find this in the `Deployment` view. Click the `URL` to copy it to the clipboard.
 
 You also need to make sure you have set up your API key properly, so you can authenticate with LangGraph Cloud.
 
@@ -144,7 +146,7 @@ export LANGSMITH_API_KEY=...
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="http://localhost:8123")
+    client = get_client(url="your-deployment-url", api_key="your-langsmith-api-key")
 
     async for chunk in client.runs.stream(
         None,  # Threadless run
@@ -175,7 +177,7 @@ export LANGSMITH_API_KEY=...
     ```python
     from langgraph_sdk import get_sync_client
 
-    client = get_sync_client(url="http://localhost:8123")
+    client = get_sync_client(url="your-deployment-url", api_key="your-langsmith-api-key")
 
     for chunk in client.runs.stream(
         None,  # Threadless run
@@ -207,7 +209,7 @@ export LANGSMITH_API_KEY=...
     const { Client } = await import("@langchain/langgraph-sdk");
 
     // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: "http://localhost:8123"});
+    const client = new Client({ apiUrl: "your-deployment-url", apiKey: "your-langsmith-api-key" });
 
     const streamResponse = client.runs.stream(
         null, // Threadless run
@@ -233,7 +235,7 @@ export LANGSMITH_API_KEY=...
 
     ```bash
     curl -s --request POST \
-        --url "http://localhost:8123/runs/stream" \
+        --url <DEPLOYMENT_URL> \
         --header 'Content-Type: application/json' \
         --data "{
             \"assistant_id\": \"agent\",

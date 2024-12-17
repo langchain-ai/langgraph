@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+import typing_extensions
+
 RunStatus = typing.Literal["pending", "error", "success", "timeout", "interrupted"]
 """Status of a run execution.
 
@@ -143,9 +145,10 @@ class MinimalUser(typing.Protocol):
 class MinimalUserDict(typing.TypedDict, total=False):
     """The minimal user dictionary."""
 
-    identity: str
+    identity: typing_extensions.Required[str]
     display_name: str
     is_authenticated: bool
+    permissions: Sequence[str]
 
 
 @typing.runtime_checkable
@@ -167,25 +170,28 @@ class BaseUser(typing.Protocol):
         """The unique identifier for the user."""
         ...
 
+    @property
+    def permissions(self) -> Sequence[str]:
+        """The permissions associated with the user."""
+        ...
+
 
 Authenticator = Callable[
     ...,
     Awaitable[
-        tuple[
-            list[str],
-            typing.Union[
-                MinimalUser, str, MinimalUserDict, typing.Mapping[str, typing.Any]
-            ],
-        ]
+        typing.Union[
+            MinimalUser, str, BaseUser, MinimalUserDict, typing.Mapping[str, typing.Any]
+        ],
     ],
 ]
 """Type for authentication functions.
 
 An authenticator can return either:
-1. A tuple of (scopes, MinimalUser/BaseUser)
-2. A tuple of (scopes, str) where str is the user identity
+1. A string (user_id)
+2. A dict containing {"identity": str, "permissions": list[str]}
+3. An object with identity and permissions properties
 
-Scopes can be used downstream by your authorization logic to determine
+Permissions can be used downstream by your authorization logic to determine
 access permissions to different resources.
 
 The authenticate decorator will automatically inject any of the following parameters
@@ -196,11 +202,10 @@ Parameters:
     body (dict): The parsed request body
     path (str): The request path
     method (str): The HTTP method (GET, POST, etc.)
-    scopes (list[str]): The required scopes for this endpoint
     path_params (dict[str, str] | None): URL path parameters
     query_params (dict[str, str] | None): URL query parameters
     headers (dict[str, bytes] | None): Request headers
-    authorization (str | None): The Authorization header value
+    authorization (str | None): The Authorization header value (e.g. "Bearer <token>")
 
 ???+ example "Examples"
     Basic authentication with token:
@@ -210,9 +215,8 @@ Parameters:
     auth = Auth()
 
     @auth.authenticate
-    async def authenticate1(authorization: str) -> tuple[list[str], MinimalUser]:
-        user = await get_user(authorization)
-        return ["read", "write"], user
+    async def authenticate1(authorization: str) -> Auth.types.MinimalUserDict:
+        return await get_user(authorization)
     ```
 
     Authentication with multiple parameters:
@@ -222,17 +226,17 @@ Parameters:
         method: str,
         path: str,
         headers: dict[str, bytes]
-    ) -> tuple[list[str], str]:
+    ) -> Auth.types.MinimalUserDict:
         # Custom auth logic using method, path and headers
-        user_id = verify_request(method, path, headers)
-        return ["read"], user_id
+        user = verify_request(method, path, headers)
+        return user
     ```
 
     Accepting the raw ASGI request:
     ```python
     MY_SECRET = "my-secret-key"
     @auth.authenticate
-    async def get_current_user(request: Request) -> tuple[list[str], dict]:
+    async def get_current_user(request: Request) -> Auth.types.MinimalUserDict:
         try:
             token = (request.headers.get("authorization") or "").split(" ", 1)[1]
             payload = jwt.decode(token, MY_SECRET, algorithms=["HS256"])
@@ -252,10 +256,11 @@ Parameters:
                 raise HTTPException(status_code=401, detail="User not found")
                 
             user_data = response.json()
-            return payload.get("role", []), {
-                "username": user_data["id"],
-                "email": user_data["email"],
-                "full_name": user_data.get("user_metadata", {}).get("full_name")
+            return {
+                "identity": user_data["id"],
+                "display_name": user_data.get("name"),
+                "permissions": user_data.get("permissions", []),
+                "is_authenticated": True,
             }
     ```
 """
@@ -269,8 +274,8 @@ class BaseAuthContext:
     authorization decisions.
     """
 
-    scopes: Sequence[str]
-    """The scopes granted to the authenticated user."""
+    permissions: Sequence[str]
+    """The permissions granted to the authenticated user."""
 
     user: BaseUser
     """The authenticated user."""
@@ -696,16 +701,18 @@ class on:
         ```python
         from langgraph_sdk import Auth
 
-        @Auth.on
+        auth = Auth()
+
+        @auth.on
         def handle_all(params: Auth.on.value):
             raise Exception("Not authorized")
 
-        @Auth.on.threads.create
+        @auth.on.threads.create
         def handle_thread_create(params: Auth.on.threads.create.value):
             # Handle thread creation
             pass
 
-        @Auth.on.assistants.search
+        @auth.on.assistants.search
         def handle_assistant_search(params: Auth.on.assistants.search.value):
             # Handle assistant search
             pass
