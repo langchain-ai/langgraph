@@ -125,7 +125,7 @@ Once your application is deployed, you can test it in **LangGraph Studio**.
 
     The API calls below are for the **ReAct Agent** template. If you're deploying a different application, you may need to adjust the API calls accordingly.
 
-Before using, you need to get the URL of your LangGraph deployment. You can find this in the `Deployment` view. Click the URL to copy it to the clipboard.
+Before using, you need to get the `URL` of your LangGraph deployment. You can find this in the `Deployment` view. Click the `URL` to copy it to the clipboard.
 
 You also need to make sure you have set up your API key properly, so you can authenticate with LangGraph Cloud.
 
@@ -146,7 +146,7 @@ export LANGSMITH_API_KEY=...
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="http://localhost:8123")
+    client = get_client(url="your-deployment-url", api_key="your-langsmith-api-key")
 
     async for chunk in client.runs.stream(
         None,  # Threadless run
@@ -177,7 +177,7 @@ export LANGSMITH_API_KEY=...
     ```python
     from langgraph_sdk import get_sync_client
 
-    client = get_sync_client(url="http://localhost:8123")
+    client = get_sync_client(url="your-deployment-url", api_key="your-langsmith-api-key")
 
     for chunk in client.runs.stream(
         None,  # Threadless run
@@ -209,7 +209,7 @@ export LANGSMITH_API_KEY=...
     const { Client } = await import("@langchain/langgraph-sdk");
 
     // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: "http://localhost:8123"});
+    const client = new Client({ apiUrl: "your-deployment-url", apiKey: "your-langsmith-api-key" });
 
     const streamResponse = client.runs.stream(
         null, // Threadless run
