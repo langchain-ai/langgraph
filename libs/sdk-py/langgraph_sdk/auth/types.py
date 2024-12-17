@@ -701,16 +701,18 @@ class on:
         ```python
         from langgraph_sdk import Auth
 
-        @Auth.on
+        auth = Auth()
+
+        @auth.on
         def handle_all(params: Auth.on.value):
             raise Exception("Not authorized")
 
-        @Auth.on.threads.create
+        @auth.on.threads.create
         def handle_thread_create(params: Auth.on.threads.create.value):
             # Handle thread creation
             pass
 
-        @Auth.on.assistants.search
+        @auth.on.assistants.search
         def handle_assistant_search(params: Auth.on.assistants.search.value):
             # Handle assistant search
             pass

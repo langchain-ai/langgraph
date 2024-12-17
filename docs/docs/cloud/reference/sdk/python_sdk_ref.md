@@ -10,3 +10,9 @@
 
 ::: langgraph_sdk.auth
     handler: python
+
+::: langgraph_sdk.auth.types
+    handler: python
+
+::: langgraph_sdk.auth.exceptions
+    handler: python
