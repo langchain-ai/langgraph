@@ -16,7 +16,7 @@ If you do not want to use LangGraph Platform, we describe the options we have im
 
 ## Reject
 
-This is the simplest option, this just rejects any follow up runs and does not allow double texting. 
+This is the simplest option, this just rejects any follow-up runs and does not allow double texting. 
 See the [how-to guide](../cloud/how-tos/reject_concurrent.md) for configuring the reject double text option.
 
 ## Enqueue

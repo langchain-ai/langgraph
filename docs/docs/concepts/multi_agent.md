@@ -94,13 +94,13 @@ This is a special case of updating the graph state from tools where in addition 
 !!! important
 
     If you want to use tools that return `Command`, you can either use prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] / [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
-
-```python
-def call_tools(state):
-    ...
-    commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
-    return commands
-```
+    
+    ```python
+    def call_tools(state):
+        ...
+        commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
+        return commands
+    ```
 
 Let's now take a closer look at the different multi-agent architectures.
 

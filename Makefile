@@ -13,7 +13,7 @@ serve-clean-docs: clean-docs
 	poetry run python -m mkdocs serve -c -f docs/mkdocs.yml --strict -w ./libs/langgraph
 
 serve-docs: build-typedoc
-	poetry run python -m mkdocs serve -f docs/mkdocs.yml -w ./libs/langgraph  -w ./libs/checkpoint --dirty
+	poetry run python -m mkdocs serve -f docs/mkdocs.yml -w ./libs/langgraph  -w ./libs/checkpoint -w ./libs/sdk-py --dirty
 
 clean-docs:
 	find ./docs/docs -name "*.ipynb" -type f -delete
