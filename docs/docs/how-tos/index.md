@@ -179,6 +179,12 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 - [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
 - [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
 
+<!-- ### Authentication & Access Control
+
+- [How to implement custom authentication handlers](./auth/custom_handlers.md)
+- [How to configure endpoint-specific authorization rules](./auth/endpoint_rules.md)
+- [How to integrate with identity providers](./auth/identity_providers.md) -->
+
 ### Assistants
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.

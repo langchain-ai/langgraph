@@ -141,6 +141,8 @@ nav:
           - tutorials/web-navigation/web_voyager.ipynb
           - tutorials/usaco/usaco.ipynb
           - tutorials/extraction/retries.ipynb
+      - LangGarph Platform:
+          - docs/docs/tutorials/auth/getting_started.md
 
   - How-to Guides:
       - how-tos/index.md

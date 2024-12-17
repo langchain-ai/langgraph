@@ -8,14 +8,14 @@ title: Tutorials
 
 New to LangGraph or LLM app development? Read this material to get up and running building your first applications.
 
-## Get Started 🚀 {#quick-start}
+## Get Started 
 
 - [LangGraph Quickstart](introduction.ipynb): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
 - [LangGraph Server Quickstart](langgraph-platform/local-server.md): Launch a LangGraph server locally and interact with it using the REST API and LangGraph Studio Web UI.
 - [LangGraph Cloud QuickStart](../cloud/quick_start.md): Deploy a LangGraph app using LangGraph Cloud.
 - [LangGraph Template Quickstart](../concepts/template_applications.md): Quickly start building with LangGraph Platform using a template application.
 
-## Use cases 🛠️
+## Use cases 
 
 Explore practical implementations tailored for specific scenarios:
 
@@ -71,3 +71,11 @@ Explore practical implementations tailored for specific scenarios:
 - [Web Navigation](web-navigation/web_voyager.ipynb): Build an agent that can navigate and interact with websites
 - [Competitive Programming](usaco/usaco.ipynb): Build an agent with few-shot "episodic memory" and human-in-the-loop collaboration to solve problems from the USA Computing Olympiad; adapted from the ["Can Language Models Solve Olympiad Programming?"](https://arxiv.org/abs/2404.10952v1) paper by Shi, Tang, Narasimhan, and Yao.
 - [Complex data extraction](extraction/retries.ipynb): Build an agent that can use function calling to do complex extraction tasks
+
+## LangGraph Platform
+
+### Authentication & Access Control
+
+Learn how to secure your LangGraph applications:
+
+- [Setting Up Custom Authentication](./auth/getting_started.md): Implement OAuth2 authentication to authorize users on your deployment
