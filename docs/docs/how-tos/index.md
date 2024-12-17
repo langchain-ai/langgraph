@@ -179,11 +179,10 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 - [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
 - [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
 
-<!-- ### Authentication & Access Control
+### Authentication & Access Control
 
-- [How to implement custom authentication handlers](./auth/custom_handlers.md)
-- [How to configure endpoint-specific authorization rules](./auth/endpoint_rules.md)
-- [How to integrate with identity providers](./auth/identity_providers.md) -->
+- [How to add custom authentication](./auth/custom_auth_new.md)
+- [How to update the security schema of your OpenAPI spec](./auth/openapi_security_new.md)
 
 ### Assistants
 
