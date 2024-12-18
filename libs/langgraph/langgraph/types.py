@@ -292,8 +292,10 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
-        else:
+        elif self.update is not None:
             return [("__root__", self.update)]
+        else:
+            return []
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
