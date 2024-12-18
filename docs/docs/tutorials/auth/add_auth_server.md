@@ -16,7 +16,6 @@ We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgra
 
 !!! warning "Prerequisites"
 
-    - Complete the [Resource Authorization](resource_auth.md) tutorial
     - [Create a Supabase project](https://supabase.com/dashboard)
     - Have your project URL and service role key ready
 
