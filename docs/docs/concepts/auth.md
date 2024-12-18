@@ -242,7 +242,7 @@ async def on_thread_read(
     return {"owner": ctx.user.identity}
 
 # Run creation, streaming, updates, etc.
-# This takes precendence over the generic @auth.on handler and the @auth.on.threads handler
+# This takes precedenceover the generic @auth.on handler and the @auth.on.threads handler
 @auth.on.threads.create_run
 async def on_run_create(
     ctx: Auth.types.AuthContext,
