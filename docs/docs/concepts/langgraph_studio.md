@@ -25,9 +25,9 @@ The key features of LangGraph Studio are:
 
 ## Types
 
-### Web UI
+### Development server with web UI
 
-You can [run a local in-memory development server](../../tutorials/langgraph-platform/local-server/) that can be used to connect a local LangGraph app with a web version of the studio.
+You can [run a local in-memory development server](../tutorials/langgraph-platform/local-server.md) that can be used to connect a local LangGraph app with a web version of the studio.
 For example, if you start the local server with `langgraph dev` (running at `http://127.0.0.1:2024` by default), you can connect to the studio by navigating to:
 
 ```
