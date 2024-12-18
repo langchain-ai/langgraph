@@ -23,7 +23,7 @@ You will need to install [`langgraph-cli`](../cloud/reference/cli.md#langgraph-c
 You will need to make sure to install the `inmem` extras.
 
 ```shell
-pip install "langgraph-cli[inmem]==0.1.55"
+pip install -U "langgraph-cli[inmem]"
 ```
 
 ## Run the development server
