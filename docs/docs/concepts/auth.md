@@ -3,7 +3,8 @@
 LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes. This guide explains the core concepts and how they work together.
 
 !!! note "Python only"
-We currently only support custom authentication and authorization in Python deployments. Support for LangGraph.JS will be added soon.
+    
+    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
 ## Core Concepts
 
@@ -15,6 +16,47 @@ While often used interchangeably, these terms represent distinct security concep
 - **Authorization** ("AuthZ") determines _what you can do_. This validates the user's privileges and roles on a per-resource basis.
 
 In LangGraph Platform, authentication is handled by your `@auth.authenticate` handler, and authorization is handled by your `@auth.on` handlers.
+
+## System Architecture
+
+A typical authentication setup involves three main components:
+
+1. **Authentication Provider** (Identity Provider/IdP)
+   - A dedicated service that manages user identities and credentials
+   - Examples: Auth0, Supabase Auth, Okta, or your own auth server
+   - Handles user registration, login, password resets, etc.
+   - Issues tokens (JWT, session tokens, etc.) after successful authentication
+
+2. **LangGraph Backend** (Resource Server)
+   - Your LangGraph application that contains business logic and protected resources
+   - Validates tokens with the auth provider
+   - Enforces access control based on user identity and permissions
+   - Never stores user credentials directly
+
+3. **Client Application** (Frontend)
+   - Web app, mobile app, or API client
+   - Collects user credentials and sends to auth provider
+   - Receives tokens from auth provider
+   - Includes tokens in requests to LangGraph backend
+
+Here's how these components typically interact:
+
+```mermaid
+sequenceDiagram
+    participant Client as Client App
+    participant Auth as Auth Provider
+    participant LG as LangGraph Backend
+    
+    Client->>Auth: 1. Login (username/password)
+    Auth-->>Client: 2. Return token
+    Client->>LG: 3. Request with token
+    LG->>Auth: 4. Validate token
+    Auth-->>LG: 5. Confirm validity
+    Note over LG: 6. Apply access control
+    LG-->>Client: 7. Return resources
+```
+
+Your `@auth.authenticate` handler in LangGraph handles steps 4-5, while your `@auth.on` handlers implement step 6.
 
 ## Authentication
 
@@ -191,6 +233,39 @@ async def rbac_create(ctx: Auth.types.AuthContext, value: dict):
         )
     return _default(ctx, value)
 ```
+
+## Supported Resources
+
+LangGraph provides authorization handlers for the following resource types:
+
+### Threads
+- `@auth.on.threads.create` - Thread creation
+- `@auth.on.threads.read` - Thread retrieval
+- `@auth.on.threads.update` - Thread updates
+- `@auth.on.threads.delete` - Thread deletion
+- `@auth.on.threads.search` - Listing threads
+
+**Runs:** are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model.
+
+- `@auth.on.threads.create_run` - Creating or updating a run
+
+All other run operations (reading, listing) are controlled by the thread's handlers, since runs are always accessed in the context of their thread.
+
+### Assistants
+- `@auth.on.assistants.create` - Assistant creation
+- `@auth.on.assistants.read` - Assistant retrieval
+- `@auth.on.assistants.update` - Assistant updates
+- `@auth.on.assistants.delete` - Assistant deletion
+- `@auth.on.assistants.search` - Listing assistants
+
+### Crons
+- `@auth.on.crons.create` - Cron job creation
+- `@auth.on.crons.read` - Cron job retrieval
+- `@auth.on.crons.update` - Cron job updates
+- `@auth.on.crons.delete` - Cron job deletion
+- `@auth.on.crons.search` - Listing cron jobs
+
+You can also use the global `@auth.on` handler to implement a single access control policy across all resources and actions, or resource level `@auth.on.threads`, etc. handlers to implement control over all actions of a single resource.
 
 ## Default Security Models
 
