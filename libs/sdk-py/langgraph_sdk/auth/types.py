@@ -176,6 +176,57 @@ class BaseUser(typing.Protocol):
         ...
 
 
+class StudioUser:
+    """A user object that's populated from authenticated requests from the LangGraph studio.
+
+    Note: Studio auth can be disabled in your `langgraph.json` config.
+
+    ```json
+    {
+      "auth": {
+        "disable_studio_auth": true
+      }
+    }
+    ```
+
+    You can use `isinstance` checks in your authorization handlers (`@auth.on`) to control access specifically
+    for developers accessing the instance from the LangGraph Studio UI.
+
+    ???+ example "Examples"
+        ```python
+        @auth.on
+        async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
+            if isinstance(ctx.user, Auth.types.StudioUser):
+                return None
+            ...
+            return False
+        ```
+    """
+
+    __slots__ = ("username", "_is_authenticated", "_permissions")
+
+    def __init__(self, username: str, is_authenticated: bool = False) -> None:
+        self.username = username
+        self._is_authenticated = is_authenticated
+        self._permissions = ["authenticated"] if is_authenticated else []
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._is_authenticated
+
+    @property
+    def display_name(self) -> str:
+        return self.username
+
+    @property
+    def identity(self) -> str:
+        return self.username
+
+    @property
+    def permissions(self) -> Sequence[str]:
+        return self._permissions
+
+
 Authenticator = Callable[
     ...,
     Awaitable[
