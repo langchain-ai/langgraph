@@ -349,7 +349,7 @@ def create_react_agent(
 
         ```pycon
         >>> from typing import TypedDict
-        >>> 
+        >>>
         >>> from langgraph.managed import IsLastStep
         >>> prompt = ChatPromptTemplate.from_messages(
         ...     [
