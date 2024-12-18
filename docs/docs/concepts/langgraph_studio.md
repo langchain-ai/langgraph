@@ -25,16 +25,6 @@ The key features of LangGraph Studio are:
 
 ## Types
 
-### Desktop app
-
-LangGraph Studio is available as a [desktop app](https://studio.langchain.com/) for MacOS users.
-
-While in Beta, LangGraph Studio is available for free to all [LangSmith](https://smith.langchain.com/) users on any plan tier.
-
-### Cloud studio
-
-If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
-
 ### Web UI
 
 You can [run a local in-memory development server](../../tutorials/langgraph-platform/local-server/) that can be used to connect a local LangGraph app with a web version of the studio.
@@ -47,6 +37,16 @@ https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 See [instructions here](../cloud/reference/cli.md#dev) for more information.
 
 The web UI version of the studio will connect to your locally running server — your agent is still running locally and never leaves your device.
+
+### Cloud studio
+
+If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
+
+### Desktop app
+
+LangGraph Studio is available as a [desktop app](https://studio.langchain.com/) for MacOS users.
+
+While in Beta, LangGraph Studio is available for free to all [LangSmith](https://smith.langchain.com/) users on any plan tier.
 
 ## Studio FAQs
 
