@@ -74,7 +74,8 @@ def test_cache_key_single_field(request: pytest.FixtureRequest, checkpointer_nam
     def dummy_node(input: State):
         return {
             "stop_condition": input["stop_condition"] + 1, 
-            "dependent_field": (input["dependent_field"] + 1) % target_call_count}
+            "dependent_field": (input["dependent_field"] + 1) % target_call_count
+        }
     
     config = {"configurable": {"thread_id": "thread-1"}}
     cache = CachePolicy(cache_key=cache_key)
@@ -122,7 +123,7 @@ def test_cache_key_multiple_fields(request: pytest.FixtureRequest, checkpointer_
             "stop_condition": input["stop_condition"] + 1, 
             "dependent_field_1": (input["dependent_field_1"] + 1) % 2,
             "dependent_field_2": (input["dependent_field_2"] + 1) % 4,
-            }
+        }
     
     config = {"configurable": {"thread_id": "thread-1"}}
     cache = CachePolicy(cache_key=cache_key)
@@ -185,7 +186,7 @@ def test_multiple_cached_nodes(request: pytest.FixtureRequest, checkpointer_name
             "stop_condition": input["stop_condition"] + 1, 
             "dependent_field_1": input["dependent_field_1"] + 1,
             "dependent_field_2": input["dependent_field_2"] + 1
-            }
+        }
     
     config: RunnableConfig = {"configurable": {"thread_id": "thread-1"}, "recursion_limit": 31}
 
@@ -229,8 +230,7 @@ def test_cache_ttl(request: pytest.FixtureRequest, checkpointer_name: str):
     # node sleeps for half of the ttl
     def dummy_node(input: State):
         time.sleep(0.5)
-        return {
-            "stop_condition": input["stop_condition"] + 1}
+        return {"stop_condition": input["stop_condition"] + 1}
     
     config = {"configurable": {"thread_id": "thread-1"}}
     cache = CachePolicy(cache_key=cache_key, ttl=1)
