@@ -76,47 +76,47 @@ threads = await client.threads.list()
 
 === "Python RemoteGraph"
 
-```python
-from langgraph.pregel.remote import RemoteGraph
-# generate token with your auth provider
-my_token = "your-token"
-remote_graph = RemoteGraph(
-    "agent",
-    url="http://localhost:2024",
-    headers={"Authorization": f"Bearer {my_token}"}
-)
-threads = await remote_graph.threads.list()
-```
+  ```python
+  from langgraph.pregel.remote import RemoteGraph
+  # generate token with your auth provider
+  my_token = "your-token"
+  remote_graph = RemoteGraph(
+      "agent",
+      url="http://localhost:2024",
+      headers={"Authorization": f"Bearer {my_token}"}
+  )
+  threads = await remote_graph.threads.list()
+  ```
 
 === "JavaScript Client"
 
-```javascript
-import { Client } from "@langchain/langgraph-sdk";
-// generate token with your auth provider
-const my_token = "your-token";
-const client = new Client({
-  apiUrl: "http://localhost:2024",
-  headers: { Authorization: `Bearer ${my_token}` },
-});
-const threads = await client.threads.list();
-```
+  ```javascript
+  import { Client } from "@langchain/langgraph-sdk";
+  // generate token with your auth provider
+  const my_token = "your-token";
+  const client = new Client({
+    apiUrl: "http://localhost:2024",
+    headers: { Authorization: `Bearer ${my_token}` },
+  });
+  const threads = await client.threads.list();
+  ```
 
 === "JavaScript RemoteGraph"
 
-```javascript
-import { RemoteGraph } from "@langchain/langgraph/remote";
-// generate token with your auth provider
-const my_token = "your-token";
-const remoteGraph = new RemoteGraph({
-  graphId: "agent",
-  url: "http://localhost:2024",
-  headers: { Authorization: `Bearer ${my_token}` },
-});
-const threads = await remoteGraph.threads.list();
-```
+  ```javascript
+  import { RemoteGraph } from "@langchain/langgraph/remote";
+  // generate token with your auth provider
+  const my_token = "your-token";
+  const remoteGraph = new RemoteGraph({
+    graphId: "agent",
+    url: "http://localhost:2024",
+    headers: { Authorization: `Bearer ${my_token}` },
+  });
+  const threads = await remoteGraph.threads.list();
+  ```
 
 === "CURL"
 
-```bash
-curl -H "Authorization: Bearer your-token" http://localhost:2024/threads
-```
+  ```bash
+  curl -H "Authorization: Bearer your-token" http://localhost:2024/threads
+  ```

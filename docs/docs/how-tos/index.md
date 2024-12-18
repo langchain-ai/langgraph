@@ -181,8 +181,8 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 ### Authentication & Access Control
 
-- [How to add custom authentication](./auth/custom_auth_new.md)
-- [How to update the security schema of your OpenAPI spec](./auth/openapi_security_new.md)
+- [How to add custom authentication](./auth/custom_auth.md)
+- [How to update the security schema of your OpenAPI spec](./auth/openapi_security.md)
 
 ### Assistants
 

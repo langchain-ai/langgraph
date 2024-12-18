@@ -1,9 +1,9 @@
 # Setting up custom authentication
 
-Let's learn how to add custom authentication to a LangGraph Platform deployment. We'll cover the core concepts of token-based authentication and show how to integrate with an authentication server.
+Let's add custom authentication to a LangGraph template. This lets users interact with our bot making their conversations accessible to other users. This tutorial covers the core concepts of token-based authentication and show how to integrate with an authentication server.
 
 ??? note "Default authentication"
-    When deploying to LangGraph Cloud, requests are authenticated using LangSmith API keys by default. This gates access to the server but doesn't provide fine-grained access control over threads. Self-hosted LangGraph platform has no default authentication. This guide shows how to add custom authentication handlers that work in both cases, to provide fine-grained access control over threads, runs, and other resources.
+When deploying to LangGraph Cloud, requests are authenticated using LangSmith API keys by default. This gates access to the server but doesn't provide fine-grained access control over threads. Self-hosted LangGraph platform has no default authentication. This guide shows how to add custom authentication handlers that work in both cases, to provide fine-grained access control over threads, runs, and other resources.
 
 !!! note "Prerequisites"
 
@@ -21,58 +21,35 @@ The key components in a token-based authentication system are:
 2. **Client**: gets tokens from auth server and includes them in requests. This is typically the user's browser or mobile app.
 3. **LangGraph backend**: validates tokens and enforces access control to control access to your agents and data.
 
-After implementing the following steps, when a user's client application (such as their web browser or mobile app) wants to access resources in LangGraph, the following steps occur:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant AuthServer as Auth Server
-    participant LangGraph
-    User->>AuthServer: 1. Authenticate (username/password)
-    AuthServer-->>User: 2. Return signed JWT token
-    User->>LangGraph: 3. Request with JWT in header
-    LangGraph->>AuthServer: 4a. Validate token
-    AuthServer-->>LangGraph: 4b. Confirm token validity
-    Note over LangGraph: 4c. Apply access filters
-    LangGraph-->>User: Return authorized resources
-```
+Here's how it typically works:
 
 1. User authenticates with the auth server (username/password, OAuth, "Sign in with Google", etc.)
 2. Auth server returns a signed JWT token attesting "I am user X with claims/roles Y"
 3. User includes this token in request headers to LangGraph
 4. LangGraph validates token signature and checks claims against the auth server. If valid, it allows the request, using custom filters to restrict access only to the user's resources.
 
-In this tutorial, we'll implement password-based authentication using Supabase as our auth server.
+## 1. Clone the template
 
-## Project Structure 
-
-After cloning, you'll see these key files:
+Clone the [LangGraph template](https://github.com/langchain-ai/new-langgraph-project) to get started.
 
 ```shell
-custom-auth/
-├── src/
-│   └── security/
-│       └── auth.py     # We'll create this
-├── langgraph.json      # We'll update this
-└── .env.example        # Environment variables template
+pip install -U "langgraph-cli[inmem]"
+langgraph new --template=new-langgraph-project-python custom-auth
+cd custom-auth
 ```
 
-## Setting up authentication
+### 2. Create the auth handler
 
-### 1. Create the auth handler
-
-First, let's create our authentication handler. Create a new file at `src/security/auth.py`:
+Next, let's create our authentication handler. Create a new file at `src/security/auth.py`:
 
 ```python
 import os
 import httpx
-import jwt
 from langgraph_sdk import Auth
 
 # Load from your .env file
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
-SUPABASE_JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
 
 # Create the auth object we'll use to protect our endpoints
 auth = Auth()
@@ -90,20 +67,14 @@ async def get_current_user(
         )
 
     try:
-        # Extract and verify JWT token
-        token = authorization.split(" ", 1)[1]
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-
-        # Double-check with Supabase that token is still valid
+        # Fetch the user info from Supabase
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{SUPABASE_URL}/auth/v1/user",
-                headers={"Authorization": f"Bearer {token}"},
+                headers={
+                    "Authorization": authorization,
+                    "apiKey": SUPABASE_SERVICE_KEY,
+                },
             )
             if response.status_code != 200:
                 raise Auth.exceptions.HTTPException(
@@ -112,7 +83,7 @@ async def get_current_user(
                 )
 
             user_data = response.json()
-            return [], {
+            return {
                 "identity": user_data["id"],
                 "display_name": user_data.get("name"),
                 "is_authenticated": True,
@@ -147,9 +118,9 @@ Next, tell LangGraph about our auth handler. Open `langgraph.json` and add:
 
 ```json
 {
-    "auth": {
-        "path": "src/security/auth.py:auth"
-    }
+  "auth": {
+    "path": "src/security/auth.py:auth"
+  }
 }
 ```
 
@@ -168,21 +139,21 @@ cp .env.example .env
 ```
 
 Add to your `.env`:
+
 ```bash
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=your-service-key # aka the service_role secret
-SUPABASE_JWT_SECRET=your-jwt-secret
 ANTHROPIC_API_KEY=your-anthropic-key  # For the LLM in our chatbot
 ```
 
-Also note down your project's "anon public" key - we'll use this for client authentication.
+Also note down your project's "anon public" key - we'll use this for client authentication below.
 
 ### 4. Start the server
 
 Install dependencies and start LangGraph:
 
 ```bash
-pip install -U "langgraph-cli[inmem]" && pip install -e .
+pip install -e .
 langgraph dev --no-browser
 ```
 
