@@ -55,14 +55,13 @@ Values:
     - reject: Reject the operation
 """
 
-FilterTypeFilterType = typing.Union[
+FilterType = typing.Union[
     typing.Dict[
         str, typing.Union[str, typing.Dict[typing.Literal["$eq", "$contains"], str]]
     ],
     typing.Dict[str, str],
 ]
-"""# 
-Type for filtering queries.
+"""Response type for authorization handlers.
 
 Supports exact matches and operators:
     - Exact match shorthand: {"field": "value"}
