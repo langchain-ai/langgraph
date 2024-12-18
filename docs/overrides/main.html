@@ -164,6 +164,11 @@
     .jupyter-wrapper .jp-Notebook .jp-Cell .jp-OutputPrompt {
       display: none !important;
     }
+
+    .md-banner {
+      background-color: #CFC9FA;
+      color: #000000;
+    }
   </style>
 {% endblock %}
 
@@ -189,4 +194,9 @@
   {% else %}
     <title>{{ config.site_name }}</title>
   {% endif %}
+{% endblock %}
+
+
+{% block announce %}
+  To learn more about LangGraph, check out our first LangChain Academy course, <em>Introduction to LangGraph</em>, available for free <a href="https://academy.langchain.com/courses/intro-to-langgraph">here</a>.
 {% endblock %}
