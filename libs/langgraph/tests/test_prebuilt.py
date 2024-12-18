@@ -1249,6 +1249,33 @@ async def test_tool_node_command():
             }
         )
 
+    # test validation (tool message with a wrong tool call ID)
+    with pytest.raises(ValueError):
+
+        @dec_tool
+        def mismatching_tool_call_id_tool():
+            """My tool"""
+            return Command(
+                update={"messages": [ToolMessage(content="foo", tool_call_id="2")]}
+            )
+
+        ToolNode([mismatching_tool_call_id_tool]).invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "",
+                        tool_calls=[
+                            {
+                                "args": {},
+                                "id": "1",
+                                "name": "mismatching_tool_call_id_tool",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
+
     # test validation (missing tool message in the update for parent graph is OK)
     @dec_tool
     def node_update_parent_tool():
@@ -1267,40 +1294,6 @@ async def test_tool_node_command():
             ]
         }
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
-
-    # test validation (multiple tool messages)
-    with pytest.raises(ValueError):
-        for graph in (None, Command.PARENT):
-
-            @dec_tool
-            def multiple_tool_messages_tool():
-                """My tool"""
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(content="foo", tool_call_id=""),
-                            ToolMessage(content="bar", tool_call_id=""),
-                        ]
-                    },
-                    graph=graph,
-                )
-
-            ToolNode([multiple_tool_messages_tool]).invoke(
-                {
-                    "messages": [
-                        AIMessage(
-                            "",
-                            tool_calls=[
-                                {
-                                    "args": {},
-                                    "id": "1",
-                                    "name": "multiple_tool_messages_tool",
-                                }
-                            ],
-                        )
-                    ]
-                }
-            )
 
 
 @pytest.mark.skipif(
@@ -1524,6 +1517,25 @@ async def test_tool_node_command_list_input():
             ]
         )
 
+    # test validation (tool message with a wrong tool call ID)
+    with pytest.raises(ValueError):
+
+        @dec_tool
+        def mismatching_tool_call_id_tool():
+            """My tool"""
+            return Command(update=[ToolMessage(content="foo", tool_call_id="2")])
+
+        ToolNode([mismatching_tool_call_id_tool]).invoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {"args": {}, "id": "1", "name": "mismatching_tool_call_id_tool"}
+                    ],
+                )
+            ]
+        )
+
     # test validation (missing tool message in the update for parent graph is OK)
     @dec_tool
     def node_update_parent_tool():
@@ -1538,36 +1550,6 @@ async def test_tool_node_command_list_input():
             )
         ]
     ) == [Command(update=[], graph=Command.PARENT)]
-
-    # test validation (multiple tool messages)
-    with pytest.raises(ValueError):
-        for graph in (None, Command.PARENT):
-
-            @dec_tool
-            def multiple_tool_messages_tool():
-                """My tool"""
-                return Command(
-                    update=[
-                        ToolMessage(content="foo", tool_call_id=""),
-                        ToolMessage(content="bar", tool_call_id=""),
-                    ],
-                    graph=graph,
-                )
-
-            ToolNode([multiple_tool_messages_tool]).invoke(
-                [
-                    AIMessage(
-                        "",
-                        tool_calls=[
-                            {
-                                "args": {},
-                                "id": "1",
-                                "name": "multiple_tool_messages_tool",
-                            }
-                        ],
-                    )
-                ]
-            )
 
 
 @pytest.mark.skipif(

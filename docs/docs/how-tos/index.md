@@ -108,6 +108,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 [Multi-agent systems](../concepts/multi_agent.md) are useful to break down complex LLM applications into multiple agents, each responsible for a different part of the application. These how-to guides show how to implement multi-agent systems in LangGraph:
 
+- [How to implement handoffs between agents](agent-handoffs.ipynb)
 - [How to build a multi-agent network](multi-agent-network.ipynb)
 - [How to add multi-turn conversation in a multi-agent application](multi-agent-multi-turn-convo.ipynb)
 
@@ -247,6 +248,7 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 - [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
 - [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
+- [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
 
 ## Troubleshooting
 

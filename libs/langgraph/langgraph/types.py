@@ -271,7 +271,7 @@ class Command(Generic[N], ToolOutputMixin):
     """
 
     graph: Optional[str] = None
-    update: Union[dict[str, Any], Sequence[tuple[str, Any]]] = ()
+    update: Optional[Any] = None
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
@@ -292,8 +292,10 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
-        else:
+        elif self.update is not None:
             return [("__root__", self.update)]
+        else:
+            return []
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
