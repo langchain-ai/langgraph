@@ -68,6 +68,7 @@ The LangGraph Platform comprises several components that work together to suppor
 - [Web-hooks](./langgraph_server.md#webhooks): Webhooks allow your running LangGraph application to send data to external services on specific events.
 - [Cron Jobs](./langgraph_server.md#cron-jobs): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.
 - [Double Texting](./double_texting.md): Double texting is a common issue in LLM applications where users may send multiple messages before the graph has finished running. This guide explains how to handle double texting with LangGraph Deploy.
+- [Authentication & Access Control](./auth.md): Learn about options for authentication and access control when deploying the LangGraph Platform.
 
 ### Deployment Options
 
