@@ -271,7 +271,7 @@ class Command(Generic[N], ToolOutputMixin):
     """
 
     graph: Optional[str] = None
-    update: Any = ()
+    update: Optional[Any] = None
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
