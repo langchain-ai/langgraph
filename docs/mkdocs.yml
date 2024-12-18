@@ -143,9 +143,9 @@ nav:
           - tutorials/extraction/retries.ipynb
       - LangGraph Platform:
           - LangGraph Platform: concepts#langgraph-platform
-          - docs/docs/tutorials/auth/getting_started.md
-          - docs/docs/tutorials/auth/resource_auth.md
-          - docs/docs/tutorials/auth/add_auth_server.md
+          - tutorials/auth/getting_started.md
+          - tutorials/auth/resource_auth.md
+          - tutorials/auth/add_auth_server.md
 
   - How-to Guides:
       - how-tos/index.md
