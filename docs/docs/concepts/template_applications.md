@@ -12,7 +12,7 @@ You can create an application from a template using the LangGraph CLI.
 ## Install the LangGraph CLI
 
 ```bash
-pip install "langgraph-cli[inmem]==0.1.58" python-dotenv
+pip install "langgraph-cli[inmem]" --upgrade
 ```
 
 ## Available Templates

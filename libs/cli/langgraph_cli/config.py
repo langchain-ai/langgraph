@@ -47,6 +47,44 @@ class StoreConfig(TypedDict, total=False):
     """Configuration for vector embeddings in store."""
 
 
+class SecurityConfig(TypedDict, total=False):
+    securitySchemes: dict
+    security: list
+    # path => {method => security}
+    paths: dict[str, dict[str, list]]
+
+
+class AuthConfig(TypedDict, total=False):
+    path: str
+    """Path to the authentication function in a Python file."""
+    disable_studio_auth: bool
+    """Whether to disable auth when connecting from the LangSmith Studio."""
+    openapi: SecurityConfig
+    """The schema to use for updating the openapi spec.
+
+    Example:
+        {
+            "securitySchemes": {
+                "OAuth2": {
+                    "type": "oauth2",
+                    "flows": {
+                        "password": {
+                            "tokenUrl": "/token",
+                            "scopes": {
+                                "me": "Read information about the current user",
+                                "items": "Access to create and manage items"
+                            }
+                        }
+                    }
+                }
+            },
+            "security": [
+                {"OAuth2": ["me"]}  # Default security requirement for all endpoints
+            ]
+        }
+    """
+
+
 class Config(TypedDict, total=False):
     python_version: str
     node_version: Optional[str]
@@ -56,6 +94,7 @@ class Config(TypedDict, total=False):
     graphs: dict[str, str]
     env: Union[dict[str, str], str]
     store: Optional[StoreConfig]
+    auth: Optional[AuthConfig]
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -85,9 +124,11 @@ def validate_config(config: Config) -> Config:
         {
             "node_version": config.get("node_version"),
             "dockerfile_lines": config.get("dockerfile_lines", []),
+            "dependencies": config.get("dependencies", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
+            "auth": config.get("auth"),
         }
         if config.get("node_version")
         else {
@@ -98,6 +139,7 @@ def validate_config(config: Config) -> Config:
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
+            "auth": config.get("auth"),
         }
     )
 
@@ -400,6 +442,10 @@ RUN set -ex && \\
 ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -445,6 +491,10 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
 ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -479,8 +529,9 @@ def config_to_compose(
         f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
     )
     if watch:
+        dependencies = config.get("dependencies") or ["."]
         watch_paths = [config_path.name] + [
-            dep for dep in config["dependencies"] if dep.startswith(".")
+            dep for dep in dependencies if dep.startswith(".")
         ]
         watch_actions = "\n".join(
             f"""- path: {path}
