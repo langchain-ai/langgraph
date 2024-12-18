@@ -21,7 +21,7 @@ The LangGraph command line interface includes commands to build and run a LangGr
 
 [](){#langgraph.json}
 
-## Configuration File
+## Configuration File {#configuration-file}
 
 The LangGraph CLI requires a JSON configuration file with the following keys:
 

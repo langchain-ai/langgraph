@@ -31,6 +31,7 @@ If everything works, the server should start and open the studio in your browser
 > 
 > This in-memory server is designed for development and testing.
 > For production use, please use LangGraph Cloud.
+
 Now that we've seen the base LangGraph app, let's add authentication to it! In part 1, we will start with a hard-coded token for illustration purposes.
 We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
 
@@ -49,9 +50,12 @@ VALID_TOKENS = {
     "user2-token": {"id": "user2", "name": "Bob"},
 }
 
+# The "Auth" object is a container that LangGraph will use to mark our authentication function
 auth = Auth()
 
 
+# The `authenticate` decorator tells LangGraph to call this function as middleware
+# for every request. This will determine whether the request is allowed or not
 @auth.authenticate
 async def get_current_user(authorization: str | None) -> Auth.types.MinimalUserDict:
     """Check if the user's token is valid."""
@@ -69,12 +73,12 @@ async def get_current_user(authorization: str | None) -> Auth.types.MinimalUserD
     }
 ```
 
-Notice that our authentication handler does two important things:
+Notice that our [authentication](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler does two important things:
 
-1. Checks if a valid token is provided
-2. Returns the user's identity
+1. Checks if a valid token is provided in the request's [Authorization header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
+2. Returns the user's [identity](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.MinimalUserDict)
 
-Now tell LangGraph to use our authentication by adding the following to the `langgraph.json` configuration:
+Now tell LangGraph to use our authentication by adding the following to the [`langgraph.json`](../../cloud/reference/cli.md#configuration-file) configuration:
 
 ```json
 {
@@ -137,14 +141,16 @@ print(response)
 ```
 
 You should see that:
+
 1. Without a valid token, we can't access the bot
 2. With a valid token, we can create threads and chat
 
-Congratulations! You've built a chatbot that only lets "authorized" users access it. While this system doesn't (yet) implement a production-ready security scheme, we've learned the basic mechanics of how to control access to our bot. In the next tutorial, we'll learn how to give each user their own private conversations.
+Congratulations! You've built a chatbot that only lets "authenticated" users access it. While this system doesn't (yet) implement a production-ready security scheme, we've learned the basic mechanics of how to control access to our bot. In the next tutorial, we'll learn how to give each user their own private conversations.
 
 ## What's Next?
 
 Now that you can control who accesses your bot, you might want to:
-1. Move on to [Resource Authorization](resource_auth.md) to learn how to make conversations private
-2. Read more about [authentication concepts](../../concepts/auth.md)
-3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md) for more authentication options
+
+1. Continue the tutorial by going to [Making Conversations Private (Part 2/3)](resource_auth.md) to learn about resource authorization.
+2. Read more about [authentication concepts](../../concepts/auth.md).
+3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md) for more authentication details.

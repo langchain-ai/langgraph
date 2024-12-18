@@ -23,23 +23,24 @@ A typical authentication setup involves three main components:
 
 1. **Authentication Provider** (Identity Provider/IdP)
 
-   - A dedicated service that manages user identities and credentials
-   - Examples: Auth0, Supabase Auth, Okta, or your own auth server
-   - Handles user registration, login, password resets, etc.
-   - Issues tokens (JWT, session tokens, etc.) after successful authentication
+    * A dedicated service that manages user identities and credentials
+    * Handles user registration, login, password resets, etc.
+    * Issues tokens (JWT, session tokens, etc.) after successful authentication
+    * Examples: Auth0, Supabase Auth, Okta, or your own auth server
 
 2. **LangGraph Backend** (Resource Server)
 
-   - Your LangGraph application that contains business logic and protected resources
-   - Validates tokens with the auth provider
-   - Enforces access control based on user identity and permissions
-   - Never stores user credentials directly
+    * Your LangGraph application that contains business logic and protected resources
+    * Validates tokens with the auth provider
+    * Enforces access control based on user identity and permissions
+    * Doesn't store user credentials directly
 
 3. **Client Application** (Frontend)
-   - Web app, mobile app, or API client
-   - Collects user credentials and sends to auth provider
-   - Receives tokens from auth provider
-   - Includes tokens in requests to LangGraph backend
+
+    * Web app, mobile app, or API client
+    * Collects time-sensitive user credentials and sends to auth provider
+    * Receives tokens from auth provider
+    * Includes these tokens in requests to LangGraph backend
 
 Here's how these components typically interact:
 
@@ -58,15 +59,15 @@ sequenceDiagram
     LG-->>Client: 7. Return resources
 ```
 
-Your `@auth.authenticate` handler in LangGraph handles steps 4-5, while your `@auth.on` handlers implement step 6.
+Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler in LangGraph handles steps 4-5, while your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers implement step 6.
 
 ## Authentication
 
-Authentication in LangGraph runs as middleware on every request. Your `@auth.authenticate` handler receives request information and must:
+Authentication in LangGraph runs as middleware on every request. Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler receives request information and should:
 
 1. Validate the credentials
 2. Return user information if valid
-3. Raise an HTTP exception if invalid (or AssertionError)
+3. Raise an HTTP exception or AssertionError if invalid
 
 ```python
 from langgraph_sdk import Auth
@@ -98,12 +99,12 @@ async def authenticate(headers: dict) -> Auth.types.MinimalUserDict:
 
 The returned user information is available:
 
-- To your authorization handlers via `ctx.user`
+- To your authorization handlers via [`ctx.user`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AuthContext)
 - In your application via `config["configuration"]["langgraph_auth_user"]`
 
 ## Authorization
 
-After authentication, LangGraph calls your `@auth.on` handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
+After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
 1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly.
 2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).

@@ -153,12 +153,20 @@ class MinimalUser(typing.Protocol):
 
 
 class MinimalUserDict(typing.TypedDict, total=False):
-    """The minimal user dictionary."""
+    """The dictionary representation of a user."""
 
     identity: typing_extensions.Required[str]
+    """The required unique identifier for the user."""
     display_name: str
+    """The optional display name for the user."""
     is_authenticated: bool
+    """Whether the user is authenticated. Defaults to True."""
     permissions: Sequence[str]
+    """A list of permissions associated with the user.
+    
+    You can use these in your `@auth.on` authorization logic to determine
+    access permissions to different resources.
+    """
 
 
 @typing.runtime_checkable
