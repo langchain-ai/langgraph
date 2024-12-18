@@ -152,7 +152,10 @@ Let's test this with a real user account!
 
 ## Testing Authentication Flow
 
-Let's test out our new authentication flow. You can run the following code in a file or notebook.
+Let's test out our new authentication flow. You can run the following code in a file or notebook. You will need to provide:
+- A valid email address
+- A Supabase project URL (from [above](#setup-auth-provider))
+- A Supabase service role key (also from [above](#setup-auth-provider))
 
 ```python
 import os
@@ -199,7 +202,7 @@ Then run the code.
 !!! tip "About test emails"
     We'll create two test accounts by adding "+1" and "+2" to your email. For example, if you use "myemail@gmail.com", we'll create "myemail+1@gmail.com" and "myemail+2@gmail.com". All emails will be delivered to your original address.
 
-⚠️ Before continuing: Check your email and click both confirmation links.
+⚠️ Before continuing: Check your email and click both confirmation links. Supabase will will reject `/login` requests until after you have confirmed your users' email.
 
 Now let's test that users can only see their own data. Make sure the server is running (run `langgraph dev`) before proceeding. The following snippet requires the "anon public" key that you copied from the Supabase dashboard while [setting up the auth provider](#setup-auth-provider) previously. 
 

@@ -105,45 +105,38 @@ langgraph dev --no-browser
     }
     ```
 
-Now let's try to chat with our bot. Create a new file `test_auth.py`:
+Now let's try to chat with our bot. Run the following code in a file or notebook:
 
 ```python
-import asyncio
 from langgraph_sdk import get_client
 
-
-async def test_auth():
-    # Try without a token (should fail)
-    client = get_client(url="http://localhost:2024")
-    try:
-        thread = await client.threads.create()
-        print("❌ Should have failed without token!")
-    except Exception as e:
-        print("✅ Correctly blocked access:", e)
-
-    # Try with a valid token
-    client = get_client(
-        url="http://localhost:2024", headers={"Authorization": "Bearer user1-token"}
-    )
-
-    # Create a thread and chat
+# Try without a token (should fail)
+client = get_client(url="http://localhost:2024")
+try:
     thread = await client.threads.create()
-    print(f"✅ Created thread as Alice: {thread['thread_id']}")
+    print("❌ Should have failed without token!")
+except Exception as e:
+    print("✅ Correctly blocked access:", e)
 
-    response = await client.runs.create(
-        thread_id=thread["thread_id"],
-        assistant_id="agent",
-        input={"messages": [{"role": "user", "content": "Hello!"}]},
-    )
-    print("✅ Bot responded:")
-    print(response)
+# Try with a valid token
+client = get_client(
+    url="http://localhost:2024", headers={"Authorization": "Bearer user1-token"}
+)
 
+# Create a thread and chat
+thread = await client.threads.create()
+print(f"✅ Created thread as Alice: {thread['thread_id']}")
 
-if __name__ == "__main__":
-    asyncio.run(test_auth())
+response = await client.runs.create(
+    thread_id=thread["thread_id"],
+    assistant_id="agent",
+    input={"messages": [{"role": "user", "content": "Hello!"}]},
+)
+print("✅ Bot responded:")
+print(response)
 ```
 
-Run the test code and you should see that:
+You should see that:
 1. Without a valid token, we can't access the bot
 2. With a valid token, we can create threads and chat
 

@@ -87,58 +87,54 @@ Notice that our simple handler does two things:
 
 ## Testing Private Conversations
 
-Let's test our authorization. Create a new file `test_private.py`:
+Let's test our authorization. If we have set things up correctly, we should expect to see all ✅ messages. Be sure to have your development server running (run `langgraph dev`):
 
 ```python
-import asyncio
 from langgraph_sdk import get_client
 
-async def test_private():
-    # Create clients for both users
-    alice = get_client(
-        url="http://localhost:2024",
-        headers={"Authorization": "Bearer user1-token"}
-    )
+# Create clients for both users
+alice = get_client(
+    url="http://localhost:2024",
+    headers={"Authorization": "Bearer user1-token"}
+)
 
-    bob = get_client(
-        url="http://localhost:2024",
-        headers={"Authorization": "Bearer user2-token"}
-    )
+bob = get_client(
+    url="http://localhost:2024",
+    headers={"Authorization": "Bearer user2-token"}
+)
 
-    # Alice creates a thread and chats
-    alice_thread = await alice.threads.create()
-    print(f"✅ Alice created thread: {alice_thread['thread_id']}")
+# Alice creates a thread and chats
+alice_thread = await alice.threads.create()
+print(f"✅ Alice created thread: {alice_thread['thread_id']}")
 
-    await alice.runs.create(
-        thread_id=alice_thread["thread_id"],
-        assistant_id="agent",
-        input={"messages": [{"role": "user", "content": "Hi, this is Alice's private chat"}]}
-    )
+await alice.runs.create(
+    thread_id=alice_thread["thread_id"],
+    assistant_id="agent",
+    input={"messages": [{"role": "user", "content": "Hi, this is Alice's private chat"}]}
+)
 
-    # Bob tries to access Alice's thread
-    try:
-        await bob.threads.get(alice_thread["thread_id"])
-        print("❌ Bob shouldn't see Alice's thread!")
-    except Exception as e:
-        print("✅ Bob correctly denied access:", e)
+# Bob tries to access Alice's thread
+try:
+    await bob.threads.get(alice_thread["thread_id"])
+    print("❌ Bob shouldn't see Alice's thread!")
+except Exception as e:
+    print("✅ Bob correctly denied access:", e)
 
-    # Bob creates his own thread
-    bob_thread = await bob.threads.create()
-    await bob.runs.create(
-        thread_id=bob_thread["thread_id"],
-        assistant_id="agent",
-        input={"messages": [{"role": "user", "content": "Hi, this is Bob's private chat"}]}
-    )
-    print(f"✅ Bob created his own thread: {bob_thread['thread_id']}")
+# Bob creates his own thread
+bob_thread = await bob.threads.create()
+await bob.runs.create(
+    thread_id=bob_thread["thread_id"],
+    assistant_id="agent",
+    input={"messages": [{"role": "user", "content": "Hi, this is Bob's private chat"}]}
+)
+print(f"✅ Bob created his own thread: {bob_thread['thread_id']}")
 
-    # List threads - each user only sees their own
-    alice_threads = await alice.threads.list()
-    bob_threads = await bob.threads.list()
-    print(f"✅ Alice sees {len(alice_threads)} thread")
-    print(f"✅ Bob sees {len(bob_threads)} thread")
+# List threads - each user only sees their own
+alice_threads = await alice.threads.list()
+bob_threads = await bob.threads.list()
+print(f"✅ Alice sees {len(alice_threads)} thread")
+print(f"✅ Bob sees {len(bob_threads)} thread")
 
-if __name__ == "__main__":
-    asyncio.run(test_private())
 ```
 
 Run the test code and you should see output like this:
