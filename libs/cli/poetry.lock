@@ -554,13 +554,13 @@ langgraph-sdk = ">=0.1.42,<0.2.0"
 
 [[package]]
 name = "langgraph-api"
-version = "0.0.8"
+version = "0.0.12"
 description = ""
 optional = true
 python-versions = "<4.0,>=3.11.0"
 files = [
-    {file = "langgraph_api-0.0.8-py3-none-any.whl", hash = "sha256:ab9b4a5ec8393d17ef921b94f3f019f49f3f17910ba9351beb1e1f962b02a33e"},
-    {file = "langgraph_api-0.0.8.tar.gz", hash = "sha256:b1304beb9d72392ce5d5602cd524a4f57839f1dcd1da6f4e1391832fb4a6edc5"},
+    {file = "langgraph_api-0.0.12-py3-none-any.whl", hash = "sha256:abe94ef5d2888bfdf378645efa4ce8ab0d9a4ad8b331a0d6106ddf5445754690"},
+    {file = "langgraph_api-0.0.12.tar.gz", hash = "sha256:47315252855f04a321aeecf898d6dbc463fd5f34a4bb91ac3a5031676d29caab"},
 ]
 
 [package.dependencies]
@@ -570,7 +570,8 @@ jsonschema-rs = ">=0.25.0,<0.26.0"
 langchain-core = ">=0.2.38,<0.4.0"
 langgraph = ">=0.2.56,<0.3.0"
 langgraph-checkpoint = ">=2.0.7,<3.0"
-langsmith = ">=0.1.63,<0.2.0"
+langgraph-sdk = ">=0.1.48,<0.2.0"
+langsmith = ">=0.1.63,<0.3.0"
 orjson = ">=3.10.1"
 pyjwt = ">=2.9.0,<3.0.0"
 sse-starlette = ">=2.1.0,<3.0.0"
@@ -597,13 +598,13 @@ msgpack = ">=1.1.0,<2.0.0"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.44"
+version = "0.1.48"
 description = "SDK for interacting with LangGraph API"
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 files = [
-    {file = "langgraph_sdk-0.1.44-py3-none-any.whl", hash = "sha256:a5a623429b44616c4369c0caf2ea30ce8d3a103123f7bb3ca50dc726eaa313a4"},
-    {file = "langgraph_sdk-0.1.44.tar.gz", hash = "sha256:5b17fe7c0a0fe4b83170c9b8987e0f98dc0636fcc0166dbdba725cc8ffd9b1cf"},
+    {file = "langgraph_sdk-0.1.48-py3-none-any.whl", hash = "sha256:2c6c01d48e8eddff7e9688bdbda943ddb107831972667eb08a0c30e3a937fa11"},
+    {file = "langgraph_sdk-0.1.48.tar.gz", hash = "sha256:a14ddfc0ea444b33fb5a7357ca0359d2d77961b61244a028dd952658d4d6bc92"},
 ]
 
 [package.dependencies]
@@ -1549,4 +1550,4 @@ inmem = ["langgraph-api", "python-dotenv"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "c36514f708e8b2b32c20ad9b7a3ba6fca41f043ced0149f0aae4eef43fc6c10b"
+content-hash = "d0297af9c28614fc2471ed4f0d86be6f717d8a9b54e360c14e5bd6325c4c00de"
