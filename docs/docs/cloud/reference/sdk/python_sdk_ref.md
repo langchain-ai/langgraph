@@ -7,7 +7,6 @@
 ::: langgraph_sdk.schema
     handler: python
 
-
 ::: langgraph_sdk.auth
     handler: python
 

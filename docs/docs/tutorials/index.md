@@ -77,6 +77,8 @@ Explore practical implementations tailored for specific scenarios:
 
 ### Authentication & Access Control
 
-Add custom authentication and authorization to your LangGraph Platform deployment.
+Add custom authentication and authorization to an existing LangGraph Platform deployment in the following three-part guide:
 
-- [Setting Up Custom Authentication](./auth/getting_started.md): Implement OAuth2 authentication to authorize users on your deployment
+1.  [Setting Up Custom Authentication](./auth/getting_started.md): Implement OAuth2 authentication to authorize users on your deployment
+2. [Resource Authorization](./auth/resource_auth.md): Let users have private conversations
+3. [Connecting an Authentication Provider](./auth/supabase_auth.md): Add real user accounts and validate using OAuth2
