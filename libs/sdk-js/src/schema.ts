@@ -2,7 +2,7 @@ import type { JSONSchema7 } from "json-schema";
 
 type Optional<T> = T | null | undefined;
 
-type RunStatus =
+export type RunStatus =
   | "pending"
   | "running"
   | "error"
@@ -10,9 +10,11 @@ type RunStatus =
   | "timeout"
   | "interrupted";
 
-type ThreadStatus = "idle" | "busy" | "interrupted" | "error";
+export type ThreadStatus = "idle" | "busy" | "interrupted" | "error";
 
 type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
+
+export type CancelAction = "interrupt" | "rollback";
 
 export interface Config {
   /**
@@ -77,7 +79,17 @@ export interface GraphSchema {
 
 export type Subgraphs = Record<string, GraphSchema>;
 
-export type Metadata = Optional<Record<string, unknown>>;
+export type Metadata = Optional<{
+  source?: "input" | "loop" | "update" | (string & {});
+
+  step?: number;
+
+  writes?: Record<string, unknown> | null;
+
+  parents?: Record<string, string>;
+
+  [key: string]: unknown;
+}>;
 
 export interface AssistantBase {
   /** The ID of the assistant. */
@@ -108,7 +120,32 @@ export interface Assistant extends AssistantBase {
   /** The name of the assistant */
   name: string;
 }
-export type AssistantGraph = Record<string, Array<Record<string, unknown>>>;
+
+export interface AssistantGraph {
+  nodes: Array<{
+    id: string | number;
+    name?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data?: Record<string, any> | string;
+    metadata?: unknown;
+  }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    data?: string;
+    conditional?: boolean;
+  }>;
+}
+
+/**
+ * An interrupt thrown inside a thread.
+ */
+export interface Interrupt {
+  value: unknown;
+  when: "during";
+  resumable: boolean;
+  ns?: string[];
+}
 
 export interface Thread<ValuesType = DefaultValues> {
   /** The ID of the thread. */
@@ -128,6 +165,9 @@ export interface Thread<ValuesType = DefaultValues> {
 
   /** The current state of the thread. */
   values: ValuesType;
+
+  /** Interrupts which were thrown in this thread */
+  interrupts: Record<string, Array<Interrupt>>;
 }
 
 export interface Cron {
@@ -181,8 +221,9 @@ export interface ThreadState<ValuesType = DefaultValues> {
 export interface ThreadTask {
   id: string;
   name: string;
+  result?: unknown;
   error: Optional<string>;
-  interrupts: Array<Record<string, unknown>>;
+  interrupts: Array<Interrupt>;
   checkpoint: Optional<Checkpoint>;
   state: Optional<ThreadState>;
 }
@@ -223,15 +264,17 @@ export interface Checkpoint {
 export interface ListNamespaceResponse {
   namespaces: string[][];
 }
-
-export interface SearchItemsResponse {
-  items: Item[];
-}
-
 export interface Item {
   namespace: string[];
   key: string;
   value: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SearchItem extends Item {
+  score?: number;
+}
+export interface SearchItemsResponse {
+  items: SearchItem[];
 }

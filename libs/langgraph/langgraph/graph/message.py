@@ -154,7 +154,7 @@ def add_messages(
         }
         ```
 
-    ..versionchanged:: 0.2.40
+    ..versionchanged:: 0.2.61
 
         Support for 'format="langchain-openai"' flag added.
     """

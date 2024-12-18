@@ -1,4 +1,5 @@
 import sys
+from os import getenv
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, cast
 
@@ -10,6 +11,7 @@ from langgraph.types import Interrupt, Send  # noqa: F401
 # --- Empty read-only containers ---
 EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 EMPTY_SEQ: tuple[str, ...] = tuple()
+MISSING = object()
 
 # --- Public constants ---
 TAG_NOSTREAM = sys.intern("langsmith:nostream")
@@ -20,12 +22,16 @@ START = sys.intern("__start__")
 """The first (maybe virtual) node in graph-style Pregel."""
 END = sys.intern("__end__")
 """The last (maybe virtual) node in graph-style Pregel."""
+SELF = sys.intern("__self__")
+"""The implicit branch that handles each node's Control values."""
 
 # --- Reserved write keys ---
 INPUT = sys.intern("__input__")
 # for values passed as input to the graph
 INTERRUPT = sys.intern("__interrupt__")
 # for dynamic interrupts raised by nodes
+RESUME = sys.intern("__resume__")
+# for values passed to resume a node after an interrupt
 ERROR = sys.intern("__error__")
 # for errors raised by nodes
 NO_WRITES = sys.intern("__no_writes__")
@@ -34,12 +40,16 @@ SCHEDULED = sys.intern("__scheduled__")
 # marker to signal node was scheduled (in distributed mode)
 TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
+RETURN = sys.intern("__return__")
+# for writes of a task where we simply record the return value
 
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
 CONFIG_KEY_READ = sys.intern("__pregel_read")
 # holds the `read` function that returns a copy of the current state
+CONFIG_KEY_CALL = sys.intern("__pregel_call")
+# holds the `call` function that accepts a node/func, args and returns a future
 CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
 # holds a `BaseCheckpointSaver` passed from parent graph to child graphs
 CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
@@ -65,6 +75,12 @@ CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
 # holds the current checkpoint_id, if any
 CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
+CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
+# holds the value that "answers" an interrupt() call
+CONFIG_KEY_WRITES = sys.intern("__pregel_writes")
+# read-only list of existing task writes
+CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
+# holds a mutable dict for temporary storage scoped to the current task
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -77,12 +93,17 @@ NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
+FF_SEND_V2 = getenv("LANGGRAPH_FF_SEND_V2", "false").lower() == "true"
+# temporary flag to enable new Send semantics
+NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
+# the task_id to use for writes that are not associated with a task
 
 RESERVED = {
     TAG_HIDDEN,
     # reserved write keys
     INPUT,
     INTERRUPT,
+    RESUME,
     ERROR,
     NO_WRITES,
     SCHEDULED,

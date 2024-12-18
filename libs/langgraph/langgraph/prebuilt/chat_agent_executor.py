@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
+from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
@@ -161,6 +162,37 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     return False
 
 
+def _validate_chat_history(
+    messages: Sequence[BaseMessage],
+) -> None:
+    """Validate that all tool calls in AIMessages have a corresponding ToolMessage."""
+    all_tool_calls = [
+        tool_call
+        for message in messages
+        if isinstance(message, AIMessage)
+        for tool_call in message.tool_calls
+    ]
+    tool_call_ids_with_results = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    }
+    tool_calls_without_results = [
+        tool_call
+        for tool_call in all_tool_calls
+        if tool_call["id"] not in tool_call_ids_with_results
+    ]
+    if not tool_calls_without_results:
+        return
+
+    error_message = create_error_message(
+        message="Found AIMessages with tool_calls that do not have a corresponding ToolMessage. "
+        f"Here are the first few of those tool calls: {tool_calls_without_results[:3]}.\n\n"
+        "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage "
+        "(result of a tool invocation to return to the LLM) - this is required by most LLM providers.",
+        error_code=ErrorCode.INVALID_CHAT_HISTORY,
+    )
+    raise ValueError(error_message)
+
+
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
     model: LanguageModelLike,
@@ -180,6 +212,7 @@ def create_react_agent(
     Args:
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools, a ToolExecutor, or a ToolNode instance.
+            If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -508,19 +541,10 @@ def create_react_agent(
         # get the tool functions wrapped in a tool class from the ToolNode
         tool_classes = list(tool_node.tools_by_name.values())
 
-    if _should_bind_tools(model, tool_classes):
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+    tool_calling_enabled = len(tool_classes) > 0
 
-    # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
-        messages = state["messages"]
-        last_message = messages[-1]
-        # If there is no function call, then we finish
-        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return "__end__"
-        # Otherwise if there is, we continue
-        else:
-            return "tools"
+    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
+        model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
     # we're passing store here for validation
     preprocessor = _get_model_preprocessing_runnable(
@@ -530,6 +554,7 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        _validate_chat_history(state["messages"])
         response = model_runnable.invoke(state, config)
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
@@ -566,6 +591,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
+        _validate_chat_history(state["messages"])
         response = await model_runnable.ainvoke(state, config)
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
@@ -600,6 +626,30 @@ def create_react_agent(
             }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
+
+    if not tool_calling_enabled:
+        # Define a new graph
+        workflow = StateGraph(state_schema or AgentState)
+        workflow.add_node("agent", RunnableCallable(call_model, acall_model))
+        workflow.set_entry_point("agent")
+        return workflow.compile(
+            checkpointer=checkpointer,
+            store=store,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+            debug=debug,
+        )
+
+    # Define the function that determines whether to continue or not
+    def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+        messages = state["messages"]
+        last_message = messages[-1]
+        # If there is no function call, then we finish
+        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+            return "__end__"
+        # Otherwise if there is, we continue
+        else:
+            return "tools"
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState)

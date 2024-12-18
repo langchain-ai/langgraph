@@ -137,7 +137,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             AsyncSqliteSaver: A new AsyncSqliteSaver instance.
         """
         async with aiosqlite.connect(conn_string) as conn:
-            yield AsyncSqliteSaver(conn)
+            yield cls(conn)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.

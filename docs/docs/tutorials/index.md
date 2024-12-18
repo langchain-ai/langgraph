@@ -6,24 +6,24 @@ title: Tutorials
 
 # Tutorials
 
-Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through building various language agents and applications.
+New to LangGraph or LLM app development? Read this material to get up and running building your first applications.
 
-## Quick Start
+## Get Started 🚀 {#quick-start}
 
-Learn the basics of LangGraph through a comprehensive quick start in which you will build an agent from scratch.
+- [LangGraph Quickstart](introduction.ipynb): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
+- [LangGraph Server Quickstart](langgraph-platform/local-server.md): Launch a LangGraph server locally and interact with it using REST API and LangGraph Studio Web UI.
+- [LangGraph Template Quickstart](../concepts/template_applications.md): Start building with LangGraph Platform using a template application.
+- [Deploy with LangGraph Cloud Quickstart](../cloud/quick_start.md): Deploy a LangGraph app using LangGraph Cloud.
 
-- [Quick Start](introduction.ipynb)
+## Use cases 🛠️
 
-## Use cases
-
-Learn from example implementations of graphs designed for specific scenarios and that implement common design patterns.
+Explore practical implementations tailored for specific scenarios:
 
 ### Chatbots
 
-- [Customer Support](customer-support/customer-support.ipynb): Build a customer support chatbot to manage flights, hotel reservations, car rentals, and other tasks
-- [Prompt Generation from User Requirements](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot
-- [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Build a code analysis and generation assistant
-
+- [Customer Support](customer-support/customer-support.ipynb): Build a multi-functional support bot for flights, hotels, and car rentals.
+- [Prompt Generation from User Requirements](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot.
+- [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Build a code analysis and generation assistant.
 
 ### RAG
 
@@ -55,7 +55,8 @@ Learn from example implementations of graphs designed for specific scenarios and
 
 - [Basic Reflection](reflection/reflection.ipynb): Prompt the agent to reflect on and revise its outputs
 - [Reflexion](reflexion/reflexion.ipynb): Critique missing and superfluous details to guide next steps
-- [Language Agent Tree Search](lats/lats.ipynb): Use reflection and rewards to drive a tree search over agents
+- [Tree of Thoughts](tot/tot.ipynb): Search over candidate solutions to a problem using a scored tree
+- [Language Agent Tree Search](lats/lats.ipynb): Use reflection and rewards to drive a monte-carlo tree search over agents
 - [Self-Discover Agent](self-discover/self-discover.ipynb): Analyze an agent that learns about its own capabilities
 
 ### Evaluation

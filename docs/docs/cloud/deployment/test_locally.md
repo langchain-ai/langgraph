@@ -8,19 +8,25 @@ Testing locally ensures that there are no errors or conflicts with Python depend
 
 Install the proper packages:
 
-```shell
-pip install langgraph-cli
-```
 
-Ensure you have an API key, which you can create from the LangSmith UI (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
+=== "pip" 
+    ```bash
+    pip install -U langgraph-cli
+    ```
+=== "Homebrew (macOS only)"
+    ```bash
+    brew install langgraph-cli
+    ```
+
+Ensure you have an API key, which you can create from the [LangSmith UI](https://smith.langchain.com) (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
 
 ```python
-LANGCHAIN_API_KEY = *********
+LANGSMITH_API_KEY = *********
 ```
 
 ## Start the API server
 
-Once you have downloaded the CLI, you can run the following command to start the API server for local testing:
+Once you have installed the CLI, you can run the following command to start the API server for local testing:
 
 ```shell
 langgraph up
@@ -48,7 +54,7 @@ You can either initialize by passing authentication or by setting an environment
     from langgraph_sdk import get_client
 
     # only pass the url argument to get_client() if you changed the default port when calling langgraph up
-    client = get_client(url=<DEPLOYMENT_URL>,api_key=<LANGCHAIN_API_KEY>)
+    client = get_client(url=<DEPLOYMENT_URL>,api_key=<LANGSMITH_API_KEY>)
     # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
@@ -60,7 +66,7 @@ You can either initialize by passing authentication or by setting an environment
     import { Client } from "@langchain/langgraph-sdk";
 
     // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <LANGCHAIN_API_KEY> });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <LANGSMITH_API_KEY> });
     // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
@@ -72,13 +78,13 @@ You can either initialize by passing authentication or by setting an environment
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
       --header 'Content-Type: application/json'
-      --header 'x-api-key: <LANGCHAIN_API_KEY>'
+      --header 'x-api-key: <LANGSMITH_API_KEY>'
     ```
   
 
 #### Initialize with environment variables
 
-If you have a `LANGCHAIN_API_KEY` set in your environment, you do not need to explicitly pass authentication to the client
+If you have a `LANGSMITH_API_KEY` set in your environment, you do not need to explicitly pass authentication to the client
 
 === "Python"
 
@@ -148,7 +154,7 @@ Now we can invoke our graph to ensure it is working. Make sure to change the inp
     }
     ```
 
-  === "CURL"
+=== "CURL"
 
     ```bash
     curl --request POST \

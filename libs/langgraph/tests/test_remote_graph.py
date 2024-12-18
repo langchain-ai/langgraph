@@ -54,7 +54,7 @@ def test_get_graph():
                 "type": "runnable",
                 "data": {
                     "id": ["langgraph", "utils", "RunnableCallable"],
-                    "name": "agent",
+                    "name": "agent_1",
                 },
             },
         ],
@@ -71,13 +71,15 @@ def test_get_graph():
 
     assert drawable_graph.nodes == {
         "__start__": DrawableNode(
-            id="__start__", name="", data="__start__", metadata=None
+            id="__start__", name="__start__", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(id="__end__", name="", data="__end__", metadata=None),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
-            name="",
-            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            name="agent_1",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent_1"},
             metadata=None,
         ),
     }
@@ -101,7 +103,7 @@ async def test_aget_graph():
                 "type": "runnable",
                 "data": {
                     "id": ["langgraph", "utils", "RunnableCallable"],
-                    "name": "agent",
+                    "name": "agent_1",
                 },
             },
         ],
@@ -118,13 +120,15 @@ async def test_aget_graph():
 
     assert drawable_graph.nodes == {
         "__start__": DrawableNode(
-            id="__start__", name="", data="__start__", metadata=None
+            id="__start__", name="__start__", data="__start__", metadata=None
         ),
-        "__end__": DrawableNode(id="__end__", name="", data="__end__", metadata=None),
+        "__end__": DrawableNode(
+            id="__end__", name="__end__", data="__end__", metadata=None
+        ),
         "agent": DrawableNode(
             id="agent",
-            name="",
-            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent"},
+            name="agent_1",
+            data={"id": ["langgraph", "utils", "RunnableCallable"], "name": "agent_1"},
             metadata=None,
         ),
     }
@@ -650,9 +654,13 @@ async def test_astream():
 def test_invoke():
     # set up test
     mock_sync_client = MagicMock()
-    mock_sync_client.runs.wait.return_value = {
-        "values": {"messages": [{"type": "human", "content": "world"}]}
-    }
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(
+            event="values", data={"messages": [{"type": "human", "content": "world"}]}
+        ),
+    ]
 
     # call method / assertions
     remote_pregel = RemoteGraph(
@@ -665,16 +673,22 @@ def test_invoke():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
+    assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
 @pytest.mark.anyio
 async def test_ainvoke():
     # set up test
-    mock_async_client = AsyncMock()
-    mock_async_client.runs.wait.return_value = {
-        "values": {"messages": [{"type": "human", "content": "world"}]}
-    }
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(event="values", data={"chunk": "data1"}),
+        StreamPart(event="values", data={"chunk": "data2"}),
+        StreamPart(
+            event="values", data={"messages": [{"type": "human", "content": "world"}]}
+        ),
+    ]
+    mock_async_client.runs.stream.return_value = async_iter
 
     # call method / assertions
     remote_pregel = RemoteGraph(
@@ -687,7 +701,7 @@ async def test_ainvoke():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert result == {"values": {"messages": [{"type": "human", "content": "world"}]}}
+    assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
 @pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")

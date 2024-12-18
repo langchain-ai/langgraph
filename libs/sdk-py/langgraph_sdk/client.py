@@ -18,6 +18,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Optional,
     Sequence,
     Union,
@@ -25,7 +26,6 @@ from typing import (
 )
 
 import httpx
-import httpx_sse
 import orjson
 from httpx._types import QueryParamTypes
 
@@ -34,7 +34,9 @@ from langgraph_sdk.schema import (
     All,
     Assistant,
     AssistantVersion,
+    CancelAction,
     Checkpoint,
+    Command,
     Config,
     Cron,
     DisconnectMode,
@@ -48,6 +50,7 @@ from langgraph_sdk.schema import (
     OnConflictBehavior,
     Run,
     RunCreate,
+    RunStatus,
     SearchItemsResponse,
     StreamMode,
     StreamPart,
@@ -57,6 +60,7 @@ from langgraph_sdk.schema import (
     ThreadStatus,
     ThreadUpdateStateResponse,
 )
+from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw, iter_lines_raw
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +190,7 @@ class LangGraphClient:
 
 
 class HttpClient:
-    """Hancle async requests to the LangGraph API.
+    """Handle async requests to the LangGraph API.
 
     Adds additional error messaging & content handling above the
     provided httpx client.
@@ -274,29 +278,49 @@ class HttpClient:
             raise e
 
     async def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         headers, content = await aencode_json(json)
-        async with httpx_sse.aconnect_sse(
-            self.client, method, path, headers=headers, content=content
-        ) as sse:
+        headers["Accept"] = "text/event-stream"
+        headers["Cache-Control"] = "no-store"
+
+        async with self.client.stream(
+            method, path, headers=headers, content=content, params=params
+        ) as res:
+            # check status
             try:
-                sse.response.raise_for_status()
+                res.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = (await sse.response.aread()).decode()
+                body = (await res.aread()).decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            async for event in sse.aiter_sse():
-                yield StreamPart(
-                    event.event, orjson.loads(event.data) if event.data else None
+            # check content type
+            content_type = res.headers.get("content-type", "").partition(";")[0]
+            if "text/event-stream" not in content_type:
+                raise httpx.TransportError(
+                    "Expected response header Content-Type to contain 'text/event-stream', "
+                    f"got {content_type!r}"
                 )
+            # parse SSE
+            decoder = SSEDecoder()
+            async for line in aiter_lines_raw(res):
+                sse = decoder.decode(line=line.rstrip(b"\n"))
+                if sse is not None:
+                    yield sse
 
 
 async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+    if json is None:
+        return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
@@ -603,7 +627,7 @@ class AssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
-            metadata: Metadata to add to assistant.
+            metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
 
         Returns:
@@ -842,7 +866,7 @@ class ThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add/update to thread.
+            metadata: Metadata to merge with existing thread metadata.
 
         Returns:
             Thread: The created thread.
@@ -888,10 +912,10 @@ class ThreadsClient:
         """Search for threads.
 
         Args:
-            metadata: Thread metadata to search for.
-            values: Thread values to search for.
-            status: Status to search for.
-                Must be one of 'idle', 'busy', or 'interrupted'.
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+                Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
 
@@ -954,7 +978,7 @@ class ThreadsClient:
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
-            subgraphs: Include subgraphs in the state.
+            subgraphs: Include subgraphs states.
 
         Returns:
             ThreadState: the thread of the state.
@@ -1071,7 +1095,7 @@ class ThreadsClient:
 
         Args:
             thread_id: The ID of the thread to update.
-            values: The values to update to the state.
+            values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
 
@@ -1122,11 +1146,11 @@ class ThreadsClient:
         """Get the state history of a thread.
 
         Args:
-            thread_id: The ID of the thread to get the state of.
-            checkpoint: Get history for this subgraph. If empty defaults to root.
-            limit: The maximum number of results to return.
-            before: Get history before this checkpoint.
-            metadata: Filter checkpoints by metadata.
+            thread_id: The ID of the thread to get the state history for.
+            checkpoint: Return states for this subgraph. If empty defaults to root.
+            limit: The maximum number of states to return.
+            before: Return states before this checkpoint.
+            metadata: Filter states by metadata key-value pairs.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -1173,6 +1197,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -1196,6 +1221,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -1216,6 +1242,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -1240,6 +1267,7 @@ class RunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: A command to execute. Cannot be combined with input.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -1290,6 +1318,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -1323,6 +1354,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -1342,6 +1374,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -1362,6 +1395,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -1384,6 +1418,7 @@ class RunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: A command to execute. Cannot be combined with input.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -1470,6 +1505,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -1507,6 +1545,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -1528,6 +1567,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -1546,6 +1586,7 @@ class RunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -1568,6 +1609,7 @@ class RunsClient:
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: A command to execute. Cannot be combined with input.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -1634,6 +1676,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -1666,7 +1711,12 @@ class RunsClient:
         return response
 
     async def list(
-        self, thread_id: str, *, limit: int = 10, offset: int = 0
+        self,
+        thread_id: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        status: Optional[RunStatus] = None,
     ) -> List[Run]:
         """List runs.
 
@@ -1674,6 +1724,7 @@ class RunsClient:
             thread_id: The thread ID to list runs for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            status: The status of the run to filter by.
 
         Returns:
             List[Run]: The runs for the thread.
@@ -1687,9 +1738,13 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return await self.http.get(
-            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}"
-        )
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if status is not None:
+            params["status"] = status
+        return await self.http.get(f"/threads/{thread_id}/runs", params=params)
 
     async def get(self, thread_id: str, run_id: str) -> Run:
         """Get a run.
@@ -1712,13 +1767,22 @@ class RunsClient:
 
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
-    async def cancel(self, thread_id: str, run_id: str, *, wait: bool = False) -> None:
+    async def cancel(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        wait: bool = False,
+        action: CancelAction = "interrupt",
+    ) -> None:
         """Get a run.
 
         Args:
             thread_id: The thread ID to cancel.
             run_id: The run ID to cancek.
             wait: Whether to wait until run has completed.
+            action: Action to take when cancelling the run. Possible values
+                are `interrupt` or `rollback`. Default is `interrupt`.
 
         Returns:
             None
@@ -1728,12 +1792,13 @@ class RunsClient:
             await client.runs.cancel(
                 thread_id="thread_id_to_cancel",
                 run_id="run_id_to_cancel",
-                wait=True
+                wait=True,
+                action="interrupt"
             )
 
         """  # noqa: E501
         return await self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}",
+            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
         )
 
@@ -1757,7 +1822,9 @@ class RunsClient:
         """  # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
-    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+    def join_stream(
+        self, thread_id: str, run_id: str, *, cancel_on_disconnect: bool = False
+    ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -1765,6 +1832,7 @@ class RunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
             None
@@ -1777,7 +1845,11 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+        return self.http.stream(
+            f"/threads/{thread_id}/runs/{run_id}/stream",
+            "GET",
+            params={"cancel_on_disconnect": cancel_on_disconnect},
+        )
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
@@ -1919,7 +1991,7 @@ class CronClient:
 
         Example Usage:
 
-            cron_run = await client.crons.create(
+            cron_run = client.crons.create(
                 assistant_id="agent",
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
@@ -2043,7 +2115,12 @@ class StoreClient:
         self.http = http
 
     async def put_item(
-        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -2051,6 +2128,7 @@ class StoreClient:
             namespace: A list of strings representing the namespace path.
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
+            index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
 
         Returns:
             None
@@ -2068,11 +2146,7 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        payload = {
-            "namespace": namespace,
-            "key": key,
-            "value": value,
-        }
+        payload = {"namespace": namespace, "key": key, "value": value, "index": index}
         await self.http.put("/store/items", json=payload)
 
     async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
@@ -2140,6 +2214,7 @@ class StoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        query: Optional[str] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2148,6 +2223,7 @@ class StoreClient:
             filter: Optional dictionary of key-value pairs to filter results.
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
+            query: Optional query for natural language search.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -2185,6 +2261,7 @@ class StoreClient:
             "filter": filter,
             "limit": limit,
             "offset": offset,
+            "query": query,
         }
 
         return await self.http.post("/store/items/search", json=_provided_vals(payload))
@@ -2383,26 +2460,41 @@ class SyncHttpClient:
             raise e
 
     def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         headers, content = encode_json(json)
-        with httpx_sse.connect_sse(
-            self.client, method, path, headers=headers, content=content
-        ) as sse:
+        with self.client.stream(
+            method, path, headers=headers, content=content, params=params
+        ) as res:
+            # check status
             try:
-                sse.response.raise_for_status()
+                res.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = sse.response.read().decode()
+                body = (res.read()).decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            for event in sse.iter_sse():
-                yield StreamPart(
-                    event.event, orjson.loads(event.data) if event.data else None
+            # check content type
+            content_type = res.headers.get("content-type", "").partition(";")[0]
+            if "text/event-stream" not in content_type:
+                raise httpx.TransportError(
+                    "Expected response header Content-Type to contain 'text/event-stream', "
+                    f"got {content_type!r}"
                 )
+            # parse SSE
+            decoder = SSEDecoder()
+            for line in iter_lines_raw(res):
+                sse = decoder.decode(line.rstrip(b"\n"))
+                if sse is not None:
+                    yield sse
 
 
 def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
@@ -2703,7 +2795,7 @@ class SyncAssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
-            metadata: Metadata to add to assistant.
+            metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
 
         Returns:
@@ -2939,7 +3031,7 @@ class SyncThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add/update to thread.
+            metadata: Metadata to merge with existing thread metadata.
 
         Returns:
             Thread: The created thread.
@@ -2983,10 +3075,10 @@ class SyncThreadsClient:
         """Search for threads.
 
         Args:
-            metadata: Thread metadata to search for.
-            values: Thread values to search for.
-            status: Status to search for.
-                Must be one of 'idle', 'busy', or 'interrupted'.
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+                Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
 
@@ -3049,7 +3141,7 @@ class SyncThreadsClient:
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
-            subgraphs: Include subgraphs in the state.
+            subgraphs: Include subgraphs states.
 
         Returns:
             ThreadState: the thread of the state.
@@ -3166,7 +3258,7 @@ class SyncThreadsClient:
 
         Args:
             thread_id: The ID of the thread to update.
-            values: The values to update to the state.
+            values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
 
@@ -3217,11 +3309,11 @@ class SyncThreadsClient:
         """Get the state history of a thread.
 
         Args:
-            thread_id: The ID of the thread to get the state of.
-            checkpoint: Get history for this subgraph. If empty defaults to root.
-            limit: The maximum number of results to return.
-            before: Get history before this checkpoint.
-            metadata: Filter checkpoints by metadata.
+            thread_id: The ID of the thread to get the state history for.
+            checkpoint: Return states for this subgraph. If empty defaults to root.
+            limit: The maximum number of states to return.
+            before: Return states before this checkpoint.
+            metadata: Filter states by metadata key-value pairs.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -3270,6 +3362,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3293,6 +3386,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3313,6 +3407,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3337,6 +3432,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3387,6 +3483,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3420,6 +3519,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3439,6 +3539,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3459,6 +3560,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3481,6 +3583,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3567,6 +3670,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3604,6 +3710,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3624,6 +3731,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -3641,6 +3749,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3662,6 +3771,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -3728,6 +3838,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -3792,13 +3905,22 @@ class SyncRunsClient:
 
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
-    def cancel(self, thread_id: str, run_id: str, *, wait: bool = False) -> None:
+    def cancel(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        wait: bool = False,
+        action: CancelAction = "interrupt",
+    ) -> None:
         """Get a run.
 
         Args:
             thread_id: The thread ID to cancel.
             run_id: The run ID to cancek.
             wait: Whether to wait until run has completed.
+            action: Action to take when cancelling the run. Possible values
+                are `interrupt` or `rollback`. Default is `interrupt`.
 
         Returns:
             None
@@ -3808,12 +3930,13 @@ class SyncRunsClient:
             client.runs.cancel(
                 thread_id="thread_id_to_cancel",
                 run_id="run_id_to_cancel",
-                wait=True
+                wait=True,
+                action="interrupt"
             )
 
         """  # noqa: E501
         return self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}",
+            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
         )
 
@@ -4117,7 +4240,12 @@ class SyncStoreClient:
         self.http = http
 
     def put_item(
-        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4125,6 +4253,7 @@ class SyncStoreClient:
             namespace: A list of strings representing the namespace path.
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
+            index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
 
         Returns:
             None
@@ -4146,6 +4275,7 @@ class SyncStoreClient:
             "namespace": namespace,
             "key": key,
             "value": value,
+            "index": index,
         }
         self.http.put("/store/items", json=payload)
 
@@ -4213,6 +4343,7 @@ class SyncStoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        query: Optional[str] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4221,6 +4352,7 @@ class SyncStoreClient:
             filter: Optional dictionary of key-value pairs to filter results.
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
+            query: Optional query for natural language search.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -4258,6 +4390,7 @@ class SyncStoreClient:
             "filter": filter,
             "limit": limit,
             "offset": offset,
+            "query": query,
         }
         return self.http.post("/store/items/search", json=_provided_vals(payload))
 

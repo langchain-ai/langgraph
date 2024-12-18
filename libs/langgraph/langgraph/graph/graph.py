@@ -27,6 +27,7 @@ from typing_extensions import Self
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.constants import (
+    EMPTY_SEQ,
     END,
     NS_END,
     NS_SEP,
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 class NodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]] = None
+    ends: Optional[tuple[str, ...]] = EMPTY_SEQ
 
 
 class Branch(NamedTuple):
@@ -123,7 +125,7 @@ class Branch(NamedTuple):
         result: Any,
         config: RunnableConfig,
     ) -> Union[Runnable, Any]:
-        if not isinstance(result, list):
+        if not isinstance(result, (list, tuple)):
             result = [result]
         if self.ends:
             destinations: Sequence[Union[Send, str]] = [
@@ -364,10 +366,18 @@ class Graph:
                         for node in self.nodes:
                             if node != start and node != branch.then:
                                 all_sources.add(node)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_sources.add(name)
         # validate sources
         for source in all_sources:
             if source not in self.nodes and source != START:
                 raise ValueError(f"Found edge starting at unknown node '{source}'")
+
+        if START not in all_sources:
+            raise ValueError(
+                "Graph must have an entrypoint: add at least one edge from START to another node"
+            )
 
         # assemble targets
         all_targets = {end for _, end in self._all_edges}
@@ -387,10 +397,9 @@ class Graph:
                     for node in self.nodes:
                         if node != start and node != branch.then:
                             all_targets.add(node)
-        # validate targets
-        for node in self.nodes:
-            if node not in all_targets:
-                raise ValueError(f"Node `{node}` is not reachable")
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_targets.update(spec.ends)
         for target in all_targets:
             if target not in self.nodes and target != END:
                 raise ValueError(f"Found edge ending at unknown node `{target}`")
@@ -565,18 +574,12 @@ class CompiledGraph(Pregel):
                 metadata["__interrupt"] = "before"
             elif key in self.interrupt_after_nodes:
                 metadata["__interrupt"] = "after"
-            if xray:
-                subgraph = (
-                    subgraphs[key].get_graph(
-                        config=config,
-                        xray=xray - 1
-                        if isinstance(xray, int)
-                        and not isinstance(xray, bool)
-                        and xray > 0
-                        else xray,
-                    )
-                    if key in subgraphs
-                    else node.get_graph(config=config)
+            if xray and key in subgraphs:
+                subgraph = subgraphs[key].get_graph(
+                    config=config,
+                    xray=xray - 1
+                    if isinstance(xray, int) and not isinstance(xray, bool) and xray > 0
+                    else xray,
                 )
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
@@ -620,5 +623,16 @@ class CompiledGraph(Pregel):
                     )
                     if branch.then is not None:
                         add_edge(end, branch.then)
+        for key, n in self.builder.nodes.items():
+            if n.ends:
+                for end in n.ends:
+                    add_edge(key, end, conditional=True)
 
         return graph
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
+        """Mime bundle used by Jupyter to display the graph"""
+        return {
+            "text/plain": repr(self),
+            "image/png": self.get_graph().draw_mermaid_png(),
+        }

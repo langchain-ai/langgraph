@@ -1,10 +1,17 @@
+import json
 import os
 import pathlib
+import tempfile
 
 import click
 import pytest
 
-from langgraph_cli.config import config_to_compose, config_to_docker, validate_config
+from langgraph_cli.config import (
+    config_to_compose,
+    config_to_docker,
+    validate_config,
+    validate_config_file,
+)
 from langgraph_cli.util import clean_empty_lines
 
 PATH_TO_CONFIG = pathlib.Path(__file__).parent / "test_config.json"
@@ -23,6 +30,8 @@ def test_validate_config():
         "pip_config_file": None,
         "dockerfile_lines": [],
         "env": {},
+        "store": None,
+        "auth": None,
         **expected_config,
     }
     actual_config = validate_config(expected_config)
@@ -39,7 +48,12 @@ def test_validate_config():
             "agent": "./agent.py:graph",
         },
         "env": env,
+        "store": None,
+        "auth": None,
     }
+    actual_config = validate_config(expected_config)
+    assert actual_config == expected_config
+    expected_config["python_version"] = "3.13"
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
 
@@ -60,6 +74,86 @@ def test_validate_config():
     # check missing graphs key raises
     with pytest.raises(click.UsageError):
         validate_config({"python_version": "3.9", "dependencies": ["."]})
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "3.11.0"})
+    assert "Invalid Python version format" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "3"})
+    assert "Invalid Python version format" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "abc.def"})
+    assert "Invalid Python version format" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config({"python_version": "3.10"})
+    assert "Minimum required version" in str(exc_info.value)
+
+
+def test_validate_config_file():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+
+        config_path = tmpdir_path / "langgraph.json"
+
+        node_config = {"node_version": "20", "graphs": {"agent": "./agent.js:graph"}}
+        with open(config_path, "w") as f:
+            json.dump(node_config, f)
+
+        validate_config_file(config_path)
+
+        package_json = {"name": "test", "engines": {"node": "20"}}
+        with open(tmpdir_path / "package.json", "w") as f:
+            json.dump(package_json, f)
+        validate_config_file(config_path)
+
+        package_json["engines"]["node"] = "20.18"
+        with open(tmpdir_path / "package.json", "w") as f:
+            json.dump(package_json, f)
+        with pytest.raises(click.UsageError, match="Use major version only"):
+            validate_config_file(config_path)
+
+        package_json["engines"] = {"node": "18"}
+        with open(tmpdir_path / "package.json", "w") as f:
+            json.dump(package_json, f)
+        with pytest.raises(click.UsageError, match="must be >= 20"):
+            validate_config_file(config_path)
+
+        package_json["engines"] = {"node": "20", "deno": "1.0"}
+        with open(tmpdir_path / "package.json", "w") as f:
+            json.dump(package_json, f)
+        with pytest.raises(click.UsageError, match="Only 'node' engine is supported"):
+            validate_config_file(config_path)
+
+        with open(tmpdir_path / "package.json", "w") as f:
+            f.write("{invalid json")
+        with pytest.raises(click.UsageError, match="Invalid package.json"):
+            validate_config_file(config_path)
+
+        python_config = {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+        with open(config_path, "w") as f:
+            json.dump(python_config, f)
+
+        validate_config_file(config_path)
+
+        for package_content in [
+            {"name": "test"},
+            {"engines": {"node": "18"}},
+            {"engines": {"node": "20", "deno": "1.0"}},
+            "{invalid json",
+        ]:
+            with open(tmpdir_path / "package.json", "w") as f:
+                if isinstance(package_content, dict):
+                    json.dump(package_content, f)
+                else:
+                    f.write(package_content)
+            validate_config_file(config_path)
 
 
 # config_to_docker
@@ -250,9 +344,10 @@ def test_config_to_docker_nodejs():
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
-RUN cd /deps/unit_tests && yarn install --frozen-lockfile
+RUN cd /deps/unit_tests && npm i
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
-WORKDIR /deps/unit_tests"""
+WORKDIR /deps/unit_tests
+RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
 

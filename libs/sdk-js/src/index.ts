@@ -10,9 +10,12 @@ export type {
   Metadata,
   Run,
   Thread,
+  ThreadTask,
   ThreadState,
+  ThreadStatus,
   Cron,
   Checkpoint,
+  Interrupt,
 } from "./schema.js";
 
-export type { OnConflictBehavior } from "./types.js";
+export type { OnConflictBehavior, Command } from "./types.js";

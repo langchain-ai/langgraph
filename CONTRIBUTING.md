@@ -49,7 +49,7 @@ gain understanding of concepts and how they interact by showing one way to achie
 
 They should **avoid** giving
 multiple permutations of ways to achieve that goal in-depth. Choice is burdensome. Instead, they should guide a new user through a recommended path to accomplishing a concrete goal. While the end result of a tutorial does not necessarily need to
-be completely production-ready, it should be useful and practically satisfy the the goal that you clearly stated in the tutorial's introduction.
+be completely production-ready, it should be useful and practically satisfy the goal that you clearly stated in the tutorial's introduction.
 
 To quote the Diataxis website:
 

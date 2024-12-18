@@ -1,5 +1,7 @@
+import asyncio
+import sys
 from collections import ChainMap
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,
@@ -278,7 +280,10 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             continue
         for k, v in config.items():
             if v is not None and k in CONFIG_KEYS:
-                empty[k] = v  # type: ignore[literal-required]
+                if k == CONF:
+                    empty[k] = cast(dict, v).copy()
+                else:
+                    empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
             if v is not None and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
@@ -290,3 +295,18 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
         ):
             empty["metadata"][key] = value
     return empty
+
+
+def get_configurable() -> dict[str, Any]:
+    if sys.version_info < (3, 11):
+        try:
+            if asyncio.current_task():
+                raise RuntimeError(
+                    "Python 3.11 or later required to use this in an async context"
+                )
+        except RuntimeError:
+            pass
+    if var_config := var_child_runnable_config.get():
+        return var_config[CONF]
+    else:
+        raise RuntimeError("Called get_configurable outside of a runnable context")
