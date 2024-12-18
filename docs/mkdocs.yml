@@ -141,6 +141,11 @@ nav:
           - tutorials/web-navigation/web_voyager.ipynb
           - tutorials/usaco/usaco.ipynb
           - tutorials/extraction/retries.ipynb
+      - LangGraph Platform:
+          - LangGraph Platform: concepts#langgraph-platform
+          - docs/docs/tutorials/auth/getting_started.md
+          - docs/docs/tutorials/auth/resource_auth.md
+          - docs/docs/tutorials/auth/add_auth_server.md
 
   - How-to Guides:
       - how-tos/index.md
@@ -242,6 +247,10 @@ nav:
               - cloud/deployment/cloud.md
               - how-tos/deploy-self-hosted.md
               - how-tos/use-remote-graph.md
+          - Authentication & Access Control:
+              - Authentication & Access Control: how-tos#authentication-access-control
+              - cloud/how-tos/auth/custom_auth_new.md
+              - cloud/how-tos/auth/openapi_security_new.md
           - Assistants:
               - Assistants: how-tos#assistants
               - cloud/how-tos/configuration_cloud.md

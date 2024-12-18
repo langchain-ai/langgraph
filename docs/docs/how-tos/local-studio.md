@@ -6,8 +6,8 @@ This guide shows you how to connect your local agent to [LangGraph Studio](../co
 
 There are two ways to connect your local agent to LangGraph Studio:
 
+- [Development Server](../concepts/langgraph_studio.md#development-server-with-web-ui): Python package, all platforms, no Docker
 - [LangGraph Desktop](../concepts/langgraph_studio.md#desktop-app): Application, Mac only, requires Docker
-- [Development Server](../concepts/langgraph_studio.md#dev-server): Python package, all platforms, no Docker
 
 In this guide we will cover how to use the development server as that is generally an easier and better experience.
 
