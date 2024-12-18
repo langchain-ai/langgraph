@@ -2,7 +2,18 @@
 
 This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
-<!-- TODO: Add prerequisites/cross-links -->
+!!! tip "Prerequisites"
+
+    This guide assumes familiarity with the following concepts:
+
+      *  [**Authentication & Access Control**](../../concepts/auth.md)
+      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+    
+    For a more guided walkthrough, see [**setting up custom authentication**](../../tutorials/auth/getting_started.md) tutorial.
+
+!!! note "Python only"
+  
+    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
 ## 1. Implement authentication
 
@@ -63,60 +74,60 @@ Assuming you are using JWT token authentication, you could access your deploymen
 
 === "Python Client"
 
-```python
-from langgraph_sdk import get_client
-# generate token with your auth provider
-my_token = "your-token"
-client = get_client(
-    url="http://localhost:2024",
-    headers={"Authorization": f"Bearer {my_token}"}
-)
-threads = await client.threads.list()
-```
+    ```python
+    from langgraph_sdk import get_client
+
+    my_token = "your-token" # In practice, you would generate a signed token with your auth provider
+    client = get_client(
+        url="http://localhost:2024",
+        headers={"Authorization": f"Bearer {my_token}"}
+    )
+    threads = await client.threads.list()
+    ```
 
 === "Python RemoteGraph"
 
-  ```python
-  from langgraph.pregel.remote import RemoteGraph
-  # generate token with your auth provider
-  my_token = "your-token"
-  remote_graph = RemoteGraph(
-      "agent",
-      url="http://localhost:2024",
-      headers={"Authorization": f"Bearer {my_token}"}
-  )
-  threads = await remote_graph.threads.list()
-  ```
+    ```python
+    from langgraph.pregel.remote import RemoteGraph
+    
+    my_token = "your-token" # In practice, you would generate a signed token with your auth provider
+    remote_graph = RemoteGraph(
+        "agent",
+        url="http://localhost:2024",
+        headers={"Authorization": f"Bearer {my_token}"}
+    )
+    threads = await remote_graph.threads.list()
+    ```
 
 === "JavaScript Client"
 
-  ```javascript
-  import { Client } from "@langchain/langgraph-sdk";
-  // generate token with your auth provider
-  const my_token = "your-token";
-  const client = new Client({
-    apiUrl: "http://localhost:2024",
-    headers: { Authorization: `Bearer ${my_token}` },
-  });
-  const threads = await client.threads.list();
-  ```
+    ```javascript
+    import { Client } from "@langchain/langgraph-sdk";
+
+    const my_token = "your-token"; // In practice, you would generate a signed token with your auth provider
+    const client = new Client({
+      apiUrl: "http://localhost:2024",
+      headers: { Authorization: `Bearer ${my_token}` },
+    });
+    const threads = await client.threads.list();
+    ```
 
 === "JavaScript RemoteGraph"
 
-  ```javascript
-  import { RemoteGraph } from "@langchain/langgraph/remote";
-  // generate token with your auth provider
-  const my_token = "your-token";
-  const remoteGraph = new RemoteGraph({
-    graphId: "agent",
-    url: "http://localhost:2024",
-    headers: { Authorization: `Bearer ${my_token}` },
-  });
-  const threads = await remoteGraph.threads.list();
-  ```
+    ```javascript
+    import { RemoteGraph } from "@langchain/langgraph/remote";
+
+    const my_token = "your-token"; // In practice, you would generate a signed token with your auth provider
+    const remoteGraph = new RemoteGraph({
+      graphId: "agent",
+      url: "http://localhost:2024",
+      headers: { Authorization: `Bearer ${my_token}` },
+    });
+    const threads = await remoteGraph.threads.list();
+    ```
 
 === "CURL"
 
-  ```bash
-  curl -H "Authorization: Bearer your-token" http://localhost:2024/threads
-  ```
+    ```bash
+    curl -H "Authorization: Bearer ${your-token}" http://localhost:2024/threads
+    ```

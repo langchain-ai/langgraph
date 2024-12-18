@@ -1,19 +1,29 @@
 # Setting up custom authentication
 
-Let's add custom authentication to a LangGraph template. This lets users interact with our bot making their conversations accessible to other users. This tutorial covers the core concepts of token-based authentication and show how to integrate with an authentication server.
+Let's add OAuth2 token authentication to a LangGraph template. This lets users interact with our bot making their conversations accessible to other users. This tutorial covers the core concepts of token-based authentication and show how to integrate with an authentication server.
 
-??? note "Default authentication"
-When deploying to LangGraph Cloud, requests are authenticated using LangSmith API keys by default. This gates access to the server but doesn't provide fine-grained access control over threads. Self-hosted LangGraph platform has no default authentication. This guide shows how to add custom authentication handlers that work in both cases, to provide fine-grained access control over threads, runs, and other resources.
+???+ tip "Prerequisites"
+This guide assumes familiarity with the following concepts:
 
-!!! note "Prerequisites"
+      *  The [LangGraph Platform](../../concepts/index.md#langgraph-platform)
+      *  [Authentication & Access Control](../../concepts/auth.md) in the LangGraph Platform
+
 
     Before you begin, ensure you have the following:
-    - [GitHub account](https://github.com/)
-    - [LangSmith account](https://smith.langchain.com/)
-    - [Supabase account](https://supabase.com/)
-    - [Anthropic API key](https://console.anthropic.com/)
 
-## Understanding authentication flow
+      * [GitHub account](https://github.com/)
+      * [LangSmith account](https://smith.langchain.com/)
+      * [Supabase account](https://supabase.com/)
+      * [Anthropic API key](https://console.anthropic.com/)
+
+??? note "Python only"
+
+    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
+
+??? tip "Default authentication"
+When deploying to LangGraph Cloud, requests are authenticated using LangSmith API keys by default. This gates access to the server but doesn't provide fine-grained access control over threads. Self-hosted LangGraph platform has no default authentication. This guide shows how to add custom authentication handlers that work in both cases, to provide fine-grained access control over threads, runs, and other resources.
+
+## Overview
 
 The key components in a token-based authentication system are:
 
@@ -21,12 +31,13 @@ The key components in a token-based authentication system are:
 2. **Client**: gets tokens from auth server and includes them in requests. This is typically the user's browser or mobile app.
 3. **LangGraph backend**: validates tokens and enforces access control to control access to your agents and data.
 
-Here's how it typically works:
+For a typical interaction:
 
 1. User authenticates with the auth server (username/password, OAuth, "Sign in with Google", etc.)
 2. Auth server returns a signed JWT token attesting "I am user X with claims/roles Y"
 3. User includes this token in request headers to LangGraph
 4. LangGraph validates token signature and checks claims against the auth server. If valid, it allows the request, using custom filters to restrict access only to the user's resources.
+
 
 ## 1. Clone the template
 
@@ -38,20 +49,50 @@ langgraph new --template=new-langgraph-project-python custom-auth
 cd custom-auth
 ```
 
-### 2. Create the auth handler
+### 2. Set up environment variables
 
-Next, let's create our authentication handler. Create a new file at `src/security/auth.py`:
+Copy the example `.env` file and add your Supabase credentials.
+
+```bash
+cp .env.example .env
+```
+
+Add to your `.env`:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-key # aka the service_role secret
+ANTHROPIC_API_KEY=your-anthropic-key  # For the LLM in our chatbot
+```
+
+To get your Supabase credentials:
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. Go to Project Settings > API
+3. Add these credentials to your `.env` file:
+
+Also note down your project's "anon public" key. We'll use this for client authentication below.
+
+### 3. Create the auth handler
+
+Now we'll create an authentication handler that does two things:
+1. Authenticates users by validating their tokens (`@auth.authenticate`)
+2. Controls what resources those users can access (`@auth.on`)
+
+We'll use the `Auth` class from `langgraph_sdk` to register these handler functions. The LangGraph backend will automatically call these functions that you've registered whenever a user makes a request.
+
+Create a new file at `src/security/auth.py`:
 
 ```python
 import os
 import httpx
 from langgraph_sdk import Auth
 
-# Load from your .env file
+# These will be loaded from your .env file in the next step
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
-# Create the auth object we'll use to protect our endpoints
+# The auth handler registers functions that the LangGraph backend will call
 auth = Auth()
 
 @auth.authenticate
@@ -59,13 +100,6 @@ async def get_current_user(
     authorization: str | None,  # "Bearer <token>"
 ) -> tuple[list[str], Auth.types.MinimalUserDict]:
     """Verify the JWT token and return user info."""
-    if not authorization:
-        raise Auth.exceptions.HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     try:
         # Fetch the user info from Supabase
         async with httpx.AsyncClient() as client:
@@ -76,12 +110,7 @@ async def get_current_user(
                     "apiKey": SUPABASE_SERVICE_KEY,
                 },
             )
-            if response.status_code != 200:
-                raise Auth.exceptions.HTTPException(
-                    status_code=401,
-                    detail="Invalid token"
-                )
-
+            assert response.status_code == 200
             user_data = response.json()
             return {
                 "identity": user_data["id"],
@@ -95,7 +124,11 @@ async def get_current_user(
         )
 ```
 
-This handler ensures only users with valid tokens can access our server. However, all users can still see each other's threads. Let's fix that by adding an authorization filter to the bottom of `auth.py`:
+This handler validates the user's information, but by itself doesn't restrict what authenticated users can access. Let's add an authorization handler to limit access to resources. We'll do this by:
+1. Adding the user's ID to resource metadata when they create something
+2. Using that metadata to filter what resources they can see
+
+Register this authorization handler with the `@auth.on` decorator. This function will run on all calls that make it past the authentication stage.
 
 ```python
 @auth.on
@@ -110,11 +143,11 @@ async def add_owner(
     return filters
 ```
 
-Now when users create threads, their ID is automatically added as the owner, and they can only see threads they own.
+Now when users create threads, assistants, runs, or other resources, their ID is automatically added as the owner in its metadata, and they can only see the threads they own.
 
-### 2. Configure LangGraph
+### 3. Configure `langgraph.json`
 
-Next, tell LangGraph about our auth handler. Open `langgraph.json` and add:
+Next, we need to tell LangGraph that we've created an auth handler. Open `langgraph.json` and add:
 
 ```json
 {
@@ -126,40 +159,23 @@ Next, tell LangGraph about our auth handler. Open `langgraph.json` and add:
 
 This points LangGraph to our `auth` object in the `auth.py` file.
 
-### 3. Set up environment variables
-
-Copy the example env file and add your Supabase credentials. To get your Supabase credentials:
-
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to Project Settings > API to find your project's credentials
-3. Add these credentials to your `.env` file:
-
-```bash
-cp .env.example .env
-```
-
-Add to your `.env`:
-
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-key # aka the service_role secret
-ANTHROPIC_API_KEY=your-anthropic-key  # For the LLM in our chatbot
-```
-
-Also note down your project's "anon public" key - we'll use this for client authentication below.
-
 ### 4. Start the server
 
 Install dependencies and start LangGraph:
 
-```bash
+```shell
 pip install -e .
 langgraph dev --no-browser
 ```
 
 ## Interacting with the server
 
-First, let's set up our environment and helper functions. Fill in the values for your Supabase anon key, and provide a working email address for our test users. You can use a single email with "+" to create multiple users, e.g. "myemail+1@gmail.com" and "myemail+2@gmail.com".
+First, let's set up our environment and helper functions. Fill in the values for your Supabase anon key, and provide a working email address for our test users.
+
+!!! tip "Multiple example emails"
+You can create multiple users with a shared email bya dding a "+" to the email address. For example, "myemail@gmail.com" can be used to create "myemail+1@gmail.com" and "myemail+2@gmail.com".
+
+Copy the code below. Make sure to fill out the Supabase URL & anon key, as well as the email addresses for your test users. Then run the code.
 
 ```python
 import os
@@ -168,9 +184,7 @@ import dotenv
 
 from langgraph_sdk import get_client
 
-dotenv.load_dotenv()
-
-supabase_url: str = os.environ.get("SUPABASE_URL")
+supabase_url: str = "CHANGEME"
 supabase_anon_key: str = "CHANGEME"  # Your project's anon/public key
 user_1_email = "CHANGEME"  # Your test email
 user_2_email = "CHANGEME"  # A second test email
@@ -256,7 +270,9 @@ thread = await client.threads.get(thread["thread_id"])
 print(f"\nThread:\n{thread}")
 ```
 
-Now let's see what happens when we try to access without authentication:
+We were able to create a thread and have a conversation with the bot. Great!
+
+Now let's see what happens when we try to access the server without authentication:
 
 ```python
 # Try to access without a token
@@ -267,7 +283,9 @@ except Exception as e:
     print(f"Failed without token: {e}")  # Will show 403 Forbidden
 ```
 
-Finally, let's try accessing user 1's thread as user 2:
+Without an authentication token, we couldn't create a new thread!
+
+If we try to access a thread owned by another user, we'll get an error:
 
 ```python
 # Log in as user 2
@@ -280,6 +298,9 @@ user_2_client = get_client(
     headers={"Authorization": f"Bearer {user_2_token}"}
 )
 
+# This passes
+thread2 = await unauthenticated_client.threads.create()
+
 # Try to access user 1's thread
 try:
     await user_2_client.threads.get(thread["thread_id"])
@@ -287,10 +308,10 @@ except Exception as e:
     print(f"Failed to access other user's thread: {e}")  # Will show 404 Not Found
 ```
 
-This demonstrates that:
+Notice that:
 
 1. With a valid token, we can create and interact with threads
-2. Without a token, we get a 401 Unauthorized or 403 Forbidden error
+2. Without a token, we get an authentication error saying we are forbidden
 3. Even with a valid token, users can only access their own threads
 
 ## Deploying to LangGraph Cloud
@@ -302,12 +323,8 @@ Now that you've set everything up, you can deploy your LangGraph application to 
 3. Connect to your GitHub repository and copy the contents of your `.env` file as environment variables.
 4. Click "Submit".
 
-Once deployed, you should be able to run the code above, replacing the `http://localhost:2024` with the URL of your deployment.
+Once deployed, you should be able to run the client code above again, replacing the `http://localhost:2024` with the URL of your deployment.
 
 ## Next steps
 
-Now that you understand token-based authentication:
-
-1. Add password hashing and secure user management
-2. Add user-specific resource ownership (see [resource access control](./resource_access.md))
-3. Implement more advanced auth patterns
+Now that you understand token-based authentication, you can try integrating this in actual frontend code! You can see a longer example of this tutorial at the [custom auth template](https://github.com/langchain-ai/custom-auth). There, you can see a full end-to-end example of adding custom authentication to a LangGraph chatbot using a react web frontend. 
