@@ -22,8 +22,14 @@ See [this guide](../concepts/application_structure.md) for information on how to
 You will need to install [`langgraph-cli`](../cloud/reference/cli.md#langgraph-cli) (version `0.1.55` or higher).
 You will need to make sure to install the `inmem` extras.
 
+???+ note "Minimum version"
+
+  The minimum version to use the `inmem` extra with `langgraph-cli` is `0.1.55`.
+  Python 3.11 or higher is required.
+  
+
 ```shell
-pip install "langgraph-cli[inmem]==0.1.55"
+pip install -U "langgraph-cli[inmem]"
 ```
 
 ## Run the development server
