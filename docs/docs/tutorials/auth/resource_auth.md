@@ -167,14 +167,25 @@ Update `src/security/auth.py` to add handlers for specific resource types:
 ```python
 # Keep our previous handlers...
 
+from langgraph_sdk import Auth
+
 @auth.on.threads.create
 async def on_thread_create(
     ctx: Auth.types.AuthContext,
     value: Auth.types.on.threads.create.value,
 ):
-    """Add owner when creating threads."""
+    """Add owner when creating threads.
+    
+    This handler runs when creating new threads and does two things:
+    1. Sets metadata on the thread being created to track ownership
+    2. Returns a filter that ensures only the creator can access it
+    """
+    # Add owner metadata to the thread being created
+    # This metadata is stored with the thread and persists
     metadata = value.setdefault("metadata", {})
     metadata["owner"] = ctx.user.identity
+    
+    # Return filter to restrict access to just the creator
     return {"owner": ctx.user.identity}
 
 @auth.on.threads.read
@@ -182,7 +193,12 @@ async def on_thread_read(
     ctx: Auth.types.AuthContext,
     value: Auth.types.on.threads.read.value,
 ):
-    """Only let users read their own threads."""
+    """Only let users read their own threads.
+    
+    This handler runs on read operations. We don't need to set
+    metadata since the thread already exists - we just need to
+    return a filter to ensure users can only see their own threads.
+    """
     return {"owner": ctx.user.identity}
 
 @auth.on.threads.create_run
@@ -190,18 +206,13 @@ async def on_run_create(
     ctx: Auth.types.AuthContext,
     value: Auth.types.on.threads.create_run.value,
 ):
-    """Only let thread owners create runs."""
+    """Only let thread owners create runs.
+    
+    This handler runs when creating runs on a thread. The filter
+    applies to the parent thread, not the run being created.
+    This ensures only thread owners can create runs on their threads.
+    """
     return {"owner": ctx.user.identity}
-
-@auth.on.assistants
-async def on_assistants(
-    ctx: Auth.types.AuthContext,
-    value: Auth.types.on.assistants.value,
-):
-    raise Auth.exceptions.HTTPException(
-        status_code=403,
-        detail="Not authorized to access assistants"
-    )
 ```
 
 Notice that instead of one global handler, we now have specific handlers for:
