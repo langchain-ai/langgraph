@@ -12,8 +12,8 @@ LangGraph Platform provides a flexible authentication and authorization system t
 
 While often used interchangeably, these terms represent distinct security concepts:
 
-- **Authentication** ("AuthN") verifies _who_ you are. This runs as middleware for every request.
-- **Authorization** ("AuthZ") determines _what you can do_. This validates the user's privileges and roles on a per-resource basis.
+- [**Authentication**](#authentication) ("AuthN") verifies _who_ you are. This runs as middleware for every request.
+- [**Authorization**](#authorization) ("AuthZ") determines _what you can do_. This validates the user's privileges and roles on a per-resource basis.
 
 In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler, and authorization is handled by your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers.
 
@@ -53,21 +53,22 @@ sequenceDiagram
     Client->>Auth: 1. Login (username/password)
     Auth-->>Client: 2. Return token
     Client->>LG: 3. Request with token
-    LG->>Auth: 4. Validate token
-    Auth-->>LG: 5. Confirm validity
-    Note over LG: 6. Apply access control
-    LG-->>Client: 7. Return resources
+    Note over LG: 4. Validate token (@auth.authenticate)
+    LG-->>Auth:  5. Fetch user info
+    Auth-->>LG: 6. Confirm validity
+    Note over LG: 7. Apply access control (@auth.on.*)
+    LG-->>Client: 8. Return resources
 ```
 
-Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler in LangGraph handles steps 4-5, while your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers implement step 6.
+Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler in LangGraph handles steps 4-6, while your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers implement step 7.
 
 ## Authentication
 
 Authentication in LangGraph runs as middleware on every request. Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler receives request information and should:
 
 1. Validate the credentials
-2. Return user information if valid
-3. Raise an HTTP exception or AssertionError if invalid
+2. Return [user info](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.MinimalUserDict) containing the user's identity and user information if valid
+3. Raise an [HTTP exception](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.exceptions.HTTPException) or AssertionError if invalid
 
 ```python
 from langgraph_sdk import Auth
@@ -102,6 +103,22 @@ The returned user information is available:
 - To your authorization handlers via [`ctx.user`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AuthContext)
 - In your application via `config["configuration"]["langgraph_auth_user"]`
 
+??? tip "Supported Parameters"
+
+    The [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler can accept any of the following parameters by name:
+
+    * request (Request): The raw ASGI request object
+    * body (dict): The parsed request body
+    * path (str): The request path, e.g., "/threads/abcd-1234-abcd-1234/runs/abcd-1234-abcd-1234/stream"
+    * method (str): The HTTP method, e.g., "GET"
+    * path_params (dict[str, str]): URL path parameters, e.g., {"thread_id": "abcd-1234-abcd-1234", "run_id": "abcd-1234-abcd-1234"}
+    * query_params (dict[str, str]): URL query parameters, e.g., {"stream": "true"}
+    * headers (dict[bytes, bytes]): Request headers
+    * authorization (str | None): The Authorization header value (e.g., "Bearer <token>")
+    
+    In many of our tutorials, we will just show the "authorization" parameter to be concise, but you can opt to accept more information as needed
+    to implement your custom authentication scheme.
+
 ## Authorization
 
 After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
@@ -110,7 +127,7 @@ After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/p
 2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
 3. Raise an HTTP exception if access is denied.
 
-If you want to just implement simple user-scoped access control, you can use a single `@auth.on` handler for all resources and actions. If you want to have different control depending on the resource and action, you can use [resource-specific handlers](#resource-specific-handlers). See the [Supported Resources](#supported-resources) section for a full list of the resources that support access control.
+If you want to just implement simple user-scoped access control, you can use a single [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handler for all resources and actions. If you want to have different control depending on the resource and action, you can use [resource-specific handlers](#resource-specific-handlers). See the [Supported Resources](#supported-resources) section for a full list of the resources that support access control.
 
 ```python
 @auth.on
@@ -154,7 +171,7 @@ async def add_owner(
 
 ### Resource-Specific Handlers {#resource-specific-handlers}
 
-You can register handlers for specific resources and actions by chaining the resource and action names together with the `@auth.on` decorator.
+You can register handlers for specific resources and actions by chaining the resource and action names together with the [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) decorator.
 When a request is made, the most specific handler that matches that resource and action is called. Below is an example of how to register handlers for specific resources and actions. For the following setup:
 
 1. Authenticated users are able to create threads, read thread, create runs on threads
@@ -410,5 +427,5 @@ LangGraph Platform provides different security defaults:
 
 For implementation details:
 
-- [Setting up authentication](../tutorials/auth/getting_started.md)
-- [Custom auth handlers](../how-tos/auth/custom_auth.md)
+- Check out the introductory tutorial on [setting up authentication](../tutorials/auth/getting_started.md)
+- See the how-to guide on implementing a [custom auth handlers](../how-tos/auth/custom_auth.md)
