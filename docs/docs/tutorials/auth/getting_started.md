@@ -5,6 +5,14 @@ Let's learn how to add custom authentication to a LangGraph Platform deployment.
 ??? note "Default authentication"
     When deploying to LangGraph Cloud, requests are authenticated using LangSmith API keys by default. This gates access to the server but doesn't provide fine-grained access control over threads. Self-hosted LangGraph platform has no default authentication. This guide shows how to add custom authentication handlers that work in both cases, to provide fine-grained access control over threads, runs, and other resources.
 
+!!! note "Prerequisites"
+
+    Before you begin, ensure you have the following:
+    - [GitHub account](https://github.com/)
+    - [LangSmith account](https://smith.langchain.com/)
+    - [Supabase account](https://supabase.com/)
+    - [Anthropic API key](https://console.anthropic.com/)
+
 ## Understanding authentication flow
 
 The key components in a token-based authentication system are:
@@ -20,7 +28,6 @@ sequenceDiagram
     participant User
     participant AuthServer as Auth Server
     participant LangGraph
-    
     User->>AuthServer: 1. Authenticate (username/password)
     AuthServer-->>User: 2. Return signed JWT token
     User->>LangGraph: 3. Request with JWT in header
@@ -37,18 +44,120 @@ sequenceDiagram
 
 In this tutorial, we'll implement password-based authentication using Supabase as our auth server.
 
-## Setting up the project
+## Project Structure 
 
-First, clone the example template:
+After cloning, you'll see these key files:
 
-```bash
-git clone https://github.com/langchain-ai/custom-auth.git
-cd custom-auth
+```shell
+custom-auth/
+├── src/
+│   └── security/
+│       └── auth.py     # We'll create this
+├── langgraph.json      # We'll update this
+└── .env.example        # Environment variables template
 ```
 
-This contains our chatbot code, as well as a custom auth handler (discussed below).
+## Setting up authentication
 
-### Configure Supabase
+### 1. Create the auth handler
+
+First, let's create our authentication handler. Create a new file at `src/security/auth.py`:
+
+```python
+import os
+import httpx
+import jwt
+from langgraph_sdk import Auth
+
+# Load from your .env file
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+SUPABASE_JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
+
+# Create the auth object we'll use to protect our endpoints
+auth = Auth()
+
+@auth.authenticate
+async def get_current_user(
+    authorization: str | None,  # "Bearer <token>"
+) -> tuple[list[str], Auth.types.MinimalUserDict]:
+    """Verify the JWT token and return user info."""
+    if not authorization:
+        raise Auth.exceptions.HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        # Extract and verify JWT token
+        token = authorization.split(" ", 1)[1]
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+
+        # Double-check with Supabase that token is still valid
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{SUPABASE_URL}/auth/v1/user",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code != 200:
+                raise Auth.exceptions.HTTPException(
+                    status_code=401,
+                    detail="Invalid token"
+                )
+
+            user_data = response.json()
+            return [], {
+                "identity": user_data["id"],
+                "display_name": user_data.get("name"),
+                "is_authenticated": True,
+            }
+    except Exception as e:
+        raise Auth.exceptions.HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+```
+
+This handler ensures only users with valid tokens can access our server. However, all users can still see each other's threads. Let's fix that by adding an authorization filter to the bottom of `auth.py`:
+
+```python
+@auth.on
+async def add_owner(
+    ctx: Auth.types.AuthContext,
+    value: dict,
+):
+    """Add owner to resource metadata and filter by owner."""
+    filters = {"owner": ctx.user.identity}
+    metadata = value.setdefault("metadata", {})
+    metadata.update(filters)
+    return filters
+```
+
+Now when users create threads, their ID is automatically added as the owner, and they can only see threads they own.
+
+### 2. Configure LangGraph
+
+Next, tell LangGraph about our auth handler. Open `langgraph.json` and add:
+
+```json
+{
+    "auth": {
+        "path": "src/security/auth.py:auth"
+    }
+}
+```
+
+This points LangGraph to our `auth` object in the `auth.py` file.
+
+### 3. Set up environment variables
+
+Copy the example env file and add your Supabase credentials. To get your Supabase credentials:
 
 1. Create a new project at [supabase.com](https://supabase.com)
 2. Go to Project Settings > API to find your project's credentials
@@ -58,8 +167,7 @@ This contains our chatbot code, as well as a custom auth handler (discussed belo
 cp .env.example .env
 ```
 
-Add the following to your `.env`:
-
+Add to your `.env`:
 ```bash
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=your-service-key # aka the service_role secret
@@ -67,11 +175,11 @@ SUPABASE_JWT_SECRET=your-jwt-secret
 ANTHROPIC_API_KEY=your-anthropic-key  # For the LLM in our chatbot
 ```
 
-Additionally, note down your project's "anon public" key. This public key will be used by the user's client to authenticate with Supabase.
+Also note down your project's "anon public" key - we'll use this for client authentication.
 
-### Start the server
+### 4. Start the server
 
-Install dependencies and start the LangGraph server:
+Install dependencies and start LangGraph:
 
 ```bash
 pip install -U "langgraph-cli[inmem]" && pip install -e .
@@ -214,113 +322,6 @@ This demonstrates that:
 2. Without a token, we get a 401 Unauthorized or 403 Forbidden error
 3. Even with a valid token, users can only access their own threads
 
-Now let's look at how this works under the hood.
-
-## How it works: The authentication handler
-
-All of this is enabled by our custom authentication handler, which is registered in `auth.py`, configured in our `langgraph.json` file:
-
-```json
-{
-    ...
-    "auth": {
-        "path": "src/security/auth.py:auth"
-    }
-}
-```
-
-This tells the LangGraph platform to look for your variable names `auth` (of type `Auth`) in the file located at `src/security/auth.py`. If you open `src/security/auth.py` now, you'll see code that looks similar to the following:
-
-```python
-# src/security/auth.py
-import os
-import httpx
-import jwt
-from langgraph_sdk import Auth
-
-# These are configured in your .env file
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
-SUPABASE_JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
-
-auth = Auth()
-
-@auth.authenticate
-async def get_current_user(
-    authorization: str | None,  # "Bearer <token>"
-) -> tuple[list[str], Auth.types.MinimalUserDict]:
-    if not authorization:
-        raise Auth.exceptions.HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    try:
-        # Extract and validate JWT token
-        token = authorization.split(" ", 1)[1]
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-
-        # Verify with Supabase
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{SUPABASE_URL}/auth/v1/user",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if response.status_code != 200:
-                raise Auth.exceptions.HTTPException(
-                    status_code=401,
-                    detail="Invalid token"
-                )
-
-            user_data = response.json()
-            return [], {
-                "identity": user_data["id"],
-                "display_name": user_data.get("name"),
-                "is_authenticated": True,
-            }
-    except Exception as e:
-        raise Auth.exceptions.HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-```
-
-This handler:
-
-1. Gets the token from the Authorization header
-2. Verifies it was signed by Supabase
-3. Double-checks with Supabase that the token is still valid
-4. Returns the user's information for use in our app
-
-## Managing user resources
-
-We can also ensure users can only access their own resources:
-
-```python
-@auth.on
-async def add_owner(
-    ctx: Auth.types.AuthContext,
-    value: dict,
-):
-    """Add owner to resource metadata and filter by owner."""
-    filters = {"owner": ctx.user.identity}
-    metadata = value.setdefault("metadata", {})
-    metadata.update(filters)
-    return filters
-```
-
-This handler matches ALL requests to threads, runs, assistants, crons, and other resources. It does 2 things:
-
-1. Adds the user's ID as owner when creating resources
-2. Filters resources by owner when reading them
-
-
 ## Deploying to LangGraph Cloud
 
 Now that you've set everything up, you can deploy your LangGraph application to LangGraph Cloud! Simply:
@@ -331,7 +332,6 @@ Now that you've set everything up, you can deploy your LangGraph application to 
 4. Click "Submit".
 
 Once deployed, you should be able to run the code above, replacing the `http://localhost:2024` with the URL of your deployment.
-
 
 ## Next steps
 
