@@ -1,12 +1,12 @@
-# Setting up Custom Authentication
-
-In this tutorial, we will build a chatbot that only lets specific users access it. We'll start with the LangGraph template and add token-based security step by step. By the end, you'll have a working chatbot that checks for valid tokens before allowing access.
+# Setting up Custom Authentication (Part 1/3)
 
 !!! note "This is part 1 of our authentication series:"
 
     1. Basic Authentication (you are here) - Control who can access your bot
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
     3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
+
+In this tutorial, we will build a chatbot that only lets specific users access it. We'll start with the LangGraph template and add token-based security step by step. By the end, you'll have a working chatbot that checks for valid tokens before allowing access.
 
 ## Setting up our project
 
@@ -23,22 +23,22 @@ The template gives us a placeholder LangGraph app. Let's try it out by installin
 pip install -e .
 langgraph dev
 ```
+If everything works, the server should start and open the studio in your browser.
+
 > - 🚀 API: http://127.0.0.1:2024
 > - 🎨 Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 > - 📚 API Docs: http://127.0.0.1:2024/docs
 > 
 > This in-memory server is designed for development and testing.
 > For production use, please use LangGraph Cloud.
-
-If everything works, the server should start and open the studio in your browser.
-
-Now that we've seen the base LangGraph app, let's add authentication to it!
+Now that we've seen the base LangGraph app, let's add authentication to it! In part 1, we will start with a hard-coded token for illustration purposes.
+We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
 
 ## Adding Authentication
 
 The [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object lets you register an authentication function that the LangGraph platform will run on every request. This function receives each request and decides whether to accept or reject.
 
-Create a new file `src/security/auth.py`. This is where we'll our code will live to check if users are allowed to access our bot:
+Create a new file `src/security/auth.py`. This is where our code will live to check if users are allowed to access our bot:
 
 ```python
 from langgraph_sdk import Auth
@@ -72,7 +72,7 @@ async def get_current_user(authorization: str | None) -> Auth.types.MinimalUserD
 Notice that our authentication handler does two important things:
 
 1. Checks if a valid token is provided
-2. Returns the user's 
+2. Returns the user's identity
 
 Now tell LangGraph to use our authentication by adding the following to the `langgraph.json` configuration:
 
@@ -84,7 +84,7 @@ Now tell LangGraph to use our authentication by adding the following to the `lan
 }
 ```
 
-## Testing Our Secure Bot
+## Testing Our "Secure" Bot
 
 Let's start the server again to test everything out!
 
@@ -99,8 +99,8 @@ langgraph dev --no-browser
     ```json
     {
         "auth": {
-        "path": "src/security/auth.py:auth",
-        "disable_studio_auth": "true"
+            "path": "src/security/auth.py:auth",
+            "disable_studio_auth": "true"
         }
     }
     ```

@@ -1,7 +1,5 @@
 # How to add custom authentication
 
-This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
-
 !!! tip "Prerequisites"
 
     This guide assumes familiarity with the following concepts:
@@ -11,9 +9,11 @@ This guide shows how to add custom authentication to your LangGraph Platform app
     
     For a more guided walkthrough, see [**setting up custom authentication**](../../tutorials/auth/getting_started.md) tutorial.
 
-!!! note "Python only"
+???+ note "Python only"
   
     We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
+
+This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 ## 1. Implement authentication
 

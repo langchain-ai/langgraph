@@ -1,9 +1,9 @@
 # Authentication & Access Control
 
-LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes. This guide explains the core concepts and how they work together.
+LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes.
 
 !!! note "Python only"
-    
+
     We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
 ## Core Concepts
@@ -22,12 +22,14 @@ In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](
 A typical authentication setup involves three main components:
 
 1. **Authentication Provider** (Identity Provider/IdP)
+
    - A dedicated service that manages user identities and credentials
    - Examples: Auth0, Supabase Auth, Okta, or your own auth server
    - Handles user registration, login, password resets, etc.
    - Issues tokens (JWT, session tokens, etc.) after successful authentication
 
 2. **LangGraph Backend** (Resource Server)
+
    - Your LangGraph application that contains business logic and protected resources
    - Validates tokens with the auth provider
    - Enforces access control based on user identity and permissions
@@ -46,7 +48,7 @@ sequenceDiagram
     participant Client as Client App
     participant Auth as Auth Provider
     participant LG as LangGraph Backend
-    
+
     Client->>Auth: 1. Login (username/password)
     Auth-->>Client: 2. Return token
     Client->>LG: 3. Request with token
@@ -104,57 +106,132 @@ The returned user information is available:
 After authentication, LangGraph calls your `@auth.on` handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
 1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly.
-2. Filter resources by metadata during search/list or read operations by returning a filter dictionary.
+2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
 3. Raise an HTTP exception if access is denied.
 
-If you want to just implement simple user-scoped access control, you can use a single `@auth.on` handler for all resources and actions.
+If you want to just implement simple user-scoped access control, you can use a single `@auth.on` handler for all resources and actions. If you want to have different control depending on the resource and action, you can use [resource-specific handlers](#resource-specific-handlers). See the [Supported Resources](#supported-resources) section for a full list of the resources that support access control.
 
 ```python
 @auth.on
-async def add_owner(ctx: Auth.types.AuthContext, value: dict):
-    """Add owner to resource metadata and filter by owner."""
+async def add_owner(
+    ctx: Auth.types.AuthContext,
+    value: dict  # The payload being sent to this access method
+) -> dict:  # Returns a filter dict that restricts access to resources
+    """Authorize all access to threads, runs, crons, and assistants.
+
+    This handler does two things:
+        - Adds a value to resource metadata (to persist with the resource so it can be filtered later)
+        - Returns a filter (to restrict access to existing resources)
+
+    Args:
+        ctx: Authentication context containing user info, permissions, the path, and
+        value: The request payload sent to the endpoint. For creation
+              operations, this contains the resource parameters. For read
+              operations, this contains the resource being accessed.
+
+    Returns:
+        A filter dictionary that LangGraph uses to restrict access to resources.
+        See [Filter Operations](#filter-operations) for supported operators.
+    """
+    # Create filter to restrict access to just this user's resources
     filters = {"owner": ctx.user.identity}
+
+    # Get or create the metadata dictionary in the payload
+    # This is where we store persistent info about the resource
     metadata = value.setdefault("metadata", {})
+
+    # Add owner to metadata - if this is a create or update operation,
+    # this information will be saved with the resource
+    # So we can filter by it later in read operations
     metadata.update(filters)
+
+    # Return filters to restrict access
+    # These filters are applied to ALL operations (create, read, update, search, etc.)
+    # to ensure users can only access their own resources
     return filters
 ```
 
-### Resource-Specific Handlers
+### Resource-Specific Handlers {#resource-specific-handlers}
 
-You can register handlers for specific resources and actions using the `@auth.on` decorator.
-When a request is made, the most specific handler that matches that resource and action is called.
+You can register handlers for specific resources and actions by chaining the resource and action names together with the `@auth.on` decorator.
+When a request is made, the most specific handler that matches that resource and action is called. Below is an example of how to register handlers for specific resources and actions. For the following setup:
+
+1. Authenticated users are able to create threads, read thread, create runs on threads
+2. Only users with the "assistants:create" permission are allowed to create new assistants
+3. All other endpoints (e.g., e.g., delete assistant, crons, store) are disabled for all users.
+
+!!! tip "Supported Handlers"
+
+    For a full list of supported resources and actions, see the [Supported Resources](#supported-resources) section below.
 
 ```python
 # Generic / global handler catches calls that aren't handled by more specific handlers
 @auth.on
-async def reject_unhandled_requests(ctx: Auth.types.AuthContext, value: Any) -> None:
+async def reject_unhandled_requests(ctx: Auth.types.AuthContext, value: Any) -> False:
     print(f"Request to {ctx.path} by {ctx.user.identity}")
-    return False
+    raise Auth.exceptions.HTTPException(
+        status_code=403,
+        detail="Forbidden"
+    )
 
-# Thread creation
+# Matches the "thread" resource and all actions - create, read, update, delete, search
+# Since this is **more specific** than the generic @auth.on handler, it will take precedence
+# over the generic handler for all actions on the "threads" resource
+@auth.on.threads
+async def on_thread_create(
+    ctx: Auth.types.AuthContext,
+    value: Auth.types.threads.create.value
+):
+    if "write" not in ctx.permissions:
+        raise Auth.exceptions.HTTPException(
+            status_code=403,
+            detail="User lacks the required permissions."
+        )
+    # Setting metadata on the thread being created
+    # will ensure that the resource contains an "owner" field
+    # Then any time a user tries to access this thread or runs within the thread,
+    # we can filter by owner
+    metadata = value.setdefault("metadata", {})
+    metadata["owner"] = ctx.user.identity
+    return {"owner": ctx.user.identity}
+
+# Thread creation. This will match only on thread create actions
+# Since this is **more specific** than both the generic @auth.on handler and the @auth.on.threads handler,
+# it will take precedence for any "create" actions on the "threads" resources
 @auth.on.threads.create
 async def on_thread_create(
     ctx: Auth.types.AuthContext,
     value: Auth.types.threads.create.value
 ):
+    # Setting metadata on the thread being created
+    # will ensure that the resource contains an "owner" field
+    # Then any time a user tries to access this thread or runs within the thread,
+    # we can filter by owner
     metadata = value.setdefault("metadata", {})
     metadata["owner"] = ctx.user.identity
     return {"owner": ctx.user.identity}
 
-# Thread retrieval
+# Reading a thread. Since this is also more specific than the generic @auth.on handler, and the @auth.on.threads handler,
+# it will take precedence for any "read" actions on the "threads" resource
 @auth.on.threads.read
 async def on_thread_read(
     ctx: Auth.types.AuthContext,
     value: Auth.types.threads.read.value
 ):
+    # Since we are reading (and not creating) a thread,
+    # we don't need to set metadata. We just need to
+    # return a filter to ensure users can only see their own threads
     return {"owner": ctx.user.identity}
 
 # Run creation, streaming, updates, etc.
+# This takes precendence over the generic @auth.on handler and the @auth.on.threads handler
 @auth.on.threads.create_run
 async def on_run_create(
     ctx: Auth.types.AuthContext,
     value: Auth.types.threads.create_run.value
 ):
+    metadata = value.setdefault("metadata", {})
+    metadata["owner"] = ctx.user.identity
     # Inherit thread's access control
     return {"owner": ctx.user.identity}
 
@@ -164,29 +241,39 @@ async def on_assistant_create(
     ctx: Auth.types.AuthContext,
     value: Auth.types.assistants.create.value
 ):
-    if "admin" not in ctx.user.get("role", []):
+    if "assistants:create" not in ctx.permissions:
         raise Auth.exceptions.HTTPException(
             status_code=403,
-            detail="Only admins can create assistants"
+            detail="User lacks the required permissions."
         )
 ```
 
-Using the setup above, a request to create a `thread` would match the `on_thread_create` handler, since it is the most specific handler for that resource and action. A request to create a `cron`, on the other hand, would match the global handler, since no more specific handler is registered for that resource and action.
+Notice that we are mixing global and resource-specific handlers in the above example. Since each request is handled by the most specific handler, a request to create a `thread` would match the `on_thread_create` handler but NOT the `reject_unhandled_requests` handler. A request to `update` a thread, however would be handled by the global handler, since we don't have a more specific handler for that resource and action. Requests to create, update, 
 
-### Filter Operations
+### Filter Operations {#filter-operations}
 
-Authorization handlers can return a filter dictionary to filter resources during all operations (both reads and writes). The filter dictionary supports two additional operators:
+Authorization handlers can return `None`, a boolean, or a filter dictionary.
+- `None` and `True` mean "authorize access to all underling resources"
+- `False` means "deny access to all underling resources (raises a 403 exception)"
+- A metadata filter dictionary will restrict access to resources
 
-- `$eq`: Exact match (e.g., `{"owner": {"$eq": user_id}}`) - this is equivalent to `{"owner": user_id}`
-- `$contains`: List membership (e.g., `{"allowed_users": {"$contains": user_id}}`)
+A filter dictionary is a dictionary with keys that match the resource metadata. It supports three operators:
 
-A dictionary with multiple keys is converted to a logical `AND` filter. For example, `{"owner": user_id, "org_id": org_id}` is converted to `{"$and": [{"owner": user_id}, {"org_id": org_id}]}`
+- The default value is a shorthand for exact match, or "$eq", below. For example, `{"owner": user_id}` will include only resources with metadata containing `{"owner": user_id}`
+- `$eq`: Exact match (e.g., `{"owner": {"$eq": user_id}}`) - this is equivalent to the shorthand above, `{"owner": user_id}`
+- `$contains`: List membership (e.g., `{"allowed_users": {"$contains": user_id}}`) The value here must be an element of the list. The metadata in the stored resource must be a list/container type.
+
+A dictionary with multiple keys is treated using a logical `AND` filter. For example, `{"owner": org_id, "allowed_users": {"$contains": user_id}}` will only match resources with metadata whose "owner" is `org_id` and whose "allowed_users" list contains `user_id`.
+
+See the reference [here](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.FilterType) for more information.
 
 ## Common Access Patterns
 
 Here are some typical authorization patterns:
 
 ### Single-Owner Resources
+
+This common pattern lets you scope all threads, assistants, crons, and runs to a single user. It's useful for common single-user use cases like regular chatbot-style apps.
 
 ```python
 @auth.on
@@ -197,6 +284,8 @@ async def owner_only(ctx: Auth.types.AuthContext, value: dict):
 ```
 
 ### Permission-based Access
+
+This pattern lets you control access based on **permissions**. It's useful if you want certain roles to have broader or more restricted access to resources.
 
 ```python
 # In your auth handler:
@@ -238,34 +327,67 @@ async def rbac_create(ctx: Auth.types.AuthContext, value: dict):
 
 LangGraph provides authorization handlers for the following resource types:
 
-### Threads
-- `@auth.on.threads.create` - Thread creation
-- `@auth.on.threads.read` - Thread retrieval
-- `@auth.on.threads.update` - Thread updates
-- `@auth.on.threads.delete` - Thread deletion
-- `@auth.on.threads.search` - Listing threads
+## Supported Resources
 
-**Runs:** are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model.
+LangGraph provides three levels of authorization handlers, from most general to most specific:
 
-- `@auth.on.threads.create_run` - Creating or updating a run
+1. **Global Handler** (`@auth.on`): Matches all resources and actions
+2. **Resource Handler** (e.g., `@auth.on.threads`, `@auth.on.assistants`, `@auth.on.crons`): Matches all actions for a specific resource
+3. **Action Handler** (e.g., `@auth.on.threads.create`, `@auth.on.threads.read`): Matches a specific action on a specific resource
 
-All other run operations (reading, listing) are controlled by the thread's handlers, since runs are always accessed in the context of their thread.
+The most specific matching handler will be used. For example, `@auth.on.threads.create` takes precedence over `@auth.on.threads` for thread creation.
+If a more specific handler is registered, the more general handler will not be called for that resource and action.
 
-### Assistants
-- `@auth.on.assistants.create` - Assistant creation
-- `@auth.on.assistants.read` - Assistant retrieval
-- `@auth.on.assistants.update` - Assistant updates
-- `@auth.on.assistants.delete` - Assistant deletion
-- `@auth.on.assistants.search` - Listing assistants
+???+ tip "Type Safety"
+    Each handler has type hints available for its `value` parameter at `Auth.types.on.<resource>.<action>.value`. For example:
+    ```python
+    @auth.on.threads.create
+    async def on_thread_create(
+        ctx: Auth.types.AuthContext,
+        value: Auth.types.on.threads.create.value  # Specific type for thread creation
+    ):
+        ...
+    
+    @auth.on.threads
+    async def on_threads(
+        ctx: Auth.types.AuthContext,
+        value: Auth.types.on.threads.value  # Union type of all thread actions
+    ):
+        ...
+    
+    @auth.on
+    async def on_all(
+        ctx: Auth.types.AuthContext,
+        value: dict  # Union type of all possible actions
+    ):
+        ...
+    ```
+    More specific handlers provide better type hints since they handle fewer action types.
 
-### Crons
-- `@auth.on.crons.create` - Cron job creation
-- `@auth.on.crons.read` - Cron job retrieval
-- `@auth.on.crons.update` - Cron job updates
-- `@auth.on.crons.delete` - Cron job deletion
-- `@auth.on.crons.search` - Listing cron jobs
+Here are all the supported action handlers:
 
-You can also use the global `@auth.on` handler to implement a single access control policy across all resources and actions, or resource level `@auth.on.threads`, etc. handlers to implement control over all actions of a single resource.
+| Resource | Handler | Description |
+|----------|---------|-------------|
+| **Threads** | `@auth.on.threads.create` | Thread creation |
+| | `@auth.on.threads.read` | Thread retrieval |
+| | `@auth.on.threads.update` | Thread updates |
+| | `@auth.on.threads.delete` | Thread deletion |
+| | `@auth.on.threads.search` | Listing threads |
+| | `@auth.on.threads.create_run` | Creating or updating a run |
+| **Assistants** | `@auth.on.assistants.create` | Assistant creation |
+| | `@auth.on.assistants.read` | Assistant retrieval |
+| | `@auth.on.assistants.update` | Assistant updates |
+| | `@auth.on.assistants.delete` | Assistant deletion |
+| | `@auth.on.assistants.search` | Listing assistants |
+| **Crons** | `@auth.on.crons.create` | Cron job creation |
+| | `@auth.on.crons.read` | Cron job retrieval |
+| | `@auth.on.crons.update` | Cron job updates |
+| | `@auth.on.crons.delete` | Cron job deletion |
+| | `@auth.on.crons.search` | Listing cron jobs |
+
+???+ note "About Runs"
+    Runs are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model. All run operations (reading, listing) except creation are controlled by the thread's handlers.
+    There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
 
 ## Default Security Models
 

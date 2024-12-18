@@ -1,12 +1,12 @@
-# Making Conversations Private
-
-In this tutorial, we will extend our chatbot to give each user their own private conversations. We'll add [resource-level access control](../../concepts/auth.md#resource-level-access-control) so users can only see their own threads.
+# Making Conversations Private (Part 2/3)
 
 !!! note "This is part 2 of our authentication series:" 
 
     1. [Basic Authentication](getting_started.md) - Control who can access your bot 
     2. Resource Authorization (you are here) - Let users have private conversations
     3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
+
+In this tutorial, we will extend our chatbot to give each user their own private conversations. We'll add [resource-level access control](../../concepts/auth.md#resource-level-access-control) so users can only see their own threads.
 
 ## Understanding Resource Authorization
 
@@ -267,4 +267,4 @@ Now that you can control access to resources, you might want to:
 
 1. Move on to [Production Auth](add_auth_server.md) to add real user accounts
 2. Read more about [authorization patterns](../../concepts/auth.md#authorization)
-3. Try adding shared resources between users
+3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial

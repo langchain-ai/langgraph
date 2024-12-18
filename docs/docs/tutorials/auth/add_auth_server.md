@@ -1,12 +1,4 @@
-# Connecting an Authentication Provider
-
-In the previous tutorial, we added [resource authorization](../../concepts/auth.md#resource-authorization) to give users private conversations. However, we were still using hard-coded tokens for authentication, which is not secure. Now we'll replace those tokens with real user accounts using [OAuth2](../../concepts/auth.md#oauth2-authentication).
-
-We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object and [resource-level access control](../../concepts/auth.md#resource-level-access-control), but upgrade our authentication to use Supabase as our identity provider. While we use Supabase in this tutorial, the concepts apply to any OAuth2 provider. You'll learn how to:
-
-1. Replace test tokens with real [JWT tokens](../../concepts/auth.md#jwt-tokens)
-2. Integrate with OAuth2 providers for secure user authentication
-3. Handle user sessions and metadata while maintaining our existing authorization logic
+# Connecting an Authentication Provider (Part 3/3)
 
 !!! note "This is part 3 of our authentication series:"
 
@@ -14,10 +6,17 @@ We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgra
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
     3. Production Auth (you are here) - Add real user accounts and validate using OAuth2
 
-!!! warning "Prerequisites"
+In the [Making Conversations Private](resource_auth.md) tutorial, we added [resource authorization](../../concepts/auth.md#resource-authorization) to give users private conversations. However, we were still using hard-coded tokens for authentication, which is not secure. Now we'll replace those tokens with real user accounts using [OAuth2](../../concepts/auth.md#oauth2-authentication).
 
-    - [Create a Supabase project](https://supabase.com/dashboard)
-    - Have your project URL and service role key ready
+We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object and [resource-level access control](../../concepts/auth.md#resource-level-access-control), but upgrade our authentication to use Supabase as our identity provider. While we use Supabase in this tutorial, the concepts apply to any OAuth2 provider. You'll learn how to:
+
+1. Replace test tokens with real [JWT tokens](../../concepts/auth.md#jwt-tokens)
+2. Integrate with OAuth2 providers for secure user authentication
+3. Handle user sessions and metadata while maintaining our existing authorization logic
+
+## Requirements
+
+You will need to set up a Supabase project to use its authentication server for this tutorial. You can do so [here](https://supabase.com/dashboard).
 
 ## Background
 
@@ -49,7 +48,7 @@ sequenceDiagram
 In the following example, we'll use Supabase as our auth server. The LangGraph application will provide the backend for your app, and we will write test code for the client app.
 Let's get started!
 
-## Setting Up Authentication Provider
+## Setting Up Authentication Provider {#setup-auth-provider}
 
 First, let's install the required dependencies. Start in your `custom-auth` directory and ensure you have the `langgraph-cli` installed:
 
@@ -153,30 +152,29 @@ Let's test this with a real user account!
 
 ## Testing Authentication Flow
 
-Create a new file `create_users.py`. This will stand-in for a frontend that lets users sign up and log in.
+Let's test out our new authentication flow. You can run the following code in a file or notebook.
 
 ```python
-import argparse
-import asyncio
 import os
-
-import dotenv
 import httpx
+from getpass import getpass
 from langgraph_sdk import get_client
 
-dotenv.load_dotenv()
 
 # Get email from command line
-parser = argparse.ArgumentParser()
-parser.add_argument("email", help="Your email address for testing")
-args = parser.parse_args()
-
-base_email = args.email.split("@")
+email = getpass("Enter your email: ")
+base_email = email.split("@")
+password = "secure-password"  # CHANGEME
 email1 = f"{base_email[0]}+1@{base_email[1]}"
 email2 = f"{base_email[0]}+2@{base_email[1]}"
 
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+if not SUPABASE_URL:
+    SUPABASE_URL = getpass("Enter your Supabase project URL: ")
+    
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
+if not SUPABASE_SERVICE_KEY:
+    SUPABASE_SERVICE_KEY = getpass("Enter your Supabase service role key: ")
 
 
 async def sign_up(email: str, password: str):
@@ -190,55 +188,30 @@ async def sign_up(email: str, password: str):
         assert response.status_code == 200
         return response.json()
 
-async def main():
-    # Create two test users
-    password = "secure-password"  # CHANGEME
-    print(f"Creating test users: {email1} and {email2}")
-    await sign_up(email1, password)
-    await sign_up(email2, password)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Create two test users
+print(f"Creating test users: {email1} and {email2}")
+await sign_up(email1, password)
+await sign_up(email2, password)
 ```
 
-Then run the setup script:
-
-```shell
-python create_users.py CHANGEME@example.com
-```
+Then run the code.
 
 !!! tip "About test emails"
     We'll create two test accounts by adding "+1" and "+2" to your email. For example, if you use "myemail@gmail.com", we'll create "myemail+1@gmail.com" and "myemail+2@gmail.com". All emails will be delivered to your original address.
 
-⚠️ Before continuing: Check your email and click both confirmation links. This would normally be handled by your frontend.
+⚠️ Before continuing: Check your email and click both confirmation links.
 
-Now let's test that users can only see their own data. Create a new file `test_oauth.py`. This will stand-in for your application's frontend.
+Now let's test that users can only see their own data. Make sure the server is running (run `langgraph dev`) before proceeding. The following snippet requires the "anon public" key that you copied from the Supabase dashboard while [setting up the auth provider](#setup-auth-provider) previously. 
 
 ```python
-import argparse
-import asyncio
 import os
-
-import dotenv
 import httpx
+
 from langgraph_sdk import get_client
 
-dotenv.load_dotenv()
-
-# Get email from command line
-parser = argparse.ArgumentParser()
-parser.add_argument("email", help="Your email address for testing")
-args = parser.parse_args()
-
-# Create two test emails from the base email
-base_email = args.email.split("@")
-email1 = f"{base_email[0]}+1@{base_email[1]}"
-email2 = f"{base_email[0]}+2@{base_email[1]}"
-
-# Initialize auth provider settings
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
-
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
+if not SUPABASE_ANON_KEY:
+    SUPABASE_ANON_KEY = getpass("Enter your Supabase anon key: ")
 
 async def login(email: str, password: str):
     """Get an access token for an existing user."""
@@ -260,49 +233,37 @@ async def login(email: str, password: str):
             raise ValueError(f"Login failed: {response.status_code} - {response.text}")
 
 
-async def main():
-    password = "secure-password"
+# Log in as user 1
+user1_token = await login(email1, password)
+user1_client = get_client(
+    url="http://localhost:2024", headers={"Authorization": f"Bearer {user1_token}"}
+)
 
-    # Log in as user 1
-    user1_token = await login(email1, password)
-    user1_client = get_client(
-        url="http://localhost:2024", headers={"Authorization": f"Bearer {user1_token}"}
-    )
+# Create a thread as user 1
+thread = await user1_client.threads.create()
+print(f"✅ User 1 created thread: {thread['thread_id']}")
 
-    # Create a thread as user 1
-    thread = await user1_client.threads.create()
-    print(f"✅ User 1 created thread: {thread['thread_id']}")
+# Try to access without a token
+unauthenticated_client = get_client(url="http://localhost:2024")
+try:
+    await unauthenticated_client.threads.create()
+    print("❌ Unauthenticated access should fail!")
+except Exception as e:
+    print("✅ Unauthenticated access blocked:", e)
 
-    # Try to access without a token
-    unauthenticated_client = get_client(url="http://localhost:2024")
-    try:
-        await unauthenticated_client.threads.create()
-        print("❌ Unauthenticated access should fail!")
-    except Exception as e:
-        print("✅ Unauthenticated access blocked:", e)
+# Try to access user 1's thread as user 2
+user2_token = await login(email2, password)
+user2_client = get_client(
+    url="http://localhost:2024", headers={"Authorization": f"Bearer {user2_token}"}
+)
 
-    # Try to access user 1's thread as user 2
-    user2_token = await login(email2, password)
-    user2_client = get_client(
-        url="http://localhost:2024", headers={"Authorization": f"Bearer {user2_token}"}
-    )
-
-    try:
-        await user2_client.threads.get(thread["thread_id"])
-        print("❌ User 2 shouldn't see User 1's thread!")
-    except Exception as e:
-        print("✅ User 2 blocked from User 1's thread:", e)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+try:
+    await user2_client.threads.get(thread["thread_id"])
+    print("❌ User 2 shouldn't see User 1's thread!")
+except Exception as e:
+    print("✅ User 2 blocked from User 1's thread:", e)
 ```
-
-Fetch the SUPABASE_ANON_KEY that you copied from the Supabase dashboard in step (1), then run the test. Make sure the server is running (if you have run `langgraph dev`):
-
-```bash
-python test_oauth.py CHANGEME@example.com
-```
+The output should look like this:
 
 > ➜  custom-auth SUPABASE_ANON_KEY=eyJh... python test_oauth.py CHANGEME@example.com
 > ✅ User 1 created thread: d6af3754-95df-4176-aa10-dbd8dca40f1a

@@ -16,11 +16,6 @@ class HTTPException(Exception):
         headers (typing.Mapping[str, str] | None, optional): Additional HTTP headers to
             include in the error response.
 
-    Attributes:
-        status_code (int): The HTTP status code of the error
-        detail (str): The error message or description
-        headers (typing.Mapping[str, str] | None): Additional HTTP headers
-
     Example:
         Default:
         ```python
@@ -53,19 +48,9 @@ class HTTPException(Exception):
         self.headers = headers
 
     def __str__(self) -> str:
-        """Return a string representation of the HTTP exception.
-
-        Returns:
-            str: A string in the format 'status_code: detail'
-        """
         return f"{self.status_code}: {self.detail}"
 
     def __repr__(self) -> str:
-        """Return a detailed string representation of the HTTP exception.
-
-        Returns:
-            str: A string representation showing the class name and all attributes
-        """
         class_name = self.__class__.__name__
         return f"{class_name}(status_code={self.status_code!r}, detail={self.detail!r})"
 
