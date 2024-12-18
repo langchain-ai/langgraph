@@ -67,7 +67,7 @@ In your `langgraph.json`, add the path to your auth file:
 }
 ```
 
-## Connect from the client
+## 3. Connect from the client
 
 Once you've set up authentication in your server, requests must include the the required authorization information based on your chosen scheme.
 Assuming you are using JWT token authentication, you could access your deployments using any of the following methods:
