@@ -86,9 +86,18 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 ## LangGraph Studio Web UI
 
-Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
+LangGraph Studio Web is a specialized UI that you can connect to LangGraph API server to enable visualization, interaction, and debugging of your application locally. Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
 
 >    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+
+!!! info "Connecting to a server with a custom host/port"
+
+    If you are running the LangGraph API server with a custom host / port, you can point the Studio Web UI at it by changing the `baseUrl` URL param. For example, if you are running your server on port 8000, you can change the above URL to the following:
+
+    ```
+    https://smith.langchain.com/studio/baseUrl=http://127.0.0.1:8000
+    ```
+
 
 !!! warning "Safari Compatibility"
     
