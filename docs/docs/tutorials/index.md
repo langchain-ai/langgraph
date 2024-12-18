@@ -81,4 +81,4 @@ Add custom authentication and authorization to an existing LangGraph Platform de
 
 1.  [Setting Up Custom Authentication](./auth/getting_started.md): Implement OAuth2 authentication to authorize users on your deployment
 2. [Resource Authorization](./auth/resource_auth.md): Let users have private conversations
-3. [Connecting an Authentication Provider](./auth/supabase_auth.md): Add real user accounts and validate using OAuth2
+3. [Connecting an Authentication Provider](./auth/add_auth_server.md): Add real user accounts and validate using OAuth2

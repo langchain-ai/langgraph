@@ -6,7 +6,7 @@ In this tutorial, we will build a chatbot that only lets specific users access i
 
     1. Basic Authentication (you are here) - Control who can access your bot
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
-    3. [Production Auth](supabase_auth.md) - Add real user accounts and validate using OAuth2
+    3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
 
 ## Setting up our project
 
@@ -36,7 +36,7 @@ Now that we've seen the base LangGraph app, let's add authentication to it!
 
 ## Adding Authentication
 
-The `Auth` object lets you register an authentication function that the LangGraph platform will run on every request. This function receives each request and decides whether to accept or reject.
+The [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object lets you register an authentication function that the LangGraph platform will run on every request. This function receives each request and decides whether to accept or reject.
 
 Create a new file `src/security/auth.py`. This is where we'll our code will live to check if users are allowed to access our bot:
 

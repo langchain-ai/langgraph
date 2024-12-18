@@ -15,7 +15,7 @@ While often used interchangeably, these terms represent distinct security concep
 - **Authentication** ("AuthN") verifies _who_ you are. This runs as middleware for every request.
 - **Authorization** ("AuthZ") determines _what you can do_. This validates the user's privileges and roles on a per-resource basis.
 
-In LangGraph Platform, authentication is handled by your `@auth.authenticate` handler, and authorization is handled by your `@auth.on` handlers.
+In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler, and authorization is handled by your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers.
 
 ## System Architecture
 
