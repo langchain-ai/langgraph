@@ -35,15 +35,18 @@ While in Beta, LangGraph Studio is available for free to all [LangSmith](https:/
 
 If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
 
-### Development server
+### Web UI
 
-LangGraph CLI also contains a command for running an in-memory development server that can be used to connect a local LangGraph app with the studio.
+You can [run a local in-memory development server](../../tutorials/langgraph-platform/local-server/) that can be used to connect a local LangGraph app with a web version of the studio.
+For example, if you start the local server with `langgraph dev` (running at `http://127.0.0.1:2024` by default), you can connect to the studio by navigating to:
+
+```
+https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+```
+
 See [instructions here](../cloud/reference/cli.md#dev) for more information.
 
-The way this works is that it runs inside your local environment.
-It will spin up an in-memory, development server to deploy the graph.
-You can then connect to the studio via the Cloud hosted version of LangGraph Platform.
-To be clear, the web studio will connect to your locally running server - your agent is still running locally and never leaves your device.
+The web UI version of the studio will connect to your locally running server — your agent is still running locally and never leaves your device.
 
 ## Studio FAQs
 
