@@ -494,6 +494,7 @@ class ShallowMemorySaver(MemorySaver):
         c.pop("pending_sends")  # type: ignore[misc]
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        # always overwrite the last checkpoint
         self.storage[thread_id][checkpoint_ns] = {
             checkpoint["id"]: (
                 self.serde.dumps_typed(c),
@@ -508,37 +509,6 @@ class ShallowMemorySaver(MemorySaver):
                 "checkpoint_id": checkpoint["id"],
             }
         }
-
-    def put_writes(
-        self,
-        config: RunnableConfig,
-        writes: Sequence[Tuple[str, Any]],
-        task_id: str,
-    ) -> None:
-        """Save a list of writes to the in-memory storage.
-
-        This method saves a list of writes to the in-memory storage. The writes are associated
-        with the provided config.
-
-        Args:
-            config (RunnableConfig): The config to associate with the writes.
-            writes (list[tuple[str, Any]]): The writes to save.
-            task_id (str): Identifier for the task creating the writes.
-
-        Returns:
-            RunnableConfig: The updated config containing the saved writes' timestamp.
-        """
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"]["checkpoint_id"]
-        outer_key = (thread_id, checkpoint_ns, checkpoint_id)
-        outer_writes_ = self.writes.get(outer_key)
-        for idx, (c, v) in enumerate(writes):
-            inner_key = (task_id, WRITES_IDX_MAP.get(c, idx))
-            if inner_key[1] >= 0 and outer_writes_ and inner_key in outer_writes_:
-                continue
-
-            self.writes[outer_key][inner_key] = (task_id, c, self.serde.dumps_typed(v))
 
 
 class PersistentDict(defaultdict):

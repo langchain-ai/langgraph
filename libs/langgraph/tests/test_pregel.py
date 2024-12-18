@@ -78,6 +78,7 @@ from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
     ALL_STORES_SYNC,
+    REGULAR_CHECKPOINTERS_SYNC,
     SHOULD_CHECK_SNAPSHOTS,
 )
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
@@ -624,7 +625,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_run_from_checkpoint_id_retains_previous_writes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -1157,6 +1158,10 @@ def test_pending_writes_resume(
     # both the pending write and the new write were applied, 1 + 2 + 3 = 6
     assert graph.invoke(None, thread1) == {"value": 6}
 
+    if "shallow" in checkpointer_name:
+        assert len(list(checkpointer.list(thread1))) == 1
+        return
+
     # check all final checkpoints
     checkpoints = [c for c in checkpointer.list(thread1)]
     # we should have 3
@@ -1617,6 +1622,9 @@ def test_invoke_checkpoint_three(
     assert state is not None
     assert state.values.get("total") == 5
     assert state.next == ()
+
+    if "shallow" in checkpointer_name:
+        return
 
     assert len(list(app.get_state_history(thread_1, limit=1))) == 1
     # list all checkpoints for thread 1
@@ -2277,8 +2285,14 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         },
         tasks=(PregelTask(AnyStr(), "qa", (PULL, "qa")),),
         next=("qa",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -2286,7 +2300,13 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "writes": {"retriever_one": {"docs": ["doc5"]}},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
@@ -5203,10 +5223,14 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     assert state is not None
     assert state.values == {"steps": ["start"], "attempt": 1}  # input state saved
     assert state.next == ("node1",)  # Should retry failed node
+    assert "RuntimeError('Simulated failure')" in state.tasks[0].error
 
     # Retry with updated attempt count
     result = graph.invoke({"steps": [], "attempt": 2}, config)
     assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
+
+    if "shallow" in checkpointer_name:
+        return
 
     # Verify checkpoint history shows both attempts
     history = list(graph.get_state_history(config))

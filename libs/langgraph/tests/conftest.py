@@ -56,6 +56,13 @@ def checkpointer_memory():
 
 
 @pytest.fixture(scope="function")
+def checkpointer_shallow_memory():
+    from langgraph.checkpoint.memory import ShallowMemorySaver
+
+    yield ShallowMemorySaver()
+
+
+@pytest.fixture(scope="function")
 def checkpointer_sqlite():
     with SqliteSaver.from_conn_string(":memory:") as checkpointer:
         yield checkpointer
@@ -417,12 +424,19 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
         raise NotImplementedError(f"Unknown store {store_name}")
 
 
-ALL_CHECKPOINTERS_SYNC = [
+SHALLOW_CHECKPOINTERS_SYNC = [
+    "shallow_memory",
+]
+REGULAR_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
     "postgres",
     "postgres_pipe",
     "postgres_pool",
+]
+ALL_CHECKPOINTERS_SYNC = [
+    *REGULAR_CHECKPOINTERS_SYNC,
+    *SHALLOW_CHECKPOINTERS_SYNC,
 ]
 ALL_CHECKPOINTERS_ASYNC = [
     "memory",
