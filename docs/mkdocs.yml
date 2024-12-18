@@ -201,6 +201,7 @@ nav:
             - how-tos/subgraphs-manage-state.ipynb
             - how-tos/subgraph-transform-state.ipynb
         - Multi-agent:
+            - Multi-agent: how-tos#multi-agent
             - how-tos/agent-handoffs.ipynb
             - how-tos/multi-agent-network.ipynb
             - how-tos/multi-agent-multi-turn-convo.ipynb
