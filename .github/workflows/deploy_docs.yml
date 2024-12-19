@@ -108,6 +108,7 @@ jobs:
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
                 --check-links-ignore "http://localhost:8123/.*" \
                 --check-links-ignore "http://localhost:2024/.*" \
+                --check-links-ignore "http://127.0.0.1:2024/.*" \
                 --check-links-ignore "https://x.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
