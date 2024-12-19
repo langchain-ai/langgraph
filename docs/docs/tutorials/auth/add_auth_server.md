@@ -96,7 +96,7 @@ And we'll keep our existing resource authorization logic unchanged
 
 Let's update `src/security/auth.py` to implement this:
 
-```python
+```python hl_lines="8-9 20-30" title="src/security/auth.py"
 import os
 import httpx
 from langgraph_sdk import Auth
@@ -135,6 +135,7 @@ async def get_current_user(authorization: str | None):
     except Exception as e:
         raise Auth.exceptions.HTTPException(status_code=401, detail=str(e))
 
+# ... the rest is the same as before
 
 # Keep our resource authorization from the previous tutorial
 @auth.on
@@ -230,10 +231,8 @@ async def login(email: str, password: str):
                 "Content-Type": "application/json"
             },
         )
-        if response.status_code == 200:
-            return response.json()["access_token"]
-        else:
-            raise ValueError(f"Login failed: {response.status_code} - {response.text}")
+        assert response.status_code == 200
+        return response.json()["access_token"]
 
 
 # Log in as user 1
@@ -268,10 +267,11 @@ except Exception as e:
 ```
 The output should look like this:
 
-> ➜  custom-auth SUPABASE_ANON_KEY=eyJh... python test_oauth.py CHANGEME@example.com
-> ✅ User 1 created thread: d6af3754-95df-4176-aa10-dbd8dca40f1a
-> ✅ Unauthenticated access blocked: Client error '403 Forbidden' for url 'http://localhost:2024/threads'
-> ✅ User 2 blocked from User 1's thread: Client error '404 Not Found' for url 'http://localhost:2024/threads/d6af3754-95df-4176-aa10-dbd8dca40f1a'
+```shell
+✅ User 1 created thread: d6af3754-95df-4176-aa10-dbd8dca40f1a
+✅ Unauthenticated access blocked: Client error '403 Forbidden' for url 'http://localhost:2024/threads'
+✅ User 2 blocked from User 1's thread: Client error '404 Not Found' for url 'http://localhost:2024/threads/d6af3754-95df-4176-aa10-dbd8dca40f1a'
+```
 
 Perfect! Our authentication and authorization are working together:
 1. Users must log in to access the bot

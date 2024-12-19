@@ -32,7 +32,7 @@ Authorization handlers are functions that run **after** authentication succeeds.
 
 Let's update our `src/security/auth.py` and add one authorization handler that is run on every request:
 
-```python hl_lines="29-39"
+```python hl_lines="29-39" title="src/security/auth.py"
 from langgraph_sdk import Auth
 
 # Keep our test users from the previous tutorial
@@ -218,32 +218,30 @@ Notice that instead of one global handler, we now have specific handlers for:
 3. Creating runs
 4. Accessing assistants
 
-The first three of these match specific **actions** on each resource (see [resource actions](../../concepts/auth.md#resource-actions)), while the last one (`@auth.on.assistants`) matches _any_ action on the `assistants` resource. For each request, LangGraph will run the most specific handler that matches the resource and action being accessed. This means that the four handlers above will run rather than the broad "@auth.on" handler.
+The first three of these match specific **actions** on each resource (see [resource actions](../../concepts/auth.md#resource-actions)), while the last one (`@auth.on.assistants`) matches _any_ action on the `assistants` resource. For each request, LangGraph will run the most specific handler that matches the resource and action being accessed. This means that the four handlers above will run rather than the broadly scoped "`@auth.on`" handler.
 
-Try adding the following test code to `test_private.py`:
+Try adding the following test code to your test file:
 
 ```python
-async def test_private():
-    # ... Same as before
-    # Try creating an assistant. This should fail
-    try:
-        await alice.assistants.create("agent")
-        print("❌ Alice shouldn't be able to create assistants!")
-    except Exception as e:
-        print("✅ Alice correctly denied access:", e)
+# ... Same as before
+# Try creating an assistant. This should fail
+try:
+    await alice.assistants.create("agent")
+    print("❌ Alice shouldn't be able to create assistants!")
+except Exception as e:
+    print("✅ Alice correctly denied access:", e)
 
-    # Try searching for assistants. This also should fail
-    try:
-        await alice.assistants.search()
-        print("❌ Alice shouldn't be able to search assistants!")
-    except Exception as e:
-        print("✅ Alice correctly denied access to searching assistants:", e)
+# Try searching for assistants. This also should fail
+try:
+    await alice.assistants.search()
+    print("❌ Alice shouldn't be able to search assistants!")
+except Exception as e:
+    print("✅ Alice correctly denied access to searching assistants:", e)
 ```
 
 And then run the test code again:
 
 ```bash
-> python test_private.py
 ✅ Alice created thread: dcea5cd8-eb70-4a01-a4b6-643b14e8f754
 ✅ Bob correctly denied access: Client error '404 Not Found' for url 'http://localhost:2024/threads/dcea5cd8-eb70-4a01-a4b6-643b14e8f754'
 For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
