@@ -17,6 +17,22 @@ While often used interchangeably, these terms represent distinct security concep
 
 In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler, and authorization is handled by your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers.
 
+## Default Security Models
+
+LangGraph Platform provides different security defaults:
+
+### LangGraph Cloud
+
+- Uses LangSmith API keys by default
+- Requires valid API key in `x-api-key` header
+- Can be customized with your auth handler
+
+### Self-Hosted
+
+- No default authentication
+- Complete flexibility to implement your security model
+- You control all aspects of authentication and authorization
+
 ## System Architecture
 
 A typical authentication setup involves three main components:
@@ -123,7 +139,7 @@ The returned user information is available:
 
 After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
-1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly.
+1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](##supported-actions) for the list of types the value can take for each action.
 2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
 3. Raise an HTTP exception if access is denied.
 
@@ -342,10 +358,6 @@ async def rbac_create(ctx: Auth.types.AuthContext, value: dict):
 
 ## Supported Resources
 
-LangGraph provides authorization handlers for the following resource types:
-
-## Supported Resources
-
 LangGraph provides three levels of authorization handlers, from most general to most specific:
 
 1. **Global Handler** (`@auth.on`): Matches all resources and actions
@@ -381,46 +393,32 @@ If a more specific handler is registered, the more general handler will not be c
     ```
     More specific handlers provide better type hints since they handle fewer action types.
 
+#### Supported actions and types {#supported-actions}
 Here are all the supported action handlers:
 
-| Resource | Handler | Description |
-|----------|---------|-------------|
-| **Threads** | `@auth.on.threads.create` | Thread creation |
-| | `@auth.on.threads.read` | Thread retrieval |
-| | `@auth.on.threads.update` | Thread updates |
-| | `@auth.on.threads.delete` | Thread deletion |
-| | `@auth.on.threads.search` | Listing threads |
-| | `@auth.on.threads.create_run` | Creating or updating a run |
-| **Assistants** | `@auth.on.assistants.create` | Assistant creation |
-| | `@auth.on.assistants.read` | Assistant retrieval |
-| | `@auth.on.assistants.update` | Assistant updates |
-| | `@auth.on.assistants.delete` | Assistant deletion |
-| | `@auth.on.assistants.search` | Listing assistants |
-| **Crons** | `@auth.on.crons.create` | Cron job creation |
-| | `@auth.on.crons.read` | Cron job retrieval |
-| | `@auth.on.crons.update` | Cron job updates |
-| | `@auth.on.crons.delete` | Cron job deletion |
-| | `@auth.on.crons.search` | Listing cron jobs |
+| Resource | Handler | Description | Value Type |
+|----------|---------|-------------|------------|
+| **Threads** | `@auth.on.threads.create` | Thread creation | [`ThreadsCreate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.ThreadsCreate) |
+| | `@auth.on.threads.read` | Thread retrieval | [`ThreadsRead`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.ThreadsRead) |
+| | `@auth.on.threads.update` | Thread updates | [`ThreadsUpdate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.ThreadsUpdate) |
+| | `@auth.on.threads.delete` | Thread deletion | [`ThreadsDelete`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.ThreadsDelete) |
+| | `@auth.on.threads.search` | Listing threads | [`ThreadsSearch`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.ThreadsSearch) |
+| | `@auth.on.threads.create_run` | Creating or updating a run | [`RunsCreate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.RunsCreate) |
+| **Assistants** | `@auth.on.assistants.create` | Assistant creation | [`AssistantsCreate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AssistantsCreate) |
+| | `@auth.on.assistants.read` | Assistant retrieval | [`AssistantsRead`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AssistantsRead) |
+| | `@auth.on.assistants.update` | Assistant updates | [`AssistantsUpdate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AssistantsUpdate) |
+| | `@auth.on.assistants.delete` | Assistant deletion | [`AssistantsDelete`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AssistantsDelete) |
+| | `@auth.on.assistants.search` | Listing assistants | [`AssistantsSearch`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AssistantsSearch) |
+| **Crons** | `@auth.on.crons.create` | Cron job creation | [`CronsCreate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsCreate) |
+| | `@auth.on.crons.read` | Cron job retrieval | [`CronsRead`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsRead) |
+| | `@auth.on.crons.update` | Cron job updates | [`CronsUpdate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsUpdate) |
+| | `@auth.on.crons.delete` | Cron job deletion | [`CronsDelete`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsDelete) |
+| | `@auth.on.crons.search` | Listing cron jobs | [`CronsSearch`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsSearch) |
 
 ???+ note "About Runs"
     Runs are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model. All run operations (reading, listing) except creation are controlled by the thread's handlers.
     There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
 
-## Default Security Models
-
-LangGraph Platform provides different security defaults:
-
-### LangGraph Cloud
-
-- Uses LangSmith API keys by default
-- Requires valid API key in `x-api-key` header
-- Can be customized with your auth handler
-
-### Self-Hosted
-
-- No default authentication
-- Complete flexibility to implement your security model
-- You control all aspects of authentication and authorization
 
 ## Next Steps
 

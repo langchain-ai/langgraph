@@ -10,6 +10,11 @@ In this tutorial, we will extend our chatbot to give each user their own private
 
 ![Authorization handlers](./img/authorization.png)
 
+???+ tip "Placeholder token"
+    
+    As we did in [part 1](getting_started.md), for this section, we will use a hard-coded token for illustration purposes.
+    We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
+
 ## Understanding Resource Authorization
 
 In the last tutorial, we controlled who could access our bot. But right now, any authenticated user can see everyone else's conversations! Let's fix that by adding [resource authorization](../../concepts/auth.md#resource-authorization).
@@ -68,7 +73,51 @@ async def add_owner(
     value: dict,  # The resource being created/accessed
 ):
     """Make resources private to their creator."""
-    # Add owner when creating resources
+    # Examples:
+    # ctx: AuthContext(
+    #     permissions=[],
+    #     user=ProxyUser(
+    #         identity='user1',
+    #         is_authenticated=True,
+    #         display_name='user1'
+    #     ),
+    #     resource='threads',
+    #     action='create_run'
+    # )
+    # value: 
+    # {
+    #     'thread_id': UUID('1e1b2733-303f-4dcd-9620-02d370287d72'),
+    #     'assistant_id': UUID('fe096781-5601-53d2-b2f6-0d3403f7e9ca'),
+    #     'run_id': UUID('1efbe268-1627-66d4-aa8d-b956b0f02a41'),
+    #     'status': 'pending',
+    #     'metadata': {},
+    #     'prevent_insert_if_inflight': True,
+    #     'multitask_strategy': 'reject',
+    #     'if_not_exists': 'reject',
+    #     'after_seconds': 0,
+    #     'kwargs': {
+    #         'input': {'messages': [{'role': 'user', 'content': 'Hello!'}]},
+    #         'command': None,
+    #         'config': {
+    #             'configurable': {
+    #                 'langgraph_auth_user': ... Your user object...
+    #                 'langgraph_auth_user_id': 'user1'
+    #             }
+    #         },
+    #         'stream_mode': ['values'],
+    #         'interrupt_before': None,
+    #         'interrupt_after': None,
+    #         'webhook': None,
+    #         'feedback_keys': None,
+    #         'temporary': False,
+    #         'subgraphs': False
+    #     }
+    # }
+
+    # Do 2 things:
+    # 1. Add the user's ID to the resource's metadata. Each LangGraph resource has a `metadata` dict that persists with the resource.
+    # this metadata is useful for filtering in read and update operations
+    # 2. Return a filter that lets users only see their own resources
     filters = {"owner": ctx.user.identity}
     metadata = value.setdefault("metadata", {})
     metadata.update(filters)
@@ -182,10 +231,14 @@ async def on_thread_create(
     1. Sets metadata on the thread being created to track ownership
     2. Returns a filter that ensures only the creator can access it
     """
+    # Example value:
+    #  {'thread_id': UUID('99b045bc-b90b-41a8-b882-dabc541cf740'), 'metadata': {}, 'if_exists': 'raise'}
+
     # Add owner metadata to the thread being created
     # This metadata is stored with the thread and persists
     metadata = value.setdefault("metadata", {})
     metadata["owner"] = ctx.user.identity
+    
     
     # Return filter to restrict access to just the creator
     return {"owner": ctx.user.identity}
@@ -210,6 +263,14 @@ async def on_assistants(
 ):
     # For illustration purposes, we will deny all requests
     # that touch the assistants resource
+    # Example value:
+    # {
+    #     'assistant_id': UUID('63ba56c3-b074-4212-96e2-cc333bbc4eb4'),
+    #     'graph_id': 'agent',
+    #     'config': {},
+    #     'metadata': {},
+    #     'name': 'Untitled'
+    # }
     raise Auth.exceptions.HTTPException(
         status_code=403,
         detail="User lacks the required permissions.",
