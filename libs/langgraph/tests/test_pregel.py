@@ -2278,6 +2278,11 @@ def test_in_one_fan_out_state_graph_waiting_edge(
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
+    expected_parent_config = (
+        None
+        if "shallow" in checkpointer_name
+        else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+    )
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "query": "analyzed: query: what is weather in sf",
@@ -2300,13 +2305,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "writes": {"retriever_one": {"docs": ["doc5"]}},
             "thread_id": "2",
         },
-        parent_config={
-            "configurable": {
-                "thread_id": "2",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
+        parent_config=expected_parent_config,
     )
 
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
@@ -4661,6 +4660,11 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
         ],
         "user_name": "Meow",
     }
+    expected_parent_config = (
+        None
+        if "shallow" in checkpointer_name
+        else list(graph.checkpointer.list(config, limit=2))[-1].config
+    )
     assert graph.get_state(config) == StateSnapshot(
         values={
             "messages": [
@@ -4690,13 +4694,7 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             "parents": {},
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
+        parent_config=expected_parent_config,
         tasks=(),
     )
 

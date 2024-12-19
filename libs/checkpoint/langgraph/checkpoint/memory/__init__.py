@@ -468,49 +468,6 @@ class MemorySaver(
         return f"{next_v:032}.{next_h:016}"
 
 
-class ShallowMemorySaver(MemorySaver):
-    def put(
-        self,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        """Save a checkpoint to the in-memory storage.
-
-        This method saves a checkpoint to the in-memory storage. The checkpoint is associated
-        with the provided config.
-
-        Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (dict): New versions as of this write
-
-        Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
-        """
-        c = checkpoint.copy()
-        c.pop("pending_sends")  # type: ignore[misc]
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"]["checkpoint_ns"]
-        # always overwrite the last checkpoint
-        self.storage[thread_id][checkpoint_ns] = {
-            checkpoint["id"]: (
-                self.serde.dumps_typed(c),
-                self.serde.dumps_typed(metadata),
-                config["configurable"].get("checkpoint_id"),  # parent
-            )
-        }
-        return {
-            "configurable": {
-                "thread_id": thread_id,
-                "checkpoint_ns": checkpoint_ns,
-                "checkpoint_id": checkpoint["id"],
-            }
-        }
-
-
 class PersistentDict(defaultdict):
     """Persistent dictionary with an API compatible with shelve and anydbm.
 
