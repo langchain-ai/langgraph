@@ -18,6 +18,44 @@ LangGraph provides [low level building primitives](../concepts/low_level.md) tha
 ??? "How to create branches for parallel execution"
     Full Example: [How to create branches for parallel execution](branching.ipynb)
 
+    LangGraph enables parallel execution of nodes through fan-out and fan-in mechanisms, enhancing graph performance. By defining a state with a reducer function, you can manage how data is aggregated across parallel branches. Here's a concise example demonstrating this setup:
+
+    ```python
+    import operator
+    from typing import Annotated, Any
+    from typing_extensions import TypedDict
+    from langgraph.graph import StateGraph, START, END
+
+    class State(TypedDict):
+        # The operator.add reducer function appends to the list
+        aggregate: Annotated[list, operator.add]
+
+    class ReturnNodeValue:
+        def __init__(self, node_secret: str):
+            self._value = node_secret
+
+        def __call__(self, state: State) -> Any:
+            print(f"Adding {self._value} to {state['aggregate']}")
+            return {"aggregate": [self._value]}
+
+    builder = StateGraph(State)
+    builder.add_node("a", ReturnNodeValue("I'm A"))
+    builder.add_edge(START, "a")
+    builder.add_node("b", ReturnNodeValue("I'm B"))
+    builder.add_node("c", ReturnNodeValue("I'm C"))
+    builder.add_node("d", ReturnNodeValue("I'm D"))
+    builder.add_edge("a", ["b", "c"])  # Fan-out to B and C
+    builder.add_edge(["b", "c"], "d")  # Fan-in to D
+    builder.add_edge("d", END)
+    graph = builder.compile()
+
+    # Execute the graph
+    graph.invoke({"aggregate": []})
+    ```
+
+    In this setup, the graph fans out from node "a" to nodes "b" and "c", then fans in to node "d". The `aggregate` list in the state accumulates values from each node, demonstrating parallel execution and data aggregation.  
+
+
 ??? "How to create map-reduce branches for parallel execution"
 
     Full Example: [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
