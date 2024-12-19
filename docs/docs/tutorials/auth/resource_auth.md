@@ -134,8 +134,8 @@ await bob.runs.create(
 print(f"✅ Bob created his own thread: {bob_thread['thread_id']}")
 
 # List threads - each user only sees their own
-alice_threads = await alice.threads.list()
-bob_threads = await bob.threads.list()
+alice_threads = await alice.threads.search()
+bob_threads = await bob.threads.search()
 print(f"✅ Alice sees {len(alice_threads)} thread")
 print(f"✅ Bob sees {len(bob_threads)} thread")
 ```
@@ -201,19 +201,6 @@ async def on_thread_read(
     """
     return {"owner": ctx.user.identity}
 
-@auth.on.threads.create_run
-async def on_run_create(
-    ctx: Auth.types.AuthContext,
-    value: Auth.types.on.threads.create_run.value,
-):
-    """Only let thread owners create runs.
-    
-    This handler runs when creating runs on a thread. The filter
-    applies to the parent thread, not the run being created.
-    This ensures only thread owners can create runs on their threads.
-    """
-    return {"owner": ctx.user.identity}
-
 @auth.on.assistants
 async def on_assistants(
     ctx: Auth.types.AuthContext,
@@ -231,8 +218,7 @@ Notice that instead of one global handler, we now have specific handlers for:
 
 1. Creating threads
 2. Reading threads
-3. Creating runs
-4. Accessing assistants
+3. Accessing assistants
 
 The first three of these match specific **actions** on each resource (see [resource actions](../../concepts/auth.md#resource-actions)), while the last one (`@auth.on.assistants`) matches _any_ action on the `assistants` resource. For each request, LangGraph will run the most specific handler that matches the resource and action being accessed. This means that the four handlers above will run rather than the broadly scoped "`@auth.on`" handler.
 
