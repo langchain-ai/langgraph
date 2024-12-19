@@ -470,15 +470,14 @@ class PregelLoop(LoopProtocol):
             )
         
         if self.exists_cached_node and self.checkpointer:
-            for tid, task in self.tasks.items():
-                if task.cache_policy:
-                    cached_writes = self.checkpointer.get_writes(tid, task.cache_policy.ttl)
-                    if cached_writes:
-                        task = self.tasks[tid]
-                        task.writes.extend(
-                            [(channel, value) for _, channel, value in cached_writes]
+            cached_tids = [tid for tid, task in self.tasks.items() if task.cache_policy]
+            cached_writes_map = self.checkpointer.get_writes(cached_tids)
+            for tid, cached_task_writes in cached_writes_map.items():
+                task = self.tasks[tid]
+                task.writes.extend(
+                            [(channel, value) for _, channel, value in cached_task_writes]
                         )
-                        self._output_writes(tid, task.writes, cached=True)
+                self._output_writes(tid, task.writes, cached=True)
 
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:

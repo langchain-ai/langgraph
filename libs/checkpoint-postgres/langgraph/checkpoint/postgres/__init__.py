@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional, Sequence, Union, List
+from typing import Any, Iterator, Optional, Sequence, Union, List, Dict
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -180,64 +180,33 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_writes(self, task_id: str, ttl: int = None) -> List[Any]:
-        """Retrieve pending writes given a task_id and optionally a ttl (in seconds). Used for retrieving pending writes for cached nodes.
-        If ttl is specified, only retrieves pending writes such that the timestamp of the corresponding checkpoint is within ttl seconds 
-        of the query.
+    def get_writes(self, task_ids: List[str]) -> Dict[str, List[Any]]:
+        """Retrieve pending writes given a list of task_id. Used for retrieving pending writes for cached nodes.
         
         Args:
-            task_id: a task identifier, usually generated from a cache key for a task deriving from a cached node
-            ttl: the time to live of the cached writes in seconds
+            task_ids: a list of a task identifiers, usually generated from a cache key for a task deriving from a cached node
             
         Returns:
-            a list of decoded pending writes for the specified task id, optionally recorded within ttl seconds of this query being made
+            a dictionary mapping each task_id to a list of corresponding decoded pending writes
         """
 
-        query = ""
-        
-        if not ttl:
-            query += """
+        query = """
                 SELECT
+                    task_id,
                     array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] ORDER BY task_id, idx) AS pending_writes
                 FROM checkpoint_writes
-                WHERE task_id = %s
-                """
-            args = (task_id,)
-        
-        else:
-            query += """
-                WITH task_data AS (
-                    SELECT
-                        thread_id,
-                        checkpoint_ns,
-                        checkpoint_id,
-                        array_agg(array[task_id::text::bytea, channel::bytea, type::bytea, blob] ORDER BY task_id, idx) AS pending_writes
-                    FROM checkpoint_writes 
-                    WHERE task_id = %s
-                    GROUP BY 1, 2, 3
-                )
-
-                SELECT
-                    extract(epoch FROM now()) as now,
-                    extract(epoch FROM (c.checkpoint->>'ts')::timestamp at time zone 'utc') checkpoint,
-                    abs(extract(epoch FROM now()) - extract(epoch FROM (c.checkpoint->>'ts')::timestamp at time zone 'utc')) as elapsed,
-                    cw.pending_writes
-                FROM task_data cw
-                INNER JOIN checkpoints c
-                    ON (cw.thread_id = c.thread_id AND cw.checkpoint_ns = c.checkpoint_ns AND cw.checkpoint_id = c.checkpoint_id)
-                WHERE extract(epoch FROM now()) - extract(epoch FROM (c.checkpoint->>'ts')::timestamp AT TIME ZONE 'UTC') <= %s
+                WHERE task_id = ANY(%s)
+                GROUP BY 1
                 """
 
-        args = (task_id,) if not ttl else (task_id, ttl)
+        args = (task_ids,)
 
-        results = []
+        results = {}
         with self._cursor() as cur:
             cur.execute(query, args, binary=True)
 
             for row in cur:
-                results.extend(
-                    self._load_writes(row["pending_writes"])
-                )
+                results[row["task_id"]] = self._load_writes(row["pending_writes"])
         return results
 
         

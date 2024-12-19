@@ -17,6 +17,8 @@ from typing import (
     overload,
 )
 from uuid import UUID
+import time
+import inspect
 
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
@@ -485,12 +487,27 @@ def prepare_single_task(
             proc = processes[packet.node]
             
             if proc.cache_policy:
-                cache_key = proc.cache_policy.cache_key(packet.arg, config)
-                task_id = _uuid5_str(
-                    b"",
-                    packet.node,
-                    cache_key,
-                )
+                # cache policy fn can take state and config or just state
+                cache_key_fn = proc.cache_policy.cache_key
+                if len(inspect.signature(cache_key_fn).parameters) == 2:
+                    cache_key = proc.cache_policy.cache_key(packet.arg, config)
+                else:
+                    cache_key = proc.cache_policy.cache_key(packet.arg)
+                
+                if ttl := proc.cache_policy.ttl:
+                    ttl_str = str(time.time() // ttl)
+                    task_id = _uuid5_str(
+                        b"",
+                        packet.node,
+                        cache_key,
+                        ttl_str
+                    )
+                else:
+                    task_id = _uuid5_str(
+                        b"",
+                        packet.node,
+                        cache_key,
+                    )
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -530,12 +547,27 @@ def prepare_single_task(
             )
             proc = processes[packet.node]
             if proc.cache_policy:
-                cache_key = proc.cache_policy.cache_key(packet.arg, config)
-                task_id = _uuid5_str(
-                    b"",
-                    packet.node,
-                    cache_key,
-                )
+                # cache policy fn can take state and config or just state
+                cache_key_fn = proc.cache_policy.cache_key
+                if len(inspect.signature(cache_key_fn).parameters) == 2:
+                    cache_key = proc.cache_policy.cache_key(packet.arg, config)
+                else:
+                    cache_key = proc.cache_policy.cache_key(packet.arg)
+
+                if ttl := proc.cache_policy.ttl:
+                    ttl_str = str(time.time() // ttl)
+                    task_id = _uuid5_str(
+                        b"",
+                        packet.node,
+                        cache_key,
+                        ttl_str
+                    )
+                else:
+                    task_id = _uuid5_str(
+                        b"",
+                        packet.node,
+                        cache_key,
+                    )
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -662,12 +694,27 @@ def prepare_single_task(
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
   
             if proc.cache_policy:
-                cache_key = proc.cache_policy.cache_key(val, config)
-                task_id = _uuid5_str(
-                    b"",
-                    name,
-                    cache_key,
-                )
+                # cache policy fn can take state and config or just state
+                cache_key_fn = proc.cache_policy.cache_key
+                if len(inspect.signature(cache_key_fn).parameters) == 2:
+                    cache_key = proc.cache_policy.cache_key(val, config)
+                else:
+                    cache_key = proc.cache_policy.cache_key(val)
+
+                if ttl := proc.cache_policy.ttl:
+                    ttl_str = str(time.time() // ttl)
+                    task_id = _uuid5_str(
+                        b"",
+                        name,
+                        cache_key,
+                        ttl_str
+                    )
+                else:
+                    task_id = _uuid5_str(
+                        b"",
+                        name,
+                        cache_key,
+                    )
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,

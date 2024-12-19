@@ -109,12 +109,11 @@ class CachePolicy(NamedTuple):
 
     cache_key: Callable[[str, Optional[RunnableConfig]], str]
     """A function that generates a hash from a subset of the input of a task at runtime, defining cached writes for a task. 
-    It must take in 2 arguments: 
-        (1) the state of the graph
-        (2) the config of the graph invocation
+    It must take in the state of the graph as the first argument. It can optionally be defined with the config of the graph invocation
+    as the second invocation.
     """
     ttl: Optional[int] = None
-    """Time to live (sec) for the cached write corresponding to a task. If not provided, writes are cached forever"""
+    """Maximum time to live (sec) for the cached write corresponding to a task. If not provided, writes are cached forever."""
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
