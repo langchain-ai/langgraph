@@ -565,7 +565,7 @@ def dev(
     host: str,
     port: int,
     no_reload: bool,
-    config: pathlib.Path,
+    config: str,
     n_jobs_per_worker: Optional[int],
     no_browser: bool,
     debug_port: Optional[int],
@@ -594,7 +594,7 @@ def dev(
             "Please ensure langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
         ) from None
 
-    config_json = langgraph_cli.config.validate_config_file(config)
+    config_json = langgraph_cli.config.validate_config_file(pathlib.Path(config))
     cwd = os.getcwd()
     sys.path.append(cwd)
     dependencies = config_json.get("dependencies", [])

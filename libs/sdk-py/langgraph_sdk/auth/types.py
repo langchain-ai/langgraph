@@ -61,23 +61,32 @@ FilterType = typing.Union[
     ],
     typing.Dict[str, str],
 ]
-"""Type for filtering queries.
+"""Response type for authorization handlers.
 
 Supports exact matches and operators:
-    - Simple match: {"field": "value"}
-    - Equals: {"field": {"$eq": "value"}}
+    - Exact match shorthand: {"field": "value"}
+    - Exact match: {"field": {"$eq": "value"}}
     - Contains: {"field": {"$contains": "value"}}
 
 ???+ example "Examples"
+    Simple exact match filter for the resource owner:
     ```python
-    # Simple match
-    filter = {"status": "pending"}
+    filter = {"owner": "user-abcd123"}
+    ```
     
-    # Equals operator
-    filter = {"status": {"$eq": "success"}}
+    Explicit version of the exact match filter:
+    ```python
+    filter = {"owner": {"$eq": "user-abcd123"}}
+    ```
     
-    # Contains operator
-    filter = {"metadata.tags": {"$contains": "important"}}
+    Containment:
+    ```python
+    filter = {"participants": {"$contains": "user-abcd123"}}
+    ```
+
+    Combining filters (treated as a logical `AND`):
+    ```python
+    filter = {"owner": "user-abcd123", "participants": {"$contains": "user-efgh456"}}
     ```
 """
 
@@ -109,9 +118,9 @@ Keys must be strings, values can be any JSON-serializable type.
 
 HandlerResult = typing.Union[None, bool, FilterType]
 """The result of a handler can be:
-- None | True: accept the request.
-- False: reject the request with a 403 error
-- FilterType: filter to apply
+    * None | True: accept the request.
+    * False: reject the request with a 403 error
+    * FilterType: filter to apply
 """
 
 Handler = Callable[..., Awaitable[HandlerResult]]
@@ -143,12 +152,20 @@ class MinimalUser(typing.Protocol):
 
 
 class MinimalUserDict(typing.TypedDict, total=False):
-    """The minimal user dictionary."""
+    """The dictionary representation of a user."""
 
     identity: typing_extensions.Required[str]
+    """The required unique identifier for the user."""
     display_name: str
+    """The optional display name for the user."""
     is_authenticated: bool
+    """Whether the user is authenticated. Defaults to True."""
     permissions: Sequence[str]
+    """A list of permissions associated with the user.
+    
+    You can use these in your `@auth.on` authorization logic to determine
+    access permissions to different resources.
+    """
 
 
 @typing.runtime_checkable
@@ -174,6 +191,57 @@ class BaseUser(typing.Protocol):
     def permissions(self) -> Sequence[str]:
         """The permissions associated with the user."""
         ...
+
+
+class StudioUser:
+    """A user object that's populated from authenticated requests from the LangGraph studio.
+
+    Note: Studio auth can be disabled in your `langgraph.json` config.
+
+    ```json
+    {
+      "auth": {
+        "disable_studio_auth": true
+      }
+    }
+    ```
+
+    You can use `isinstance` checks in your authorization handlers (`@auth.on`) to control access specifically
+    for developers accessing the instance from the LangGraph Studio UI.
+
+    ???+ example "Examples"
+        ```python
+        @auth.on
+        async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
+            if isinstance(ctx.user, Auth.types.StudioUser):
+                return None
+            ...
+            return False
+        ```
+    """
+
+    __slots__ = ("username", "_is_authenticated", "_permissions")
+
+    def __init__(self, username: str, is_authenticated: bool = False) -> None:
+        self.username = username
+        self._is_authenticated = is_authenticated
+        self._permissions = ["authenticated"] if is_authenticated else []
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._is_authenticated
+
+    @property
+    def display_name(self) -> str:
+        return self.username
+
+    @property
+    def identity(self) -> str:
+        return self.username
+
+    @property
+    def permissions(self) -> Sequence[str]:
+        return self._permissions
 
 
 Authenticator = Callable[
