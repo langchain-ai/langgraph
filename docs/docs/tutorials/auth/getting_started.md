@@ -32,8 +32,13 @@ If everything works, the server should start and open the studio in your browser
 > This in-memory server is designed for development and testing.
 > For production use, please use LangGraph Cloud.
 
+The graph should run, and if you were to self-host this on the public internet, anyone could access it!
+
+![No auth](./img/no_auth.png)
+
 Now that we've seen the base LangGraph app, let's add authentication to it! In part 1, we will start with a hard-coded token for illustration purposes.
 We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
+
 
 ## Adding Authentication
 
@@ -114,7 +119,11 @@ langgraph dev --no-browser
     }
     ```
 
-Now let's try to chat with our bot. Run the following code in a file or notebook:
+Now let's try to chat with our bot. If we've implemented authentication correctly, we should only be able to access the bot if we provide a valid token in the request header. Users will still, however, be able to access each other's resources until we add [resource authorization handlers](../../concepts/auth.md#resource-authorization) in the next section of our tutorial.
+
+![Authentication, no authorization handlers](./img/authentication.png)
+
+Run the following code in a file or notebook:
 
 ```python
 from langgraph_sdk import get_client
