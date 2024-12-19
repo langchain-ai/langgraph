@@ -5,6 +5,7 @@
     1. Basic Authentication (you are here) - Control who can access your bot
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
     3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
+
 !!! tip "Prerequisites"
 
     This guide assumes basic familiarity with the following concepts:
@@ -46,8 +47,12 @@ The graph should run, and if you were to self-host this on the public internet, 
 
 ![No auth](./img/no_auth.png)
 
-Now that we've seen the base LangGraph app, let's add authentication to it! In part 1, we will start with a hard-coded token for illustration purposes.
-We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
+Now that we've seen the base LangGraph app, let's add authentication to it! 
+
+???+ tip "Placeholder token"
+    
+    In part 1, we will start with a hard-coded token for illustration purposes.
+    We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
 
 
 ## Adding Authentication

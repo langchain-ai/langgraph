@@ -17,6 +17,22 @@ While often used interchangeably, these terms represent distinct security concep
 
 In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler, and authorization is handled by your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers.
 
+## Default Security Models
+
+LangGraph Platform provides different security defaults:
+
+### LangGraph Cloud
+
+- Uses LangSmith API keys by default
+- Requires valid API key in `x-api-key` header
+- Can be customized with your auth handler
+
+### Self-Hosted
+
+- No default authentication
+- Complete flexibility to implement your security model
+- You control all aspects of authentication and authorization
+
 ## System Architecture
 
 A typical authentication setup involves three main components:
@@ -402,21 +418,6 @@ Here are all the supported action handlers:
     Runs are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model. All run operations (reading, listing) except creation are controlled by the thread's handlers.
     There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
 
-## Default Security Models
-
-LangGraph Platform provides different security defaults:
-
-### LangGraph Cloud
-
-- Uses LangSmith API keys by default
-- Requires valid API key in `x-api-key` header
-- Can be customized with your auth handler
-
-### Self-Hosted
-
-- No default authentication
-- Complete flexibility to implement your security model
-- You control all aspects of authentication and authorization
 
 ## Next Steps
 

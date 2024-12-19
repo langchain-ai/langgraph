@@ -10,6 +10,11 @@ In this tutorial, we will extend our chatbot to give each user their own private
 
 ![Authorization handlers](./img/authorization.png)
 
+???+ tip "Placeholder token"
+    
+    As we did in [part 1](getting_started.md), for this section, we will use a hard-coded token for illustration purposes.
+    We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
+
 ## Understanding Resource Authorization
 
 In the last tutorial, we controlled who could access our bot. But right now, any authenticated user can see everyone else's conversations! Let's fix that by adding [resource authorization](../../concepts/auth.md#resource-authorization).
