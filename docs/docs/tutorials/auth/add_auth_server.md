@@ -154,9 +154,10 @@ Let's test this with a real user account!
 ## Testing Authentication Flow
 
 Let's test out our new authentication flow. You can run the following code in a file or notebook. You will need to provide:
+
 - A valid email address
 - A Supabase project URL (from [above](#setup-auth-provider))
-- A Supabase service role key (also from [above](#setup-auth-provider))
+- A Supabase anon **public key** (also from [above](#setup-auth-provider))
 
 ```python
 import os
@@ -175,10 +176,12 @@ email2 = f"{base_email[0]}+2@{base_email[1]}"
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 if not SUPABASE_URL:
     SUPABASE_URL = getpass("Enter your Supabase project URL: ")
-    
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
-if not SUPABASE_SERVICE_KEY:
-    SUPABASE_SERVICE_KEY = getpass("Enter your Supabase service role key: ")
+
+# This is your PUBLIC anon key (which is safe to use client-side)
+# Do NOT mistake this for the secret service role key
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
+if not SUPABASE_ANON_KEY:
+    SUPABASE_ANON_KEY = getpass("Enter your public Supabase anon  key: ")
 
 
 async def sign_up(email: str, password: str):
@@ -187,7 +190,7 @@ async def sign_up(email: str, password: str):
         response = await client.post(
             f"{SUPABASE_URL}/auth/v1/signup",
             json={"email": email, "password": password},
-            headers={"apiKey": SUPABASE_SERVICE_KEY},
+            headers={"apiKey": SUPABASE_ANON_KEY},
         )
         assert response.status_code == 200
         return response.json()
@@ -208,15 +211,6 @@ Then run the code.
 Now let's test that users can only see their own data. Make sure the server is running (run `langgraph dev`) before proceeding. The following snippet requires the "anon public" key that you copied from the Supabase dashboard while [setting up the auth provider](#setup-auth-provider) previously. 
 
 ```python
-import os
-import httpx
-
-from langgraph_sdk import get_client
-
-SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
-if not SUPABASE_ANON_KEY:
-    SUPABASE_ANON_KEY = getpass("Enter your Supabase anon key: ")
-
 async def login(email: str, password: str):
     """Get an access token for an existing user."""
     async with httpx.AsyncClient() as client:
