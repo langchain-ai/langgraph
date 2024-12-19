@@ -8,6 +8,8 @@
 
 In this tutorial, we will extend our chatbot to give each user their own private conversations. We'll add [resource-level access control](../../concepts/auth.md#resource-level-access-control) so users can only see their own threads.
 
+![Authorization handlers](./img/authorization.png)
+
 ## Understanding Resource Authorization
 
 In the last tutorial, we controlled who could access our bot. But right now, any authenticated user can see everyone else's conversations! Let's fix that by adding [resource authorization](../../concepts/auth.md#resource-authorization).

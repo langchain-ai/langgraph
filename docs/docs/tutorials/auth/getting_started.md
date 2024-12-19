@@ -5,6 +5,16 @@
     1. Basic Authentication (you are here) - Control who can access your bot
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
     3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
+!!! tip "Prerequisites"
+
+    This guide assumes basic familiarity with the following concepts:
+
+      *  [**Authentication & Access Control**](../../concepts/auth.md)
+      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+
+!!! note "Python only"
+
+    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
 In this tutorial, we will build a chatbot that only lets specific users access it. We'll start with the LangGraph template and add token-based security step by step. By the end, you'll have a working chatbot that checks for valid tokens before allowing access.
 
@@ -32,8 +42,13 @@ If everything works, the server should start and open the studio in your browser
 > This in-memory server is designed for development and testing.
 > For production use, please use LangGraph Cloud.
 
+The graph should run, and if you were to self-host this on the public internet, anyone could access it!
+
+![No auth](./img/no_auth.png)
+
 Now that we've seen the base LangGraph app, let's add authentication to it! In part 1, we will start with a hard-coded token for illustration purposes.
 We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
+
 
 ## Adding Authentication
 
@@ -114,7 +129,11 @@ langgraph dev --no-browser
     }
     ```
 
-Now let's try to chat with our bot. Run the following code in a file or notebook:
+Now let's try to chat with our bot. If we've implemented authentication correctly, we should only be able to access the bot if we provide a valid token in the request header. Users will still, however, be able to access each other's resources until we add [resource authorization handlers](../../concepts/auth.md#resource-authorization) in the next section of our tutorial.
+
+![Authentication, no authorization handlers](./img/authentication.png)
+
+Run the following code in a file or notebook:
 
 ```python
 from langgraph_sdk import get_client
