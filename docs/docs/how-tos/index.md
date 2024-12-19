@@ -60,15 +60,50 @@ LangGraph provides [low level building primitives](../concepts/low_level.md) tha
 
     Full Example: [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 
+    Use the Send API to split your data or tasks into separate branches and process each in parallel, then combine the outputs with a “reduce” step. This lets you dynamically scale the number of parallel tasks without manually wiring each node.
+
+    ```python
+    from langgraph.types import Send
+
+    def continue_to_jokes(state):
+        # Distribute jokes generation for each subject in parallel
+        return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
+    ```
+
 ??? "How to control graph recursion limit"
 
     Full Example: [How to control graph recursion limit](recursion-limit.ipynb)
 
-    Set a [recursion limit](../concepts/low_level.md#recursion-limit) to limit the number of supersteps that the graph is allowed to execute during a single execution.
+    Use the [recursion_limit](../concepts/low_level.md#recursion-limit) parameter in your graph’s invoke method to control how many supersteps are allowed before raising a GraphRecursionError. This guards against infinite loops and excessive computation time.
+
+    ```python
+    from langgraph.errors import GraphRecursionError
+
+    try:
+        # The recursion_limit sets the max number of supersteps
+        # StateGraph, START, and END are relevant langgraph primitives.
+        graph.invoke({"aggregate": []}, {"recursion_limit": 4})
+    except GraphRecursionError:
+        print("Recursion limit exceeded!")
+    ```
 
 ??? "How to combine control flow and state updates with Command"
 
     Full Example: [How to combine control flow and state updates with Command](command.ipynb)
+
+    Use a [Command][langgraph.types.Command] return type in a node function to simultaneously update the graph’s state and conditionally decide the next node in the graph. Combining both operations in one step removes the need for separate conditional edges.
+
+    ```python
+    from typing_extensions import Literal
+    from langgraph.types import Command
+
+    def my_node(state: dict) -> Command[Literal["other_node"]]:
+        return Command(
+            update={"foo": "bar"},   # state update
+            goto="other_node"       # control flow
+        )
+    ```
+
 
 ### Persistence
 
@@ -79,21 +114,89 @@ These how-to guides show how to enable persistence:
 ??? "How to add thread-level persistence to graphs"
     Full Example: [How to add thread-level persistence to graphs](persistence.ipynb)
 
+    Use the MemorySaver checkpointer when compiling your StateGraph to store conversation data across interactions. By specifying a thread_id, you can maintain or reset memory for each conversation thread as needed. This preserves context between messages while still allowing fresh starts.
+
+    ```python
+    from langgraph.checkpoint.memory import MemorySaver
+
+    memory = MemorySaver()
+    graph = graph_builder.compile(checkpointer=memory)
+    ```
+
 ??? "How to add thread-level persistence to **subgraphs**"
     Full Example: [How to add thread-level persistence to **subgraphs**](subgraph-persistence.ipynb)
+
+    Pass a single checkpointer (e.g., MemorySaver) when compiling the parent graph, and LangGraph automatically propagates it to any child subgraphs. This avoids passing a checkpointer during subgraph compilation and ensures each thread’s state is captured at every step. 
 
 ??? "How to add **cross-thread** persistence to graphs"
     Full Example: [How to add **cross-thread** persistence to graphs](cross-thread-persistence.ipynb)
 
     Use the [**Store**][langgraph.store.base.BaseStore] API to share state across conversational threads.
+    Use a shared Store (e.g., InMemoryStore) to persist user data across different threads. Namespaces keep data for each user separate, and the graph's nodes can retrieve or store memories by referencing the store and user_id. This example demonstrates how to compile a StateGraph with MemorySaver and cross-thread persistence enabled.
+
+    ```python
+    from langgraph.store.memory import InMemoryStore
+    from langgraph.graph import StateGraph, MessagesState, START
+    from langgraph.checkpoint.memory import MemorySaver
+
+    # Initialize a store to hold data across threads
+    store = InMemoryStore()
+
+    def my_node(state, config, *, store):
+        # Use store to retrieve or store data as needed
+        user_id = config["configurable"]["user_id"]
+        namespace = ("memories", user_id)
+        # For example, store.put(namespace, "key", {"data": "Some info"})
+        return state
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("my_node", my_node)
+    builder.add_edge(START, "my_node")
+
+    # Pass the store when compiling, along with a checkpointer
+    graph = builder.compile(checkpointer=MemorySaver(), store=store)
+    ```
 
 During development, you will often be using the [MemorySaver][langgraph.checkpoint.memory.MemorySaver] checkpointer. For production use, you will want to persist the data to a database. These how-to guides show how to use different databases for persistence:
 
 ??? "How to use Postgres checkpointer for persistence"
     Full Example: [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 
+    Use PostgresSaver or its async variant (AsyncPostgresSaver) from langgraph.checkpoint.postgres to persist conversation or graph states in a PostgreSQL database, enabling your agents or graphs to retain context between runs. Just provide a psycopg connection/pool or a conn string, call setup() once, and pass the checkpointer when compiling (or creating) your StateGraph or agent.
+
+    ```python
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.prebuilt import create_react_agent
+    from psycopg import Connection
+
+    DB_URI = "postgresql://user:password@host:port/db"
+
+    with Connection.connect(DB_URI, autocommit=True) as conn:
+        checkpointer = PostgresSaver(conn)
+        checkpointer.setup()  # Creates necessary tables if not already present
+        graph = create_react_agent(model=..., tools=..., checkpointer=checkpointer)
+        result = graph.invoke({"messages": [("human", "Hello!")]}, config={"configurable": {"thread_id": "example"}})
+    ```
+
 ??? "How to use MongoDB checkpointer for persistence"
     Full Example: [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
+
+    Use the MongoDB checkpointer (MongoDBSaver) from langgraph-checkpoint-mongodb to store and retrieve your graph's state so you can persist interactions across multiple runs. Simply pass the checkpointer into the create_react_agent (or any compiled graph) to automatically handle saving and loading state from your MongoDB instance.
+
+    ```python
+    from langgraph.checkpoint.mongodb import MongoDBSaver
+    from langgraph.prebuilt import create_react_agent
+    from langchain_openai import ChatOpenAI
+
+    MONGODB_URI = "mongodb://localhost:27017"
+    model = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
+    tools = []  # define your tools here
+
+    with MongoDBSaver.from_conn_string(MONGODB_URI) as checkpointer:
+        graph = create_react_agent(model, tools=tools, checkpointer=checkpointer)
+        response = graph.invoke({"messages": [("user", "What's the weather in sf?")]})
+        print(response)
+    ```
 
 ??? "How to create a custom checkpointer using Redis"
     Full Example: [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
@@ -109,23 +212,86 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 
     **Trim** or **filter** messages from the conversation history to fit within the chat model's context window size.
 
+
 ??? "How to delete messages"
     Full Example: [How to delete messages](memory/delete-messages.ipynb)
 
-    **Delete** messages from the history using the built-in [RemoveMessages](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.modifier.RemoveMessage.html#langchain_core.messages.modifier.RemoveMessage) primitive.
+    You can remove messages from a conversation by passing RemoveMessage objects to the state, provided your MessagesState (or similar) is set up with a reducer that processes them. This helps keep the message list concise and maintain model requirements (e.g. not starting with an AI message). Make sure the remaining conversation flow still follows any format rules your model requires.
+
+    ```python
+    # Minimal example illustrating message removal:
+    from langchain_core.messages import RemoveMessage
+
+    # Suppose 'app' is a compiled StateGraph using a MessagesState reducer
+    # and 'config' is your configuration dictionary with a specific thread_id.
+    messages = app.get_state(config).values["messages"]
+    message_id_to_remove = messages[0].id
+
+    app.update_state(
+        config,
+        {"messages": RemoveMessage(id=message_id_to_remove)}
+    )
+
+    # 'messages[0]' is now deleted from the conversation state.
+    ```
 
 ??? "How to add summary conversation memory"
     Full Example: [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
 
     Implement a **running summary** of the conversation history to fit within the chat model's context window size.
 
+
 Cross-thread memory:
 
 ??? "How to add long-term memory (cross-thread)"
     Full Example: [How to add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
 
+    Use the [**Store**][langgraph.store.base.BaseStore] API to share state across conversational threads.
+    Use a shared Store (e.g., InMemoryStore) to persist user data across different threads. Namespaces keep data for each user separate, and the graph's nodes can retrieve or store memories by referencing the store and user_id. This example demonstrates how to compile a StateGraph with MemorySaver and cross-thread persistence enabled.
+
+    ```python
+    from langgraph.store.memory import InMemoryStore
+    from langgraph.graph import StateGraph, MessagesState, START
+    from langgraph.checkpoint.memory import MemorySaver
+
+    # Initialize a store to hold data across threads
+    store = InMemoryStore()
+
+    def my_node(state, config, *, store):
+        # Use store to retrieve or store data as needed
+        user_id = config["configurable"]["user_id"]
+        namespace = ("memories", user_id)
+        # For example, store.put(namespace, "key", {"data": "Some info"})
+        return state
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("my_node", my_node)
+    builder.add_edge(START, "my_node")
+
+    # Pass the store when compiling, along with a checkpointer
+    graph = builder.compile(checkpointer=MemorySaver(), store=store)
+    ```
+
 ??? "How to use semantic search for long-term memory"
     Full Example: [How to use semantic search for long-term memory](memory/semantic-search.ipynb)
+
+    Enable semantic search in your agent by providing an index configuration (e.g., embeddings, vector dimensions) when creating an InMemoryStore. Then, simply store entries with store.put(...) and retrieve semantically similar items using store.search(...).
+
+    ```python
+    from langchain.embeddings import init_embeddings
+    from langgraph.store.memory import InMemoryStore
+
+    # Initialize embeddings and store
+    embeddings = init_embeddings("openai:text-embedding-3-small")
+    store = InMemoryStore(index={"embed": embeddings, "dims": 1536})
+
+    # Store some items
+    store.put(("agent_id", "memories"), "1", {"text": "I love pizza"})
+
+    # Search semantically
+    results = store.search(("agent_id", "memories"), "food preferences", limit=1)
+    print(results)
+    ```
 
 ### Human-in-the-loop
 
@@ -148,7 +314,15 @@ Other methods:
 ??? "How to add static breakpoints"
     Full Example: [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb)
 
-    Use for debugging purposes. For [**human-in-the-loop**](../concepts/human_in_the_loop.md) workflows, we recommend the [`interrupt` function][langgraph.types.interrupt] instead.
+    Static breakpoints are used to pause graph execution at predetermined nodes, aiding in debugging and inspection of state at specific stages. You can set these breakpoints at compile time or run time by specifying `interrupt_before` and `interrupt_after` parameters. Here's a quick example:
+    
+    ```python
+    graph = graph_builder.compile(
+        interrupt_before=["node_a"], 
+        interrupt_after=["node_b", "node_c"]
+    )
+    ```
+
 
 ??? "How to edit graph state"
     Full Example: [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
