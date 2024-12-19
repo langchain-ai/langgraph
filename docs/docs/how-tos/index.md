@@ -188,7 +188,7 @@ Working with chat models:
     Use LangChain's **callback system** to stream tokens from a custom LLM that is not a [LangChain Chat Model](https://python.langchain.com/docs/concepts/chat_models/).
 
 ??? "How to stream events from within a tool without LangChain models"
-Full Example: [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
+	Full Example: [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 
 
 ### Tool Calling
@@ -350,92 +350,164 @@ The LangGraph Platform offers a few different deployment options described in th
 
 Learn how to set up your app for deployment to LangGraph Platform:
 
-- [How to set up app for deployment (requirements.txt)](../cloud/deployment/setup.md)
-- [How to set up app for deployment (pyproject.toml)](../cloud/deployment/setup_pyproject.md)
-- [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
-- [How to add semantic search](../cloud/deployment/semantic_search.md)
-- [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
-- [How to test locally](../cloud/deployment/test_locally.md)
-- [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
-- [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
+??? "How to set up app for deployment"
+
+    *  [How to set up app for deployment (requirements.txt)](../cloud/deployment/setup.md)
+    *  [How to set up app for deployment (pyproject.toml)](../cloud/deployment/setup_pyproject.md)
+    *  [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
+
+??? "How to customize Dockerfile"
+
+    Full Example: [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
+
+??? "How to test locally"
+
+    Full Example: [How to test locally](../cloud/deployment/test_locally.md)
+
+??? "How to rebuild graph at runtime"
+
+    Full Example: [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+
+??? "How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks"
+
+    Full Example: [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
+
 
 ### Deployment
 
 LangGraph applications can be deployed using LangGraph Cloud, which provides a range of services to help you deploy, manage, and scale your applications.
 
-- [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
-- [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
-- [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
+??? "How to deploy to LangGraph cloud"
+	Full Example: [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
+
+??? "How to deploy to a self-hosted environment"
+	Full Example: [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
+
+??? "How to interact with the deployment using RemoteGraph"
+	Full Example: [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
 
 ### Assistants
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.
 
-- [How to configure agents](../cloud/how-tos/configuration_cloud.md)
-- [How to version assistants](../cloud/how-tos/assistant_versioning.md)
+??? "How to configure agents"
+	Full Example: [How to configure agents](../cloud/how-tos/configuration_cloud.md)
+
+??? "How to version assistants"
+	Full Example: [How to version assistants](../cloud/how-tos/assistant_versioning.md)
 
 ### Threads
 
-- [How to copy threads](../cloud/how-tos/copy_threads.md)
-- [How to check status of your threads](../cloud/how-tos/check_thread_status.md)
+??? "How to copy threads"
+	Full Example: [How to copy threads](../cloud/how-tos/copy_threads.md)
+
+??? "How to check status of your threads"
+	Full Example: [How to check status of your threads](../cloud/how-tos/check_thread_status.md)
 
 ### Runs
 
 LangGraph Platform supports multiple types of runs besides streaming runs.
 
-- [How to run an agent in the background](../cloud/how-tos/background_run.md)
-- [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
-- [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
-- [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
+??? "How to run an agent in the background"
+	Full Example: [How to run an agent in the background](../cloud/how-tos/background_run.md)
+
+??? "How to run multiple agents in the same thread"
+	Full Example: [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
+
+??? "How to create cron jobs"
+	Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
+
+??? "How to create stateless runs"
+	Full Example: [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
 
 ### Streaming
 
-Streaming the results of your LLM application is vital for ensuring a good user experience, especially when your graph may call multiple models and take a long time to fully complete a run. Read about how to stream values from your graph in these how to guides:
+Streaming the results of your LLM application is vital for ensuring a good user experience, especially when your graph may call multiple models and take a long time to fully complete a run. Read about how to stream values from your graph in these how-to guides:
 
-- [How to stream values](../cloud/how-tos/stream_values.md)
-- [How to stream updates](../cloud/how-tos/stream_updates.md)
-- [How to stream messages](../cloud/how-tos/stream_messages.md)
-- [How to stream events](../cloud/how-tos/stream_events.md)
-- [How to stream in debug mode](../cloud/how-tos/stream_debug.md)
-- [How to stream multiple modes](../cloud/how-tos/stream_multiple.md)
+??? "How to stream values"
+	Full Example: [How to stream values](../cloud/how-tos/stream_values.md)
+
+??? "How to stream updates"
+	Full Example: [How to stream updates](../cloud/how-tos/stream_updates.md)
+
+??? "How to stream messages"
+	Full Example: [How to stream messages](../cloud/how-tos/stream_messages.md)
+
+??? "How to stream events"
+	Full Example: [How to stream events](../cloud/how-tos/stream_events.md)
+
+??? "How to stream in debug mode"
+	Full Example: [How to stream in debug mode](../cloud/how-tos/stream_debug.md)
+
+??? "How to stream multiple modes"
+	Full Example: [How to stream multiple modes](../cloud/how-tos/stream_multiple.md)
 
 ### Human-in-the-loop
 
 When designing complex graphs, relying entirely on the LLM for decision-making can be risky, particularly when it involves tools that interact with files, APIs, or databases. These interactions may lead to unintended data access or modifications, depending on the use case. To mitigate these risks, LangGraph allows you to integrate human-in-the-loop behavior, ensuring your LLM applications operate as intended without undesirable outcomes.
 
-- [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
-- [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
-- [How to edit graph state](../cloud/how-tos/human_in_the_loop_edit_state.md)
-- [How to replay and branch from prior states](../cloud/how-tos/human_in_the_loop_time_travel.md)
-- [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
+??? "How to add a breakpoint"
+	Full Example: [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
+
+??? "How to wait for user input"
+	Full Example: [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
+
+??? "How to edit graph state"
+	Full Example: [How to edit graph state](../cloud/how-tos/human_in_the_loop_edit_state.md)
+
+??? "How to replay and branch from prior states"
+	Full Example: [How to replay and branch from prior states](../cloud/how-tos/human_in_the_loop_time_travel.md)
+
+??? "How to review tool calls"
+	Full Example: [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
 
 ### Double-texting
 
 Graph execution can take a while, and sometimes users may change their mind about the input they wanted to send before their original input has finished running. For example, a user might notice a typo in their original request and will edit the prompt and resend it. Deciding what to do in these cases is important for ensuring a smooth user experience and preventing your graphs from behaving in unexpected ways.
 
-- [How to use the interrupt option](../cloud/how-tos/interrupt_concurrent.md)
-- [How to use the rollback option](../cloud/how-tos/rollback_concurrent.md)
-- [How to use the reject option](../cloud/how-tos/reject_concurrent.md)
-- [How to use the enqueue option](../cloud/how-tos/enqueue_concurrent.md)
+??? "How to use the interrupt option"
+	Full Example: [How to use the interrupt option](../cloud/how-tos/interrupt_concurrent.md)
+
+??? "How to use the rollback option"
+	Full Example: [How to use the rollback option](../cloud/how-tos/rollback_concurrent.md)
+
+??? "How to use the reject option"
+	Full Example: [How to use the reject option](../cloud/how-tos/reject_concurrent.md)
+
+??? "How to use the enqueue option"
+	Full Example: [How to use the enqueue option](../cloud/how-tos/enqueue_concurrent.md)
 
 ### Webhooks
 
-- [How to integrate webhooks](../cloud/how-tos/webhooks.md)
+??? "How to integrate webhooks"
+	Full Example: [How to integrate webhooks](../cloud/how-tos/webhooks.md)
 
 ### Cron Jobs
 
-- [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
+??? "How to create cron jobs"
+	Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 
 ### LangGraph Studio
 
 LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
 
-- [How to connect to a LangGraph Cloud deployment](../cloud/how-tos/test_deployment.md)
-- [How to connect to a local dev server](../how-tos/local-studio.md)
-- [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
-- [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
-- [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
-- [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
+??? "How to connect to a LangGraph Cloud deployment"
+	Full Example: [How to connect to a LangGraph Cloud deployment](../cloud/how-tos/test_deployment.md)
+
+??? "How to connect to a local dev server"
+	Full Example: [How to connect to a local dev server](../how-tos/local-studio.md)
+
+??? "How to connect to a local deployment (Docker)"
+	Full Example: [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
+
+??? "How to test your graph in LangGraph Studio (MacOS only)"
+	Full Example: [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
+
+??? "How to interact with threads in LangGraph Studio"
+	Full Example: [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
+
+??? "How to add nodes as dataset examples in LangGraph Studio"
+	Full Example: [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
 
 ## Troubleshooting
 
