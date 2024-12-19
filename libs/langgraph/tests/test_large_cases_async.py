@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from typing import (
     Annotated,
     Any,
-    AnyStr,
     AsyncIterator,
     Literal,
     Optional,
@@ -23,20 +22,20 @@ from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
+from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import END, FF_SEND_V2, PULL, PUSH, START
 from langgraph.graph.graph import Graph
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
-from langgraph.managed.context import Context
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
-from tests.any_str import AnyDict
+from tests.any_str import AnyDict, AnyStr
 from tests.conftest import ALL_CHECKPOINTERS_ASYNC, awith_checkpointer
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
@@ -46,6 +45,8 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+
+pytestmark = pytest.mark.anyio
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
