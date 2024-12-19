@@ -35,7 +35,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
-from tests.any_str import AnyStr, AnyDict
+from tests.any_str import AnyDict, AnyStr
 from tests.conftest import ALL_CHECKPOINTERS_ASYNC, awith_checkpointer
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
@@ -47,6 +47,7 @@ from tests.messages import (
 )
 
 pytestmark = pytest.mark.anyio
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_invoke_two_processes_in_out_interrupt(
