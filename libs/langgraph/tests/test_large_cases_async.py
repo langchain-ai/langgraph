@@ -2786,10 +2786,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
             ),
             next=("tools",),
-            config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-            created_at=(
-                await app_w_interrupt.checkpointer.aget_tuple(config)
-            ).checkpoint["ts"],
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            created_at=AnyStr(),
             metadata={
                 "parents": {},
                 "source": "loop",
@@ -2797,9 +2801,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 "writes": None,
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         # modify ai message
@@ -2851,9 +2859,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2978,9 +2990,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         await app_w_interrupt.aupdate_state(
@@ -3028,9 +3044,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         # interrupt before tools
@@ -3065,7 +3085,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             },
             {"__interrupt__": ()},
         ]
-
+        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
                 "messages": [
@@ -3111,10 +3131,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
             ),
             next=("tools",),
-            config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-            created_at=(
-                await app_w_interrupt.checkpointer.aget_tuple(config)
-            ).checkpoint["ts"],
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "loop",
@@ -3122,9 +3140,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 "writes": None,
                 "thread_id": "2",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         # modify ai message
@@ -3176,9 +3198,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -3305,9 +3331,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
         await app_w_interrupt.aupdate_state(
@@ -3355,9 +3385,13 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+                ][-1].config
+            ),
         )
 
 
@@ -7040,15 +7074,22 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         )
         assert actual_snapshot == expected_snapshot
+
+        if "shallow" in checkpointer_name:
+            return
 
         # test full history
         actual_history = [c async for c in graph.aget_state_history(config)]

@@ -720,22 +720,25 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             "my_key": "value ⛰️ one",
             "market": "DE",
         }
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": {"tool_one": {"my_key": " one"}},
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+
+        if "shallow" not in checkpointer_name:
+            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": {"tool_one": {"my_key": " one"}},
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
+
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️ one", "market": "DE"},
@@ -763,9 +766,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "writes": {"tool_one": {"my_key": " one"}},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
         # clear the interrupt and next tasks
         await tool_two.aupdate_state(thread1, None)
@@ -791,9 +798,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
 
@@ -2364,7 +2375,7 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     if not FF_SEND_V2:
         pytest.skip("Send deduplication is only available in Send V2")
@@ -2817,13 +2828,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -2900,13 +2915,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -2976,13 +2995,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "3",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "3",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3085,13 +3108,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "3",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "3",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
