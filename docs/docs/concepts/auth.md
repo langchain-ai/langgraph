@@ -342,10 +342,6 @@ async def rbac_create(ctx: Auth.types.AuthContext, value: dict):
 
 ## Supported Resources
 
-LangGraph provides authorization handlers for the following resource types:
-
-## Supported Resources
-
 LangGraph provides three levels of authorization handlers, from most general to most specific:
 
 1. **Global Handler** (`@auth.on`): Matches all resources and actions
