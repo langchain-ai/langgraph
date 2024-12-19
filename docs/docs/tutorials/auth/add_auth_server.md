@@ -66,13 +66,10 @@ Since we're using Supabase for this, we can do this in the Supabase dashboard:
 ```shell
 echo "SUPABASE_URL=your-project-url" >> .env
 ```
-
 3. Next, copy your service role secret key and add it to your `.env` file
-
 ```shell
 echo "SUPABASE_SERVICE_KEY=your-service-role-key" >> .env
 ```
-
 4. Finally, copy your "anon public" key and note it down. This will be used later when we set up our client code.
 
 ```bash
