@@ -132,6 +132,13 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 
 
 class ShallowPostgresSaver(BasePostgresSaver):
+    """A checkpoint saver that uses Postgres to store checkpoints.
+
+    This checkpointer ONLY stores the most recent checkpoint and does NOT retain any history.
+    It is meant to be a light-weight drop-in replacement for the PostgresSaver that
+    supports most of the LangGraph persistence functionality with the exception of time travel.
+    """
+
     SELECT_SQL = SELECT_SQL
     MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
@@ -179,7 +186,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     else ("empty", None)
                 ),
             )
-            for k, ver in versions.items()
+            for k in versions
         ]
 
     @classmethod
@@ -239,6 +246,12 @@ class ShallowPostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
+        """List checkpoints from the database.
+
+        This method retrieves a list of checkpoint tuples from the Postgres database based
+        on the provided config. For ShallowPostgresSaver, this method returns a list with
+        ONLY the most recent checkpoint.
+        """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where
         if limit:
@@ -265,6 +278,38 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database.
+
+        This method retrieves a checkpoint tuple from the Postgres database based on the
+        provided config (matching the thread ID in the config).
+
+        Args:
+            config (RunnableConfig): The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+
+        Examples:
+
+            Basic:
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
+
+            With timestamp:
+
+            >>> config = {
+            ...    "configurable": {
+            ...        "thread_id": "1",
+            ...        "checkpoint_ns": "",
+            ...        "checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875",
+            ...    }
+            ... }
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
+        """  # noqa
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         args = (thread_id, checkpoint_ns)
@@ -303,6 +348,31 @@ class ShallowPostgresSaver(BasePostgresSaver):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
+        """Save a checkpoint to the database.
+
+        This method saves a checkpoint to the Postgres database. The checkpoint is associated
+        with the provided config.
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (ChannelVersions): New channel versions as of this write.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+
+        Examples:
+
+            >>> from langgraph.checkpoint.postgres import ShallowPostgresSaver
+            >>> DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+            >>> with ShallowPostgresSaver.from_conn_string(DB_URI) as memory:
+            >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
+            >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
+            >>> print(saved_config)
+            {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
+        """
         configurable = config["configurable"].copy()
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
@@ -317,6 +387,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
         }
 
         with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                """DELETE FROM checkpoint_writes
+                WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id NOT IN (%s, %s)""",
+                (
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint["id"],
+                    configurable.get("checkpoint_id", ""),
+                ),
+            )
             cur.executemany(
                 self.UPSERT_CHECKPOINT_BLOBS_SQL,
                 self._dump_blobs(
