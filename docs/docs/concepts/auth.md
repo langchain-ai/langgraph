@@ -139,7 +139,7 @@ The returned user information is available:
 
 After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
-1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly.
+1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](##supported-actions) for the list of types the value can take for each action.
 2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
 3. Raise an HTTP exception if access is denied.
 
@@ -393,6 +393,7 @@ If a more specific handler is registered, the more general handler will not be c
     ```
     More specific handlers provide better type hints since they handle fewer action types.
 
+#### Supported actions and types {#supported-actions}
 Here are all the supported action handlers:
 
 | Resource | Handler | Description | Value Type |
