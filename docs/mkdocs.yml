@@ -73,7 +73,7 @@ plugins:
             allow_inspection: true
             heading_level: 2
             show_bases: true
-            show_source: true
+            show_source: false 
             summary: true
             inherited_members: true
             selection:
