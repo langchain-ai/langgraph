@@ -6098,7 +6098,11 @@ def test_dynamic_interrupt_subgraph(
         parent_config=(
             None
             if "shallow" in checkpointer_name
-            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+            else list(
+                tool_two.checkpointer.list(
+                    {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
+                )
+            )[-1].config
         ),
     )
     # clear the interrupt and next tasks
@@ -6126,7 +6130,11 @@ def test_dynamic_interrupt_subgraph(
         parent_config=(
             None
             if "shallow" in checkpointer_name
-            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+            else list(
+                tool_two.checkpointer.list(
+                    {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
+                )
+            )[-1].config
         ),
     )
 

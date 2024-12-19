@@ -4660,11 +4660,6 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
         ],
         "user_name": "Meow",
     }
-    expected_parent_config = (
-        None
-        if "shallow" in checkpointer_name
-        else list(graph.checkpointer.list(config, limit=2))[-1].config
-    )
     assert graph.get_state(config) == StateSnapshot(
         values={
             "messages": [
@@ -4694,7 +4689,17 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             "parents": {},
         },
         created_at=AnyStr(),
-        parent_config=expected_parent_config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            }
+        ),
         tasks=(),
     )
 

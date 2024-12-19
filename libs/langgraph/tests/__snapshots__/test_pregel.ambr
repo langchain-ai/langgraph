@@ -2891,7 +2891,7 @@
   
   '''
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge[shallow_postgres]
+# name: test_in_one_fan_out_state_graph_waiting_edge[postgres_shallow]
   '''
   graph TD;
   	__start__ --> rewrite_query;
@@ -3407,7 +3407,7 @@
     'type': 'object',
   })
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[shallow_postgres]
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_shallow]
   '''
   graph TD;
   	__start__ --> rewrite_query;
@@ -3420,7 +3420,7 @@
   
   '''
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[shallow_postgres].1
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_shallow].1
   dict({
     'definitions': dict({
       'InnerObject': dict({
@@ -3454,7 +3454,7 @@
     'type': 'object',
   })
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[shallow_postgres].2
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_shallow].2
   dict({
     'properties': dict({
       'answer': dict({
@@ -4024,7 +4024,7 @@
     'type': 'object',
   })
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[shallow_postgres]
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_shallow]
   '''
   graph TD;
   	__start__ --> rewrite_query;
@@ -4037,7 +4037,7 @@
   
   '''
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[shallow_postgres].1
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_shallow].1
   dict({
     '$defs': dict({
       'InnerObject': dict({
@@ -4071,7 +4071,7 @@
     'type': 'object',
   })
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[shallow_postgres].2
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_shallow].2
   dict({
     'properties': dict({
       'answer': dict({
@@ -4242,7 +4242,7 @@
   
   '''
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[shallow_postgres]
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres_shallow]
   '''
   graph TD;
   	__start__ --> rewrite_query;

@@ -14,7 +14,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.duckdb import DuckDBSaver
 from langgraph.checkpoint.duckdb.aio import AsyncDuckDBSaver
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.postgres.aio import (
+    AsyncPostgresSaver,
+    AsyncShallowPostgresSaver,
+)
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.store.base import BaseStore
@@ -101,7 +104,7 @@ def checkpointer_postgres():
 
 
 @pytest.fixture(scope="function")
-def checkpointer_shallow_postgres():
+def checkpointer_postgres_shallow():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -187,6 +190,31 @@ async def _checkpointer_postgres_aio():
 
 
 @asynccontextmanager
+async def _checkpointer_postgres_aio_shallow():
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        # yield checkpointer
+        async with AsyncShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database
+        ) as checkpointer:
+            await checkpointer.setup()
+            yield checkpointer
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@asynccontextmanager
 async def _checkpointer_postgres_aio_pipe():
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
@@ -258,6 +286,9 @@ async def awith_checkpointer(
             yield checkpointer
     elif checkpointer_name == "postgres_aio":
         async with _checkpointer_postgres_aio() as checkpointer:
+            yield checkpointer
+    elif checkpointer_name == "postgres_aio_shallow":
+        async with _checkpointer_postgres_aio_shallow() as checkpointer:
             yield checkpointer
     elif checkpointer_name == "postgres_aio_pipe":
         async with _checkpointer_postgres_aio_pipe() as checkpointer:
@@ -436,7 +467,7 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
         raise NotImplementedError(f"Unknown store {store_name}")
 
 
-SHALLOW_CHECKPOINTERS_SYNC = ["shallow_postgres"]
+SHALLOW_CHECKPOINTERS_SYNC = ["postgres_shallow"]
 REGULAR_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
@@ -448,12 +479,17 @@ ALL_CHECKPOINTERS_SYNC = [
     *REGULAR_CHECKPOINTERS_SYNC,
     *SHALLOW_CHECKPOINTERS_SYNC,
 ]
-ALL_CHECKPOINTERS_ASYNC = [
+SHALLOW_CHECKPOINTERS_ASYNC = ["postgres_aio_shallow"]
+REGULAR_CHECKPOINTERS_ASYNC = [
     "memory",
     "sqlite_aio",
     "postgres_aio",
     "postgres_aio_pipe",
     "postgres_aio_pool",
+]
+ALL_CHECKPOINTERS_ASYNC = [
+    *REGULAR_CHECKPOINTERS_ASYNC,
+    *SHALLOW_CHECKPOINTERS_ASYNC,
 ]
 ALL_CHECKPOINTERS_ASYNC_PLUS_NONE = [
     *ALL_CHECKPOINTERS_ASYNC,
