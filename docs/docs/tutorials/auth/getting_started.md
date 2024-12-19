@@ -5,6 +5,16 @@
     1. Basic Authentication (you are here) - Control who can access your bot
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
     3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
+!!! tip "Prerequisites"
+
+    This guide assumes basic familiarity with the following concepts:
+
+      *  [**Authentication & Access Control**](../../concepts/auth.md)
+      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+
+!!! note "Python only"
+
+    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
 In this tutorial, we will build a chatbot that only lets specific users access it. We'll start with the LangGraph template and add token-based security step by step. By the end, you'll have a working chatbot that checks for valid tokens before allowing access.
 
