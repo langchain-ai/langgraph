@@ -41,10 +41,10 @@ The [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth
 
 Create a new file `src/security/auth.py`. This is where our code will live to check if users are allowed to access our bot:
 
-```python
+```python hl_lines="10 15-16" title="src/security/auth.py"
 from langgraph_sdk import Auth
 
-# This is our toy user database
+# This is our toy user database. Do not do this in production
 VALID_TOKENS = {
     "user1-token": {"id": "user1", "name": "Alice"},
     "user2-token": {"id": "user2", "name": "Bob"},
@@ -80,8 +80,13 @@ Notice that our [authentication](../../cloud/reference/sdk/python_sdk_ref.md#lan
 
 Now tell LangGraph to use our authentication by adding the following to the [`langgraph.json`](../../cloud/reference/cli.md#configuration-file) configuration:
 
-```json
+```json hl_lines="7-9" title="langgraph.json"
 {
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "./src/agent/graph.py:graph"
+  },
+  "env": ".env",
   "auth": {
     "path": "src/security/auth.py:auth"
   }
