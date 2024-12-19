@@ -103,6 +103,10 @@ bob = get_client(
     headers={"Authorization": "Bearer user2-token"}
 )
 
+# Alice creates an assistant
+alice_assistant = await alice.assistants.create()
+print(f"✅ Alice created assistant: {alice_assistant['assistant_id']}")
+
 # Alice creates a thread and chats
 alice_thread = await alice.threads.create()
 print(f"✅ Alice created thread: {alice_thread['thread_id']}")
@@ -130,16 +134,16 @@ await bob.runs.create(
 print(f"✅ Bob created his own thread: {bob_thread['thread_id']}")
 
 # List threads - each user only sees their own
-alice_threads = await alice.threads.list()
-bob_threads = await bob.threads.list()
+alice_threads = await alice.threads.search()
+bob_threads = await bob.threads.search()
 print(f"✅ Alice sees {len(alice_threads)} thread")
 print(f"✅ Bob sees {len(bob_threads)} thread")
-
 ```
 
 Run the test code and you should see output like this:
 
 ```bash
+✅ Alice created assistant: fc50fb08-78da-45a9-93cc-1d3928a3fc37
 ✅ Alice created thread: 533179b7-05bc-4d48-b47a-a83cbdb5781d
 ✅ Bob correctly denied access: Client error '404 Not Found' for url 'http://localhost:2024/threads/533179b7-05bc-4d48-b47a-a83cbdb5781d'
 For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
@@ -197,26 +201,24 @@ async def on_thread_read(
     """
     return {"owner": ctx.user.identity}
 
-@auth.on.threads.create_run
-async def on_run_create(
+@auth.on.assistants
+async def on_assistants(
     ctx: Auth.types.AuthContext,
-    value: Auth.types.on.threads.create_run.value,
+    value: Auth.types.on.assistants.value,
 ):
-    """Only let thread owners create runs.
-    
-    This handler runs when creating runs on a thread. The filter
-    applies to the parent thread, not the run being created.
-    This ensures only thread owners can create runs on their threads.
-    """
-    return {"owner": ctx.user.identity}
+    # For illustration purposes, we will deny all requests
+    # that touch the assistants resource
+    raise Auth.exceptions.HTTPException(
+        status_code=403,
+        detail="User lacks the required permissions.",
+    )
 ```
 
 Notice that instead of one global handler, we now have specific handlers for:
 
 1. Creating threads
 2. Reading threads
-3. Creating runs
-4. Accessing assistants
+3. Accessing assistants
 
 The first three of these match specific **actions** on each resource (see [resource actions](../../concepts/auth.md#resource-actions)), while the last one (`@auth.on.assistants`) matches _any_ action on the `assistants` resource. For each request, LangGraph will run the most specific handler that matches the resource and action being accessed. This means that the four handlers above will run rather than the broadly scoped "`@auth.on`" handler.
 
@@ -237,6 +239,10 @@ try:
     print("❌ Alice shouldn't be able to search assistants!")
 except Exception as e:
     print("✅ Alice correctly denied access to searching assistants:", e)
+
+# Alice can still create threads
+alice_thread = await alice.threads.create()
+print(f"✅ Alice created thread: {alice_thread['thread_id']}")
 ```
 
 And then run the test code again:

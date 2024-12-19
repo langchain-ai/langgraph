@@ -82,7 +82,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
         url="http://localhost:2024",
         headers={"Authorization": f"Bearer {my_token}"}
     )
-    threads = await client.threads.list()
+    threads = await client.threads.search()
     ```
 
 === "Python RemoteGraph"
@@ -96,7 +96,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
         url="http://localhost:2024",
         headers={"Authorization": f"Bearer {my_token}"}
     )
-    threads = await remote_graph.threads.list()
+    threads = await remote_graph.ainvoke(...)
     ```
 
 === "JavaScript Client"
@@ -109,7 +109,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
       apiUrl: "http://localhost:2024",
       headers: { Authorization: `Bearer ${my_token}` },
     });
-    const threads = await client.threads.list();
+    const threads = await client.threads.search();
     ```
 
 === "JavaScript RemoteGraph"
@@ -123,7 +123,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
       url: "http://localhost:2024",
       headers: { Authorization: `Bearer ${my_token}` },
     });
-    const threads = await remoteGraph.threads.list();
+    const threads = await remoteGraph.invoke(...);
     ```
 
 === "CURL"
