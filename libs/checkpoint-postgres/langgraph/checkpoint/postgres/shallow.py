@@ -19,8 +19,7 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
+from langgraph.checkpoint.serde.types import TASKS
 
 Conn = _internal.Conn  # For backward compatibility
 
@@ -219,8 +218,30 @@ class ShallowPostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
-        checkpoint_tuple = self.get_tuple(config)
-        return [] if checkpoint_tuple is None else [checkpoint_tuple]
+        where, args = self._search_where(config, filter, before)
+        query = self.SELECT_SQL + where
+        if limit:
+            query += f" LIMIT {limit}"
+        with self._cursor() as cur:
+            cur.execute(self.SELECT_SQL + where, args, binary=True)
+            for value in cur:
+                checkpoint = self._load_checkpoint(
+                    value["checkpoint"],
+                    value["channel_values"],
+                    value["pending_sends"],
+                )
+                yield CheckpointTuple(
+                    config={
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": checkpoint["id"],
+                        }
+                    },
+                    checkpoint=checkpoint,
+                    metadata=self._load_metadata(value["metadata"]),
+                    pending_writes=self._load_writes(value["pending_writes"]),
+                )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         thread_id = config["configurable"]["thread_id"]
