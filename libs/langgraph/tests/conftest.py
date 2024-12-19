@@ -13,7 +13,7 @@ from pytest_mock import MockerFixture
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.duckdb import DuckDBSaver
 from langgraph.checkpoint.duckdb.aio import AsyncDuckDBSaver
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -97,6 +97,25 @@ def checkpointer_postgres():
     try:
         # yield checkpointer
         with PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database
+        ) as checkpointer:
+            checkpointer.setup()
+            yield checkpointer
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(scope="function")
+def checkpointer_shallow_postgres():
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        # yield checkpointer
+        with ShallowPostgresSaver.from_conn_string(
             DEFAULT_POSTGRES_URI + database
         ) as checkpointer:
             checkpointer.setup()
@@ -424,9 +443,7 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
         raise NotImplementedError(f"Unknown store {store_name}")
 
 
-SHALLOW_CHECKPOINTERS_SYNC = [
-    "shallow_memory",
-]
+SHALLOW_CHECKPOINTERS_SYNC = ["shallow_memory", "shallow_postgres"]
 REGULAR_CHECKPOINTERS_SYNC = [
     "memory",
     "sqlite",
