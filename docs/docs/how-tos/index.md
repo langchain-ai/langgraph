@@ -13,33 +13,40 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 
 ### Controllability
 
-LangGraph offers a high level of control over the execution of your graph.
-
-These how-to guides show how to achieve that controllability.
+LangGraph provides [low level building primitives](../concepts/low_level.md) that give you control over how you build and execute the graph.
 
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
-- [How to control graph recursion limit](recursion-limit.ipynb)
+- [How to control graph recursion limit](recursion-limit.ipynb): Set a [recursion limit](../concepts/low_level.md#recursion-limit) to limit the number of supersteps that the graph is allowed to execute during a single execution.
 - [How to combine control flow and state updates with Command](command.ipynb)
 
 ### Persistence
 
-[LangGraph Persistence](../concepts/persistence.md) makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
+[LangGraph Persistence](../concepts/persistence.md) makes it easy to persist state across graph runs (**thread-level** persistence) and across threads (**cross-thread** persistence). 
 
-- [How to add thread-level persistence to your graph](persistence.ipynb)
-- [How to add thread-level persistence to subgraphs](subgraph-persistence.ipynb)
-- [How to add cross-thread persistence to your graph](cross-thread-persistence.ipynb)
+These how-to guides show how to enable persistence:
+
+- [How to add thread-level persistence to graphs](persistence.ipynb)
+- [How to add thread-level persistence to **subgraphs**](subgraph-persistence.ipynb)
+- [How to add **cross-thread** persistence to graphs](cross-thread-persistence.ipynb): Use the [**Store**][langgraph.store.base.BaseStore] API to share state across conversational threads.
+
+
+During development, you will often be using the [MemorySaver][langgraph.checkpoint.memory.MemorySaver] checkpointer. For production use, you will want to persist the data to a database. These how-to guides show how to use different databases for persistence:
+
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
-- [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+- [How to create a custom checkpointer using Redis](persistence_redis.ipynb): A reference implementation of a custom checkpointer using Redis. Adapt this to your own needs.
 
 ### Memory
 
-LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) in your graph. These how-to guides show how to implement different strategies for that.
+LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) in your graph.
 
-- [How to manage conversation history](memory/manage-conversation-history.ipynb)
-- [How to delete messages](memory/delete-messages.ipynb)
-- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
+- [How to manage conversation history](memory/manage-conversation-history.ipynb): **trim** or **filter** messages from the conversation history to fit within the chat model's context window size.
+- [How to delete messages](memory/delete-messages.ipynb): **delete** messages from the history using the built-in [RemoveMessages](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.modifier.RemoveMessage.html#langchain_core.messages.modifier.RemoveMessage) primitive.
+- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb): Implement a **running summary** of the conversation history to fit within the chat model's context window size.
+
+Cross-thread memory:
+
 - [How to add long-term memory (cross-thread)](cross-thread-persistence.ipynb)
 - [How to use semantic search for long-term memory](memory/semantic-search.ipynb)
 
@@ -71,17 +78,24 @@ Other methods:
 
 [Streaming](../concepts/streaming.md) is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
 
-- [How to stream full state of your graph](stream-values.ipynb)
-- [How to stream state updates of your graph](stream-updates.ipynb)
-- [How to stream LLM tokens](streaming-tokens.ipynb)
-- [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)
-- [How to stream custom data](streaming-content.ipynb)
-- [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
+- [How to stream full state of your graph](stream-values.ipynb): Use `graph.stream(stream_mode="values")` to stream the full state of your graph after each node execution.
+- [How to stream state updates of your graph](stream-updates.ipynb): Use `graph.stream(stream_mode="updates")` to stream state updates of your graph after each node execution.
+- [How to stream LLM tokens](streaming-tokens.ipynb): Use `stream_mode="messages"` to stream tokens from a chat model as they're generated.
+- [How to stream custom data](streaming-content.ipynb): Use [`StreamWriter`][langgraph.types.StreamWriter] to write custom data to the `custom` stream.
+- [How to multiple streaming modes the same time](stream-multiple.ipynb): Use `graph.stream(stream_mode=["values", "updates", ...])` to stream multiple modes at the same time.
+- [How to stream from subgraphs](streaming-subgraphs.ipynb): Use `graph.stream(stream_mode=..., subgraph=True)` to include data from within **subgraphs**.
+
+Streaming from specific parts of the application:
+
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
-- [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
-- [How to stream from subgraphs](streaming-subgraphs.ipynb)
-- [How to disable streaming for models that don't support it](disable-streaming.ipynb)
+- [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
+
+Working with chat models:
+ 
+- [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb): Use LangChain's **callback system** to stream tokens from a custom LLM that is not a [LangChain Chat Model]( https://python.langchain.com/docs/concepts/chat_models/).
+- [How to disable streaming for models that don't support it](disable-streaming.ipynb): Pass `disable_streaming=True` when initializing th chat model; e.g., `ChatOpenAI(model="o1", disable_streaming=True)`.
+
 
 ### Tool calling
 
@@ -89,10 +103,56 @@ Other methods:
 
 These how-to guides show common patterns for tool calling with LangGraph:
 
-- [How to call tools using ToolNode](tool-calling.ipynb)
+- [How to call tools using ToolNode](tool-calling.ipynb): Use the pre-built [`ToolNode`][langgraph.prebuilt.ToolNode] to execute tools.
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
 - [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
-- [How to pass config to tools](pass-config-to-tools.ipynb)
+??? "How to pass config to tools"
+
+    **Full example**: [How to pass config to tools](pass-config-to-tools.ipynb)
+
+    ```python
+    from typing import Annotated
+
+    from langchain_core.runnables import RunnableConfig
+    from langchain_core.tools import InjectedToolArg
+    from langgraph.store.base import BaseStore
+
+    from langgraph.prebuilt import InjectedState, InjectedStore
+
+
+    # Can be sync or async; @tool decorator not required
+    async def my_tool(
+        # These arguments are populated by the LLM
+        some_arg: str,
+        another_arg: float,
+        # The config: RunnableConfig is always available in LangChain calls
+        # This is not exposed to the LLM
+        config: RunnableConfig,
+        # The following three are specific to the prebuilt ToolNode
+        # (and `create_react_agent` by extension). If you are invoking the
+        # tool on its own (in your own node), then you would need to provide these yourself.
+        store: Annotated[BaseStore, InjectedStore],
+        # This passes in the full state.
+        state: Annotated[State, InjectedState],
+        # You can also inject single fields from your state if you
+        messages: Annotated[list, InjectedState("messages")]
+        # The following is not compatible with create_react_agent or ToolNode
+        # You can also exclude other arguments from being shown to the model.
+        # These must be provided manually and are useful if you call the tools/functions in your own node
+        # some_other_arg=Annotated["MyPrivateClass", InjectedToolArg],
+    ):
+        """Call my_tool to have an impact on the real world.
+
+        Args:
+            some_arg: a very important argument
+            another_arg: another argument the LLM will provide
+        """ # The docstring becomes the description for your tool and is passed to the model
+        print(some_arg, another_arg, config, store, state, messages)
+        # Config, some_other_rag, store, and state  are all "hidden" from
+        # LangChain models when passed to bind_tools or with_structured_output
+        return "... some response"
+    ```
+
 - [How to update graph state from tools](update-state-from-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
 
