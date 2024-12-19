@@ -400,7 +400,9 @@ class StateGraph(Graph):
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> Self:
         """Adds a directed edge from the start node to the end node.
 
-        If the graph transitions to the start_key node, it will always transition to the end_key node next.
+        If the graph transitions to the start_key node(s), it will always transition to the end_key node
+        next. For multiple start_key nodes, the transition to end_key occurs only after transitioning
+        through all start_key nodes.
 
         Args:
             start_key (Union[str, list[str]]): The key(s) of the start node(s) of the edge.
