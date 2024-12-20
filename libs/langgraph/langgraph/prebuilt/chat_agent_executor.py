@@ -1,4 +1,13 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+from typing import (
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -8,6 +17,7 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
@@ -19,7 +29,7 @@ from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, Command
 from langgraph.utils.runnable import RunnableCallable
 
 
@@ -35,6 +45,8 @@ class AgentState(TypedDict):
     is_last_step: IsLastStep
 
     remaining_steps: RemainingSteps
+
+    structured_response: Union[dict, BaseModel]
 
 
 StateSchema = TypeVar("StateSchema", bound=AgentState)
@@ -162,6 +174,19 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     return False
 
 
+def _get_model(model: LanguageModelLike) -> BaseChatModel:
+    """Get the underlying model from a RunnableBinding or return the model itself."""
+    if isinstance(model, RunnableBinding):
+        model = model.bound
+
+    if not isinstance(model, BaseChatModel):
+        raise TypeError(
+            f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(model)}"
+        )
+
+    return model
+
+
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -201,6 +226,7 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
+    response_format: Optional[Union[dict, type[BaseModel]]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -236,6 +262,18 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+        response_format: An optional schema for the final agent output.
+
+            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If not provided, `structured_response` will not be present in the output state.
+            Can be passed in as:
+
+                - an OpenAI function/tool schema,
+                - a JSON Schema,
+                - a TypedDict class,
+                - or a Pydantic class.
+
+            NOTE: this will make a separate call to the LLM to generate the structured response after the agent loop is finished.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -527,9 +565,11 @@ def create_react_agent(
     """
 
     if state_schema is not None:
-        if missing_keys := {"messages", "is_last_step"} - set(
-            state_schema.__annotations__
-        ):
+        required_keys = {"messages", "is_last_step", "remaining_steps"}
+        if response_format is not None:
+            required_keys.add("structured_response")
+
+        if missing_keys := required_keys - set(state_schema.__annotations__):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if isinstance(tools, ToolExecutor):
@@ -557,8 +597,8 @@ def create_react_agent(
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         _validate_chat_history(state["messages"])
-        response = model_runnable.invoke(state, config)
-        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+        response = cast(AIMessage, model_runnable.invoke(state, config))
+        has_tool_calls = len(response.tool_calls) > 0
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
             if isinstance(response, AIMessage)
@@ -581,21 +621,24 @@ def create_react_agent(
                 and has_tool_calls
             )
         ):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
+            # We return a Command here to exit if the agent runs out of steps
+            return Command(
+                update={
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            )
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         _validate_chat_history(state["messages"])
-        response = await model_runnable.ainvoke(state, config)
-        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+        response = cast(AIMessage, await model_runnable.ainvoke(state, config))
+        has_tool_calls = len(response.tool_calls) > 0
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
             if isinstance(response, AIMessage)
@@ -618,22 +661,57 @@ def create_react_agent(
                 and has_tool_calls
             )
         ):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
+            return Command(
+                update={
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            )
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
+
+    def generate_structured_response(
+        state: AgentState, config: RunnableConfig
+    ) -> AgentState:
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(Union[dict, type[BaseModel]], response_format)
+        )
+        # NOTE: we exclude the last message because there is enough information
+        # for the LLM to generate the structured response
+        response = model_with_structured_output.invoke(state["messages"][:-1], config)
+        return {"structured_response": response}
+
+    async def agenerate_structured_response(
+        state: AgentState, config: RunnableConfig
+    ) -> AgentState:
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(Union[dict, type[BaseModel]], response_format)
+        )
+        # NOTE: we exclude the last message because there is enough information
+        # for the LLM to generate the structured response
+        response = await model_with_structured_output.ainvoke(
+            state["messages"][:-1], config
+        )
+        return {"structured_response": response}
 
     if not tool_calling_enabled:
         # Define a new graph
         workflow = StateGraph(state_schema or AgentState)
         workflow.add_node("agent", RunnableCallable(call_model, acall_model))
         workflow.set_entry_point("agent")
+        if response_format is not None:
+            workflow.add_node(
+                "generate_structured_response",
+                RunnableCallable(
+                    generate_structured_response, agenerate_structured_response
+                ),
+            )
+            workflow.add_edge("agent", "generate_structured_response")
+
         return workflow.compile(
             checkpointer=checkpointer,
             store=store,
@@ -643,12 +721,14 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+    def should_continue(state: AgentState) -> str:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return "__end__"
+            return (
+                "__end__" if response_format is None else "generate_structured_response"
+            )
         # Otherwise if there is, we continue
         else:
             return "tools"
@@ -664,6 +744,19 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point("agent")
 
+    # Add a structured output node if response_format is provided
+    if response_format is not None:
+        workflow.add_node(
+            "generate_structured_response",
+            RunnableCallable(
+                generate_structured_response, agenerate_structured_response
+            ),
+        )
+        workflow.add_edge("generate_structured_response", "__end__")
+        should_continue_destinations = ["tools", "generate_structured_response"]
+    else:
+        should_continue_destinations = ["tools", "__end__"]
+
     # We now add a conditional edge
     workflow.add_conditional_edges(
         # First, we define the start node. We use `agent`.
@@ -671,6 +764,7 @@ def create_react_agent(
         "agent",
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
+        path_map=should_continue_destinations,
     )
 
     # If any of the tools are configured to return_directly after running,
