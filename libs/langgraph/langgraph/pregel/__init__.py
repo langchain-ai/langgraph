@@ -1139,6 +1139,10 @@ class Pregel(PregelProtocol):
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        """Update the state of the graph asynchronously with the given values, as if they came from
+        node `as_node`. If `as_node` is not provided, it will be set to the last node
+        that updated the state, if not ambiguous.
+        """
         checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
