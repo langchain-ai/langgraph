@@ -357,7 +357,8 @@ class ShallowPostgresSaver(BasePostgresSaver):
         """Save a checkpoint to the database.
 
         This method saves a checkpoint to the Postgres database. The checkpoint is associated
-        with the provided config.
+        with the provided config. For ShallowPostgresSaver, this method saves ONLY the most recent
+        checkpoint and overwrites a previous checkpoint, if it exists.
 
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
@@ -684,7 +685,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """Save a checkpoint to the database asynchronously.
 
         This method saves a checkpoint to the Postgres database. The checkpoint is associated
-        with the provided config and its parent config (if any).
+        with the provided config. For AsyncShallowPostgresSaver, this method saves ONLY the most recent
+        checkpoint and overwrites a previous checkpoint, if it exists.
 
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
@@ -829,16 +831,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """List checkpoints from the database.
 
         This method retrieves a list of checkpoint tuples from the Postgres database based
-        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
-
-        Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
-            limit (Optional[int]): Maximum number of checkpoints to return.
-
-        Yields:
-            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
+        on the provided config. For ShallowPostgresSaver, this method returns a list with
+        ONLY the most recent checkpoint.
         """
         aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
         while True:
@@ -854,9 +848,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
-        the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
-        for the given thread ID is retrieved.
+        provided config (matching the thread ID in the config).
 
         Args:
             config (RunnableConfig): The config to use for retrieving the checkpoint.
@@ -890,7 +882,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """Save a checkpoint to the database.
 
         This method saves a checkpoint to the Postgres database. The checkpoint is associated
-        with the provided config and its parent config (if any).
+        with the provided config. For AsyncShallowPostgresSaver, this method saves ONLY the most recent
+        checkpoint and overwrites a previous checkpoint, if it exists.
 
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
