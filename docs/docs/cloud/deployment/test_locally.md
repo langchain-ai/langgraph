@@ -11,7 +11,7 @@ Install the proper packages:
 
 === "pip" 
     ```bash
-    pip install -U langgraph-cli
+    pip install -U "langgraph-cli[inmem]"
     ```
 === "Homebrew (macOS only)"
     ```bash
@@ -29,16 +29,26 @@ LANGSMITH_API_KEY = *********
 Once you have installed the CLI, you can run the following command to start the API server for local testing:
 
 ```shell
-langgraph up
+langgraph dev
 ```
 
 This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
 
-```shell
-Ready!
-- API: http://localhost:8123
-2024-06-26 19:20:41,056:INFO:uvicorn.access 127.0.0.1:44138 - "GET /ok HTTP/1.1" 200
-```
+>    Ready!
+> 
+>    - API: [http://localhost:2024](http://localhost:2024/)
+>     
+>    - Docs: http://localhost:2024/docs
+>     
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+
+!!! note "In-Memory Mode"
+
+    The `langgraph dev` command starts LangGraph Server in an in-memory mode. This mode is suitable for development and testing purposes. For production use, you should deploy LangGraph Server with access to a persistent storage backend.
+
+    If you want to test your application with a persistent storage backend, you can use the `langgraph up` command instead of `langgraph dev`. You will
+    need to have `docker` installed on your machine to use this command.
+
 
 ### Interact with the server
 
@@ -53,7 +63,7 @@ You can either initialize by passing authentication or by setting an environment
     ```python
     from langgraph_sdk import get_client
 
-    # only pass the url argument to get_client() if you changed the default port when calling langgraph up
+    # only pass the url argument to get_client() if you changed the default port when calling langgraph dev
     client = get_client(url=<DEPLOYMENT_URL>,api_key=<LANGSMITH_API_KEY>)
     # Using the graph deployed with the name "agent"
     assistant_id = "agent"
@@ -65,7 +75,7 @@ You can either initialize by passing authentication or by setting an environment
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    // only set the apiUrl if you changed the default port when calling langgraph up
+    // only set the apiUrl if you changed the default port when calling langgraph dev
     const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <LANGSMITH_API_KEY> });
     // Using the graph deployed with the name "agent"
     const assistantId = "agent";
@@ -91,7 +101,7 @@ If you have a `LANGSMITH_API_KEY` set in your environment, you do not need to ex
     ```python
     from langgraph_sdk import get_client
 
-    # only pass the url argument to get_client() if you changed the default port when calling langgraph up
+    # only pass the url argument to get_client() if you changed the default port when calling langgraph dev
     client = get_client()
     # Using the graph deployed with the name "agent"
     assistant_id = "agent"
@@ -103,7 +113,7 @@ If you have a `LANGSMITH_API_KEY` set in your environment, you do not need to ex
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    // only set the apiUrl if you changed the default port when calling langgraph up
+    // only set the apiUrl if you changed the default port when calling langgraph dev
     const client = new Client();
     // Using the graph deployed with the name "agent"
     const assistantId = "agent";
