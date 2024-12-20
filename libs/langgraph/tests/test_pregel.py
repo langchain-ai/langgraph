@@ -5242,3 +5242,127 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_streaming_from_subgraph_with_interrupt(
+    request: pytest.FixtureRequest, checkpointer_name: str
+):
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        """The graph state."""
+
+        foo: str
+
+    counter_sub_node1 = 0
+
+    def sub_node1(state: State):
+        """A node in the sub-graph."""
+        nonlocal counter_sub_node1
+        counter_sub_node1 += 1
+        return {
+            "foo": "sub_node1",
+        }
+
+    counter_sub_node2 = 0
+
+    def sub_node2(state: State):
+        """A node in the sub-graph."""
+        nonlocal counter_sub_node2
+        counter_sub_node2 += 1
+        return {
+            "foo": "sub_node2",
+        }
+
+    counter_human_node = 0
+
+    def sub_human_node(state: State):
+        chunks_streamed_from_subgraph.append(
+            {"foo": state["foo"], "info": "Manually added. not streamed."},
+        )
+        nonlocal counter_human_node
+        counter_human_node += 1
+        answer = interrupt("what is your name?")
+        return {
+            "foo": answer,
+        }
+
+    def sub_node3(state: State):
+        return {
+            "foo": "sub_node3",
+        }  # Not updating anything for this example
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("sub_node1", sub_node1)
+    subgraph_builder.add_node("sub_node2", sub_node2)
+    subgraph_builder.add_node("sub_human_node", sub_human_node)
+    subgraph_builder.add_node("sub_node3", sub_node3)
+    subgraph_builder.add_edge(START, "sub_node1")
+    subgraph_builder.add_edge("sub_node1", "sub_node2")
+    subgraph_builder.add_edge("sub_node2", "sub_human_node")
+    subgraph_builder.add_edge("sub_human_node", "sub_node3")
+    subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+
+    chunks_streamed_from_subgraph = []
+    parent_counter = 0
+
+    def parent_node(state: State):
+        """This parent node will invoke the subgraph."""
+        nonlocal parent_counter
+        parent_counter += 1
+        for chunk in subgraph.stream(
+            state, stream_mode="updates"
+        ):  # <-- has interrupt inside
+            chunks_streamed_from_subgraph.append(chunk)
+        return {
+            "foo": "end_parent",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("parent_node", parent_node)
+    builder.add_edge(START, "parent_node")
+
+    # A checkpointer must be enabled for interrupts to work!
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {
+        "configurable": {
+            "thread_id": str(uuid.uuid4()),
+        }
+    }
+
+    # Run until the first interrupt
+    # invoke returns the state of the graph at the time of interrupt
+    assert graph.invoke({"foo": "start_parent"}, config) == {"foo": "start_parent"}
+    assert parent_counter == 1
+    assert counter_sub_node1 == 1
+    assert counter_sub_node2 == 1
+    assert counter_human_node == 1
+    assert chunks_streamed_from_subgraph == [
+        {"foo": "start_parent"},
+        {"foo": "sub_node1"},
+        {"foo": "sub_node2"},
+        {"foo": "sub_node2", "info": "Manually added. not streamed."},
+    ]
+
+    # Resume after the first interrupt
+    interrupt_value = "sub_human_node_interrupt_value"
+    assert graph.invoke(
+        Command(resume=interrupt_value, update={"foo": "resume_value"}), config
+    ) == {"foo": "end_parent"}
+    assert parent_counter == 2
+    assert counter_sub_node1 == 1
+    assert counter_sub_node2 == 1
+    assert counter_human_node == 2
+    # What should be the expected chunks here after a resume?
+    assert chunks_streamed_from_subgraph == [
+        {"foo": "start_parent"},
+        {"foo": "sub_node1"},
+        {"foo": "sub_node2"},
+        {"foo": "sub_node2", "info": "Manually added. not streamed."},
+        {"foo": "sub_node2"},
+        {"foo": "sub_node2", "info": "Manually added. not streamed."}, # <-- THIS VALUE SHOULD NOT BE EMITTED
+        {"foo": "sub_human_node_interrupt_value"},
+        {"foo": "sub_node3"},
+    ]
