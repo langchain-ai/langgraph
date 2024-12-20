@@ -866,7 +866,7 @@ See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for i
 
 ??? "How to visualize your graph"
     Full Example: [How to visualize your graph](visualization.ipynb)
-j
+
     You can visualize your Graph by converting it to Mermaid syntax or generating a PNG. Below is a minimal example to create and draw a Graph.
 
     ```python
@@ -1308,8 +1308,8 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 LangGraph Platform supports multiple types of runs besides streaming runs.
 
-??? "How to run an agent in the background"
-	Full Example: [How to run an agent in the background](../cloud/how-tos/background_run.md)
+??? "How to run an assistant in the background"
+	Full Example: [How to run an in the background](../cloud/how-tos/background_run.md)
 
     Kick off background runs by creating a thread, sending your request, then waiting on the run to finish using "join". Once complete, fetch the final state from the thread for the results.
 
@@ -1361,7 +1361,8 @@ LangGraph Platform supports multiple types of runs besides streaming runs.
     ```
 
 ??? "How to create cron jobs"
-Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
+
+    Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 
     **Cron jobs** allow you to schedule your graph to run on a set timetable (e.g., sending automated emails) rather than waiting for user input. Simply provide a cron expression to define your schedule, and always remember to delete old jobs to avoid excess usage.
 
@@ -1595,6 +1596,7 @@ When designing complex graphs, relying entirely on the LLM for decision-making c
     )
 
     print(response)
+    ```
 
 ??? "How to wait for user input"
 	Full Example: [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
