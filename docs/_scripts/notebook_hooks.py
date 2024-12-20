@@ -44,7 +44,7 @@ def _highlight_code_blocks(markdown: str) -> str:
         markdown: The markdown content to process.
 
     Returns:
-        updated markdown code with code blocks containing highlight comments
+        updated Markdown code with code blocks containing highlight comments
         updated to use the hl_lines attribute.
     """
     # Pattern to find code blocks with highlight comments and without
@@ -87,12 +87,18 @@ def _highlight_code_blocks(markdown: str) -> str:
 
         if highlighted_lines:
             return (
-                f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"'
-                f'{new_code_block}'  # The indent is already included in the code block
-                f'\n{indent}```'
+                f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"\n'
+                # The indent and terminating \n is already included in the code block
+                f'{new_code_block}'
+                f'{indent}```'
             )
         else:
-            return f"{indent}```{language}\n{new_code_block}\n{indent}```"
+            return (
+                f"{indent}```{language}\n"
+                # The indent and terminating \n is already included in the code block
+                f"{new_code_block}"
+                f"{indent}```"
+            )
 
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
