@@ -61,23 +61,32 @@ FilterType = typing.Union[
     ],
     typing.Dict[str, str],
 ]
-"""Type for filtering queries.
+"""Response type for authorization handlers.
 
 Supports exact matches and operators:
-    - Simple match: {"field": "value"}
-    - Equals: {"field": {"$eq": "value"}}
+    - Exact match shorthand: {"field": "value"}
+    - Exact match: {"field": {"$eq": "value"}}
     - Contains: {"field": {"$contains": "value"}}
 
 ???+ example "Examples"
+    Simple exact match filter for the resource owner:
     ```python
-    # Simple match
-    filter = {"status": "pending"}
+    filter = {"owner": "user-abcd123"}
+    ```
     
-    # Equals operator
-    filter = {"status": {"$eq": "success"}}
+    Explicit version of the exact match filter:
+    ```python
+    filter = {"owner": {"$eq": "user-abcd123"}}
+    ```
     
-    # Contains operator
-    filter = {"metadata.tags": {"$contains": "important"}}
+    Containment:
+    ```python
+    filter = {"participants": {"$contains": "user-abcd123"}}
+    ```
+
+    Combining filters (treated as a logical `AND`):
+    ```python
+    filter = {"owner": "user-abcd123", "participants": {"$contains": "user-efgh456"}}
     ```
 """
 
@@ -109,9 +118,9 @@ Keys must be strings, values can be any JSON-serializable type.
 
 HandlerResult = typing.Union[None, bool, FilterType]
 """The result of a handler can be:
-- None | True: accept the request.
-- False: reject the request with a 403 error
-- FilterType: filter to apply
+    * None | True: accept the request.
+    * False: reject the request with a 403 error
+    * FilterType: filter to apply
 """
 
 Handler = Callable[..., Awaitable[HandlerResult]]
@@ -143,12 +152,20 @@ class MinimalUser(typing.Protocol):
 
 
 class MinimalUserDict(typing.TypedDict, total=False):
-    """The minimal user dictionary."""
+    """The dictionary representation of a user."""
 
     identity: typing_extensions.Required[str]
+    """The required unique identifier for the user."""
     display_name: str
+    """The optional display name for the user."""
     is_authenticated: bool
+    """Whether the user is authenticated. Defaults to True."""
     permissions: Sequence[str]
+    """A list of permissions associated with the user.
+    
+    You can use these in your `@auth.on` authorization logic to determine
+    access permissions to different resources.
+    """
 
 
 @typing.runtime_checkable

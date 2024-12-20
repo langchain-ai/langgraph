@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict
 
 from mkdocs.structure.pages import Page
@@ -8,6 +9,7 @@ from notebook_convert import convert_notebook
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.INFO)
+DISABLED = os.getenv("DISABLE_NOTEBOOK_CONVERT") in ("1", "true", "True")
 
 
 class NotebookFile(File):
@@ -16,6 +18,8 @@ class NotebookFile(File):
 
 
 def on_files(files: Files, **kwargs: Dict[str, Any]):
+    if DISABLED:
+        return files
     new_files = Files([])
     for file in files:
         if file.src_path.endswith(".ipynb"):
@@ -32,6 +36,8 @@ def on_files(files: Files, **kwargs: Dict[str, Any]):
 
 
 def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
+    if DISABLED:
+        return markdown
     if page.file.src_path.endswith(".ipynb"):
         logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         body = convert_notebook(page.file.abs_src_path)

@@ -21,14 +21,15 @@ The LangGraph command line interface includes commands to build and run a LangGr
 
 [](){#langgraph.json}
 
-## Configuration File
+## Configuration File {#configuration-file}
 
 The LangGraph CLI requires a JSON configuration file with the following keys:
 
-| Key                | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Key                | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dependencies`     | **Required**. Array of dependencies for LangGraph Cloud API server. Dependencies can be one of the following: (1) `"."`, which will look for local Python packages, (2) `pyproject.toml`, `setup.py` or `requirements.txt` in the app directory `"./local_package"`, or (3) a package name.                                                                                                                                                                                                                                                  |
 | `graphs`           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and creates an instance of `langgraph.graph.state.StateGraph` / `langgraph.graph.state.CompiledStateGraph`.</li></ul> |
+| `auth`             | _(Added in v0.0.11)_ Auth configuration containing the path to your authentication handler. Example: `./your_package/auth.py:auth`, where `auth` is an instance of `langgraph_sdk.Auth`. See [authentication guide](../../concepts/auth.md) for details.                                                                                                                                                                                                                                                                                                                      |
 | `env`              | Path to `.env` file or a mapping from environment variable to its value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `store`            | Configuration for adding semantic search to the BaseStore. Contains the following fields: <ul><li>`index`: Configuration for semantic search indexing with fields:<ul><li>`embed`: Embedding provider (e.g., "openai:text-embedding-3-small") or path to custom embedding function</li><li>`dims`: Dimension size of the embedding model. Used to initialize the vector table.</li><li>`fields` (optional): List of fields to index. Defaults to `["$"]`, meaningto index entire documents. Can be specific fields like `["text", "summary", "some.value"]`</li></ul></li></ul>                                                                  |
 | `python_version`   | `3.11` or `3.12`. Defaults to `3.11`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -119,6 +120,35 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     # Implementation using your preferred embedding model
     return [[0.1, 0.2, ...] for _ in texts]  # dims-dimensional vectors
 ```
+
+#### Adding custom authentication
+
+```json
+{
+  "dependencies": ["."],
+  "graphs": {
+    "chat": "./chat/graph.py:graph"
+  },
+  "auth": {
+    "path": "./auth.py:auth",
+    "openapi": {
+      "securitySchemes": {
+        "apiKeyAuth": {
+          "type": "apiKey",
+          "in": "header",
+          "name": "X-API-Key"
+        }
+      },
+      "security": [
+        {"apiKeyAuth": []}
+      ]
+    },
+    "disable_studio_auth": false
+  }
+}
+```
+
+See the [authentication conceptual guide](../../concepts/auth.md) for details, and the [setting up custom authentication](../../tutorials/auth/getting_started.md) guide for a practical walk through of the process.
 
 ## Commands
 
