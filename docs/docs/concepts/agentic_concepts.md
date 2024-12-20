@@ -1,8 +1,8 @@
 # Agent architectures
 
-Many LLM applications implement a particular control flow of steps before and / or after LLM calls. As an example, [RAG](https://github.com/langchain-ai/rag-from-scratch) performs retrieval of relevant documents related to a user question, and passes those documents to an LLM in order to ground the model's response, generating context-specific answers. 
+Many LLM applications implement a particular control flow of steps before and / or after LLM calls. As an example, [RAG](https://github.com/langchain-ai/rag-from-scratch) performs retrieval of documents relevant to a user question, and passes those documents to an LLM in order to ground the model's response in the provided document context. 
 
-Instead of hard-coding a fixed control flow, we sometimes want LLM systems to pick its own control flow to solve more complex problems! This is one definition of an [agent](https://blog.langchain.dev/what-is-an-agent/): *an agent is a system that uses an LLM to decide the control flow of an application.* There are many ways that an LLM can control application:
+Instead of hard-coding a fixed control flow, we sometimes want LLM systems that can pick their own control flow to solve more complex problems! This is one definition of an [agent](https://blog.langchain.dev/what-is-an-agent/): *an agent is a system that uses an LLM to decide the control flow of an application.* There are many ways that an LLM can control application:
 
 - An LLM can route between two potential paths
 - An LLM can decide which of many tools to call
@@ -14,14 +14,14 @@ As a result, there are many different types of [agent architectures](https://blo
 
 ## Router
 
-A router allows an LLM to select a single step from a specified set of options. This is an agent architecture that exhibits a relatively limited level of control because the LLM usually focuses on making a single decision and can produces a specific output from limited set of pre-defined options. Routers typically employ a few different concepts to achieve this.
+A router allows an LLM to select a single step from a specified set of options. This is an agent architecture that exhibits a relatively limited level of control because the LLM usually focuses on making a single decision and produces a specific output from limited set of pre-defined options. Routers typically employ a few different concepts to achieve this.
 
 ### Structured Output
 
 Structured outputs with LLMs work by providing a specific format or schema that the LLM should follow in its response. This is similar to tool calling, but more general. While tool calling typically involves selecting and using predefined functions, structured outputs can be used for any type of formatted response. Common methods to achieve structured outputs include:
 
-1. Prompt engineering: Instructing the LLM to respond in a specific format in the prompt.
-2. Output parsers: Use post-processing techniques to extract structured data from LLM responses.
+1. Prompt engineering: Instructing the LLM to respond in a specific format via the system prompt.
+2. Output parsers: Using post-processing to extract structured data from LLM responses.
 3. Tool calling: Leveraging built-in tool calling capabilities of some LLMs to generate structured outputs.
 
 Structured outputs are crucial for routing as they ensure the LLM's decision can be reliably interpreted and acted upon by the system. Learn more about [structured outputs in this how-to guide](https://python.langchain.com/docs/how_to/structured_output/).
@@ -43,7 +43,7 @@ This architecture allows for more complex and flexible agent behaviors, going be
 
 ### Tool calling
 
-Tools are useful whenever you want an agent to interact with external systems. External systems (e.g., APIs) often require a particular input schema or payload, rather than natural language. When we bind an API, for example, as a tool we give the model awareness of the required input schema. The model will choose to call a tool based upon the natural language input from the user and it will return an output that adheres to the tool's required schema. 
+Tools are useful whenever you want an agent to interact with external systems. External systems (e.g., APIs) often require a particular input schema or payload, rather than natural language. When we bind an API, for example, as a tool, we give the model awareness of the required input schema. The model will choose to call a tool based upon the natural language input from the user and it will return an output that adheres to the tool's required schema. 
 
 [Many LLM providers support tool calling](https://python.langchain.com/docs/integrations/chat/) and [tool calling interface](https://blog.langchain.dev/improving-core-tool-interfaces-and-docs-in-langchain/) in LangChain is simple: you can simply pass any Python `function` into `ChatModel.bind_tools(function)`.
 
@@ -67,7 +67,7 @@ Effective memory management enhances an agent's ability to maintain context, lea
 
 ### Planning
 
-In the ReAct architecture, an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user requests and is not worth calling any more tools.
+In the ReAct architecture, an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user request and it is not worth calling any more tools.
 
 ### ReAct implementation 
 
