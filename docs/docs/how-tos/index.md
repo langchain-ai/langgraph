@@ -1099,17 +1099,83 @@ Learn how to set up your app for deployment to LangGraph Platform:
     *  [How to set up app for deployment (pyproject.toml)](../cloud/deployment/setup_pyproject.md)
     *  [How to set up app for deployment (JavaScript)](../cloud/deployment/setup_javascript.md)
 
+    Specify your **dependencies** (e.g., requirements.txt) and **environment variables** (e.g., .env), then define your graphs in a Python module. Finally, create a **langgraph.json** to reference your compiled graphs for deployment.
+
+    ```python
+    from typing import TypedDict
+    from langgraph.graph import StateGraph, START, END
+
+    class State(TypedDict):
+        foo: str
+
+    def example_node(state):
+        return {
+            "foo": "Hello from LangGraph!"
+        }
+
+    graph = (
+        StateGraph(State)
+        .add_node("say_hello", example_node)
+        .add_edge(START, "say_hello")
+        .add_edge("say_hello", END)
+        .compile()
+    )
+    ```
+
+
 ??? "How to customize Dockerfile"
 
     Full Example: [How to customize Dockerfile](../cloud/deployment/custom_docker.md)
+
+    Modify langgraph.json to include custom Dockerfile lines for your app. This lets you install additional dependencies or configure your environment as needed.
+
+    ```json
+    {
+        "dependencies": ["."],
+        "graphs": {
+            "openai_agent": "./openai_agent.py:agent",
+        },
+        "env": "./.env",
+        "dockerfile_lines": [
+            "RUN apt-get update && apt-get install -y libjpeg-dev zlib1g-dev libpng-dev",
+            "RUN pip install Pillow"
+        ]
+    }
+    ```
 
 ??? "How to test locally"
 
     Full Example: [How to test locally](../cloud/deployment/test_locally.md)
 
+    **Install** the CLI, **run** your server with `langgraph dev`, and **use** a client to test your graph endpoints locally with a valid API key. **Ensure** your environment variables are set or pass them to the client initialization.
+
+
 ??? "How to rebuild graph at runtime"
 
     Full Example: [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
+
+    You can define a **function** that returns a compiled graph based on your config, then reference that function in your "langgraph.json" file. This enables you to rebuild your graph for each new run using different parameters.
+
+    ```python
+    # Filename: graph.py
+    def make_graph(config):
+        # Define and compile a graph based on the config
+        return compiled_graph
+    ```
+
+    In `langgraph.json` reference the function in the "graphs" section:
+
+    ```json
+    {
+        "dependencies": ["."],
+        "graphs": {
+            "agent_name": "graph.py:make_graph",
+        },
+        "env": "./.env"
+    }
+    ```
+
+    The function can be an `async` function if you need to perform asynchronous operations during graph compilation.
 
 ??? "How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks"
 
@@ -1123,12 +1189,23 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 ??? "How to deploy to LangGraph cloud"
 	Full Example: [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 
+    Deploy your GitHub-based LangGraph app in the LangSmith UI by creating a new deployment, setting your config file path, and choosing environment variables. Then create or update revisions, view logs, and manage branches or auto-updates in the deployment settings.
+
 ??? "How to deploy to a self-hosted environment"
 	Full Example: [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
 
 ??? "How to interact with the deployment using RemoteGraph"
 	Full Example: [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
 
+    Initialize a RemoteGraph by specifying its name and either a URL or client credentials. Then invoke or stream results by calling the appropriate sync or async methods, optionally persisting state via a thread ID if needed.
+
+    ```python
+    from langgraph.pregel.remote import RemoteGraph
+
+    remote_graph = RemoteGraph("agent", url="<DEPLOYMENT_URL>") 
+    result = remote_graph.invoke({"messages": [{"role": "user", "content": "What's the weather in LA?"}]})
+    print(result)
+    ```
 ### Authentication & Access Control
 
 - [How to add custom authentication](./auth/custom_auth.md)
@@ -1144,13 +1221,49 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 ??? "How to version assistants"
 	Full Example: [How to version assistants](../cloud/how-tos/assistant_versioning.md)
 
+    Version your assistant by creating it with a specific config, then use the update endpoint to generate a new version with any additional config changes. You can easily switch between versions as needed.
+
+    ```python
+    from langgraph_sdk import get_client
+
+    client = get_client(url="https://your-deployment-url")
+    graph_name = "agent"
+
+    # Create an assistant
+    assistant = client.assistants.create(
+        graph_name,
+        config={"configurable": {"model_name": "openai"}},
+        name="my_assistant"
+    )
+
+    # Create a new version with an updated config
+    assistant_v2 = client.assistants.update(
+        assistant["assistant_id"],
+        config={"configurable": {"model_name": "openai", "system_prompt": "You are a helpful assistant!"}}
+    )
+    ```
+
 ### Threads
 
 ??? "How to copy threads"
 	Full Example: [How to copy threads](../cloud/how-tos/copy_threads.md)
 
+    You can **copy** an existing thread to create a new one with the same history. This keeps the original thread intact and lets you explore different ideas independently.
+
+    ```python
+    copied_thread = await client.threads.copy("<THREAD_ID>")
+    ```
+
 ??? "How to check status of your threads"
 	Full Example: [How to check status of your threads](../cloud/how-tos/check_thread_status.md)
+
+    Use the client to **search** for threads by status (e.g., "idle" or "busy"), retrieve a specific one by **ID**, or filter them by **metadata**. This makes it easy to track the state of any thread programmatically.
+
+    For example, 
+
+    ```python
+    await client.threads.search(status="idle", limit=1)
+    ```
 
 ### Runs
 
@@ -1159,11 +1272,38 @@ LangGraph Platform supports multiple types of runs besides streaming runs.
 ??? "How to run an agent in the background"
 	Full Example: [How to run an agent in the background](../cloud/how-tos/background_run.md)
 
+    Kick off background runs by creating a thread, sending your request, then waiting on the run to finish using "join". Once complete, fetch the final state from the thread for the results.
+
 ??? "How to run multiple agents in the same thread"
 	Full Example: [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
 
+    **Use the same thread ID** to let multiple agents share conversation context. Simply create a thread once, then call each agent on that thread to continue where the previous one left off.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    thread = client.threads.create()
+
+    client.runs.stream(
+        thread["thread_id"],
+        "FIRST ASSISTANT ID",
+        input={"messages": [{"role": "user", "content": "Hello from OpenAI agent"}]},
+        stream_mode="updates",
+    )
+
+    client.runs.stream(
+        thread["thread_id"],
+        "DIFFERENT ASSISTANT ID",
+        input={"messages": [{"role": "user", "content": "Continuing with default agent"}]},
+        stream_mode="updates",
+    )
+    ```
+
 ??? "How to create cron jobs"
-	Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
+Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
+
+    **Cron jobs** allow you to schedule your graph to run on a set timetable (e.g., sending automated emails) rather than waiting for user input. Simply provide a cron expression to define your schedule, and always remember to delete old jobs to avoid excess usage.
 
 ??? "How to create stateless runs"
 	Full Example: [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
@@ -1216,24 +1356,36 @@ Graph execution can take a while, and sometimes users may change their mind abou
 ??? "How to use the interrupt option"
 	Full Example: [How to use the interrupt option](../cloud/how-tos/interrupt_concurrent.md)
 
+    Use **interrupt** to halt the previous run and mark it as “interrupted”, then start a new run without deleting the first one. This keeps the original run data in the database while focusing on the fresh run.
+
 ??? "How to use the rollback option"
 	Full Example: [How to use the rollback option](../cloud/how-tos/rollback_concurrent.md)
+
+    Use **rollback** to fully remove a previous run from the database before starting a new run. The old run becomes inaccessible once this new run is triggered. Below is a minimal example:
 
 ??? "How to use the reject option"
 	Full Example: [How to use the reject option](../cloud/how-tos/reject_concurrent.md)
 
+    Use the **"reject"** strategy to block a second concurrent run, causing an error if another run is started while the original is still active. This ensures that the first run completes uninterrupted.
+
 ??? "How to use the enqueue option"
 	Full Example: [How to use the enqueue option](../cloud/how-tos/enqueue_concurrent.md)
+
+    Use the **enqueue** option to queue and process interruptions sequentially, ensuring each new run waits its turn. Simply create multiple runs, specifying "enqueue" for the interrupting run.
 
 ### Webhooks
 
 ??? "How to integrate webhooks"
 	Full Example: [How to integrate webhooks](../cloud/how-tos/webhooks.md)
 
+    Expose an endpoint that can accept POST requests, then provide its URL in the **webhook** parameter to get a callback once your run finishes. This is handy for updating your service after async calls. 
+
 ### Cron Jobs
 
 ??? "How to create cron jobs"
 	Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
+
+    **Cron jobs** allow you to schedule your graph to run on a set timetable (e.g., sending automated emails) rather than waiting for user input. Simply provide a cron expression to define your schedule, and always remember to delete old jobs to avoid excess usage.
 
 ### LangGraph Studio
 
