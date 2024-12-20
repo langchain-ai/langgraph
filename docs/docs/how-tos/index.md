@@ -275,7 +275,8 @@ Cross-thread memory:
 ??? "How to use semantic search for long-term memory"
     Full Example: [How to use semantic search for long-term memory](memory/semantic-search.ipynb)
 
-    Enable semantic search in your agent by providing an index configuration (e.g., embeddings, vector dimensions) when creating an InMemoryStore. Then, simply store entries with store.put(...) and retrieve semantically similar items using store.search(...).
+    Enable semantic search in your agent by providing an index configuration (e.g., embeddings, vector dimensions) 
+    when creating an InMemoryStore. Then, simply store entries with store.put(...) and retrieve semantically similar items using store.search(...).
 
     ```python
     from langchain.embeddings import init_embeddings
@@ -302,37 +303,117 @@ Key workflows:
 ??? "How to wait for user input"
     Full Example: [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
 
-    A basic example that shows how to implement a human-in-the-loop workflow in your graph using the `interrupt` function.
+    Use the **interrupt()** function in a node to pause graph execution until user input is provided, then pass **Command(resume="some input")** to continue. This is especially helpful for clarifying questions in agentic flows or when building human-in-the-loop interactions in LangGraph.
+
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    from langgraph.types import Command, interrupt
+
+    def ask_feedback(state):
+        feedback = interrupt("Please provide feedback:")
+        return {"feedback": feedback}
+
+    builder = StateGraph(dict)
+    builder.add_node("ask_feedback", ask_feedback)
+    builder.add_edge(START, "ask_feedback")
+    builder.add_edge("ask_feedback", END)
+
+    graph = builder.compile()
+
+    # Start execution until it interrupts:
+    events = list(graph.stream({}, {"thread_id": "1"}))
+    # Resume from interruption:
+    graph.stream(Command(resume="User's feedback"), {"thread_id": "1"})
+    ```
 
 ??? "How to review tool calls"
     Full Example: [How to review tool calls](human_in_the_loop/review-tool-calls.ipynb)
 
-    Incorporate human-in-the-loop for reviewing/editing/accepting tool call requests before they are executed using the `interrupt` function.
+    Use the **interrupt()** function to pause execution and gather user input, then use **Command(resume=…)** to decide how to proceed (e.g. approve, edit, or provide feedback). This helps coordinate a human-in-the-loop flow for reviewing tool calls.
+
+    ```python
+    from langgraph.types import interrupt, Command
+
+    def human_review_node(state):
+        tool_call = state["messages"][-1].tool_calls[-1]
+        human_review = interrupt({"question": "Is this correct?", "tool_call": tool_call})
+        
+        if human_review["action"] == "continue":
+            return Command(goto="run_tool")
+        elif human_review["action"] == "update":
+            # update the call arguments
+            ...
+            return Command(goto="run_tool", update={"messages": [updated_message]})
+        elif human_review["action"] == "feedback":
+            # pass feedback back to the LLM
+            ...
+            return Command(goto="call_llm", update={"messages": [tool_message]})
+    ```
 
 Other methods:
 
 ??? "How to add static breakpoints"
     Full Example: [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb)
 
-    Static breakpoints are used to pause graph execution at predetermined nodes, aiding in debugging and inspection of state at specific stages. You can set these breakpoints at compile time or run time by specifying `interrupt_before` and `interrupt_after` parameters. Here's a quick example:
-    
+    Use breakpoints to pause your graph at specific steps by including "interrupt_before" in your compiled StateGraph. Then, resume from the last checkpoint (e.g., saved with MemorySaver) by calling the graph again with None. This allows you to insert human approval before sensitive actions.
+
     ```python
-    graph = graph_builder.compile(
-        interrupt_before=["node_a"], 
-        interrupt_after=["node_b", "node_c"]
+    from langgraph.graph import StateGraph, START, END
+    from langgraph.checkpoint.memory import MemorySaver
+
+    def step_1(state): print("Step 1")
+
+    # Create and link nodes
+    builder = StateGraph()
+    builder.add_node("step_1", step_1)
+    builder.add_edge(START, "step_1")
+    builder.add_edge("step_1", END)
+
+    # Compile with breakpoints
+    graph = builder.compile(
+        checkpointer=MemorySaver(),
+        interrupt_before=["step_1"]
     )
+
+    # Run once to pause at the breakpoint
+    thread = {"configurable": {"thread_id": "example"}}
+    graph.run({"input": "hello"}, thread)
+
+    # Resume by passing None as input
+    graph.run(None, thread)
     ```
 
 
 ??? "How to edit graph state"
     Full Example: [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
 
-    Edit graph state using the `graph.update_state` method. Use this if implementing a **human-in-the-loop** workflow via **static breakpoints**.
+    Manually update the graph by setting a breakpoint using “interrupt_before” on a specific node, then edit the state with “update_state” before resuming execution. This approach is especially useful when adjusting tool calls midway. Relevant LangGraph primitives: “StateGraph”, “MemorySaver”, and “interrupt_before”.
+
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    graph = StateGraph()
+    thread = {"configurable": {"thread_id": "1"}}
+
+    # After a breakpoint interrupt:
+    print("Current state:", graph.get_state(thread).values)
+    graph.update_state(thread, {"input": "edited input!"})
+    ```
 
 ??? "How to add dynamic breakpoints with `NodeInterrupt` (not recommended)"
     Full Example: [How to add dynamic breakpoints with `NodeInterrupt`](human_in_the_loop/dynamic_breakpoints.ipynb)
 
     **Not recommended**: Use the [`interrupt` function](../concepts/human_in_the_loop.md) instead.
+
+    **Use** the special exception **NodeInterrupt** to raise a dynamic breakpoint within a node whenever certain conditions are met. After the interrupt is raised, you can update the node's state or inputs before resuming the workflow, or even skip the interrupted node entirely.
+
+    ```python
+    from langgraph.errors import NodeInterrupt
+
+    def step_2(state: dict) -> dict:
+        if len(state['input']) > 5:
+            raise NodeInterrupt("Input too long!")  # Dynamic interrupt
+        return state
+    ```
 
 ### Time Travel
 
@@ -350,29 +431,60 @@ Other methods:
 ??? "How to stream full state of your graph"
     Full Example: [How to stream full state of your graph](stream-values.ipynb)  
 
-    Use `graph.stream(stream_mode="values")` to stream the full state of your graph after each node execution.
+    Use **stream_mode="values"** to capture the entire state of the graph after each node call. Simply iterate over the chunks to retrieve and process the full output at each step.
+
+    ```python
+    inputs = {"messages": [("human", "what's the weather in sf")]}
+    for chunk in graph.stream(inputs, stream_mode="values"):
+        print(chunk)
+    ```
 
 ??? "How to stream state updates of your graph"
     Full Example: [How to stream state updates of your graph](stream-updates.ipynb)  
 
-    Use `graph.stream(stream_mode="updates")` to stream state updates of your graph after each node execution.
+    Use **stream_mode="updates"** to see real-time changes in each node's state as your graph runs. Just configure your graph, provide inputs, and iterate over the streamed updates to handle them on the fly.
+
+    ```python
+    inputs = {"messages": [("human", "What's the weather in sf")]}
+    for chunk in graph.stream(inputs, stream_mode="updates"):
+        print(chunk)
+    ```
 
 ??? "How to stream custom data"
     Full Example: [How to stream custom data](streaming-content.ipynb)  
 
     Use [`StreamWriter`][langgraph.types.StreamWriter] to write custom data to the `custom` stream.
 
+    You can stream custom data from a node by calling **.stream/.astream** with stream_mode="custom" to dispatch intermediate outputs or custom events. This lets you surface progress updates or other information to users in real time.
+
+    ```python
+    for chunk in app.stream({"messages": [HumanMessage(content="Show me updates")]}, stream_mode="custom"):
+        print(chunk)
+    ```
+
 ??? "How to multiple streaming modes at the same time"
     Full Example: [How to multiple streaming modes the same time](stream-multiple.ipynb)  
 
-    Use `graph.stream(stream_mode=["values", "updates", ...])` to stream multiple modes at the same time.
+    **Configure multiple streaming modes** by passing a list of modes (e.g., ["updates", "debug"]) when calling astream. This lets you observe detailed updates and debug output simultaneously. Below is a minimal example showing how to stream events of different types together:
+
+    ```python
+    for event, chunk in graph.stream({"messages": [("human", "What's the weather in sf")]}, stream_mode=["updates", "debug"]):
+        print(f"Event type: {event}")
+        print("Event data:", chunk)
+    ```
 
 Streaming from specific parts of the application:
 
 ??? "How to stream from subgraphs"
     Full Example: [How to stream from subgraphs](streaming-subgraphs.ipynb)
 
-    Use `graph.stream(stream_mode=..., subgraph=True)` to include data from within **subgraphs**.
+    You can **stream subgraphs** by passing the parameter `subgraphs=True` when calling the stream method, which provides updates from both parent and subgraph nodes. This helps you capture intermediate updates within each subgraph.
+
+    ```python
+    for namespace, chunk in graph.stream(input_data, stream_mode="updates", subgraphs=True):
+        node_name = list(chunk.keys())[0]
+        print(namespace, node_name, chunk[node_name])
+    ```
 
 ??? "How to stream events from within a tool"
     Full Example: [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
@@ -380,6 +492,16 @@ Streaming from specific parts of the application:
 ??? "How to stream events from the final node"
     Full Example: [How to stream events from the final node](streaming-from-final-node.ipynb)
 
+    You can stream from the final node by checking the “langgraph_node” field or attaching custom tags to isolate events for that node. This ensures you only receive tokens from the desired model in real time.
+
+    ```python
+    from langchain_core.messages import HumanMessage
+
+    inputs = {"messages": [HumanMessage(content="What's the weather in sf?")]}
+    for msg, metadata in graph.stream(inputs, stream_mode="messages"):
+        if metadata["langgraph_node"] == "final" and msg.content:
+            print(msg.content, end="", flush=True)
+    ```
 
 Working with chat models:
 
@@ -392,7 +514,16 @@ Working with chat models:
 ??? "How to disable streaming for models that don't support it"
     Full Example: [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 
-    Pass `disable_streaming=True` when initializing the chat model; e.g., `ChatOpenAI(model="o1", disable_streaming=True)`.
+    Set **disable_streaming=True** on your chat model to prevent errors when using models that don’t support streaming. This ensures they won’t be called in streaming mode, even when using the astream_events API.
+
+    ```python
+    from langchain_openai import ChatOpenAI
+
+    llm = ChatOpenAI(
+        model="o1", # This model doesn't support streaming at the time of writing
+        disable_streaming=True
+    )
+    ```
 
 ??? "How to stream LLM tokens without LangChain models"
     Full Example: [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)  
@@ -410,7 +541,20 @@ Working with chat models:
 ??? "How to call tools using ToolNode"
     Full Example: [How to call tools using ToolNode](tool-calling.ipynb)
 
-    Use the pre-built [`ToolNode`][langgraph.prebuilt.ToolNode] to execute tools.
+    Use the prebuilt **ToolNode** to handle sequential or parallel tool calls from AI messages.
+
+    ```python
+    from langgraph.prebuilt import ToolNode
+    from langchain_core.messages import AIMessage
+
+    def get_weather(location: str):
+        return {"weather": "sunny"}
+
+    tool_node = ToolNode([get_weather, get_coolest_cities])
+    message_with_tool_call = AIMessage(tool_calls=[{"name": "get_weather","args": {"location": "sf"}}])
+    result = tool_node.invoke({"messages": [message_with_tool_call]})
+    print(result)
+    ```
 
 ??? "How to handle tool calling errors"
     Full Example: [How to handle tool calling errors](tool-calling-errors.ipynb)
@@ -447,11 +591,58 @@ Working with chat models:
     Full Example: [How to pass config to tools](pass-config-to-tools.ipynb)
 
 ??? "How to update graph state from tools"
+
     Full Example: [How to update graph state from tools](update-state-from-tools.ipynb)
+
+    Use a tool that returns a **Command** with an **update** dictionary to store new graph data (e.g., user info) and message history.
+
+    The tool should be executed in a node that can handle the Command return type, such as a **ToolNode** or a custom node that can process the Command.
+
+    ```python
+    from langgraph.types import Command
+    from langchain_core.tools import tool
+
+    @tool
+    def update_state_tool():
+        return Command(update={"my_custom_key": "some_value"})
+    ```
 
 ??? "How to handle large numbers of tools"
     Full Example: [How to handle large numbers of tools](many-tools.ipynb)
 
+    Use a **vector store** to search over tool descriptions and **dynamically select** relevant tools for each query. This helps reduce token usage and potential errors when handling large sets of tools. 
+
+    ```python
+    from langchain_core.tools import StructuredTool
+    from langchain_core.documents import Document
+    from langchain_core.vectorstores import InMemoryVectorStore
+    from langchain_openai import OpenAIEmbeddings
+
+    # 1) Define a few "tools" with descriptions
+    tools = [
+        StructuredTool.from_function(
+            lambda year: f"Info for CompanyA in {year}",
+            name="CompanyA",
+            description="Fetch data for CompanyA."
+        ),
+        StructuredTool.from_function(
+            lambda year: f"Info for CompanyB in {year}",
+            name="CompanyB",
+            description="Fetch data for CompanyB."
+        )
+    ]
+
+    # 2) Add tool descriptions to a vector store
+    docs = [Document(page_content=t.description, metadata={"tool_name": t.name}) for t in tools]
+    vector_store = InMemoryVectorStore(embedding=OpenAIEmbeddings())
+    vector_store.add_documents(docs)
+
+    # 3) Retrieve and bind only relevant tools to your LLM based on a user query
+    query = "Tell me about CompanyB in 2022"
+    relevant_tools = vector_store.similarity_search(query)
+    matched_tool_names = [doc.metadata["tool_name"] for doc in relevant_tools]
+    print("Tools selected:", matched_tool_names)  # Dynamically pick from many tools
+    ```
 
 ### Subgraphs
 
@@ -460,12 +651,73 @@ Working with chat models:
 ??? "How to add and use subgraphs"
     Full Example: [How to add and use subgraphs](subgraph.ipynb)
 
+    Use **subgraphs** to break your system into smaller graphs that can share or transform state. You can either add a subgraph node directly to your parent graph for shared schema keys or define a node function that invokes a compiled subgraph if the schemas differ.
+
+    ```python
+    from langgraph.graph import START, StateGraph
+    from typing import TypedDict
+
+    # Define a subgraph
+    class SubgraphState(TypedDict):
+        bar: str
+
+    def sub_node(state: SubgraphState):
+        return {"bar": state["bar"] + " subgraph"}
+
+    sub_builder = StateGraph(SubgraphState)
+    sub_builder.add_node(sub_node)
+    sub_builder.add_edge(START, "sub_node")
+    compiled_subgraph = sub_builder.compile()
+
+    # Define parent graph
+    class ParentState(TypedDict):
+        foo: str
+
+    def parent_node(state: ParentState):
+        result = compiled_subgraph.invoke({"bar": state["foo"]})
+        return {"foo": result["bar"]}
+
+    builder = StateGraph(ParentState)
+    builder.add_node("parent_node", parent_node)
+    builder.add_edge(START, "parent_node")
+    graph = builder.compile()
+
+    # Execute the parent graph
+    print(graph.invoke({"foo": "Hello,"}))
+    ```
+
 ??? "How to view and update state in subgraphs"
     Full Example: [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
+
+    **You can pause subgraphs at breakpoints, inspect their state, and update or override node outputs before resuming execution.** 
+
+    This lets you rewind specific parts of the workflow or inject new data without rerunning the entire graph.
+
+    ```python
+    state = graph.get_state(config, subgraphs=True)
+    graph.update_state(
+        state.tasks[0].state.config, 
+        {"city": "Tokyo"}, 
+        as_node="weather_node"
+    )
+    for update in graph.stream(None, config=config, subgraphs=True):
+        print(update)
+    ```
 
 ??? "How to transform inputs and outputs of a subgraph"
     Full Example: [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
 
+    You can **wrap** subgraph calls in helper functions to **map** parent state keys to subgraph keys and **transform** the subgraph’s output back to the parent. This lets each subgraph maintain its own independent state while still sharing data. 
+
+    ```python
+    def transform_and_call_subgraph(parent_state: dict) -> dict:
+        # Map parent key to subgraph key
+        child_input = {"my_child_key": parent_state["my_key"]}
+        # Invoke subgraph
+        child_output = child_graph.invoke(child_input)
+        # Map subgraph key back to parent
+        return {"my_key": child_output["my_child_key"]}
+    ```
 ### Multi-Agent
 
 [Multi-agent systems](../concepts/multi_agent.md) are useful to break down complex LLM applications into multiple agents, each responsible for a different part of the application. These how-to guides show how to implement multi-agent systems in LangGraph:
@@ -473,11 +725,36 @@ Working with chat models:
 ??? "How to implement handoffs between agents"
     Full Example: [How to implement handoffs between agents](agent-handoffs.ipynb)
 
+    Use a **Command** object or a specialized "handoff tool" that returns a Command, with goto specifying the next agent and update for transferring state. This approach allows agents to route requests or share context seamlessly.
+
+    ```python
+    from langgraph.types import Command
+
+    def agent(state):
+        # Decide on the next agent
+        next_agent = "other_agent"
+        return Command(goto=next_agent, update={"key": "value"})
+    ```
+
 ??? "How to build a multi-agent network"
     Full Example: [How to build a multi-agent network](multi-agent-network.ipynb)
 
+
+
 ??? "How to add multi-turn conversation in a multi-agent application"
     Full Example: [How to add multi-turn conversation in a multi-agent application](multi-agent-multi-turn-convo.ipynb)
+
+    **Use an interrupt node to gather user input, append it to the conversation state, and reroute to the active agent.** The agent then processes the new message to produce a response or hand off to another agent as needed.
+
+    ```python
+    def human_node(state):
+        user_input = interrupt(value="Provide your input:")
+        active_agent = ...  # Determine the active agent
+        return Command(
+            update={"messages": [{"role": "human", "content": user_input}]},
+            goto=active_agent
+        )
+    ```
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
@@ -486,38 +763,208 @@ See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for i
 ??? "How to use Pydantic model as state"
     Full Example: [How to use Pydantic model as state](state-model.ipynb)
 
+    Use a Pydantic BaseModel to define your graph’s state and automatically validate node inputs. Any mismatch in types or invalid data triggers a pydantic validation error at runtime.
+
+    ```python
+    from pydantic import BaseModel
+    from langgraph.graph import StateGraph, START, END
+
+    class MyState(BaseModel):
+        a: str
+
+    def node(state: MyState):
+        return {"a": "goodbye"}
+
+    builder = StateGraph(MyState)
+    builder.add_node(node)
+    builder.add_edge(START, "node")
+    builder.add_edge("node", END)
+    graph = builder.compile()
+
+    # Valid input
+    print(graph.invoke({"a": "hello"}))
+    ```
+
 ??? "How to define input/output schema for your graph"
     Full Example: [How to define input/output schema for your graph](input_output_schema.ipynb)
 
+    You can **define** separate typed dictionaries for your input and output schemas to ensure only relevant fields are included in the final output. Simply specify these schemas when creating the StateGraph and return the necessary data from each node.
+
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    from typing_extensions import TypedDict
+
+    class InputState(TypedDict):
+        question: str
+
+    class OutputState(TypedDict):
+        answer: str
+
+    def answer_node(state: InputState):
+        return {"answer": f"Your question was: {state['question']}"}
+
+    builder = StateGraph(input=InputState, output=OutputState)
+    builder.add_node(answer_node)
+    builder.add_edge(START, "answer_node")
+    builder.add_edge("answer_node", END)
+    graph = builder.compile()
+
+    print(graph.invoke({"question": "Hi"}))  # Prints {'answer': 'Your question was: Hi'}
+    ```
+
 ??? "How to pass private state between nodes inside the graph"
     Full Example: [How to pass private state between nodes inside the graph](pass_private_state.ipynb)
+
+    You can define separate schemas for private and public data, then configure your nodes so only the intended steps receive the private fields, while the rest of the nodes access only the public state. This way, internal information is passed between specific nodes and kept out of the final schema.
+
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    from typing_extensions import TypedDict
+
+    class OverallState(TypedDict):
+        a: str
+
+    class Node1Output(TypedDict):
+        private_data: str
+
+    def node_1(state: OverallState) -> Node1Output:
+        return {"private_data": "secret_value"}
+
+    def node_2(state: Node1Output) -> OverallState:
+        return {"a": "public_value"}
+
+    def node_3(state: OverallState) -> OverallState:
+        return {"a": "final_value"}
+
+    builder = StateGraph(OverallState)
+    builder.add_node(node_1)
+    builder.add_node(node_2)
+    builder.add_node(node_3)
+    builder.add_edge(START, "node_1")
+    builder.add_edge("node_1", "node_2")
+    builder.add_edge("node_2", "node_3")
+    builder.add_edge("node_3", END)
+    graph = builder.compile()
+
+    print(graph.invoke({"a": "initial_value"}))
+    ```
 
 ### Other
 
 ??? "How to run graph asynchronously"
     Full Example: [How to run graph asynchronously](async.ipynb)
 
+    Define nodes with **async def** and use **await** for asynchronous calls. Then compile your graph with a StateGraph and call it using app.ainvoke(...) to run the graph concurrently.
+
+    ```python
+    async def call_model(state):
+        response = await model.ainvoke(state["messages"])
+        return {"messages": [response]}
+
+    result = await app.ainvoke({"messages": [HumanMessage(content="Hello")]})
+    ```
+
 ??? "How to visualize your graph"
     Full Example: [How to visualize your graph](visualization.ipynb)
+j
+    You can visualize your Graph by converting it to Mermaid syntax or generating a PNG. Below is a minimal example to create and draw a Graph.
+
+    ```python
+    from IPython import display
+    from langgraph.graph import StateGraph, START, END
+
+    builder = StateGraph(dict)
+    builder.add_node("my_node", lambda state: {"messages": ["Hello from my_node"]})
+    builder.add_edge(START, "my_node")
+    builder.add_edge("my_node", END)
+    graph = builder.compile()
+
+    display.Image(graph.get_graph().draw_mermaid_png())
+    ```
 
 ??? "How to add runtime configuration to your graph"
     Full Example: [How to add runtime configuration to your graph](configuration.ipynb)
 
+    Configure your graph at runtime by passing parameters under the "configurable" key in a config object. This way, you can dynamically choose which model to use or add extra settings without altering the tracked state.
+
+    ```python
+    config = {"configurable": {"model": "openai"}}
+    graph.invoke({"messages": [HumanMessage(content="Hello!")]}, config=config)
+    ```
+
 ??? "How to add node retries"
     Full Example: [How to add node retries](node-retries.ipynb)
 
+    Use the “retry” parameter in add_node() to configure how many times a node is retried, intervals between attempts, and which exceptions trigger a retry. This can handle errors from external calls such as APIs or databases.
+
+    ```python
+    from langgraph.pregel import RetryPolicy
+
+    builder.add_node(
+        "my_node",
+        my_func,
+        retry=RetryPolicy(max_attempts=3, backoff_factor=2.0)
+    )
+    ```
 ??? "How to force function calling agent to structure output"
     Full Example: [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
+
+    Use a single LLM plus a “response tool” or call a second LLM that enforces structured output. Both approaches ensure consistent, parseable results. This makes it easier to integrate the agent’s answer into downstream workflows.
 
 ??? "How to pass custom LangSmith run ID for graph runs"
     Full Example: [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 
+    **Add a custom** `run_id`, `tags`, and `metadata` to your LangGraph `RunnableConfig` to organize and filter your runs in LangSmith. Initialize these fields before calling methods like `.stream()` or `.invoke()` to keep your traces tidy.
+
+    ```python
+    import uuid
+
+    config = {
+        "run_id": str(uuid.uuid4()),
+        "tags": ["custom_tag"],
+        "metadata": {"key": "value"},
+    }
+
+    graph.invoke("Hello, world!", config)
+    ```
+
 ??? "How to return state before hitting recursion limit"
     Full Example: [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
+
+    Simply track the remaining steps in your state and end the graph before the recursion limit triggers an error, returning the last state. Use a special “RemainingSteps” annotation, check if it’s near zero, and terminate gracefully.
+
+    ```python
+    from typing_extensions import TypedDict
+    from typing import Annotated
+    from langgraph.graph import StateGraph, START, END
+    from langgraph.managed.is_last_step import RemainingSteps
+
+    class State(TypedDict):
+        value: str
+        remaining_steps: RemainingSteps
+
+    def router(state: State):
+        if state["remaining_steps"] <= 2:
+            return END
+        return "action"
+
+    def action_node(state: State):
+        return {}
+
+    flow = StateGraph(State)
+    flow.add_node("action", action_node)
+    flow.add_edge(START, "action")
+    flow.add_conditional_edges("action", router, ["action", END])
+
+    app = flow.compile()
+    result = app.invoke({"value": "test"})
+    print(result)
+    ```
 
 ??? "How to integrate LangGraph with AutoGen, CrewAI, and other frameworks"
     Full Example: [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
 
+    LangGraph can integrate with frameworks like **AutoGen** or **CrewAI** by wrapping those frameworks in LangGraph nodes. Then, define a multi-agent system that references both the external agent node and local agents. Finally, run the orchestrated graph for coordinated multi-agent interactions.
 
 ### Prebuilt ReAct Agent
 
@@ -530,20 +977,104 @@ These guides show how to use the prebuilt ReAct agent:
 ??? "How to create a ReAct agent"
     Full Example: [How to create a ReAct agent](create-react-agent.ipynb)
 
+    Use the prebuilt create_react_agent() function with a chat model and tools to handle user requests. The agent decides whether to call a tool or return an answer based on the conversation. Provide your LLM and any needed tools, and the agent will manage the rest.
+
+    ```python
+    from langgraph.prebuilt import create_react_agent
+
+    model = ... # Initialize your LLM
+    tools = [...] # Initialize your tools
+
+    agent = create_react_agent(model, tools=tools)
+    result = agent({"messages": [("user", "What is the weather in sf?")]})
+    print(result)
+    ```
+
 ??? "How to add memory to a ReAct agent"
     Full Example: [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
+
+    Add a **checkpointer** (like MemorySaver) to the create_react_agent function to enable memory in your ReAct agent. This way, the agent retains conversation history across calls for more dynamic interactions.
+
+    ```python
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.prebuilt import create_react_agent
+
+    memory = MemorySaver()
+    graph = create_react_agent(model, tools=tools, checkpointer=memory)
+    ```
 
 ??? "How to add a custom system prompt to a ReAct agent"
     Full Example: [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 
+    Add a custom system prompt to the prebuilt ReAct agent by passing **your desired instructions** to the state_modifier parameter. This modifies the agent’s system prompt and guides its responses.
+
+    ```python
+    from langgraph.prebuilt import create_react_agent
+
+    model = ... # Initialize your LLM
+
+    prompt = "Respond in Italian"
+    agent = create_react_agent(model, tools=[], state_modifier=prompt)
+    ```
+
 ??? "How to add human-in-the-loop processes to a ReAct agent"
     Full Example: [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
+
+    **You can add a human review step by passing** `interrupt_before=["tools"]` **to the ReAct agent and using a checkpointer to pause execution whenever a tool call is about to happen. This allows you to inspect or modify the agent’s proposed tool calls before continuing.**
+
+    ```python
+    from langgraph.prebuilt import create_react_agent
+    from langgraph.checkpoint.memory import MemorySaver
+
+    model = ... # Initialize your LLM
+    memory = MemorySaver() # Initialize your checkpointer
+
+    graph = create_react_agent(
+        model,
+        tools=[],  # Add your tools here
+        interrupt_before=["tools"],
+        checkpointer=memory
+    )
+    ```
 
 ??? "How to create prebuilt ReAct agent from scratch"
     Full Example: [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 
+    **Define a custom ReAct agent** by specifying a basic agent state, linking a chat model to relevant tools, and building a node-based workflow in LangGraph. Then pass user messages to the compiled graph to handle tool usage and respond.
+
+    ```python
+    from langgraph.graph import StateGraph, END
+
+    # Define your state class, model, tool nodes, and callback functions here (AgentState, call_model, tool_node, should_continue)
+
+    workflow = StateGraph(AgentState)
+    workflow.add_node("agent", call_model)
+    workflow.add_node("tools", tool_node)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", should_continue, {"continue": "tools", "end": END})
+    workflow.add_edge("tools", "agent")
+    graph = workflow.compile()
+
+    response = graph.run({"messages": [("user", "What is the weather in SF?")]})
+    print(response["messages"][-1].content)
+    ```
+
 ??? "How to add semantic search for long-term memory to a ReAct agent"
     Full Example: [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
+
+    **Enable semantic search** by providing an embeddings-based index config when creating your memory store. Store data with `.put(...)` and retrieve relevant entries via `.search(...)`, letting your agent recall context from stored information seamlessly.
+
+    ```python
+    from langchain.embeddings import init_embeddings
+    from langgraph.store.memory import InMemoryStore
+
+    embeddings = init_embeddings("openai:text-embedding-3-small")
+    store = InMemoryStore(index={"embed": embeddings, "dims": 1536})
+
+    store.put(("user_123","memories"), "1", {"text": "I love pizza"})
+    results = store.search(("user_123","memories"), query="favorite food", limit=1)
+    print(results)
+    ```
 
 ## LangGraph Platform
 
