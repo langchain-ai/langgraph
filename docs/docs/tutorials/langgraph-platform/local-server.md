@@ -180,7 +180,7 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
     ```js
     const { Client } = await import("@langchain/langgraph-sdk");
 
-    // only set the apiUrl if you changed the default port when calling langgraph up
+    // only set the apiUrl if you changed the default port when calling langgraph dev
     const client = new Client({ apiUrl: "http://localhost:2024"});
 
     const streamResponse = client.runs.stream(
