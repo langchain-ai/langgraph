@@ -273,7 +273,11 @@ def create_react_agent(
                 - a TypedDict class,
                 - or a Pydantic class.
 
-            NOTE: this will make a separate call to the LLM to generate the structured response after the agent loop is finished.
+            !!! Important
+                `response_format` requires the model to support `.with_structured_output`
+
+            !!! Note
+                The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -565,7 +569,7 @@ def create_react_agent(
     """
 
     if state_schema is not None:
-        required_keys = {"messages", "is_last_step", "remaining_steps"}
+        required_keys = {"messages", "remaining_steps"}
         if response_format is not None:
             required_keys.add("structured_response")
 
@@ -597,8 +601,8 @@ def create_react_agent(
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         _validate_chat_history(state["messages"])
-        response = cast(AIMessage, model_runnable.invoke(state, config))
-        has_tool_calls = len(response.tool_calls) > 0
+        response = model_runnable.invoke(state, config)
+        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
             if isinstance(response, AIMessage)
@@ -621,24 +625,21 @@ def create_react_agent(
                 and has_tool_calls
             )
         ):
-            # We return a Command here to exit if the agent runs out of steps
-            return Command(
-                update={
-                    "messages": [
-                        AIMessage(
-                            id=response.id,
-                            content="Sorry, need more steps to process this request.",
-                        )
-                    ]
-                }
-            )
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
         _validate_chat_history(state["messages"])
-        response = cast(AIMessage, await model_runnable.ainvoke(state, config))
-        has_tool_calls = len(response.tool_calls) > 0
+        response = await model_runnable.ainvoke(state, config)
+        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
             if isinstance(response, AIMessage)
@@ -661,16 +662,14 @@ def create_react_agent(
                 and has_tool_calls
             )
         ):
-            return Command(
-                update={
-                    "messages": [
-                        AIMessage(
-                            id=response.id,
-                            content="Sorry, need more steps to process this request.",
-                        )
-                    ]
-                }
-            )
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
