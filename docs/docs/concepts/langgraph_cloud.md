@@ -19,7 +19,7 @@ See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for c
 | **Deployment Type** | **CPU** | **Memory** | **Scaling**         |
 |---------------------|---------|------------|---------------------|
 | Development         | 1 CPU   | 1 GB       | Up to 1 container   |
-| Production          | 1 CPU   | 2 GB       | Up to 10 containers |
+| Production          | 2 CPU   | 2 GB       | Up to 10 containers |
 
 ## Autoscaling
 `Production` type deployments automatically scale up to 10 containers. Scaling is based on the current request load for a single container. Specifically, the autoscaling implementation scales the deployment so that each container is processing about 10 concurrent requests. For example... 
