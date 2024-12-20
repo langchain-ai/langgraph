@@ -1189,23 +1189,46 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 ??? "How to deploy to LangGraph cloud"
 	Full Example: [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
 
-    Deploy your GitHub-based LangGraph app in the LangSmith UI by creating a new deployment, setting your config file path, and choosing environment variables. Then create or update revisions, view logs, and manage branches or auto-updates in the deployment settings.
+    Deploy your code from a GitHub repository to LangGraph Cloud via the LangSmith UI, then manage new revisions, environment variables, and logs.
+
 
 ??? "How to deploy to a self-hosted environment"
 	Full Example: [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
 
+    Use the LangGraph CLI to build a Docker image for your application, then pass in the required environment variables (e.g., REDIS_URI and DATABASE_URI) to run it. Below is a minimal example:
+
+    ```bash
+    pip install -U langgraph-cli
+    langgraph build -t my-image
+    docker run \
+        --env-file .env \
+        -p 8123:8000 \
+        -e REDIS_URI="foo" \
+        -e DATABASE_URI="bar" \
+        my-image
+    ```
+
 ??? "How to interact with the deployment using RemoteGraph"
 	Full Example: [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
 
-    Initialize a RemoteGraph by specifying its name and either a URL or client credentials. Then invoke or stream results by calling the appropriate sync or async methods, optionally persisting state via a thread ID if needed.
+    Initialize a RemoteGraph by specifying the graph name and either a URL or a sync client. Then call its invoke() or stream() methods synchronously. Below is a minimal Python snippet:
 
     ```python
+    from langgraph_sdk import get_sync_client
     from langgraph.pregel.remote import RemoteGraph
 
-    remote_graph = RemoteGraph("agent", url="<DEPLOYMENT_URL>") 
-    result = remote_graph.invoke({"messages": [{"role": "user", "content": "What's the weather in LA?"}]})
+    url = "<DEPLOYMENT_URL>"
+    graph_name = "agent"
+
+    sync_client = get_sync_client(url=url)
+    remote_graph = RemoteGraph(graph_name, sync_client=sync_client)
+
+    result = remote_graph.invoke({
+        "messages": [{"role": "user", "content": "What's the weather in SF?"}]
+    })
     print(result)
     ```
+
 ### Authentication & Access Control
 
 - [How to add custom authentication](./auth/custom_auth.md)
@@ -1248,21 +1271,37 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 ??? "How to copy threads"
 	Full Example: [How to copy threads](../cloud/how-tos/copy_threads.md)
 
-    You can **copy** an existing thread to create a new one with the same history. This keeps the original thread intact and lets you explore different ideas independently.
+    Copying a thread lets you preserve the original thread’s history while creating a new thread for independent runs. Create a new thread copy from an existing one, then verify the history matches the original.
 
     ```python
-    copied_thread = await client.threads.copy("<THREAD_ID>")
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    thread = client.threads.create()
+
+    copied_thread = client.threads.copy("<THREAD_ID>")
+
+    original_thread_history = client.threads.get_history("<THREAD_ID>")
+    copied_thread_history = client.threads.get_history(copied_thread["thread_id"])
     ```
 
 ??? "How to check status of your threads"
 	Full Example: [How to check status of your threads](../cloud/how-tos/check_thread_status.md)
 
-    Use the client to **search** for threads by status (e.g., "idle" or "busy"), retrieve a specific one by **ID**, or filter them by **metadata**. This makes it easy to track the state of any thread programmatically.
-
-    For example, 
+    You can query threads to see if they’re idle, interrupted, or busy, and you can also filter by ID or metadata to find specific threads. Below is an example using the synchronous Python client:
 
     ```python
-    await client.threads.search(status="idle", limit=1)
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+
+    # Find idle threads
+    idle_threads = client.threads.search(status="idle", limit=1)
+    print(idle_threads)
+
+    # Find a thread by ID
+    thread_info = client.threads.get("<THREAD_ID>")
+    print(thread_info["status"])
     ```
 
 ### Runs
@@ -1273,6 +1312,27 @@ LangGraph Platform supports multiple types of runs besides streaming runs.
 	Full Example: [How to run an agent in the background](../cloud/how-tos/background_run.md)
 
     Kick off background runs by creating a thread, sending your request, then waiting on the run to finish using "join". Once complete, fetch the final state from the thread for the results.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    # Create client (async)
+    client = get_sync_client(url="YOUR_DEPLOYMENT_URL")
+
+    # Create a new thread
+    thread = client.threads.create()
+
+    # Start a background run
+    input_data = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+    run = client.runs.create(thread["thread_id"], "agent", input=input_data)
+
+    # Wait for the run to finish
+    client.runs.join(thread["thread_id"], run["run_id"])
+
+    # Retrieve final result
+    final_state = client.threads.get_state(thread["thread_id"])
+    print(final_state['values']['messages'][-1]['content'][0]['text'])
+    ```
 
 ??? "How to run multiple agents in the same thread"
 	Full Example: [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
@@ -1305,8 +1365,30 @@ Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 
     **Cron jobs** allow you to schedule your graph to run on a set timetable (e.g., sending automated emails) rather than waiting for user input. Simply provide a cron expression to define your schedule, and always remember to delete old jobs to avoid excess usage.
 
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="YOUR_DEPLOYMENT_URL")
+    assistant_id = "agent"
+
+    # Create a thread (sync version)
+    thread = client.threads.create()
+
+    # Schedule a cron job to run daily at 15:27
+    cron_job = client.crons.create_for_thread(
+        thread["thread_id"],
+        assistant_id,
+        schedule="27 15 * * *",
+        input={"messages": [{"role": "user", "content": "What time is it?"}]}
+    )
+
+    # Delete the cron job
+    client.crons.delete(cron_job["cron_id"])
+    ```
+
 ??? "How to create stateless runs"
 	Full Example: [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
+
 
 ### Streaming
 
@@ -1315,20 +1397,178 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 ??? "How to stream values"
 	Full Example: [How to stream values](../cloud/how-tos/stream_values.md)
 
+    Use "values" streaming mode to retrieve the entire graph state after each node executes. Provide an input, then iterate over the streaming response for each superstep.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    input_data = {"messages": [{"role": "user", "content": "What's the weather in LA"}]}
+
+    for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant_id,
+        input=input_data,
+        stream_mode="values",
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+    ```
+
 ??? "How to stream updates"
 	Full Example: [How to stream updates](../cloud/how-tos/stream_updates.md)
+
+    You can enable streaming of state updates (rather than the full state) by setting stream_mode="updates". Each chunk of streamed data contains only the new or changed parts of the graph's state after each node runs.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")  # sync version
+    assistant_id = "agent"
+    thread = client.threads.create()
+    input_data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "what's the weather in la"
+            }
+        ]
+    }
+
+    for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant_id,
+        input=input_data,
+        stream_mode="updates",
+    ):
+        print(f"Receiving new event: {chunk.event}")
+        print(chunk.data)
+    ```
 
 ??? "How to stream messages"
 	Full Example: [How to stream messages](../cloud/how-tos/stream_messages.md)
 
+    Use "messages-tuple" to receive LLM tokens from nodes in real-time. Create a thread and call runs.stream with stream_mode set to "messages-tuple" to get a tuple containing each token's text and metadata.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+
+    thread = client.threads.create()
+    print(thread)
+
+    input_data = {"messages": [{"role": "user", "content": "What's the weather in sf"}]}
+    config = {"configurable": {"model_name": "openai"}}
+
+    for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant_id=assistant_id,
+        input=input_data,
+        config=config,
+        stream_mode="messages-tuple"
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+        print()
+    ```
+
 ??? "How to stream events"
 	Full Example: [How to stream events](../cloud/how-tos/stream_events.md)
+
+    Use the events streaming mode to get real-time updates of each event that occurs in your graph. Provide an input to your graph and iterate the returned stream to receive and handle each event as it happens.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    input_data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "What's the weather in SF?",
+            }
+        ]
+    }
+
+    for chunk in client.runs.stream(
+        thread_id=thread["thread_id"],
+        assistant_id=assistant_id,
+        input=input_data,
+        stream_mode="events",
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+    ```
 
 ??? "How to stream in debug mode"
 	Full Example: [How to stream in debug mode](../cloud/how-tos/stream_debug.md)
 
+    You can stream debug events from your graph by setting stream_mode="debug", which returns a series of events with details about checkpoints, tasks, and results. These events help you follow each super-step of your graph to spot issues or monitor execution.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    input_data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "What's the weather in SF?",
+            }
+        ]
+    }
+
+    for chunk in client.runs.stream(
+        thread_id=thread["thread_id"],
+        assistant_id=assistant_id,
+        input=input_data,
+        stream_mode="debug",
+    ):
+        print(f"Received event: {chunk.event}")
+        print(chunk.data)
+    ```
+
 ??? "How to stream multiple modes"
 	Full Example: [How to stream multiple modes](../cloud/how-tos/stream_multiple.md)
+
+    You can enable multiple streaming outputs by passing a list of modes (e.g. ["messages", "events", "debug"]) in the stream_mode parameter. Each mode then emits its own stream events.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    input_data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "What's the weather in SF?",
+            }
+        ]
+    }
+
+    for chunk in client.runs.stream(
+        thread_id=thread["thread_id"],
+        assistant_id=assistant_id,
+        input=input_data,
+        stream_mode=["messages", "events", "debug"],
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+    ```
 
 ### Human-in-the-loop
 
@@ -1337,17 +1577,158 @@ When designing complex graphs, relying entirely on the LLM for decision-making c
 ??? "How to add a breakpoint"
 	Full Example: [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
 
+    You can add a breakpoint by specifying "interrupt_before" on the relevant node. This pauses execution at that node, letting you resume afterward.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url=<DEPLOYMENT_URL>)
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    input_data = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+    response = client.runs.run(
+        thread["thread_id"],
+        assistant_id,
+        input=input_data,
+        interrupt_before=["action"]
+    )
+
+    print(response)
+
 ??? "How to wait for user input"
 	Full Example: [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
+
+    Use a breakpoint before the node where human input is needed, then update the graph state (with as_node) so that execution resumes from that node after adding the user’s response. This approach allows your graph to pause for input and then continue without starting over.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+
+    # 1. Create a thread
+    thread = client.threads.create()
+
+    # 2. Initial invocation, interrupting before "ask_human" node
+    input_data = {"messages": [{"role": "user", "content": "Where are you located?"}]}
+    for chunk in client.runs.stream(
+        thread["thread_id"], assistant_id, input=input_data,
+        stream_mode="updates", interrupt_before=["ask_human"]
+    ):
+        if chunk.data and chunk.event != "metadata":
+            print(chunk.data)
+
+    # 3. Update state with the user's response
+    state = client.threads.get_state(thread["thread_id"])
+    tool_call_id = state["values"]["messages"][-1]["tool_calls"][0]["id"]
+    tool_message = [{"tool_call_id": tool_call_id, "type": "tool", "content": "San Francisco"}]
+    client.threads.update_state(
+        thread["thread_id"], {"messages": tool_message},
+        as_node="ask_human"
+    )
+
+    # 4. Continue execution
+    for chunk in client.runs.stream(thread["thread_id"], assistant_id, input=None, stream_mode="updates"):
+        if chunk.data and chunk.event != "metadata":
+            print(chunk.data)
+    ```
 
 ??? "How to edit graph state"
 	Full Example: [How to edit graph state](../cloud/how-tos/human_in_the_loop_edit_state.md)
 
+    To interrupt a graph run before a node, retrieve and modify the relevant portion of the state, and then resume execution, you can invoke your deployed graph with an “interrupt_before” parameter, update the state through the SDK, and continue from the same point.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    # 1. Invoke with interrupt
+    for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant_id,
+        input={"messages": [{"role": "user", "content": "search for weather in SF"}]},
+        interrupt_before=["action"],
+        stream_mode="updates",
+    ):
+        print(chunk)
+
+    # 2. Update the state
+    current_state = client.threads.get_state(thread["thread_id"])
+    last_message = current_state["values"]["messages"][-1]
+    last_message["tool_calls"][0]["args"] = {"query": "current weather in Sidi Frej"}
+    client.threads.update_state(thread["thread_id"], {"messages": last_message})
+
+    # 3. Resume execution
+    for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant_id,
+        stream_mode="updates",
+    ):
+        print(chunk)
+    ```
+
 ??? "How to replay and branch from prior states"
 	Full Example: [How to replay and branch from prior states](../cloud/how-tos/human_in_the_loop_time_travel.md)
 
+    You can revisit previous states by referencing their checkpoint_id to rerun or modify them for alternate paths. This lets you debug or explore different outcomes mid-conversation.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    # Connect to your deployed graph
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    # Get all prior states
+    states = client.threads.get_history(thread["thread_id"])
+    state_to_replay = states[2]
+
+    # Update the thread to replay from a chosen checkpoint
+    updated_config = client.threads.update_state(
+        thread["thread_id"],
+        {"messages": []},
+        checkpoint_id=state_to_replay["checkpoint_id"]
+    )
+
+    # Re-run the graph from that checkpoint
+    for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant_id,
+        input=None,
+        stream_mode="updates",
+        checkpoint_id=updated_config["checkpoint_id"]
+    ):
+        if chunk.data and chunk.event != "metadata":
+            print(chunk.data)
+    ```
+
 ??? "How to review tool calls"
 	Full Example: [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
+
+    Use breakpoints to intercept and review tool calls in a human-in-the-loop process. You can approve, edit, or provide feedback on a tool call by updating the graph state accordingly.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    thread = client.threads.create()
+
+    # Submit user input
+    input_data = {"messages": [{"role": "user", "content": "What's the weather in SF?"}]}
+    for chunk in client.runs.stream(thread["thread_id"], "agent", input=input_data):
+        if chunk["data"] and chunk["event"] != "metadata":
+            print(chunk["data"])
+
+    # Tool call is now waiting for review - approve by sending no input
+    for chunk in client.runs.stream(thread["thread_id"], "agent", input=None):
+        if chunk["data"] and chunk["event"] != "metadata":
+            print(chunk["data"])
+    ```
 
 ### Double-texting
 
@@ -1363,22 +1744,118 @@ Graph execution can take a while, and sometimes users may change their mind abou
 
     Use **rollback** to fully remove a previous run from the database before starting a new run. The old run becomes inaccessible once this new run is triggered. Below is a minimal example:
 
+    ```python
+    import requests
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+    thread = client.threads.create()
+
+    rolled_back_run = client.runs.create(
+        thread["thread_id"],
+        assistant_id,
+        input={"messages": [{"role": "user", "content": "What's the weather in SF?"}]},
+    )
+
+    run = client.runs.create(
+        thread["thread_id"],
+        assistant_id,
+        input={"messages": [{"role": "user", "content": "What's the weather in NYC?"}]},
+        multitask_strategy="rollback",
+    )
+
+    client.runs.join(thread["thread_id"], run["run_id"])
+    ```
+
 ??? "How to use the reject option"
 	Full Example: [How to use the reject option](../cloud/how-tos/reject_concurrent.md)
 
     Use the **"reject"** strategy to block a second concurrent run, causing an error if another run is started while the original is still active. This ensures that the first run completes uninterrupted.
 
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    thread = client.threads.create()
+
+    run = client.runs.create(
+        thread["thread_id"],
+        "agent",
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    )
+
+    try:
+        client.runs.create(
+            thread["thread_id"],
+            "agent",
+            input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
+            multitask_strategy="reject",
+        )
+    except Exception as e:
+        print("Failed to start concurrent run:", e)
+    ```
+
+
 ??? "How to use the enqueue option"
 	Full Example: [How to use the enqueue option](../cloud/how-tos/enqueue_concurrent.md)
 
-    Use the **enqueue** option to queue and process interruptions sequentially, ensuring each new run waits its turn. Simply create multiple runs, specifying "enqueue" for the interrupting run.
+    Use the "enqueue" strategy to queue and process multiple user requests in the order they arrive. The second request waits until the first is done, then runs automatically.
+
+    ```python
+    from langchain_core.messages import convert_to_messages
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="<DEPLOYMENT_URL>")
+    assistant_id = "agent"
+
+    # Create a new thread
+    thread = client.threads.create()
+
+    # Create two runs, with the second enqueued
+    first_run = client.runs.create(
+        thread["thread_id"],
+        assistant_id,
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
+    )
+    second_run = client.runs.create(
+        thread["thread_id"],
+        assistant_id,
+        input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
+        multitask_strategy="enqueue",
+    )
+
+    # Wait for second run to complete and view thread results
+    client.runs.join(thread["thread_id"], second_run["run_id"])
+    state = client.threads.get_state(thread["thread_id"])
+    for msg in convert_to_messages(state["values"]["messages"]):
+        print(msg)
+    ```
 
 ### Webhooks
 
 ??? "How to integrate webhooks"
 	Full Example: [How to integrate webhooks](../cloud/how-tos/webhooks.md)
 
-    Expose an endpoint that can accept POST requests, then provide its URL in the **webhook** parameter to get a callback once your run finishes. This is handy for updating your service after async calls. 
+    Expose an endpoint that can accept POST requests, then provide its URL in the **webhook** parameter to get a callback once your run finishes.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="https://YOUR_DEPLOYMENT_URL")
+
+    # Create a thread
+    thread = client.threads.create()
+
+    # Create a run with a webhook
+    run_response = client.runs.wait(
+        thread_id=thread["thread_id"],
+        assistant_id="agent",
+        input={"messages": [{"role": "user", "content": "Hello!"}]},
+        webhook="https://my-server.app/my-webhook-endpoint"
+    )
+    print(run_response)
+    ```
 
 ### Cron Jobs
 
@@ -1386,6 +1863,27 @@ Graph execution can take a while, and sometimes users may change their mind abou
 	Full Example: [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 
     **Cron jobs** allow you to schedule your graph to run on a set timetable (e.g., sending automated emails) rather than waiting for user input. Simply provide a cron expression to define your schedule, and always remember to delete old jobs to avoid excess usage.
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url=<DEPLOYMENT_URL>)
+    assistant_id = "agent"
+
+    # Create thread
+    thread = client.threads.create()
+
+    # Schedule a cron job for a thread
+    cron_job = client.crons.create_for_thread(
+        thread["thread_id"],
+        assistant_id,
+        schedule="27 15 * * *",
+        input={"messages": [{"role": "user", "content": "What time is it?"}]},
+    )
+
+    # Delete the cron job when you're done
+    client.crons.delete(cron_job["cron_id"])
+    ``` 
 
 ### LangGraph Studio
 
