@@ -40,12 +40,16 @@ SCHEDULED = sys.intern("__scheduled__")
 # marker to signal node was scheduled (in distributed mode)
 TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
+RETURN = sys.intern("__return__")
+# for writes of a task where we simply record the return value
 
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
 CONFIG_KEY_READ = sys.intern("__pregel_read")
 # holds the `read` function that returns a copy of the current state
+CONFIG_KEY_CALL = sys.intern("__pregel_call")
+# holds the `call` function that accepts a node/func, args and returns a future
 CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
 # holds a `BaseCheckpointSaver` passed from parent graph to child graphs
 CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
@@ -72,9 +76,11 @@ CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
 CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
-# callback to be called when a node is finished
-CONFIG_KEY_RESUME_VALUE = sys.intern("__pregel_resume_value")
 # holds the value that "answers" an interrupt() call
+CONFIG_KEY_WRITES = sys.intern("__pregel_writes")
+# read-only list of existing task writes
+CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
+# holds a mutable dict for temporary storage scoped to the current task
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

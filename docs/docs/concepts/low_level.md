@@ -191,7 +191,7 @@ class State(MessagesState):
 
 ## Nodes
 
-In LangGraph, nodes are typically python functions (sync or `async`) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
+In LangGraph, nodes are typically python functions (sync or async) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
 
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node][langgraph.graph.StateGraph.add_node] method:
 
@@ -283,6 +283,9 @@ You can optionally provide a dictionary that maps the `routing_function`'s outpu
 graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
 ```
 
+!!! tip
+    Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
+
 ### Entry Point
 
 The entry point is the first node(s) that are run when the graph starts. You can use the [`add_edge`][langgraph.graph.StateGraph.add_edge] method from the virtual [`START`][langgraph.constants.START] node to the first node to execute to specify where to enter the graph.
@@ -321,6 +324,68 @@ def continue_to_jokes(state: OverallState):
 
 graph.add_conditional_edges("node_a", continue_to_jokes)
 ```
+
+## `Command`
+
+It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [`Command`][langgraph.types.Command] object from node functions:
+
+```python
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(
+        # state update
+        update={"foo": "bar"},
+        # control flow
+        goto="my_other_node"
+    )
+```
+
+With `Command` you can also achieve dynamic control flow behavior (identical to [conditional edges](#conditional-edges)):
+
+```python
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    if state["foo"] == "bar":
+        return Command(update={"foo": "baz"}, goto="my_other_node")
+```
+
+!!! important
+
+    When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph rendering and tells LangGraph that `my_node` can navigate to `my_other_node`.
+
+Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
+
+### When should I use Command instead of conditional edges?
+
+Use `Command` when you need to **both** update the graph state **and** route to a different node. For example, when implementing [multi-agent handoffs](./multi_agent.md#handoffs) where it's important to route to a different agent and pass some information to that agent.
+
+Use [conditional edges](#conditional-edges) to route between nodes conditionally without updating the state.
+
+### Using inside tools
+
+A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
+
+```python
+@tool
+def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: RunnableConfig):
+    """Use this to look up user information to better assist them with their questions."""
+    user_info = get_user_info(config.get("configurable", {}).get("user_id"))
+    return Command(
+        update={
+            # update the state keys
+            "user_info": user_info,
+            # update the message history
+            "messages": [ToolMessage("Successfully looked up user information", tool_call_id=tool_call_id)]
+        }
+    )
+```
+
+!!! important
+    You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
+
+If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
+
+### Human-in-the-loop
+
+`Command` is an important part of human-in-the-loop workflows: when using `interrupt()` to collect user input, `Command` is then used to supply the input and resume execution via `Command(resume="User input")`. Check out [this conceptual guide](./human_in_the_loop.md) for more information.
 
 ## Persistence
 
@@ -387,35 +452,32 @@ graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthr
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
 
+## `interrupt`
+
+Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing the developer to collect user input, validate the graph state, or make decisions before resuming execution.
+
+```python
+from langgraph.types import interrupt
+
+def human_approval_node(state: State):
+    ...
+    answer = interrupt(
+        # This value will be sent to the client.
+        # It can be any JSON serializable value.
+        {"question": "is it ok to continue?"},
+    )
+    ...
+```
+
+Resuming the graph is done by passing a [`Command`](#command) object to the graph with the `resume` key set to the value returned by the `interrupt` function.
+
+Read more about how the `interrupt` is used for **human-in-the-loop** workflows in the [Human-in-the-loop conceptual guide](./human_in_the_loop.md).
+
 ## Breakpoints
 
-It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
+Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt-function) for this purpose.
 
-You **MUST** use a [checkpoiner](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
-
-In order to resume execution, you can just invoke your graph with `None` as the input.
-
-```python
-# Initial run of graph
-graph.invoke(inputs, config=config)
-
-# Let's assume it hit a breakpoint somewhere, you can then resume by passing in None
-graph.invoke(None, config=config)
-```
-
-See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
-
-### Dynamic Breakpoints
-
-It may be helpful to **dynamically** interrupt the graph from inside a given node based on some condition. In `LangGraph` you can do so by using `NodeInterrupt` -- a special exception that can be raised from inside a node.
-
-```python
-def my_node(state: State) -> State:
-    if len(state['input']) > 5:
-        raise NodeInterrupt(f"Received input that is longer than 5 characters: {state['input']}")
-
-    return state
-```
+Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
 ## Subgraphs
 
@@ -456,7 +518,7 @@ The simplest way to create subgraph nodes is by using a [compiled subgraph](#com
     If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
 
 ```python
-from langgraph.graph import START, StateGraph
+from langgraph.graph import StateGraph
 from typing import TypedDict
 
 class State(TypedDict):

@@ -1,3 +1,4 @@
+import sys
 from collections import defaultdict, deque
 from functools import partial
 from hashlib import sha1
@@ -36,13 +37,14 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
-    CONFIG_KEY_RESUME_VALUE,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_WRITES,
     EMPTY_SEQ,
+    ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -51,21 +53,30 @@ from langgraph.constants import (
     PUSH,
     RESERVED,
     RESUME,
+    RETURN,
     TAG_HIDDEN,
     TASKS,
     Send,
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
+from langgraph.pregel.call import get_runnable_for_func
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.store.base import BaseStore
-from langgraph.types import All, LoopProtocol, PregelExecutableTask, PregelTask
+from langgraph.types import (
+    All,
+    LoopProtocol,
+    PregelExecutableTask,
+    PregelTask,
+    RetryPolicy,
+)
 from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
+SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
 class WritesProtocol(Protocol):
@@ -93,6 +104,21 @@ class PregelTaskWrites(NamedTuple):
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
+
+
+class Call:
+    __slots__ = ("func", "input", "retry")
+
+    func: Callable
+    input: Any
+    retry: Optional[RetryPolicy]
+
+    def __init__(
+        self, func: Callable, input: Any, *, retry: Optional[RetryPolicy]
+    ) -> None:
+        self.func = func
+        self.input = input
+        self.retry = retry
 
 
 def should_interrupt(
@@ -177,7 +203,7 @@ def local_write(
     """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
     Validates writes and forwards them to `commit` function."""
     for chan, value in writes:
-        if chan in (PUSH, TASKS):
+        if chan in (PUSH, TASKS) and value is not None:
             if not isinstance(value, Send):
                 raise InvalidUpdateError(f"Expected Send, got {value}")
             if value.node not in process_keys:
@@ -245,7 +271,7 @@ def apply_writes(
     pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
-            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT):
+            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
                 pass
             elif chan == TASKS:  # TODO: remove branch in 1.0
                 checkpoint["pending_sends"].append(val)
@@ -436,7 +462,7 @@ def prepare_next_tasks(
 
 
 def prepare_single_task(
-    task_path: tuple[Union[str, int, tuple], ...],
+    task_path: tuple[Any, ...],
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
@@ -457,7 +483,94 @@ def prepare_single_task(
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
-    if task_path[0] == PUSH:
+    if task_path[0] == PUSH and isinstance(task_path[-1], Call):
+        # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
+        task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
+        call = task_path_t[-1]
+        proc_ = get_runnable_for_func(call.func)
+        name = proc_.name
+        if name is None:
+            raise ValueError("`call` functions must have a `__name__` attribute")
+        # create task id
+        triggers = [PUSH]
+        checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
+        task_id = _uuid5_str(
+            checkpoint_id,
+            checkpoint_ns,
+            str(step),
+            name,
+            PUSH,
+            _tuple_str(task_path[1]),
+            str(task_path[2]),
+        )
+        task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        metadata = {
+            "langgraph_step": step,
+            "langgraph_node": name,
+            "langgraph_triggers": triggers,
+            "langgraph_path": task_path[:3],
+            "langgraph_checkpoint_ns": task_checkpoint_ns,
+        }
+        if task_id_checksum is not None:
+            assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
+        if for_execution:
+            writes: deque[tuple[str, Any]] = deque()
+            return PregelExecutableTask(
+                name,
+                call.input,
+                proc_,
+                writes,
+                patch_config(
+                    merge_configs(config, {"metadata": metadata}),
+                    run_name=name,
+                    callbacks=(
+                        manager.get_child(f"graph:step:{step}") if manager else None
+                    ),
+                    configurable={
+                        CONFIG_KEY_TASK_ID: task_id,
+                        # deque.extend is thread-safe
+                        CONFIG_KEY_SEND: partial(
+                            local_write,
+                            writes.extend,
+                            processes.keys(),
+                        ),
+                        CONFIG_KEY_READ: partial(
+                            local_read,
+                            step,
+                            checkpoint,
+                            channels,
+                            managed,
+                            PregelTaskWrites(task_path[:3], name, writes, triggers),
+                            config,
+                        ),
+                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
+                        CONFIG_KEY_CHECKPOINTER: (
+                            checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                        ),
+                        CONFIG_KEY_CHECKPOINT_MAP: {
+                            **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                            parent_ns: checkpoint["id"],
+                        },
+                        CONFIG_KEY_CHECKPOINT_ID: None,
+                        CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                        CONFIG_KEY_WRITES: [
+                            w
+                            for w in pending_writes
+                            + configurable.get(CONFIG_KEY_WRITES, [])
+                            if w[0] in (NULL_TASK_ID, task_id)
+                        ],
+                        CONFIG_KEY_SCRATCHPAD: {},
+                    },
+                ),
+                triggers,
+                call.retry,
+                None,
+                task_id,
+                task_path[:3],
+            )
+        else:
+            return PregelTask(task_id, name, task_path[:3])
+    elif task_path[0] == PUSH:
         if len(task_path) == 2:  # TODO: remove branch in 1.0
             # legacy SEND tasks, executed in superstep n+1
             # (PUSH, idx of pending send)
@@ -488,17 +601,19 @@ def prepare_single_task(
                 PUSH,
                 str(idx),
             )
-        elif len(task_path) == 4:
+        elif len(task_path) >= 4:
             # new PUSH tasks, executed in superstep n
             # (PUSH, parent task path, idx of PUSH write, id of parent task)
-            task_path_t = cast(tuple[str, tuple, int, str], task_path)
-            writes_for_path = [w for w in pending_writes if w[0] == task_path_t[3]]
-            if task_path_t[2] >= len(writes_for_path):
+            task_path_tt = cast(tuple[str, tuple, int, str], task_path)
+            writes_for_path = [w for w in pending_writes if w[0] == task_path_tt[3]]
+            if task_path_tt[2] >= len(writes_for_path):
                 logger.warning(
                     f"Ignoring invalid write index {task_path[2]} in pending writes"
                 )
                 return
-            packet = writes_for_path[task_path_t[2]][2]
+            packet = writes_for_path[task_path_tt[2]][2]
+            if packet is None:
+                return
             if not isinstance(packet, Send):
                 logger.warning(
                     f"Ignoring invalid packet type {type(packet)} in pending writes"
@@ -531,7 +646,7 @@ def prepare_single_task(
             "langgraph_step": step,
             "langgraph_node": packet.node,
             "langgraph_triggers": triggers,
-            "langgraph_path": task_path,
+            "langgraph_path": task_path[:3],
             "langgraph_checkpoint_ns": task_checkpoint_ns,
         }
         if task_id_checksum is not None:
@@ -541,7 +656,7 @@ def prepare_single_task(
             if node := proc.node:
                 if proc.metadata:
                     metadata.update(proc.metadata)
-                writes: deque[tuple[str, Any]] = deque()
+                writes = deque()
                 return PregelExecutableTask(
                     packet.node,
                     packet.arg,
@@ -570,7 +685,7 @@ def prepare_single_task(
                                 channels,
                                 managed,
                                 PregelTaskWrites(
-                                    task_path, packet.node, writes, triggers
+                                    task_path[:3], packet.node, writes, triggers
                                 ),
                                 config,
                             ),
@@ -587,25 +702,24 @@ def prepare_single_task(
                             },
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                            CONFIG_KEY_RESUME_VALUE: next(
-                                (
-                                    v
-                                    for tid, c, v in pending_writes
-                                    if tid in (NULL_TASK_ID, task_id) and c == RESUME
-                                ),
-                                MISSING,
-                            ),
+                            CONFIG_KEY_WRITES: [
+                                w
+                                for w in pending_writes
+                                + configurable.get(CONFIG_KEY_WRITES, [])
+                                if w[0] in (NULL_TASK_ID, task_id)
+                            ],
+                            CONFIG_KEY_SCRATCHPAD: {},
                         },
                     ),
                     triggers,
                     proc.retry_policy,
                     None,
                     task_id,
-                    task_path,
+                    task_path[:3],
+                    writers=proc.flat_writers,
                 )
-
         else:
-            return PregelTask(task_id, packet.node, task_path)
+            return PregelTask(task_id, packet.node, task_path[:3])
     elif task_path[0] == PULL:
         # (PULL, node name)
         name = cast(str, task_path[1])
@@ -633,6 +747,12 @@ def prepare_single_task(
                 )
             except StopIteration:
                 return
+            except Exception as exc:
+                if SUPPORTS_EXC_NOTES:
+                    exc.add_note(
+                        f"Before task with name '{name}' and path '{task_path[:3]}'"
+                    )
+                raise
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
@@ -649,7 +769,7 @@ def prepare_single_task(
                 "langgraph_step": step,
                 "langgraph_node": name,
                 "langgraph_triggers": triggers,
-                "langgraph_path": task_path,
+                "langgraph_path": task_path[:3],
                 "langgraph_checkpoint_ns": task_checkpoint_ns,
             }
             if task_id_checksum is not None:
@@ -688,7 +808,9 @@ def prepare_single_task(
                                     checkpoint,
                                     channels,
                                     managed,
-                                    PregelTaskWrites(task_path, name, writes, triggers),
+                                    PregelTaskWrites(
+                                        task_path[:3], name, writes, triggers
+                                    ),
                                     config,
                                 ),
                                 CONFIG_KEY_STORE: (
@@ -704,25 +826,24 @@ def prepare_single_task(
                                 },
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                                CONFIG_KEY_RESUME_VALUE: next(
-                                    (
-                                        v
-                                        for tid, c, v in pending_writes
-                                        if tid in (NULL_TASK_ID, task_id)
-                                        and c == RESUME
-                                    ),
-                                    MISSING,
-                                ),
+                                CONFIG_KEY_WRITES: [
+                                    w
+                                    for w in pending_writes
+                                    + configurable.get(CONFIG_KEY_WRITES, [])
+                                    if w[0] in (NULL_TASK_ID, task_id)
+                                ],
+                                CONFIG_KEY_SCRATCHPAD: {},
                             },
                         ),
                         triggers,
                         proc.retry_policy,
                         None,
                         task_id,
-                        task_path,
+                        task_path[:3],
+                        writers=proc.flat_writers,
                     )
             else:
-                return PregelTask(task_id, name, task_path)
+                return PregelTask(task_id, name, task_path[:3])
 
 
 def _proc_input(

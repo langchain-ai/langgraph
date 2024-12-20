@@ -36,8 +36,8 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 
 ```
-langgraph>=0.2.30,<0.3.0
-langgraph-checkpoint>=1.0.14
+langgraph>=0.2.56,<0.3.0
+langgraph-checkpoint>=2.0.5,<3.0
 langchain-core>=0.2.38,<0.4.0
 langsmith>=0.1.63
 orjson>=3.9.7

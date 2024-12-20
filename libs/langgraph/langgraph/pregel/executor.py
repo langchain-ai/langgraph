@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import sys
+import time
 from contextlib import ExitStack
 from contextvars import copy_context
 from types import TracebackType
@@ -20,7 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -34,6 +35,7 @@ class Submit(Protocol[P, T]):
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
+        __next_tick__: bool = False,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]: ...
 
@@ -58,9 +60,13 @@ class BackgroundExecutor(ContextManager):
         __name__: Optional[str] = None,  # currently not used in sync version
         __cancel_on_exit__: bool = False,  # for sync, can cancel only if not started
         __reraise_on_exit__: bool = True,
+        __next_tick__: bool = False,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]:
-        task = self.executor.submit(fn, *args, **kwargs)
+        if __next_tick__:
+            task = self.executor.submit(next_tick, fn, *args, **kwargs)
+        else:
+            task = self.executor.submit(fn, *args, **kwargs)
         self.tasks[task] = (__cancel_on_exit__, __reraise_on_exit__)
         task.add_done_callback(self.done)
         return task
@@ -68,7 +74,7 @@ class BackgroundExecutor(ContextManager):
     def done(self, task: concurrent.futures.Future) -> None:
         try:
             task.result()
-        except GraphInterrupt:
+        except GraphBubbleUp:
             # This exception is an interruption signal, not an error
             # so we don't want to re-raise it on exit
             self.tasks.pop(task)
@@ -137,11 +143,14 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
+        __next_tick__: bool = False,
         **kwargs: P.kwargs,
     ) -> asyncio.Task[T]:
         coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
         if self.semaphore:
             coro = gated(self.semaphore, coro)
+        if __next_tick__:
+            coro = anext_tick(coro)
         if self.context_not_supported:
             task = self.loop.create_task(coro, name=__name__)
         else:
@@ -155,7 +164,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
             if exc := task.exception():
                 # This exception is an interruption signal, not an error
                 # so we don't want to re-raise it on exit
-                if isinstance(exc, GraphInterrupt):
+                if isinstance(exc, GraphBubbleUp):
                     self.tasks.pop(task)
             else:
                 self.tasks.pop(task)
@@ -197,3 +206,15 @@ async def gated(semaphore: asyncio.Semaphore, coro: Coroutine[None, None, T]) ->
     """A coroutine that waits for a semaphore before running another coroutine."""
     async with semaphore:
         return await coro
+
+
+def next_tick(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+    """A function that yields control to other threads before running another function."""
+    time.sleep(0)
+    return fn(*args, **kwargs)
+
+
+async def anext_tick(coro: Coroutine[None, None, T]) -> T:
+    """A coroutine that yields control to event loop before running another coroutine."""
+    await asyncio.sleep(0)
+    return await coro

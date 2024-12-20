@@ -73,7 +73,7 @@ plugins:
             allow_inspection: true
             heading_level: 2
             show_bases: true
-            show_source: true
+            show_source: false 
             summary: true
             inherited_members: true
             selection:
@@ -94,6 +94,7 @@ nav:
       - Quick Start:
         - Quick Start: tutorials#quick-start
         - tutorials/introduction.ipynb
+        - tutorials/langgraph-platform/local-server.md
         - cloud/quick_start.md
       - Chatbots:
           - Chatbots: tutorials#chatbots
@@ -140,6 +141,11 @@ nav:
           - tutorials/web-navigation/web_voyager.ipynb
           - tutorials/usaco/usaco.ipynb
           - tutorials/extraction/retries.ipynb
+      - LangGraph Platform:
+          - LangGraph Platform: concepts#langgraph-platform
+          - tutorials/auth/getting_started.md
+          - tutorials/auth/resource_auth.md
+          - tutorials/auth/add_auth_server.md
 
   - How-to Guides:
       - how-tos/index.md
@@ -150,6 +156,7 @@ nav:
             - how-tos/branching.ipynb
             - how-tos/map-reduce.ipynb
             - how-tos/recursion-limit.ipynb
+            - how-tos/command.ipynb
         - Persistence:
             - Persistence: how-tos#persistence
             - how-tos/persistence.ipynb
@@ -163,6 +170,7 @@ nav:
             - how-tos/memory/manage-conversation-history.ipynb
             - how-tos/memory/delete-messages.ipynb
             - how-tos/memory/add-summary-conversation-history.ipynb
+            - how-tos/memory/semantic-search.ipynb
         - Human-in-the-loop:
             - Human-in-the-loop: how-tos#human-in-the-loop
             - how-tos/human_in_the_loop/breakpoints.ipynb
@@ -189,6 +197,7 @@ nav:
             - how-tos/tool-calling.ipynb
             - how-tos/tool-calling-errors.ipynb
             - how-tos/pass-run-time-values-to-tools.ipynb
+            - how-tos/update-state-from-tools.ipynb
             - how-tos/pass-config-to-tools.ipynb
             - how-tos/many-tools.ipynb
         - Subgraphs:
@@ -196,6 +205,11 @@ nav:
             - how-tos/subgraph.ipynb
             - how-tos/subgraphs-manage-state.ipynb
             - how-tos/subgraph-transform-state.ipynb
+        - Multi-agent:
+            - Multi-agent: how-tos#multi-agent
+            - how-tos/agent-handoffs.ipynb
+            - how-tos/multi-agent-network.ipynb
+            - how-tos/multi-agent-multi-turn-convo.ipynb
         - State Management:
             - State Management: how-tos#state-management
             - how-tos/state-model.ipynb
@@ -224,6 +238,7 @@ nav:
               - cloud/deployment/setup.md
               - cloud/deployment/setup_pyproject.md
               - cloud/deployment/setup_javascript.md
+              - cloud/deployment/semantic_search.md
               - cloud/deployment/custom_docker.md
               - cloud/deployment/test_locally.md
               - cloud/deployment/graph_rebuild.md
@@ -232,6 +247,10 @@ nav:
               - cloud/deployment/cloud.md
               - how-tos/deploy-self-hosted.md
               - how-tos/use-remote-graph.md
+          - Authentication & Access Control:
+              - Authentication & Access Control: how-tos#authentication-access-control
+              - cloud/how-tos/auth/custom_auth_new.md
+              - cloud/how-tos/auth/openapi_security_new.md
           - Assistants:
               - Assistants: how-tos#assistants
               - cloud/how-tos/configuration_cloud.md
@@ -277,6 +296,7 @@ nav:
               - cloud/how-tos/test_local_deployment.md
               - cloud/how-tos/invoke_studio.md
               - cloud/how-tos/threads_studio.md
+              - cloud/how-tos/datasets_studio.md
       - Troubleshooting:
           - Troubleshooting: how-tos#troubleshooting
           - troubleshooting/errors/index.md

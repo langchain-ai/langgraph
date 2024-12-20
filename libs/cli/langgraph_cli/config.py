@@ -6,8 +6,86 @@ from typing import NamedTuple, Optional, TypedDict, Union
 
 import click
 
+MIN_NODE_VERSION = "20"
+MIN_PYTHON_VERSION = "3.11"
 
-class Config(TypedDict):
+
+class IndexConfig(TypedDict, total=False):
+    """Configuration for indexing documents for semantic search in the store."""
+
+    dims: int
+    """Number of dimensions in the embedding vectors.
+    
+    Common embedding models have the following dimensions:
+        - openai:text-embedding-3-large: 3072
+        - openai:text-embedding-3-small: 1536
+        - openai:text-embedding-ada-002: 1536
+        - cohere:embed-english-v3.0: 1024
+        - cohere:embed-english-light-v3.0: 384
+        - cohere:embed-multilingual-v3.0: 1024
+        - cohere:embed-multilingual-light-v3.0: 384
+    """
+
+    embed: str
+    """Optional model (string) to generate embeddings from text or path to model or function.
+    
+    Examples:
+        - "openai:text-embedding-3-large"
+        - "cohere:embed-multilingual-v3.0"
+        - "src/app.py:embeddings
+    """
+
+    fields: Optional[list[str]]
+    """Fields to extract text from for embedding generation.
+    
+    Defaults to the root ["$"], which embeds the json object as a whole.
+    """
+
+
+class StoreConfig(TypedDict, total=False):
+    embed: Optional[IndexConfig]
+    """Configuration for vector embeddings in store."""
+
+
+class SecurityConfig(TypedDict, total=False):
+    securitySchemes: dict
+    security: list
+    # path => {method => security}
+    paths: dict[str, dict[str, list]]
+
+
+class AuthConfig(TypedDict, total=False):
+    path: str
+    """Path to the authentication function in a Python file."""
+    disable_studio_auth: bool
+    """Whether to disable auth when connecting from the LangSmith Studio."""
+    openapi: SecurityConfig
+    """The schema to use for updating the openapi spec.
+
+    Example:
+        {
+            "securitySchemes": {
+                "OAuth2": {
+                    "type": "oauth2",
+                    "flows": {
+                        "password": {
+                            "tokenUrl": "/token",
+                            "scopes": {
+                                "me": "Read information about the current user",
+                                "items": "Access to create and manage items"
+                            }
+                        }
+                    }
+                }
+            },
+            "security": [
+                {"OAuth2": ["me"]}  # Default security requirement for all endpoints
+            ]
+        }
+    """
+
+
+class Config(TypedDict, total=False):
     python_version: str
     node_version: Optional[str]
     pip_config_file: Optional[str]
@@ -15,6 +93,30 @@ class Config(TypedDict):
     dependencies: list[str]
     graphs: dict[str, str]
     env: Union[dict[str, str], str]
+    store: Optional[StoreConfig]
+    auth: Optional[AuthConfig]
+
+
+def _parse_version(version_str: str) -> tuple[int, int]:
+    """Parse a version string into a tuple of (major, minor)."""
+    try:
+        major, minor = map(int, version_str.split("."))
+        return (major, minor)
+    except ValueError:
+        raise click.UsageError(f"Invalid version format: {version_str}") from None
+
+
+def _parse_node_version(version_str: str) -> int:
+    """Parse a Node.js version string into a major version number."""
+    try:
+        if "." in version_str:
+            raise ValueError("Node.js version must be major version only")
+        return int(version_str)
+    except ValueError:
+        raise click.UsageError(
+            f"Invalid Node.js version format: {version_str}. "
+            "Use major version only (e.g., '20')."
+        ) from None
 
 
 def validate_config(config: Config) -> Config:
@@ -22,8 +124,11 @@ def validate_config(config: Config) -> Config:
         {
             "node_version": config.get("node_version"),
             "dockerfile_lines": config.get("dockerfile_lines", []),
+            "dependencies": config.get("dependencies", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
+            "store": config.get("store"),
+            "auth": config.get("auth"),
         }
         if config.get("node_version")
         else {
@@ -33,25 +138,40 @@ def validate_config(config: Config) -> Config:
             "dependencies": config.get("dependencies", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
+            "store": config.get("store"),
+            "auth": config.get("auth"),
         }
     )
 
     if config.get("node_version"):
-        if config["node_version"] not in ("20",):
-            raise click.UsageError(
-                f"Unsupported Node.js version: {config['node_version']}. "
-                "Currently only `node_version: \"20\"` is supported."
-            )
+        node_version = config["node_version"]
+        try:
+            major = _parse_node_version(node_version)
+            min_major = _parse_node_version(MIN_NODE_VERSION)
+            if major < min_major:
+                raise click.UsageError(
+                    f"Node.js version {node_version} is not supported. "
+                    f"Minimum required version is {MIN_NODE_VERSION}."
+                )
+        except ValueError as e:
+            raise click.UsageError(str(e)) from None
 
     if config.get("python_version"):
-        if config["python_version"] not in (
-            "3.11",
-            "3.12",
+        pyversion = config["python_version"]
+        if not pyversion.count(".") == 1 or not all(
+            part.isdigit() for part in pyversion.split(".")
         ):
             raise click.UsageError(
-                f"Unsupported Python version: {config['python_version']}. "
-                "Supported versions are 3.11 and 3.12."
+                f"Invalid Python version format: {pyversion}. "
+                "Use 'major.minor' format (e.g., '3.11'). "
+                "Patch version cannot be specified."
             )
+        if _parse_version(pyversion) < _parse_version(MIN_PYTHON_VERSION):
+            raise click.UsageError(
+                f"Python version {pyversion} is not supported. "
+                f"Minimum required version is {MIN_PYTHON_VERSION}."
+            )
+
         if not config["dependencies"]:
             raise click.UsageError(
                 "No dependencies found in config. "
@@ -64,6 +184,48 @@ def validate_config(config: Config) -> Config:
             "Add at least one graph to 'graphs' dictionary."
         )
     return config
+
+
+def validate_config_file(config_path: pathlib.Path) -> Config:
+    with open(config_path) as f:
+        config = json.load(f)
+    validated = validate_config(config)
+    # Enforce the package.json doesn't enforce an
+    # incompatible Node.js version
+    if validated.get("node_version"):
+        package_json_path = config_path.parent / "package.json"
+        if package_json_path.is_file():
+            try:
+                with open(package_json_path) as f:
+                    package_json = json.load(f)
+                    if "engines" in package_json:
+                        engines = package_json["engines"]
+                        if any(engine != "node" for engine in engines.keys()):
+                            raise click.UsageError(
+                                "Only 'node' engine is supported in package.json engines."
+                                f" Got engines: {list(engines.keys())}"
+                            )
+                        if engines:
+                            node_version = engines["node"]
+                            try:
+                                major = _parse_node_version(node_version)
+                                min_major = _parse_node_version(MIN_NODE_VERSION)
+                                if major < min_major:
+                                    raise click.UsageError(
+                                        f"Node.js version in package.json engines must be >= {MIN_NODE_VERSION} "
+                                        f"(major version only), got '{node_version}'. Minor/patch versions "
+                                        "(like '20.x.y') are not supported to prevent deployment issues "
+                                        "when new Node.js versions are released."
+                                    )
+                            except ValueError as e:
+                                raise click.UsageError(str(e)) from None
+
+            except json.JSONDecodeError:
+                raise click.UsageError(
+                    "Invalid package.json found in langgraph "
+                    f"config directory {package_json_path}: file is not valid JSON"
+                ) from None
+    return validated
 
 
 class LocalDeps(NamedTuple):
@@ -272,7 +434,18 @@ RUN set -ex && \\
             ],
         )
     )
-
+    store_config = config.get("store")
+    env_additional_config = (
+        ""
+        if not store_config
+        else f"""
+ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
+"""
+    )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -280,7 +453,7 @@ RUN set -ex && \\
 {installs}
 
 RUN {pip_install} -e /deps/*
-
+{env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 {f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
@@ -310,7 +483,18 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "npm ci"
     else:
         install_cmd = "npm i"
-
+    store_config = config.get("store")
+    env_additional_config = (
+        ""
+        if not store_config
+        else f"""
+ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
+"""
+    )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -318,7 +502,7 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
 ADD . {faux_path}
 
 RUN cd {faux_path} && {install_cmd}
-
+{env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 WORKDIR {faux_path}
@@ -345,8 +529,9 @@ def config_to_compose(
         f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
     )
     if watch:
+        dependencies = config.get("dependencies") or ["."]
         watch_paths = [config_path.name] + [
-            dep for dep in config["dependencies"] if dep.startswith(".")
+            dep for dep in dependencies if dep.startswith(".")
         ]
         watch_actions = "\n".join(
             f"""- path: {path}

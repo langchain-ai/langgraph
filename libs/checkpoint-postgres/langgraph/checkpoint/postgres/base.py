@@ -1,5 +1,6 @@
 import random
-from typing import Any, List, Optional, Sequence, Tuple, cast
+from collections.abc import Sequence
+from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
@@ -56,6 +57,17 @@ MIGRATIONS = [
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
 );""",
     "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
+    """
+    """,
+    """
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoints_thread_id_idx ON checkpoints(thread_id);
+    """,
+    """
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoint_blobs_thread_id_idx ON checkpoint_blobs(thread_id);
+    """,
+    """
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoint_writes_thread_id_idx ON checkpoint_writes(thread_id);
+    """,
 ]
 
 SELECT_SQL = f"""
@@ -133,6 +145,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
     jsonplus_serde = JsonPlusSerializer()
+    supports_pipeline: bool
 
     def _load_checkpoint(
         self,
@@ -248,7 +261,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         config: Optional[RunnableConfig],
         filter: MetadataInput,
         before: Optional[RunnableConfig] = None,
-    ) -> Tuple[str, List[Any]]:
+    ) -> tuple[str, list[Any]]:
         """Return WHERE clause predicates for alist() given config, filter, before.
 
         This method returns a tuple of a string and a tuple of values. The string

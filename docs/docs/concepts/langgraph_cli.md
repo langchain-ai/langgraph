@@ -28,9 +28,33 @@ The CLI provides the following core functionality:
 
 The `langgraph build` command builds a Docker image for the [LangGraph API server](./langgraph_server.md) that can be directly deployed.
 
+### `dev`
+
+!!! note "New in version 0.1.55"
+    The `langgraph dev` command was introduced in langgraph-cli version 0.1.55.
+
+!!! note "Python only"
+
+    Currently, the CLI only supports Python >= 3.11.
+    JS support is coming soon.
+
+The `langgraph dev` command starts a lightweight development server that requires no Docker installation. This server is ideal for rapid development and testing, with features like:
+
+- Hot reloading: Changes to your code are automatically detected and reloaded
+- Debugger support: Attach your IDE's debugger for line-by-line debugging
+- In-memory state with local persistence: Server state is stored in memory for speed but persisted locally between restarts
+
+To use this command, you need to install the CLI with the "inmem" extra:
+
+```bash
+pip install -U "langgraph-cli[inmem]"
+```
+
+**Note**: This command is intended for local development and testing only. It is not recommended for production use. Since it does not use Docker, we recommend using virtual environments to manage your project's dependencies.
+
 ### `up`
 
-The `langgraph up` command starts an instance of the [LangGraph API server](./langgraph_server.md) locally. This requires docker to be installed and running locally. It also requires a LangSmith API key for local development or a license key for production use.
+The `langgraph up` command starts an instance of the [LangGraph API server](./langgraph_server.md) locally in a docker container. This requires thedocker server to be running locally. It also requires a LangSmith API key for local development or a license key for production use.
 
 The server includes all API endpoints for your graph's runs, threads, assistants, etc. as well as the other services required to run your agent, including a managed database for checkpointing and storage.
 

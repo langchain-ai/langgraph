@@ -18,7 +18,6 @@ from typing import (
     Type,
     Union,
     cast,
-    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -107,6 +106,7 @@ from langgraph.types import (
     Checkpointer,
     LoopProtocol,
     StateSnapshot,
+    StreamChunk,
     StreamMode,
 )
 from langgraph.utils.config import (
@@ -116,6 +116,7 @@ from langgraph.utils.config import (
     patch_config,
     patch_configurable,
 )
+from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
@@ -318,8 +319,15 @@ class Pregel(PregelProtocol):
                 )
                 + (
                     [
-                        ConfigurableFieldSpec(id=name, annotation=typ)
-                        for name, typ in get_type_hints(self.config_type).items()
+                        ConfigurableFieldSpec(
+                            id=name,
+                            annotation=typ,
+                            default=default,
+                            description=description,
+                        )
+                        for name, typ, default, description in get_enhanced_type_hints(
+                            self.config_type
+                        )
                     ]
                     if self.config_type is not None
                     else []
@@ -672,7 +680,7 @@ class Pregel(PregelProtocol):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
+        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -709,7 +717,7 @@ class Pregel(PregelProtocol):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
+        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -750,8 +758,9 @@ class Pregel(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
+        config = ensure_config(config)
         """Get the history of the state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
+        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -799,8 +808,9 @@ class Pregel(PregelProtocol):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
+        config = ensure_config(config)
         """Get the history of the state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
+        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -854,7 +864,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
+        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -968,6 +978,23 @@ class Pregel(PregelProtocol):
                         "source": "update",
                         "step": step + 1,
                         "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1116,7 +1143,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        checkpointer: Optional[BaseCheckpointSaver] = config[CONF].get(
+        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1233,6 +1260,23 @@ class Pregel(PregelProtocol):
                         "source": "update",
                         "step": step + 1,
                         "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            if values is None and as_node == "__copy__":
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1722,6 +1766,10 @@ class Pregel(PregelProtocol):
 
         stream = AsyncQueue()
         aioloop = asyncio.get_running_loop()
+        stream_put = cast(
+            Callable[[StreamChunk], None],
+            partial(aioloop.call_soon_threadsafe, stream.put_nowait),
+        )
 
         def output() -> Iterator:
             while True:
@@ -1776,12 +1824,14 @@ class Pregel(PregelProtocol):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put_nowait)
+                    StreamMessagesHandler(stream_put)
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put_nowait(
-                    ((), "custom", c)
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
+                    lambda c: aioloop.call_soon_threadsafe(
+                        stream.put_nowait, ((), "custom", c)
+                    )
                 )
             async with AsyncPregelLoop(
                 input,
@@ -1808,7 +1858,9 @@ class Pregel(PregelProtocol):
                 )
                 # enable subgraph streaming
                 if subgraphs:
-                    loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
+                    loop.config[CONF][CONFIG_KEY_STREAM] = StreamProtocol(
+                        stream_put, stream_modes
+                    )
                 # enable concurrent streaming
                 if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
 

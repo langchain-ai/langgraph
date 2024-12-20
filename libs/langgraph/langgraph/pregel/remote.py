@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import (
     Any,
     AsyncIterator,
@@ -27,6 +28,7 @@ from langgraph_sdk.client import (
     get_sync_client,
 )
 from langgraph_sdk.schema import Checkpoint, ThreadState
+from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
@@ -41,7 +43,7 @@ from langgraph.constants import (
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Interrupt, StreamProtocol
+from langgraph.types import Command, Interrupt, StreamProtocol
 from langgraph.utils.config import merge_configs
 
 
@@ -573,6 +575,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
+        **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Create a run and stream the results.
 
@@ -587,6 +590,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
             The output of the graph.
@@ -597,17 +601,24 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+        if isinstance(input, Command):
+            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            input = None
+        else:
+            command = None
 
         for chunk in sync_client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
+            command=command,
             config=sanitized_config,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            **kwargs,
         ):
             # split mode and ns
             if NS_SEP in chunk.event:
@@ -656,6 +667,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         subgraphs: bool = False,
+        **kwargs: Any,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         """Create a run and stream the results.
 
@@ -670,6 +682,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
             The output of the graph.
@@ -680,17 +693,24 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+        if isinstance(input, Command):
+            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            input = None
+        else:
+            command = None
 
         async for chunk in client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.name,
             input=input,
+            command=command,
             config=sanitized_config,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            **kwargs,
         ):
             # split mode and ns
             if NS_SEP in chunk.event:
@@ -753,18 +773,16 @@ class RemoteGraph(PregelProtocol):
         *,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
         """Create a run, wait until it finishes and return the final state.
-
-        This method calls `POST /threads/{thread_id}/runs/wait` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
-        `POST /runs/wait` otherwise.
 
         Args:
             input: Input to the graph.
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            **kwargs: Additional params to pass to RemoteGraph.stream.
 
         Returns:
             The output of the graph.
@@ -775,6 +793,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_mode="values",
+            **kwargs,
         ):
             pass
         try:
@@ -789,18 +808,16 @@ class RemoteGraph(PregelProtocol):
         *,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
         """Create a run, wait until it finishes and return the final state.
-
-        This method calls `POST /threads/{thread_id}/runs/wait` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
-        `POST /runs/wait` otherwise.
 
         Args:
             input: Input to the graph.
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            **kwargs: Additional params to pass to RemoteGraph.astream.
 
         Returns:
             The output of the graph.
@@ -811,6 +828,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             stream_mode="values",
+            **kwargs,
         ):
             pass
         try:

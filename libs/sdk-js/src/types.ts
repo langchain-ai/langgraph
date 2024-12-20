@@ -29,11 +29,22 @@ export interface Send {
 }
 
 export interface Command {
+  /**
+   * An object to update the thread state with.
+   */
   update?: Record<string, unknown>;
 
+  /**
+   * The value to return from an `interrupt` function call.
+   */
   resume?: unknown;
 
-  send?: Send | Send[];
+  /**
+   * Determine the next node to navigate to. Can be one of the following:
+   * - Name(s) of the node names to navigate to next.
+   * - `Send` command(s) to execute node(s) with provided input.
+   */
+  goto?: Send | Send[] | string | string[];
 }
 
 interface RunsInvokePayload {

@@ -7,6 +7,7 @@ import {
   GraphSchema,
   Metadata,
   Run,
+  RunStatus,
   Thread,
   ThreadState,
   Cron,
@@ -33,6 +34,36 @@ import {
   OnConflictBehavior,
 } from "./types.js";
 import { mergeSignals } from "./utils/signals.js";
+import { getEnvironmentVariable } from "./utils/env.js";
+
+/**
+ * Get the API key from the environment.
+ * Precedence:
+ *   1. explicit argument
+ *   2. LANGGRAPH_API_KEY
+ *   3. LANGSMITH_API_KEY
+ *   4. LANGCHAIN_API_KEY
+ *
+ * @param apiKey - Optional API key provided as an argument
+ * @returns The API key if found, otherwise undefined
+ */
+export function getApiKey(apiKey?: string): string | undefined {
+  if (apiKey) {
+    return apiKey;
+  }
+
+  const prefixes = ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"];
+
+  for (const prefix of prefixes) {
+    const envKey = getEnvironmentVariable(`${prefix}_API_KEY`);
+    if (envKey) {
+      // Remove surrounding quotes
+      return envKey.trim().replace(/^["']|["']$/g, "");
+    }
+  }
+
+  return undefined;
+}
 
 interface ClientConfig {
   apiUrl?: string;
@@ -62,10 +93,12 @@ class BaseClient {
 
     // default limit being capped by Chrome
     // https://github.com/nodejs/undici/issues/1373
-    this.apiUrl = config?.apiUrl || "http://localhost:8123";
+    // Regex to remove trailing slash, if present
+    this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
-    if (config?.apiKey != null) {
-      this.defaultHeaders["X-Api-Key"] = config.apiKey;
+    const apiKey = getApiKey(config?.apiKey);
+    if (apiKey) {
+      this.defaultHeaders["X-Api-Key"] = apiKey;
     }
   }
 
@@ -912,12 +945,18 @@ export class RunsClient extends BaseClient {
        * Defaults to 0.
        */
       offset?: number;
+
+      /**
+       * Status of the run to filter by.
+       */
+      status?: RunStatus;
     },
   ): Promise<Run[]> {
     return this.fetch<Run[]>(`/threads/${threadId}/runs`, {
       params: {
         limit: options?.limit ?? 10,
         offset: options?.offset ?? 0,
+        status: options?.status ?? undefined,
       },
     });
   }
@@ -982,19 +1021,28 @@ export class RunsClient extends BaseClient {
    *
    * @param threadId The ID of the thread.
    * @param runId The ID of the run.
-   * @param signal An optional abort signal.
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
     threadId: string,
     runId: string,
-    signal?: AbortSignal,
+    options?:
+      | { signal?: AbortSignal; cancelOnDisconnect?: boolean }
+      | AbortSignal,
   ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+    const opts =
+      typeof options === "object" &&
+      options != null &&
+      options instanceof AbortSignal
+        ? { signal: options }
+        : options;
+
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
         method: "GET",
         timeoutMs: null,
-        signal,
+        signal: opts?.signal,
+        params: { cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0" },
       }),
     );
 
@@ -1009,7 +1057,7 @@ export class RunsClient extends BaseClient {
         async start(ctrl) {
           parser = createParser((event) => {
             if (
-              (signal && signal.aborted) ||
+              (opts?.signal && opts.signal.aborted) ||
               (event.type === "event" && event.data === "[DONE]")
             ) {
               ctrl.terminate();
@@ -1158,6 +1206,7 @@ export class StoreClient extends BaseClient {
    * @param options.filter Optional dictionary of key-value pairs to filter results.
    * @param options.limit Maximum number of items to return (default is 10).
    * @param options.offset Number of items to skip before returning results (default is 0).
+   * @param options.query Optional search query.
    * @returns Promise<SearchItemsResponse>
    */
   async searchItems(
@@ -1166,6 +1215,7 @@ export class StoreClient extends BaseClient {
       filter?: Record<string, any>;
       limit?: number;
       offset?: number;
+      query?: string;
     },
   ): Promise<SearchItemsResponse> {
     const payload = {
@@ -1173,6 +1223,7 @@ export class StoreClient extends BaseClient {
       filter: options?.filter,
       limit: options?.limit ?? 10,
       offset: options?.offset ?? 0,
+      query: options?.query,
     };
 
     const response = await this.fetch<APISearchItemsResponse>(

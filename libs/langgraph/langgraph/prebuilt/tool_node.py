@@ -1,15 +1,10 @@
-from __future__ import annotations
-
 import asyncio
 import inspect
 import json
-from copy import copy
+from copy import copy, deepcopy
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    List,
     Literal,
     Optional,
     Sequence,
@@ -25,6 +20,7 @@ from langchain_core.messages import (
     AnyMessage,
     ToolCall,
     ToolMessage,
+    convert_to_messages,
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
@@ -35,14 +31,13 @@ from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import get_all_basemodel_annotations
+from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
+from langgraph.types import Command
 from langgraph.utils.runnable import RunnableCallable
-
-if TYPE_CHECKING:
-    from pydantic import BaseModel
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -50,11 +45,11 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def msg_content_output(output: Any) -> str | List[dict]:
+def msg_content_output(output: Any) -> Union[str, list[dict]]:
     recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
         return output
-    elif all(
+    elif isinstance(output, list) and all(
         [
             isinstance(x, dict) and x.get("type") in recognized_content_block_types
             for x in output
@@ -95,7 +90,7 @@ def _handle_tool_error(
     return content
 
 
-def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception]]:
+def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], ...]:
     sig = inspect.signature(handler)
     params = list(sig.parameters.values())
     if params:
@@ -194,9 +189,9 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
-        self.tools_by_name: Dict[str, BaseTool] = {}
-        self.tool_to_state_args: Dict[str, Dict[str, Optional[str]]] = {}
-        self.tool_to_store_arg: Dict[str, Optional[str]] = {}
+        self.tools_by_name: dict[str, BaseTool] = {}
+        self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
+        self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
@@ -217,12 +212,31 @@ class ToolNode(RunnableCallable):
         *,
         store: BaseStore,
     ) -> Any:
-        tool_calls, output_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
+        input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
-            outputs = [*executor.map(self._run_one, tool_calls, config_list)]
-        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {self.messages_key: outputs}
+            outputs = [
+                *executor.map(self._run_one, tool_calls, input_types, config_list)
+            ]
+
+        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        if not any(isinstance(output, Command) for output in outputs):
+            # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
+            return outputs if input_type == "list" else {self.messages_key: outputs}
+
+        # LangGraph will automatically handle list of Command and non-command node updates
+        combined_outputs: list[
+            Command | list[ToolMessage] | dict[str, list[ToolMessage]]
+        ] = []
+        for output in outputs:
+            if isinstance(output, Command):
+                combined_outputs.append(output)
+            else:
+                combined_outputs.append(
+                    [output] if input_type == "list" else {self.messages_key: [output]}
+                )
+        return combined_outputs
 
     def invoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -249,33 +263,104 @@ class ToolNode(RunnableCallable):
         *,
         store: BaseStore,
     ) -> Any:
-        tool_calls, output_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
-            *(self._arun_one(call, config) for call in tool_calls)
+            *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
-        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-        return outputs if output_type == "list" else {self.messages_key: outputs}
 
-    def _run_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
+        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        if not any(isinstance(output, Command) for output in outputs):
+            # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
+            return outputs if input_type == "list" else {self.messages_key: outputs}
+
+        # LangGraph will automatically handle list of Command and non-command node updates
+        combined_outputs: list[
+            Command | list[ToolMessage] | dict[str, list[ToolMessage]]
+        ] = []
+        for output in outputs:
+            if isinstance(output, Command):
+                combined_outputs.append(output)
+            else:
+                combined_outputs.append(
+                    [output] if input_type == "list" else {self.messages_key: [output]}
+                )
+        return combined_outputs
+
+    def _run_one(
+        self,
+        call: ToolCall,
+        input_type: Literal["list", "dict"],
+        config: RunnableConfig,
+    ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            tool_message: ToolMessage = self.tools_by_name[call["name"]].invoke(
-                input, config
-            )
-            tool_message.content = cast(
-                Union[str, list], msg_content_output(tool_message.content)
-            )
-            return tool_message
+            response = self.tools_by_name[call["name"]].invoke(input, config)
+
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphInterrupt as e:
+        except GraphBubbleUp as e:
+            raise e
+        except Exception as e:
+            if isinstance(self.handle_tool_errors, tuple):
+                handled_types: tuple = self.handle_tool_errors
+            elif callable(self.handle_tool_errors):
+                handled_types = _infer_handled_types(self.handle_tool_errors)
+            else:
+                # default behavior is catching all exceptions
+                handled_types = (Exception,)
+
+            # Unhandled
+            if not self.handle_tool_errors or not isinstance(e, handled_types):
+                raise e
+            # Handled
+            else:
+                content = _handle_tool_error(e, flag=self.handle_tool_errors)
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
+            )
+
+        if isinstance(response, Command):
+            return self._validate_tool_command(response, call, input_type)
+        elif isinstance(response, ToolMessage):
+            response.content = cast(
+                Union[str, list], msg_content_output(response.content)
+            )
+            return response
+        else:
+            raise TypeError(
+                f"Tool {call['name']} returned unexpected type: {type(response)}"
+            )
+
+    async def _arun_one(
+        self,
+        call: ToolCall,
+        input_type: Literal["list", "dict"],
+        config: RunnableConfig,
+    ) -> ToolMessage:
+        if invalid_tool_message := self._validate_tool_call(call):
+            return invalid_tool_message
+
+        try:
+            input = {**call, **{"type": "tool_call"}}
+            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
+
+        # GraphInterrupt is a special exception that will always be raised.
+        # It can be triggered in the following scenarios:
+        # (1) a NodeInterrupt is raised inside a tool
+        # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
+        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
+        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
+        except GraphBubbleUp as e:
             raise e
         except Exception as e:
             if isinstance(self.handle_tool_errors, tuple):
@@ -293,50 +378,24 @@ class ToolNode(RunnableCallable):
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
 
-        return ToolMessage(
-            content=content, name=call["name"], tool_call_id=call["id"], status="error"
-        )
-
-    async def _arun_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
-        if invalid_tool_message := self._validate_tool_call(call):
-            return invalid_tool_message
-
-        try:
-            input = {**call, **{"type": "tool_call"}}
-            tool_message: ToolMessage = await self.tools_by_name[call["name"]].ainvoke(
-                input, config
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
             )
-            tool_message.content = cast(
-                Union[str, list], msg_content_output(tool_message.content)
+
+        if isinstance(response, Command):
+            return self._validate_tool_command(response, call, input_type)
+        elif isinstance(response, ToolMessage):
+            response.content = cast(
+                Union[str, list], msg_content_output(response.content)
             )
-            return tool_message
-        # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios:
-        # (1) a NodeInterrupt is raised inside a tool
-        # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
-        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
-        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphInterrupt as e:
-            raise e
-        except Exception as e:
-            if isinstance(self.handle_tool_errors, tuple):
-                handled_types: tuple = self.handle_tool_errors
-            elif callable(self.handle_tool_errors):
-                handled_types = _infer_handled_types(self.handle_tool_errors)
-            else:
-                # default behavior is catching all exceptions
-                handled_types = (Exception,)
-
-            # Unhandled
-            if not self.handle_tool_errors or not isinstance(e, handled_types):
-                raise e
-            # Handled
-            else:
-                content = _handle_tool_error(e, flag=self.handle_tool_errors)
-
-        return ToolMessage(
-            content=content, name=call["name"], tool_call_id=call["id"], status="error"
-        )
+            return response
+        else:
+            raise TypeError(
+                f"Tool {call['name']} returned unexpected type: {type(response)}"
+            )
 
     def _parse_input(
         self,
@@ -346,16 +405,16 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: BaseStore,
-    ) -> Tuple[List[ToolCall], Literal["list", "dict"]]:
+    ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
-            output_type = "list"
+            input_type = "list"
             message: AnyMessage = input[-1]
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
-            output_type = "dict"
+            input_type = "dict"
             message = messages[-1]
         elif messages := getattr(input, self.messages_key, None):
             # Assume dataclass-like state that can coerce from dict
-            output_type = "dict"
+            input_type = "dict"
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
@@ -366,7 +425,7 @@ class ToolNode(RunnableCallable):
         tool_calls = [
             self._inject_tool_args(call, input, store) for call in message.tool_calls
         ]
-        return tool_calls, output_type
+        return tool_calls, input_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
         if (requested_tool := call["name"]) not in self.tools_by_name:
@@ -459,6 +518,59 @@ class ToolNode(RunnableCallable):
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
         return tool_call_with_store
+
+    def _validate_tool_command(
+        self, command: Command, call: ToolCall, input_type: Literal["list", "dict"]
+    ) -> Command:
+        if isinstance(command.update, dict):
+            # input type is dict when ToolNode is invoked with a dict input (e.g. {"messages": [AIMessage(..., tool_calls=[...])]})
+            if input_type != "dict":
+                raise ValueError(
+                    f"Tools can provide a dict in Command.update only when using dict with '{self.messages_key}' key as ToolNode input, "
+                    f"got: {command.update} for tool '{call['name']}'"
+                )
+
+            updated_command = deepcopy(command)
+            state_update = cast(dict[str, Any], updated_command.update) or {}
+            messages_update = state_update.get(self.messages_key, [])
+        elif isinstance(command.update, list):
+            # input type is list when ToolNode is invoked with a list input (e.g. [AIMessage(..., tool_calls=[...])])
+            if input_type != "list":
+                raise ValueError(
+                    f"Tools can provide a list of messages in Command.update only when using list of messages as ToolNode input, "
+                    f"got: {command.update} for tool '{call['name']}'"
+                )
+
+            updated_command = deepcopy(command)
+            messages_update = updated_command.update
+        else:
+            return command
+
+        # convert to message objects if updates are in a dict format
+        messages_update = convert_to_messages(messages_update)
+        has_matching_tool_message = False
+        for message in messages_update:
+            if not isinstance(message, ToolMessage):
+                continue
+
+            if message.tool_call_id == call["id"]:
+                message.name = call["name"]
+                has_matching_tool_message = True
+
+        # validate that we always have a ToolMessage matching the tool call in
+        # Command.update if command is sent to the CURRENT graph
+        if updated_command.graph is None and not has_matching_tool_message:
+            example_update = (
+                '`Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'
+                if input_type == "dict"
+                else '`Command(update=[ToolMessage("Success", tool_call_id=tool_call_id), ...], ...)`'
+            )
+            raise ValueError(
+                f"Expected to have a matching ToolMessage in Command.update for tool '{call['name']}', got: {messages_update}. "
+                "Every tool call (LLM requesting to call a tool) in the message history MUST have a corresponding ToolMessage. "
+                f"You can fix it by modifying the tool to return {example_update}."
+            )
+        return updated_command
 
 
 def tools_condition(
@@ -656,9 +768,9 @@ def _is_injection(
     return False
 
 
-def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
+def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
-    tool_args_to_state_fields: Dict = {}
+    tool_args_to_state_fields: dict = {}
 
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
         injections = [

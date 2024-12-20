@@ -1557,8 +1557,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1905,8 +1908,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -2143,8 +2149,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -2868,9 +2877,18 @@
             "description": "The cron schedule to execute this job on."
           },
           "assistant_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Assistant Id"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "title": "Assistant Id"
+              },
+              {
+                "type": "string",
+                "title": "Graph Id"
+              }
+            ],
+            "description": "The assistant ID or graph name to run. If using graph name, will default to the assistant automatically created from that graph by the server."
           },
           "input": {
             "anyOf": [
@@ -3171,6 +3189,66 @@
         ],
         "title": "Run"
       },
+      "Send": {
+        "type": "object",
+        "title": "Send",
+        "description": "A message to send to a node.",
+        "properties": {
+          "node": {
+            "type": "string",
+            "title": "Node",
+            "description": "The node to send the message to."
+          },
+          "input": {
+            "type": "object",
+            "title": "Message",
+            "description": "The message to send."
+          }
+        },
+        "required": [
+          "node",
+          "input"
+        ]
+      },
+      "Command": {
+        "type": "object",
+        "title": "Command",
+        "description": "The command to run.",
+        "properties": {
+          "update": {
+            "type": "object",
+            "title": "Update",
+            "description": "An update to the state."
+          },
+          "resume": {
+            "type": [
+              "object",
+              "array",
+              "number",
+              "string",
+              "null"
+            ],
+            "title": "Resume",
+            "description": "A value to pass to an interrupted node."
+          },
+          "send": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Send"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Send"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "RunCreateStateful": {
         "properties": {
           "assistant_id": {
@@ -3196,13 +3274,19 @@
           "input": {
             "anyOf": [
               {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
+                "type": "object"
               },
               {
-                "type": "object"
+                "type": "null"
+              }
+            ],
+            "title": "Input",
+            "description": "The input to the graph."
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Command"
               },
               {
                 "type": "null"
@@ -3405,13 +3489,19 @@
           "input": {
             "anyOf": [
               {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
+                "type": "object"
               },
               {
-                "type": "object"
+                "type": "null"
+              }
+            ],
+            "title": "Input",
+            "description": "The input to the graph."
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Command"
               },
               {
                 "type": "null"
