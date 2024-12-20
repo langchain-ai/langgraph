@@ -6,17 +6,11 @@ Testing locally ensures that there are no errors or conflicts with Python depend
 
 ## Setup
 
-Install the proper packages:
+Install the LangGraph CLI package:
 
-
-=== "pip" 
-    ```bash
-    pip install -U "langgraph-cli[inmem]"
-    ```
-=== "Homebrew (macOS only)"
-    ```bash
-    brew install langgraph-cli
-    ```
+```bash
+pip install -U "langgraph-cli[inmem]"
+```
 
 Ensure you have an API key, which you can create from the [LangSmith UI](https://smith.langchain.com) (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
 
