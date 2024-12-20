@@ -8,7 +8,7 @@ Instead of hard-coding a fixed control flow, we sometimes want LLM systems that 
 - An LLM can decide which of many tools to call
 - An LLM can decide whether the generated answer is sufficient or more work is needed
 
-As a result, there are many different types of [agent architectures](https://blog.langchain.dev/what-is-a-cognitive-architecture/), which gives an LLM varying levels of control. 
+As a result, there are many different types of [agent architectures](https://blog.langchain.dev/what-is-a-cognitive-architecture/), which give an LLM varying levels of control. 
 
 ![Agent Types](img/agent_types.png)
 
