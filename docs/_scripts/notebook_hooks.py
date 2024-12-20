@@ -49,13 +49,15 @@ def _highlight_code_blocks(markdown: str) -> str:
     """
     # Pattern to find code blocks with highlight comments and without
     # existing hl_lines for Python and JavaScript
+    # Pattern to find code blocks with highlight comments, handling optional indentation
     code_block_pattern = re.compile(
-        r"```(?P<language>py|python|js)(?!\s+hl_lines=)\n"
+        r"(?P<indent>[ \t]*)```(?P<language>py|python|js|javascript)(?!\s+hl_lines=)\n"
         r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
-        r"```"
+        r"(?P=indent)```"  # Match closing backticks with the same indentation
     )
 
     def replace_highlight_comments(match: re.Match) -> str:
+        indent = match.group("indent")
         language = match.group("language")
         code_block = match.group("code")
         lines = code_block.split("\n")
@@ -84,9 +86,13 @@ def _highlight_code_blocks(markdown: str) -> str:
         new_code_block = "\n".join(lines_to_keep)
 
         if highlighted_lines:
-            return f'```{language} hl_lines="{" ".join(highlighted_lines)}"\n{new_code_block}\n```'
+            return (
+                f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"'
+                f'{new_code_block}'  # The indent is already included in the code block
+                f'\n{indent}```'
+            )
         else:
-            return f"```{language}\n{new_code_block}\n```"
+            return f"{indent}```{language}\n{new_code_block}\n{indent}```"
 
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
