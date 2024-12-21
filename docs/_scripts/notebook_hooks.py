@@ -3,8 +3,10 @@ import os
 import re
 from typing import Any, Dict
 
+import markdown as markdown_pkg
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
+from mkdocs.config import Config
 
 from notebook_convert import convert_notebook
 
@@ -103,9 +105,64 @@ def _highlight_code_blocks(markdown: str) -> str:
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
     return markdown
+def collapsable_directive(markdown: str, config) -> str:
+    """Define a custom directive that allows for collapsable code blocks in markdown.
 
+    This directive is similar to the `???` built-in directive, but it also allows
+    attaching a link to the collapsable section.
 
-def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
+    The format is
+
+    ::: "title" | "link"
+    markdown content
+    :::
+
+    or
+
+    ::: "title"
+    markdown content
+    :::
+
+    Returns:
+        str: The markdown string with collapsable sections formatted.
+    """
+    import re
+
+    # Regex pattern to match the custom collapsable directive with optional link using named groups
+    pattern = re.compile(
+        r':::\s*"(?P<title>[^"]+)"(?:\s*\|\s*"(?P<link>[^"]+)")?\s*\n(?P<content>.*?)\n:::',
+        re.DOTALL
+    )
+
+    # Function to replace matched patterns with the appropriate HTML or markdown
+    def replace(match: re.Match) -> str:
+        title: str = match.group('title')
+        link: str = match.group('link')
+        content: str = match.group('content')
+        # Use the Markdown instance with the extensions already registered with mkdocs
+        md = markdown_pkg.Markdown(extensions=config['markdown_extensions'])
+        html_content = md.convert(content)
+        if link:
+            return (
+                f'<details class="example">\n'
+                f'  <summary>{title} <a href="{link}" class="title-example-link">Full Example</a></summary>\n'
+                f'  {html_content}\n'
+                f'  <p>For more details, please see the <a href="{link}" class="see-full-example">full example</a>.</p>'
+                f'</details>'
+            )
+        else:
+            return (
+                f'<details>\n'
+                f'  <summary>{title}</summary>\n'
+                f'  {html_content}\n'
+                f'</details>'
+            )
+
+    # Replace all occurrences in the markdown
+    markdown = pattern.sub(replace, markdown)
+    return markdown
+
+def on_page_markdown(markdown: str, config: Config, page: Page, **kwargs: Dict[str, Any]):
     if DISABLED:
         return markdown
     if page.file.src_path.endswith(".ipynb"):
@@ -113,5 +170,6 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         markdown = convert_notebook(page.file.abs_src_path)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
-
+    # Apply collapsable directive
+    markdown = collapsable_directive(markdown, config)
     return markdown

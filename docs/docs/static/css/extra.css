@@ -1,0 +1,12 @@
+.title-example-link {
+    padding: 2px 3px; /* Comfortable padding */
+    text-decoration: none;
+    border-radius: 2px; /* Material design standard border radius */
+    display: inline-block;
+    float: right; /* Aligns the element to the right side of its container */
+}
+
+.title-example-link:hover {
+    color: #673ab7; /* Darker purple text on hover for better interaction feedback */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); /* Enhanced shadow on hover for depth */
+}
