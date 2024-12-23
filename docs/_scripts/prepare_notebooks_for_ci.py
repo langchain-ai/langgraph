@@ -7,7 +7,7 @@ import click
 import nbformat
 
 logger = logging.getLogger(__name__)
-NOTEBOOK_DIRS = ("docs/docs/how-tos","docs/docs/tutorials")
+NOTEBOOK_DIRS = ("docs/docs/how-tos", "docs/docs/tutorials")
 DOCS_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
@@ -20,7 +20,7 @@ BLOCKLIST_COMMANDS = (
 
 NOTEBOOKS_NO_CASSETTES = (
     "docs/docs/how-tos/visualization.ipynb",
-    "docs/docs/how-tos/many-tools.ipynb"
+    "docs/docs/how-tos/many-tools.ipynb",
 )
 
 NOTEBOOKS_NO_EXECUTION = [
@@ -43,7 +43,7 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
-    "docs/docs/how-tos/map-reduce.ipynb"  # flakiness from structured output, only when running with VCR
+    "docs/docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
 ]
 
 
@@ -71,9 +71,9 @@ def is_comment(code: str) -> bool:
 
 
 def has_blocklisted_command(code: str, metadata: dict) -> bool:
-    if 'hide_from_vcr' in metadata:
+    if "hide_from_vcr" in metadata:
         return True
-    
+
     code = code.strip()
     for blocklisted_pattern in BLOCKLIST_COMMANDS:
         if blocklisted_pattern in code:
@@ -116,8 +116,9 @@ def add_vcr_to_notebook(
 
         cell_id = cell.get("id", idx)
         cassette_name = f"{cassette_prefix}_{cell_id}.msgpack.zlib"
-        cell.source = f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='advanced_compressed'):\n" + "\n".join(
-            f"    {line}" for line in lines
+        cell.source = (
+            f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='advanced_compressed'):\n"
+            + "\n".join(f"    {line}" for line in lines)
         )
 
     # Add import statement
@@ -129,7 +130,7 @@ def add_vcr_to_notebook(
         "import base64",
         "import zlib",
         "import os",
-        "os.environ.pop(\"LANGCHAIN_TRACING_V2\", None)",
+        'os.environ.pop("LANGCHAIN_TRACING_V2", None)',
         "custom_vcr = vcr.VCR()",
         "",
         "def compress_data(data, compression_level=9):",
@@ -188,13 +189,15 @@ def process_notebooks(should_comment_install_cells: bool) -> None:
 
                         # Add a special tag to the first code cell
                         if notebook.cells and notebook.cells[1].cell_type == "code":
-                            notebook.cells[1].metadata["tags"] = notebook.cells[1].metadata.get("tags", []) + ["no_execution"]
+                            notebook.cells[1].metadata["tags"] = notebook.cells[
+                                1
+                            ].metadata.get("tags", []) + ["no_execution"]
 
                     nbformat.write(notebook, notebook_path)
                     logger.info(f"Processed: {notebook_path}")
                 except Exception as e:
                     logger.error(f"Error processing {notebook_path}: {e}")
-    
+
     with open(os.path.join(DOCS_PATH, "notebooks_no_execution.json"), "w") as f:
         json.dump(NOTEBOOKS_NO_EXECUTION, f)
 

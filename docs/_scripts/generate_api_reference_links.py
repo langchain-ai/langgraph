@@ -250,7 +250,8 @@ def update_markdown_with_imports(markdown: str) -> str:
         This function will append an API reference link to the `TextGenerator` class from the `langchain.nlp` module if it's recognized.
     """
     code_block_pattern = re.compile(
-        r'(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```', re.DOTALL
+        r"(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```",
+        re.DOTALL,
     )
 
     def replace_code_block(match: re.Match) -> str:
@@ -262,9 +263,9 @@ def update_markdown_with_imports(markdown: str) -> str:
         Returns:
             str: The modified code block with API reference links appended if applicable.
         """
-        indent = match.group('indent')
-        code_block = match.group('code')
-        language = match.group('language')  # Preserve the language from the regex match
+        indent = match.group("indent")
+        code_block = match.group("code")
+        language = match.group("language")  # Preserve the language from the regex match
         # Retrieve import information from the code block
         imports = get_imports(code_block, "__unused__")
 
@@ -274,11 +275,11 @@ def update_markdown_with_imports(markdown: str) -> str:
             return original_code_block
 
         # Generate API reference links for each import
-        api_links = ' | '.join(
+        api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
         # Return the code block with appended API reference links
-        return f'{original_code_block}\n\n{indent}API Reference: {api_links}'
+        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
