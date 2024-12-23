@@ -21,13 +21,13 @@ clean-docs:
 
 ## Run format against the project documentation.
 format-docs:
-	poetry run ruff format docs/docs
-	poetry run ruff check --fix docs/docs
+	poetry run ruff format docs/
+	poetry run ruff check --fix docs/
 
 # Check the docs for linting violations
 lint-docs:
-	poetry run ruff format --check docs/docs
-	poetry run ruff check docs/docs
+	poetry run ruff format --check docs
+	poetry run ruff check docs/
 
 codespell:
 	./docs/codespell_notebooks.sh .
