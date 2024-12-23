@@ -107,7 +107,6 @@ exporter = MarkdownExporter(
     preprocessors=[
         EscapePreprocessor,
         ExtractAttachmentsPreprocessor,
-        ImportPreprocessor,
     ],
     template_name="mdoutput",
     extra_template_basedirs=[

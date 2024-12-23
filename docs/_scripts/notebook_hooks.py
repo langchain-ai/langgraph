@@ -112,11 +112,9 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
     if page.file.src_path.endswith(".ipynb"):
         logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
-    else:
-        # Append API reference links to code blocks
-        # This logic is already applied for notebooks in `convert_notebook`.
-        # We add it here to apply it to regular markdown files.
-        markdown = update_markdown_with_imports(markdown)
+
+    # Append API reference links to code blocks
+    markdown = update_markdown_with_imports(markdown)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
     return markdown
