@@ -6,8 +6,6 @@ import nbformat
 from nbconvert.exporters import MarkdownExporter
 from nbconvert.preprocessors import Preprocessor
 
-from generate_api_reference_links import ImportPreprocessor
-
 
 class EscapePreprocessor(Preprocessor):
     def preprocess_cell(self, cell, resources, cell_index):
