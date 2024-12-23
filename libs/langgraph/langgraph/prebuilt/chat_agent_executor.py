@@ -66,9 +66,8 @@ def _get_state_modifier_runnable(
             lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
         )
     elif isinstance(state_modifier, str):
-        _system_message: BaseMessage = SystemMessage(content=state_modifier)
         state_modifier_runnable = RunnableCallable(
-            lambda state: [_system_message] + state["messages"],
+            lambda state, config: [SystemMessage(config['configurable'].get('system_prompt', state_modifier))] + state["messages"],
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, SystemMessage):
