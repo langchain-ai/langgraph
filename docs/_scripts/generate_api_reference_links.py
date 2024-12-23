@@ -47,6 +47,8 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.graph"], "langgraph.constants", "END", "constants"),
     (["langgraph.constants"], "langgraph.types", "Send", "types"),
     (["langgraph.constants"], "langgraph.types", "Interrupt", "types"),
+    (["langgraph.constants"], "langgraph.types", "interrupt", "types"),
+    (["langgraph.constants"], "langgraph.types", "Command", "types"),
     ([], "langgraph.types", "RetryPolicy", "types"),
     ([], "langgraph.checkpoint.base", "Checkpoint", "checkpoints"),
     ([], "langgraph.checkpoint.base", "CheckpointMetadata", "checkpoints"),
@@ -115,10 +117,10 @@ def _get_doc_title(data: str, file_name: str) -> str:
 
 
 class ImportInformation(TypedDict):
-    imported: str  # imported class name
-    source: str  # module path
-    docs: str  # URL to the documentation
-    title: str  # Title of the document
+    imported: str  # The name of the class that was imported.
+    source: str  # The full module path from which the class was imported.
+    docs: str  # The URL pointing to the class's documentation.
+    title: str  # The title of the document where the import is used.
 
 
 def _get_imports(
@@ -244,3 +246,75 @@ class ImportPreprocessor(Preprocessor):
                 cells.append(cell)
         nb.cells = cells
         return nb, resources
+
+
+def get_imports(code: str, doc_title: str) -> List[ImportInformation]:
+    """Retrieve all import references from the given code for specified ecosystems.
+
+    Args:
+        code: The source code from which to extract import references.
+        doc_title: The documentation title associated with the code.
+
+    Returns:
+        A list of import information for each import found.
+    """
+    ecosystems = ["langchain", "langgraph"]
+    all_imports = []
+    for package_ecosystem in ecosystems:
+        all_imports.extend(_get_imports(code, doc_title, package_ecosystem))
+    return all_imports
+
+
+def update_markdown_with_imports(markdown: str) -> str:
+    """Update markdown to include API reference links for imports in Python code blocks.
+
+    This function scans the markdown content for Python code blocks, extracts any imports, and appends links to their API documentation.
+
+    Args:
+        markdown: The markdown content to process.
+
+    Returns:
+        Updated markdown with API reference links appended to Python code blocks.
+
+    Example:
+        Given a markdown with a Python code block:
+
+        ```python
+        from langchain.nlp import TextGenerator
+        ```
+        This function will append an API reference link to the `TextGenerator` class from the `langchain.nlp` module if it's recognized.
+    """
+    code_block_pattern = re.compile(
+        r'(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```', re.DOTALL
+    )
+
+    def replace_code_block(match: re.Match) -> str:
+        """Replace the matched code block with additional API reference links if imports are found.
+
+        Args:
+            match (re.Match): The regex match object containing the code block.
+
+        Returns:
+            str: The modified code block with API reference links appended if applicable.
+        """
+        indent = match.group('indent')
+        code_block = match.group('code')
+        language = match.group('language')  # Preserve the language from the regex match
+        # Retrieve import information from the code block
+        imports = get_imports(code_block, "__unused__")
+
+        original_code_block = match.group(0)
+        # If no imports are found, return the original code block
+        if not imports:
+            return original_code_block
+
+        # Generate API reference links for each import
+        api_links = ' | '.join(
+            f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
+        )
+        # Return the code block with appended API reference links
+        return f'{original_code_block}\n\n{indent}API Reference: {api_links}'
+
+    # Apply the replace_code_block function to all matches in the markdown
+    updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
+    return updated_markdown
