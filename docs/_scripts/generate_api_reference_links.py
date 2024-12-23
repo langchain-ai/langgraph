@@ -6,6 +6,9 @@ import re
 from typing import List, Literal, Optional
 from typing_extensions import TypedDict
 
+
+from functools import lru_cache
+
 import nbformat
 from nbconvert.preprocessors import Preprocessor
 
@@ -85,8 +88,11 @@ _IMPORT_LANGCHAIN_RE = _make_regular_expression("langchain")
 _IMPORT_LANGGRAPH_RE = _make_regular_expression("langgraph")
 
 
-def _get_full_module_name(module_path, class_name) -> Optional[str]:
-    """Get full module name using inspect"""
+
+
+@lru_cache(maxsize=10_000)
+def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
+    """Get full module name using inspect, with LRU cache to memoize results."""
     try:
         module = importlib.import_module(module_path)
         class_ = getattr(module, class_name)
@@ -97,12 +103,11 @@ def _get_full_module_name(module_path, class_name) -> Optional[str]:
             return module_path
         return module.__name__
     except AttributeError as e:
-        logger.warning(f"Could not find module for {class_name}, {e}")
+        logger.warning(f"API Reference: Could not find module for {class_name}, {e}")
         return None
     except ImportError as e:
-        logger.warning(f"Failed to load for class {class_name}, {e}")
+        logger.warning(f"API Reference: Failed to load for class {class_name}, {e}")
         return None
-
 
 def _get_doc_title(data: str, file_name: str) -> str:
     try:
