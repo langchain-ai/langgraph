@@ -13,6 +13,8 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
+    Awaitable,
+    Callable,
     Dict,
     Generator,
     List,
@@ -63,6 +65,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.types import (
+    CachePolicy,
     Command,
     Interrupt,
     PregelTask,
@@ -6288,3 +6291,77 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         # Verify the error was recorded in checkpoint
         failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
         assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+async def test_node_caching() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> END
+    class State(TypedDict):
+        x: str
+        counter: int
+
+    async def count_chars(s: State):
+        return {"counter": len(s["x"])}
+
+    workflow = StateGraph(State)
+    counter = AwhileMaker(0.1, count_chars)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        # Cache the node based on the value of x.
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+    workflow.set_entry_point("CharsCounter")
+    workflow.set_finish_point("CharsCounter")
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Assert
+
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert await g.ainvoke(dict(x="ab"), config=cfg) == {"x": "ab", "counter": 2}
+    assert counter.calls == 2
+
+    assert await g.ainvoke(dict(x="b"), config=cfg) == {"x": "b", "counter": 1}
+    assert counter.calls == 3
+
+    assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 3
+
+    # Test that caching is thread-local.
+    cfg2 = {"configurable": {"thread_id": "thread-2"}}
+    assert await g.ainvoke(dict(x="a"), config=cfg2)
+    assert counter.calls == 4
+
+
+class AwhileMaker:
+    def __init__(
+        self, sleep: float, rtn: Union[dict, Exception, Callable[[Any], Awaitable[Any]]]
+    ) -> None:
+        self.sleep = sleep
+        self.rtn = rtn
+        self.reset()
+
+    async def __call__(self, input: Any) -> Any:
+        self.calls += 1
+        await asyncio.sleep(self.sleep)
+        if isinstance(self.rtn, Exception):
+            raise self.rtn
+        if callable(self.rtn):
+            result = await self.rtn(input)
+            return result
+        else:
+            return self.rtn
+
+    def reset(self):
+        self.calls = 0

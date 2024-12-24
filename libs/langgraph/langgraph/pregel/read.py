@@ -24,6 +24,7 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
+from langgraph.types import CachePolicy
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
@@ -139,6 +140,9 @@ class PregelNode(Runnable):
     retry_policy: Optional[RetryPolicy]
     """The retry policy to use when invoking the node."""
 
+    cache_policy: Optional[CachePolicy]
+    """The cache policy to use when invoking the node."""
+
     tags: Optional[Sequence[str]]
     """Tags to attach to the node for tracing."""
 
@@ -156,6 +160,7 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        cache_policy: Optional[CachePolicy] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -163,6 +168,7 @@ class PregelNode(Runnable):
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         self.retry_policy = retry_policy
+        self.cache_policy = cache_policy
         self.tags = tags
         self.metadata = metadata
 

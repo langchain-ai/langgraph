@@ -13,6 +13,7 @@ from random import randrange
 from typing import (
     Annotated,
     Any,
+    Callable,
     Dict,
     Generator,
     Iterator,
@@ -66,6 +67,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.store.base import BaseStore
 from langgraph.types import (
+    CachePolicy,
     Command,
     Interrupt,
     PregelTask,
@@ -5215,3 +5217,547 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+def test_node_caching() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> END
+    class State(TypedDict):
+        x: str
+        counter: int
+
+    def count_chars(s: State):
+        return {"counter": len(s["x"])}
+
+    workflow = StateGraph(State)
+    counter = AwhileMaker(0.1, count_chars)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        # Cache the node based on the value of x.
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+    workflow.set_entry_point("CharsCounter")
+    workflow.set_finish_point("CharsCounter")
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Assert
+
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert g.invoke(dict(x="ab"), config=cfg) == {"x": "ab", "counter": 2}
+    assert counter.calls == 2
+
+    assert g.invoke(dict(x="b"), config=cfg) == {"x": "b", "counter": 1}
+    assert counter.calls == 3
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 3
+
+    # Test that caching is thread-local.
+    cfg2 = {"configurable": {"thread_id": "thread-2"}}
+    assert g.invoke(dict(x="a"), config=cfg2)
+    assert counter.calls == 4
+
+
+def test_node_caching_with_parralel_nodes_one_cached_the_other_not() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START ├── CharsCounter [cached] -> B -> END
+    #       └──   A  ___________________/
+    class State(TypedDict):
+        x: str
+        counter: int
+
+    def count_chars(s: State):
+        return {"counter": len(s["x"])}
+
+    counter = AwhileMaker(0.1, count_chars)
+    do_nothing = AwhileMaker(0.0, dict())
+
+    workflow = StateGraph(State)
+    workflow.add_node("A", do_nothing)
+    workflow.add_node("B", do_nothing)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+
+    workflow.add_edge(START, "CharsCounter")
+    workflow.add_edge(START, "A")
+    workflow.add_edge("A", "B")
+    workflow.add_edge("CharsCounter", "B")
+    workflow.add_edge("B", END)
+
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Asserts
+
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert g.invoke(dict(x="ab"), config=cfg) == {"x": "ab", "counter": 2}
+    assert counter.calls == 2
+
+    assert g.invoke(dict(x="b"), config=cfg) == {"x": "b", "counter": 1}
+    assert counter.calls == 3
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 3
+
+    # Test that caching is thread-local.
+    cfg2 = {"configurable": {"thread_id": "thread-2"}}
+    assert g.invoke(dict(x="a"), config=cfg2)
+    assert counter.calls == 4
+
+
+def test_node_caching_when_no_checkpointer_set() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> END
+    class State(TypedDict):
+        x: str
+        char_count: int
+
+    def count_chars(s: State):
+        return {"char_count": len(s["x"])}
+
+    workflow = StateGraph(State)
+    counter = AwhileMaker(0.1, count_chars)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        # Cache the node based on the value of x.
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+    workflow.set_entry_point("CharsCounter")
+    workflow.set_finish_point("CharsCounter")
+    g = workflow.compile(checkpointer=None)
+
+    # Test that subsequent calls are cached.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "char_count": 1}
+    assert counter.calls == 1
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "char_count": 1}
+    assert counter.calls == 2
+
+
+def test_node_caching_with_multiple_nodes_cached() -> None:
+    # Arrange graph.
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> A -> VowelCounter [cached] -> END
+    class State(TypedDict):
+        x: int
+        char_count: int
+        vowel_count: int
+
+    def count_chars(s: State):
+        text = s["x"]
+        return {"char_count": len(text)}
+
+    def count_vowels(s: State):
+        text = s["x"]
+        return {"vowel_count": sum(1 for char in str(text).lower() if char in "aeiou")}
+
+    char_counter = AwhileMaker(0.1, count_chars)
+    vowel_counter = AwhileMaker(0.1, count_vowels)
+    do_nothing = AwhileMaker(0.0, dict())
+
+    workflow = StateGraph(State)
+    workflow.add_node("A", do_nothing)
+    workflow.add_node(
+        "CharsCounter",
+        char_counter,
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+    workflow.add_node(
+        "VowelCounter",
+        vowel_counter,
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+
+    workflow.add_edge(START, "CharsCounter")
+    workflow.add_edge("CharsCounter", "A")
+    workflow.add_edge("A", "VowelCounter")
+    workflow.add_edge("VowelCounter", END)
+
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Assert.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert g.invoke(dict(x="ab"), config=cfg) == {
+        "x": "ab",
+        "char_count": 2,
+        "vowel_count": 1,
+    }
+    assert char_counter.calls == 1
+    assert vowel_counter.calls == 1
+
+    assert g.invoke(dict(x="ab"), config=cfg) == {
+        "x": "ab",
+        "char_count": 2,
+        "vowel_count": 1,
+    }
+    assert char_counter.calls == 1
+    assert vowel_counter.calls == 1
+
+    assert g.invoke(dict(x="abu"), config=cfg) == {
+        "x": "abu",
+        "char_count": 3,
+        "vowel_count": 2,
+    }
+    assert char_counter.calls == 2
+    assert vowel_counter.calls == 2
+
+
+def test_node_caching_when_cached_node_fails_then_gets_resumed() -> None:
+    # Arrange graph.
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> END
+    class State(TypedDict):
+        x: str
+        chars_count: int
+
+    def count_chars(s: State):
+        return {"chars_count": len(s["x"])}
+
+    counter = AwhileMaker(0.1, ConnectionError("I'm not good"))
+    workflow = StateGraph(State)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+    workflow.add_edge(START, "CharsCounter")
+    workflow.add_edge("CharsCounter", END)
+
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Assert that the cached node fails.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    with pytest.raises(ConnectionError):
+        g.invoke(dict(x=""), config=cfg)
+    assert counter.calls == 1
+
+    # Resume the graph. Now "node_1" won't fail.
+    counter.rtn = count_chars
+    assert g.invoke(None, config=cfg) == {"x": "", "chars_count": 0}
+    assert counter.calls == 2
+
+    # Assert that node_1 is cached.
+    assert g.invoke(dict(x=""), config=cfg) == {"x": "", "chars_count": 0}
+    assert counter.calls == 2
+
+
+def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_multistep() -> (
+    None
+):
+    # Arrange graph.
+    # Graph sketch:
+    #
+    # START ├── CharsCounter [cached] -> B -> END
+    #       └──   A [fails] ____________/
+    # Arrange graph.
+    class State(TypedDict):
+        x: str
+        counter: int
+
+    def count_chars(s: State):
+        return {"counter": len(s["x"])}
+
+    counter = AwhileMaker(0.1, count_chars)
+    node_a = AwhileMaker(0.0, ConnectionError("I'm not good"))
+    do_nothing = AwhileMaker(0.0, dict())
+
+    workflow = StateGraph(State)
+    workflow.add_node("A", node_a)
+    workflow.add_node("B", do_nothing)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        cache_policy=CachePolicy(key=operator.itemgetter("x")),
+    )
+
+    workflow.add_edge(START, "CharsCounter")
+    workflow.add_edge(START, "A")
+    workflow.add_edge("A", "B")
+    workflow.add_edge("CharsCounter", "B")
+    workflow.add_edge("B", END)
+
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Assert.
+
+    # Assert that the non-cached node fails.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    with pytest.raises(ConnectionError):
+        g.invoke(dict(x=""), config=cfg)
+    assert counter.calls == 1
+    assert node_a.calls == 1
+    assert do_nothing.calls == 0
+
+    # Now "node_a" won't fail.
+    # Assert that "CountChars" was not called again.
+    node_a.rtn = {}
+    assert g.invoke(None, config=cfg) == {"x": "", "counter": 0}
+    assert counter.calls == 1
+    assert node_a.calls == 2
+    assert do_nothing.calls == 1
+
+
+def test_node_caching_with_subgraph_as_node_cached() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> outer_node/[START -> inner_node [cached] -> END] -> END
+    # Define subgraph
+    class SubgraphState(TypedDict):
+        foo: str
+
+    def inner_node(state: SubgraphState):
+        return {"foo": state["foo"] + "bar"}
+
+    inner_node_wrap = AwhileMaker(0.1, inner_node)
+
+    subgraph_builder = StateGraph(SubgraphState)
+    subgraph_builder.add_node(
+        "inner_node",
+        inner_node_wrap,
+        cache_policy=CachePolicy(key=json.dumps),
+    )
+    subgraph_builder.set_entry_point("inner_node")
+    subgraph_builder.set_finish_point("inner_node")
+    subgraph = subgraph_builder.compile()
+
+    # Define parent graph
+    class State(TypedDict):
+        foo: str
+
+    builder = StateGraph(State)
+    builder.add_node("outer_node", subgraph)
+    builder.set_entry_point("outer_node")
+    builder.set_finish_point("outer_node")
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Assert subgraph node is cached.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 1
+
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 1
+
+
+def test_node_caching_when_subgraph_as_func_is_cached() -> None:
+    # Arrange graph.
+    # Graph sketch:
+    #
+    # START -> outer_node (internally calls subgraph using invoke) -> END
+    # Define subgraph.
+    class SubgraphState(TypedDict):
+        foo: str
+
+    def inner_node(state: SubgraphState):
+        return {"foo": state["foo"] + "bar"}
+
+    inner_node_wrap = AwhileMaker(0.1, inner_node)
+
+    subgraph_builder = StateGraph(SubgraphState)
+    subgraph_builder.add_node(
+        "inner_node",
+        inner_node_wrap,
+        cache_policy=CachePolicy(key=json.dumps),
+    )
+    subgraph_builder.set_entry_point("inner_node")
+    subgraph_builder.set_finish_point("inner_node")
+    subgraph = subgraph_builder.compile()
+
+    # Define parent graph
+    class State(TypedDict):
+        foo: str
+
+    builder = StateGraph(State)
+    builder.add_node("subgraph_fn", lambda s: subgraph.invoke(s))
+    builder.set_entry_point("subgraph_fn")
+    builder.set_finish_point("subgraph_fn")
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Assert subgraph node is cached.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 1
+
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 1
+
+
+def test_node_caching_when_cached_node_is_interrupted() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> Oracle [interrupted] [cached] -> END
+    class State(TypedDict):
+        x: int
+
+    def oracle(state: State):
+        resp = interrupt("")
+        return {"x": resp}
+
+    oracle_wrap = AwhileMaker(0.1, oracle)
+
+    workflow = StateGraph(State)
+    workflow.add_node(
+        "Oracle",
+        oracle_wrap,
+        cache_policy=CachePolicy(key=lambda s: str(s["x"])),
+    )
+    workflow.add_edge(START, "Oracle")
+    workflow.add_edge("Oracle", END)
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Run & resume the graph.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    g.invoke(dict(x=0), config=cfg)
+    assert oracle_wrap.calls == 1
+
+    assert g.invoke(Command(resume=42), config=cfg) == {"x": 42}
+    assert oracle_wrap.calls == 2
+
+    # Assert that the node is cached (won't be interrupted again).
+    assert g.invoke(dict(x=0), config=cfg) == {"x": 42}
+    assert oracle_wrap.calls == 2
+
+
+def test_node_caching_works_with_update_graph_state() -> None:
+    class State(TypedDict):
+        x: int
+
+    def oracle(state: State):
+        return {"x": 42}
+
+    oracle_wrap = AwhileMaker(0.1, oracle)
+    workflow = StateGraph(State)
+    workflow.add_node(
+        "Oracle",
+        oracle_wrap,
+        cache_policy=CachePolicy(key=lambda s: str(s["x"])),
+    )
+    workflow.add_edge(START, "Oracle")
+    workflow.add_edge("Oracle", END)
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer, interrupt_before=["Oracle"])
+
+    # Assert.
+
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    g.invoke(dict(x=0), config=cfg)
+    assert oracle_wrap.calls == 0  # Interruped before calling the oracle.
+
+    assert g.invoke(None, config=cfg) == {"x": 42}
+    assert oracle_wrap.calls == 1  # Oracle was called once.
+
+    g.invoke(dict(x=0), config=cfg)
+    assert oracle_wrap.calls == 1  # Interruped before calling the oracle.
+
+    g.update_state(
+        cfg, {"x": 12}, as_node="Oracle"
+    )  # Skip oracle by using "as_node" to force a new output.
+    assert g.invoke(None, config=cfg) == {"x": 12}
+    assert oracle_wrap.calls == 1
+
+    g.invoke(dict(x=0), config=cfg)
+    assert oracle_wrap.calls == 1  # Interruped before calling the oracle.
+
+    assert g.invoke(None, config=cfg) == {"x": 42}
+    assert oracle_wrap.calls == 1  # Cached.
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Sharp edge 🪚: If two graphs use the same runnable name, the same thread id, and the same cache key, there "
+        "will be cache contamination 😷. The proper solution is to scope the cache keys to the graph instance."
+    )
+)
+def test_node_caching_muti_graph_cache_key_conflict() -> None:
+    class State(TypedDict):
+        x: str
+
+    fn = AwhileMaker(0.1, dict())
+
+    workflow = StateGraph(State)
+    workflow.add_node(
+        "node", fn, cache_policy=CachePolicy(key=operator.itemgetter("x"))
+    )
+    workflow.add_edge(START, "node")
+    workflow.add_edge("node", END)
+
+    # G1 and G2 share the same "checkpointer" and the same cached "node name".
+    checkpointer = MemorySaver()
+    g1 = workflow.compile(checkpointer=checkpointer)
+    g2 = workflow.compile(checkpointer=checkpointer)
+
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert fn.calls == 0
+
+    g1.invoke(dict(x=""), config=cfg)
+    assert fn.calls == 1
+
+    g2.invoke(dict(x=""), config=cfg)
+    assert fn.calls == 2, f"got {fn.calls} calls, want 2"
+
+
+class AwhileMaker:
+    def __init__(
+        self, sleep: float, rtn: Union[dict, Exception, Callable[[Any], Any]]
+    ) -> None:
+        self.sleep = sleep
+        self.rtn = rtn
+        self.reset()
+
+    def __call__(self, input: Any) -> Any:
+        self.calls += 1
+        time.sleep(self.sleep)
+        if isinstance(self.rtn, Exception):
+            raise self.rtn
+        if callable(self.rtn):
+            return self.rtn(input)
+        else:
+            return self.rtn
+
+    def reset(self):
+        self.calls = 0

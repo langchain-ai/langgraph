@@ -756,14 +756,28 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                name,
-                PULL,
-                *triggers,
-            )
+
+            if cache_policy := proc.cache_policy:
+                # If the node is configured for caching, then we use the cache key to generate the task_id.
+                # This guarantees that the task_id is the same for the same input value.
+                cache_key = cache_policy.key(val).encode()
+                task_id = _uuid5_str(
+                    cache_key,
+                    name,
+                    PULL,
+                    *triggers,
+                )
+            else:
+                # Otherwise we use the checkpoint_id and step number to generate the task_id.
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    name,
+                    PULL,
+                    *triggers,
+                )
+
             task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
             metadata = {
                 "langgraph_step": step,
@@ -837,7 +851,7 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        None,
+                        proc.cache_policy,
                         task_id,
                         task_path[:3],
                         writers=proc.flat_writers,

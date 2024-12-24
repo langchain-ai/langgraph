@@ -480,6 +480,10 @@ class PregelLoop(LoopProtocol):
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             self._match_writes(self.tasks)
 
+        # if there are cached writes from a previous run, apply them
+        if self.checkpointer:
+            self._apply_cached_writes(self.tasks)
+
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks.values()):
             return self.tick(input_keys=input_keys)
@@ -520,6 +524,39 @@ class PregelLoop(LoopProtocol):
                         self.tasks[tid] = task._replace(scheduled=True)
                 else:
                     task.writes.append((k, v))
+
+    def _apply_cached_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
+        for task in self.tasks.values():
+            self._apply_cached_writes_to_task(task)
+
+    def _apply_cached_writes_to_task(self, task: PregelExecutableTask) -> None:
+        if task.writes or task.cache_policy is None:
+            # Skip tasks that already have writes or don't have a cache policy.
+            # Pending writes from a previous run are one example of why writes may already exist.
+            return
+
+        assert self.checkpointer is not None, "Internal error: checkpointer is None"
+        cache_result = self.checkpointer.get_writes(
+            self.checkpoint_config, task_id=task.id
+        )
+        if not cache_result:
+            return
+
+        _, cached_writes = cache_result
+
+        # Ignore special channels (e.g., Errors, Interrupts, etc ...).
+        # Those channel writes may come from a previous run. For example,
+        # if a node failed then the graph was resumed using g.invoke(None, config=...).
+        cached_writes = tuple(
+            w for w in cached_writes if w.channel_name not in WRITES_IDX_MAP
+        )
+        if not cached_writes:
+            return
+
+        # Extra check to ensure that the cached writes are safe to use.
+        safe_to_use = all(chan in self.channels for chan, _ in cached_writes)
+        if safe_to_use:
+            task.writes.extend(cached_writes)
 
     def _first(self, *, input_keys: Union[str, Sequence[str]]) -> None:
         # resuming from previous checkpoint requires

@@ -57,7 +57,7 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, Command, RetryPolicy
+from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
@@ -91,6 +91,7 @@ class StateNodeSpec(NamedTuple):
     metadata: Optional[dict[str, Any]]
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy] = None
     ends: Optional[tuple[str, ...]] = EMPTY_SEQ
 
 
@@ -232,6 +233,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache_policy: Optional[CachePolicy] = None,
     ) -> Self:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -256,6 +258,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache_policy: Optional[CachePolicy] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -279,6 +282,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache_policy: Optional[CachePolicy] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -290,6 +294,12 @@ class StateGraph(Graph):
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
             retry (Optional[RetryPolicy]): The policy for retrying the node. (default: None)
+            cache_policy (Optional[CachePolicy]): Caching config. (default: None which means no caching)
+
+        Note:
+            If node caching is enabled, the cache is thread-local. The thread is identified by the `thread_id` in the
+            `configurable` portion of the config, e.g., `{configurable: {"thread_id": "thread-1"}}`.
+
         Raises:
             ValueError: If the key is already being used as a state key.
 
@@ -393,6 +403,7 @@ class StateGraph(Graph):
             metadata,
             input=input or self.schema,
             retry_policy=retry,
+            cache_policy=cache_policy,
             ends=ends,
         )
         return self
@@ -719,6 +730,7 @@ class CompiledStateGraph(CompiledGraph):
                 ],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
+                cache_policy=node.cache_policy,
                 bound=node.runnable,
             )
         else:

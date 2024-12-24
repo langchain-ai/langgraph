@@ -132,9 +132,10 @@ class CachePolicy:
     ttl: Optional[float] = None
     """Time-to-live for the cache in seconds."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.ttl is not None and self.ttl <= 0:
             raise ValueError("ttl must be greater than 0")
+
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
