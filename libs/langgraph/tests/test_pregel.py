@@ -5270,6 +5270,48 @@ def test_node_caching() -> None:
     assert counter.calls == 4
 
 
+def test_node_caching_with_ttl():
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> END
+    class State(TypedDict):
+        x: str
+        counter: int
+
+    def count_chars(s: State):
+        return {"counter": len(s["x"])}
+
+    workflow = StateGraph(State)
+    counter = AwhileMaker(0.1, count_chars)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        # Cache the node based on the value of x.
+        cache_policy=CachePolicy(key=operator.itemgetter("x"), ttl=1),
+    )
+    workflow.set_entry_point("CharsCounter")
+    workflow.set_finish_point("CharsCounter")
+    checkpointer = MemorySaver()
+    g = workflow.compile(checkpointer=checkpointer)
+
+    # Assert
+
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 1
+
+    time.sleep(1.1)
+
+    assert g.invoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+    assert counter.calls == 2
+
+
 def test_node_caching_with_parralel_nodes_one_cached_the_other_not() -> None:
     # Arrange graph.
 
@@ -5577,6 +5619,56 @@ def test_node_caching_with_subgraph_as_node_cached() -> None:
 
     assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
     assert inner_node_wrap.calls == 1
+
+
+def test_node_caching_with_subgraph_as_node_cached_with_ttl() -> None:
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> outer_node/[START -> inner_node [cached] -> END] -> END
+    # Define subgraph
+    class SubgraphState(TypedDict):
+        foo: str
+
+    def inner_node(state: SubgraphState):
+        return {"foo": state["foo"] + "bar"}
+
+    inner_node_wrap = AwhileMaker(0.1, inner_node)
+
+    subgraph_builder = StateGraph(SubgraphState)
+    subgraph_builder.add_node(
+        "inner_node",
+        inner_node_wrap,
+        cache_policy=CachePolicy(key=json.dumps, ttl=1),
+    )
+    subgraph_builder.set_entry_point("inner_node")
+    subgraph_builder.set_finish_point("inner_node")
+    subgraph = subgraph_builder.compile()
+
+    # Define parent graph
+    class State(TypedDict):
+        foo: str
+
+    builder = StateGraph(State)
+    builder.add_node("outer_node", subgraph)
+    builder.set_entry_point("outer_node")
+    builder.set_finish_point("outer_node")
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Assert subgraph node is cached.
+    cfg = {"configurable": {"thread_id": "thread-1"}}
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 1
+
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 1
+
+    time.sleep(1.1)
+
+    assert graph.invoke({"foo": "foo"}, config=cfg) == {"foo": "foobar"}
+    assert inner_node_wrap.calls == 2
 
 
 def test_node_caching_when_subgraph_as_func_is_cached() -> None:

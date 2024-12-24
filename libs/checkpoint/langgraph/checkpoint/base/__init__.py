@@ -34,6 +34,14 @@ from langgraph.checkpoint.serde.types import (
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
 
+DEFAULT_TIMEZONE = timezone.utc
+
+
+class CheckpointKey(NamedTuple):
+    thread_id: str
+    checkpoint_id: str
+    checkpoint_ns: str
+
 
 class WriteObject(NamedTuple):
     """Represents a write operation consisting of a channel name and a corresponding value."""
@@ -113,7 +121,7 @@ def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=1,
         id=str(uuid6(clock_seq=-2)),
-        ts=datetime.now(timezone.utc).isoformat(),
+        ts=datetime.now(DEFAULT_TIMEZONE).isoformat(),
         channel_values={},
         channel_versions={},
         versions_seen={},
@@ -141,7 +149,7 @@ def create_checkpoint(
     id: Optional[str] = None,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(DEFAULT_TIMEZONE).isoformat()
     if channels is None:
         values = checkpoint["channel_values"]
     else:
@@ -312,7 +320,7 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         *,
         task_id: str,
-    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+    ) -> Optional[tuple[CheckpointKey, Sequence[WriteObject]]]:
         """Retrieves the most recent writes produced by a task.
 
         Args:
@@ -323,8 +331,8 @@ class BaseCheckpointSaver(Generic[V]):
             Recency here refers to the checkpoint that the writes are linked to.
 
         Returns:
-            Optional[tuple[str, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
-            and the checkpoint id they originated from in the form (ckpt_id, writes), or None if no writes are found.
+            Optional[tuple[CheckpointKey, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
+            and a key that identifies the checkpoint the writes originated from. Or None if no writes are found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -428,7 +436,7 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         *,
         task_id: str,
-    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+    ) -> Optional[tuple[CheckpointKey, Sequence[WriteObject]]]:
         """Asynchronously retrieves the most recent writes produced by a task.
 
         Args:
@@ -439,8 +447,8 @@ class BaseCheckpointSaver(Generic[V]):
             Recency here refers to the checkpoint that the writes are linked to.
 
         Returns:
-            Optional[tuple[str, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
-            and the checkpoint id they originated from in the form (ckpt_id, writes), or None if no writes are found.
+            Optional[tuple[CheckpointKey, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
+            and a key that identifies the checkpoint the writes originated from. Or None if no writes are found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.

@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
+from datetime import datetime
 from types import TracebackType
 from typing import (
     Any,
@@ -26,6 +27,7 @@ from typing_extensions import ParamSpec, Self
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
+    DEFAULT_TIMEZONE,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
@@ -530,7 +532,9 @@ class PregelLoop(LoopProtocol):
             self._apply_cached_writes_to_task(task)
 
     def _apply_cached_writes_to_task(self, task: PregelExecutableTask) -> None:
-        if task.writes or task.cache_policy is None:
+        cache_policy = task.cache_policy
+
+        if task.writes or cache_policy is None:
             # Skip tasks that already have writes or don't have a cache policy.
             # Pending writes from a previous run are one example of why writes may already exist.
             return
@@ -542,7 +546,8 @@ class PregelLoop(LoopProtocol):
         if not cache_result:
             return
 
-        _, cached_writes = cache_result
+        (tid, ckpt_id, ckpt_ns), cached_writes = cache_result
+        assert tid == self.checkpoint_config["configurable"]["thread_id"], "Internal error: Found writes from a different thread."
 
         # Ignore special channels (e.g., Errors, Interrupts, etc ...).
         # Those channel writes may come from a previous run. For example,
@@ -555,8 +560,44 @@ class PregelLoop(LoopProtocol):
 
         # Extra check to ensure that the cached writes are safe to use.
         safe_to_use = all(chan in self.channels for chan, _ in cached_writes)
-        if safe_to_use:
-            task.writes.extend(cached_writes)
+        if not safe_to_use:
+            return
+
+        # Check if the cache is stale.
+        ttl = cache_policy.ttl
+        if ttl and ttl > 0:
+            if self._is_checkpoint_stale(
+                thread_id=tid, ckpt_id=ckpt_id, ckpt_ns=ckpt_ns, ttl=ttl
+            ):
+                return
+
+        # Apply the cached writes.
+        task.writes.extend(cached_writes)
+
+    def _is_checkpoint_stale(
+        self, *, thread_id: str, ckpt_id: str, ckpt_ns: str, ttl: float
+    ) -> bool:
+        cfg: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_id": ckpt_id,
+                "checkpoint_ns": ckpt_ns,
+            }
+        }
+        ckpt_tup = self.checkpointer.get_tuple(cfg)
+        if not ckpt_tup:
+            return True
+
+        # Compute the expiration time.
+        ckpt_dt = datetime.fromisoformat(ckpt_tup.checkpoint["ts"])
+        ckpt_ts = ckpt_dt.replace(tzinfo=DEFAULT_TIMEZONE).timestamp()
+        expiry_ts = ckpt_ts + ttl
+
+        return expiry_ts < self._current_timestamp()
+
+    def _current_timestamp(self) -> float:
+        """Get the current timestamp."""
+        return datetime.now(DEFAULT_TIMEZONE).timestamp()
 
     def _first(self, *, input_keys: Union[str, Sequence[str]]) -> None:
         # resuming from previous checkpoint requires

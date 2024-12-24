@@ -104,12 +104,13 @@ import concurrent.futures as cf
 import functools
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from importlib import util
 from typing import Any, Iterable, Optional
 
 from langchain_core.embeddings import Embeddings
 
+from langgraph.checkpoint.base import DEFAULT_TIMEZONE
 from langgraph.store.base import (
     BaseStore,
     GetOp,
@@ -406,8 +407,8 @@ class InMemoryStore(BaseStore):
                     value=op.value,
                     key=key,
                     namespace=namespace,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(DEFAULT_TIMEZONE),
+                    updated_at=datetime.now(DEFAULT_TIMEZONE),
                 )
 
     def _extract_texts(

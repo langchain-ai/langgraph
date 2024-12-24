@@ -142,6 +142,8 @@ class TestMemorySaver:
     async def test_put_and_get_writes(self) -> None:
         CONFIG = self.config_2
         CKPT_ID = CONFIG["configurable"]["checkpoint_id"]
+        THREAD_ID = CONFIG["configurable"]["thread_id"]
+        CKPT_KEY = (THREAD_ID, "", CKPT_ID)
 
         TASK1 = "task1"
         TASK2 = "task2"
@@ -152,15 +154,15 @@ class TestMemorySaver:
         # Test that writes are saved and retrieved correctly.
         writes1 = (("node1", 1), ("node2", "a"), ("node3", 1.0), ("node4", True))
         self.memory_saver.put_writes(CONFIG, writes1, TASK1)
-        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (CKPT_ID, writes1)
+        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (CKPT_KEY, writes1)
 
         # Write to another task and check that writes are saved and retrieved correctly.
         writes2 = (("node1", 2), ("node2", "b"), ("node3", 2.0), ("node4", False))
         self.memory_saver.put_writes(CONFIG, writes2, TASK2)
-        assert self.memory_saver.get_writes(CONFIG, task_id=TASK2) == (CKPT_ID, writes2)
+        assert self.memory_saver.get_writes(CONFIG, task_id=TASK2) == (CKPT_KEY, writes2)
 
         # Test that writes are not overwritten
-        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (CKPT_ID, writes1)
+        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (CKPT_KEY, writes1)
 
     async def test_get_writes_when_multiple_entries_exist_pick_the_latest(self) -> None:
         TASK_ID = "task1"
@@ -196,6 +198,6 @@ class TestMemorySaver:
             }
         }
         assert self.memory_saver.get_writes(cfg, task_id=TASK_ID) == (
-            "001",
+            ("thread-1", "", "001"),
             tuple(writes2),
         )

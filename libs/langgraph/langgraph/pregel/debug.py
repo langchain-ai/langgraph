@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
 from pprint import pformat
 from typing import (
     Any,
@@ -19,7 +19,12 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
+from langgraph.checkpoint.base import (
+    DEFAULT_TIMEZONE,
+    Checkpoint,
+    CheckpointMetadata,
+    PendingWrite,
+)
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -97,7 +102,7 @@ def map_debug_tasks(
     step: int, tasks: Iterable[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     """Produce "task" events for stream_mode=debug."""
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(DEFAULT_TIMEZONE).isoformat()
     for task in tasks:
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
@@ -127,7 +132,7 @@ def map_debug_task_results(
     task, writes = task_tup
     yield {
         "type": "task_result",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(DEFAULT_TIMEZONE).isoformat(),
         "step": step,
         "payload": {
             "id": task.id,

@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointKey,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
@@ -353,7 +354,7 @@ class MemorySaver(
 
     def get_writes(
         self, config: RunnableConfig, *, task_id: str
-    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+    ) -> Optional[tuple[CheckpointKey, Sequence[WriteObject]]]:
         """Gets the most recent writes that are related to the input task from the in-memory storage.
 
         Args:
@@ -364,13 +365,14 @@ class MemorySaver(
             Recency is determined by the checkpoint ID associated with the writes.
 
         Returns:
-            A sequence of writes (outputs) produced by the task. Or None if no writes are found.
+            Optional[tuple[CheckpointKey, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
+            and a key that identifies the checkpoint the writes originated from. Or None if no writes are found.
         """
         thread_id = config["configurable"]["thread_id"]
 
-        max_ckpt_id, writes = "", []
+        max_ckpt_id, ckpt_ns, writes = "", "", []
         for outer_key, super_step_writes in self.writes.items():
-            tid, _, ckpt_id = outer_key
+            tid, ns, ckpt_id = outer_key
             if tid != thread_id:
                 continue
 
@@ -384,12 +386,19 @@ class MemorySaver(
 
             if ws and ckpt_id > max_ckpt_id:
                 max_ckpt_id = ckpt_id
+                ckpt_ns = ns
                 writes = ws
 
         if not writes:
             return None
 
-        return (max_ckpt_id, tuple(writes))
+        ckpt_key = CheckpointKey(
+            thread_id=thread_id,
+            checkpoint_ns=ckpt_ns,
+            checkpoint_id=max_ckpt_id,
+        )
+
+        return (ckpt_key, tuple(writes))
 
     def put_writes(
         self,
@@ -480,7 +489,7 @@ class MemorySaver(
 
     async def aget_writes(
         self, config: RunnableConfig, *, task_id: str
-    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+    ) -> Optional[tuple[CheckpointKey, Sequence[WriteObject]]]:
         """Asynchronous version of get_writes."""
         return self.get_writes(config, task_id=task_id)
 
