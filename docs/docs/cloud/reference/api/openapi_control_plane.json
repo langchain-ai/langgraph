@@ -1,0 +1,485 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LangGraph Control Plane API (Beta)",
+    "version": "0.0.1",
+    "description": "The LangGraph Control Plane API is used to programmatically create and manage LangGraph Server deployments. For example, the APIs can be orchestrated to create custom CI/CD workflows.\n\n### Beta\nThis API is currently in beta and may change or break without notice. This API documentation may not be up-to-date with actual API functionality.\n### Host\nhttps://api.host.langchain.com/\n\n### Authentication\nTo authenticate with the LangGraph Control Plane API, set the `X-Api-Key` header to a valid LangSmith API key for each request.\n\n### Versioning\nEach endpoint path is prefixed with a version (e.g. `v1`)."
+  },
+  "tags": [
+    {
+      "name": "Projects (v1)",
+      "description": "A project corresponds to a LangGraph Server deployment and the associated LangSmith tracing project."
+    },
+    {
+      "name": "Revisions (v1)",
+      "description": "A revision is a version of a LangGraph Server deployment. Different revisions may have different code and/or environment variables. A project can have many revisions."
+    }
+  ],
+  "paths": {
+    "/v1/projects": {
+      "get": {
+        "tags": ["Projects (v1)"],
+        "summary": "List Projects",
+        "description": "List all projects.",
+        "operationId": "list_projects_projects_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Limit",
+              "description": "Maximum number of results to return. Minimum: 1. Maximum: 100.",
+              "default": 20
+            },
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Offset",
+              "description": "Pagination offset value. Pass this value in subsequent requests to retrieve the next page of results. Minimum: 0.",
+              "default": 0
+            },
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Name Contains",
+              "description": "Filter string to filter projects by `name`."
+            },
+            "name": "name_contains",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}": {
+      "get": {
+        "tags": ["Projects (v1)"],
+        "summary": "Get Project",
+        "description": "Get project by ID.",
+        "operationId": "get_project_projects__project_id__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Projects (v1)"],
+        "summary": "Delete Project",
+        "description": "Delete project by ID.",
+        "operationId": "delete_project_projects__project_id__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/revisions": {
+      "get": {
+        "tags": ["Revisions (v1)"],
+        "summary": "List Revisions",
+        "description": "List revisions of a project.",
+        "operationId": "list_revisions_projects__project_id__revisions_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Limit",
+              "description": "Maximum number of results to return. Minimum: 1. Maximum: 100.",
+              "default": 20
+            },
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Offset",
+              "description": "Pagination offset value. Pass this value in subsequent requests to retrieve the next page of results. Minimum: 0.",
+              "default": 0
+            },
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Revision"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Create Revision",
+        "description": "Create a new revision for a project.",
+        "operationId": "create_revision_projects__project_id__revisions_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/revisions/{revision_id}": {
+      "get": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Get Revision",
+        "description": "Get revision by ID.",
+        "operationId": "get_revision_projects__project_id__revisions__revision_id__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Revision ID"
+            },
+            "name": "revision_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EnvVar": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateRevisionRequest": {
+        "type": "object",
+        "properties": {
+          "image_path": {
+            "type": "string"
+          },
+          "repo_path": {
+            "type": "string"
+          },
+          "env_vars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVar"
+            }
+          },
+          "shareable": {
+            "type": "boolean"
+          },
+          "container_spec": {
+            "type": "object"
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tool_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "example_input": {
+            "type": "object"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "lc_hosted": {
+            "type": "boolean"
+          },
+          "repo_url": {
+            "type": "string"
+          },
+          "repo_branch": {
+            "type": "string"
+          },
+          "tracer_session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "api_key_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "build_on_push": {
+            "type": "boolean"
+          },
+          "input_json_schemas": {
+            "type": "object"
+          },
+          "output_json_schemas": {
+            "type": "object"
+          },
+          "host_integration_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ResourceService"
+          }
+        }
+      },
+      "ResourceId": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ResourceRevision": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "env_vars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVar"
+            }
+          },
+          "hosted_langserve_revision_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ResourceService": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "url": {
+            "type": "string"
+          },
+          "latest_revision": {
+            "$ref": "#/components/schemas/ResourceRevision"
+          },
+          "latest_active_revision": {
+            "$ref": "#/components/schemas/ResourceRevision"
+          }
+        }
+      },
+      "Revision": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "repo_path": {
+            "type": "string"
+          },
+          "repo_commit": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_message": {
+            "type": "string"
+          },
+          "gcp_build_name": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "image_path": {
+            "type": "string"
+          },
+          "container_spec": {
+            "type": "object"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ResourceRevision"
+          }
+        }
+      }
+    }
+  }
+}
