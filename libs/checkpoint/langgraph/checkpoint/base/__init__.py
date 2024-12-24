@@ -35,6 +35,13 @@ V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
 
 
+class WriteObject(NamedTuple):
+    """Represents a write operation consisting of a channel name and a corresponding value."""
+
+    channel_name: str
+    value: Any
+
+
 # Marked as total=False to allow for future expansion.
 class CheckpointMetadata(TypedDict, total=False):
     """Metadata associated with a checkpoint."""
@@ -300,6 +307,30 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def get_writes(
+        self,
+        config: RunnableConfig,
+        *,
+        task_id: str,
+    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+        """Retrieves the most recent writes produced by a task.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            task_id (str): Identifier for the task for which to retrieve its writes.
+
+        Note:
+            Recency here refers to the checkpoint that the writes are linked to.
+
+        Returns:
+            Optional[tuple[str, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
+            and the checkpoint id they originated from in the form (ckpt_id, writes), or None if no writes are found.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
+        raise NotImplementedError
+
     def put_writes(
         self,
         config: RunnableConfig,
@@ -386,6 +417,30 @@ class BaseCheckpointSaver(Generic[V]):
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
+        raise NotImplementedError
+
+    async def aget_writes(
+        self,
+        config: RunnableConfig,
+        *,
+        task_id: str,
+    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+        """Asynchronously retrieves the most recent writes produced by a task.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            task_id (str): Identifier for the task for which to retrieve its writes.
+
+        Note:
+            Recency here refers to the checkpoint that the writes are linked to.
+
+        Returns:
+            Optional[tuple[str, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
+            and the checkpoint id they originated from in the form (ckpt_id, writes), or None if no writes are found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.

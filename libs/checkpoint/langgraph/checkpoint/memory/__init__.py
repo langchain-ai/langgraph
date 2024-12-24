@@ -18,6 +18,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
+    WriteObject,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
@@ -350,6 +351,46 @@ class MemorySaver(
             }
         }
 
+    def get_writes(
+        self, config: RunnableConfig, *, task_id: str
+    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+        """Gets the most recent writes that are related to the input task from the in-memory storage.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            task_id (str): Identifier for the task for which to retrieve its writes.
+
+        Note:
+            Recency is determined by the checkpoint ID associated with the writes.
+
+        Returns:
+            A sequence of writes (outputs) produced by the task. Or None if no writes are found.
+        """
+        thread_id = config["configurable"]["thread_id"]
+
+        max_ckpt_id, writes = "", []
+        for outer_key, super_step_writes in self.writes.items():
+            tid, _, ckpt_id = outer_key
+            if tid != thread_id:
+                continue
+
+            # Note: we don't check against checkpoint_ns because it's not stable accross checkpoints.
+
+            ws = []
+            for inner_key, write in super_step_writes.items():
+                tsk_id = inner_key[0]
+                if task_id == tsk_id:
+                    ws.append(WriteObject(write[1], self.serde.loads_typed(write[2])))
+
+            if ws and ckpt_id > max_ckpt_id:
+                max_ckpt_id = ckpt_id
+                writes = ws
+
+        if not writes:
+            return None
+
+        return (max_ckpt_id, tuple(writes))
+
     def put_writes(
         self,
         config: RunnableConfig,
@@ -436,6 +477,12 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         return self.put(config, checkpoint, metadata, new_versions)
+
+    async def aget_writes(
+        self, config: RunnableConfig, *, task_id: str
+    ) -> Optional[tuple[str, Sequence[WriteObject]]]:
+        """Asynchronous version of get_writes."""
+        return self.get_writes(config, task_id=task_id)
 
     async def aput_writes(
         self,
