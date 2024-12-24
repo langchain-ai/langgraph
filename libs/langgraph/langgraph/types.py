@@ -119,11 +119,22 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-class CachePolicy(NamedTuple):
+@dataclasses.dataclass(frozen=True)
+class CachePolicy:
     """Configuration for caching nodes."""
 
-    pass
+    key: Callable[[Any], str]
+    """Specifies a function of one argument that is used to extract a cache key. 
+    The input to the function is the input to the node. The output must be a string. 
+    For example, `key=lambda state: state["file_id"]`.
+    """
 
+    ttl: Optional[float] = None
+    """Time-to-live for the cache in seconds."""
+
+    def __post_init__(self):
+        if self.ttl is not None and self.ttl <= 0:
+            raise ValueError("ttl must be greater than 0")
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
