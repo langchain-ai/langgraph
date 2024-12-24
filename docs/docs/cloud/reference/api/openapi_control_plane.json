@@ -316,7 +316,7 @@
       },
       "ContainerSpec": {
         "type": "object",
-        "description": "Container specification for a deployment.\n\nIf any field is omitted or set to `null`, the internal default value is used depending on the deployment type (`Development` or `Production`).",
+        "description": "Container specification for a revision's deployment.\n\nIf any field is omitted or set to `null`, the internal default value is used depending on the deployment type (`dev` or `prod`).",
         "properties": {
           "min_scale": {
             "type": ["integer", "null"],
@@ -379,64 +379,88 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "ID of the project.",
+            "required": true
           },
           "tool_name": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Do not use."
           },
           "display_name": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Do not use."
           },
           "description": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Do not use."
           },
           "example_input": {
-            "type": "object"
+            "type": ["object", "null"],
+            "description": "Do not use."
           },
           "tenant_id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "ID of the tenant/workspace of the project.",
+            "required": true
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Timestamp of when the project was created.",
+            "required": true
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Timestamp of when the project was updated.",
+            "required": true
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Name of the project.\n\nThis is also the name of the LangSmith tracing project for the LangGraph deployment.",
+            "required": true
           },
           "lc_hosted": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Boolean flag to indicate if the deployment is hosted in LangChain's cloud or an external cloud (e.g. BYOC).",
+            "required": true
           },
           "repo_url": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "URL of the GitHub repository.\n\nThis field is not used for deployments from a Docker image."
           },
           "repo_branch": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Branch of the GitHub repository.\n\nThis field is not used for deployments from a Docker image."
           },
           "tracer_session_id": {
-            "type": "string",
-            "format": "uuid"
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
           },
           "api_key_id": {
-            "type": "string",
-            "format": "uuid"
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
           },
           "build_on_push": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Boolean flag to indicate if a new revision is automatically created on push to GitHub branch (`repo_branch`).\n\nThis field does not apply for BYOC deployments."
           },
           "input_json_schemas": {
-            "type": "object"
+            "type": ["object", "null"],
+            "description": "Do not use."
           },
           "output_json_schemas": {
-            "type": "object"
+            "type": ["object", "null"],
+            "description": "Do not use."
           },
           "host_integration_id": {
-            "type": "string",
-            "format": "uuid"
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
           },
           "metadata": {
             "type": "object"
@@ -533,7 +557,7 @@
             "type": "string"
           },
           "container_spec": {
-            "type": "object"
+            "$ref": "#/components/schemas/ContainerSpec"
           },
           "resource": {
             "$ref": "#/components/schemas/ResourceRevision"
