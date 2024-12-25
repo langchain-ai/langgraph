@@ -78,6 +78,7 @@ from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
     ALL_STORES_ASYNC,
+    ASYNC_NODE_CACHE_SAVERS,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
     awith_store,
@@ -6293,7 +6294,8 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
 
 
-async def test_node_caching() -> None:
+@pytest.mark.parametrize("checkpointer_name", ASYNC_NODE_CACHE_SAVERS)
+async def test_node_caching(checkpointer_name: str) -> None:
     # Arrange graph.
 
     # Graph sketch:
@@ -6316,32 +6318,79 @@ async def test_node_caching() -> None:
     )
     workflow.set_entry_point("CharsCounter")
     workflow.set_finish_point("CharsCounter")
-    checkpointer = MemorySaver()
-    g = workflow.compile(checkpointer=checkpointer)
 
-    # Assert
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        g = workflow.compile(checkpointer=checkpointer)
 
-    cfg = {"configurable": {"thread_id": "thread-1"}}
+        # Assert
 
-    assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
-    assert counter.calls == 1
+        cfg = {"configurable": {"thread_id": "thread-1"}}
 
-    assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
-    assert counter.calls == 1
+        assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+        assert counter.calls == 1
 
-    assert await g.ainvoke(dict(x="ab"), config=cfg) == {"x": "ab", "counter": 2}
-    assert counter.calls == 2
+        assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+        assert counter.calls == 1
 
-    assert await g.ainvoke(dict(x="b"), config=cfg) == {"x": "b", "counter": 1}
-    assert counter.calls == 3
+        assert await g.ainvoke(dict(x="ab"), config=cfg) == {"x": "ab", "counter": 2}
+        assert counter.calls == 2
 
-    assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
-    assert counter.calls == 3
+        assert await g.ainvoke(dict(x="b"), config=cfg) == {"x": "b", "counter": 1}
+        assert counter.calls == 3
 
-    # Test that caching is thread-local.
-    cfg2 = {"configurable": {"thread_id": "thread-2"}}
-    assert await g.ainvoke(dict(x="a"), config=cfg2)
-    assert counter.calls == 4
+        assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+        assert counter.calls == 3
+
+        # Test that caching is thread-local.
+        cfg2 = {"configurable": {"thread_id": "thread-2"}}
+        assert await g.ainvoke(dict(x="a"), config=cfg2)
+        assert counter.calls == 4
+
+
+@pytest.mark.parametrize("checkpointer_name", ASYNC_NODE_CACHE_SAVERS)
+async def test_node_caching_with_ttl_async(
+    request: pytest.FixtureRequest, checkpointer_name: str
+):
+    # Arrange graph.
+
+    # Graph sketch:
+    #
+    # START -> CharsCounter [cached] -> END
+    class State(TypedDict):
+        x: str
+        counter: int
+
+    async def count_chars(s: State):
+        return {"counter": len(s["x"])}
+
+    workflow = StateGraph(State)
+    counter = AwhileMaker(0.1, count_chars)
+    workflow.add_node(
+        "CharsCounter",
+        counter,
+        # Cache the node based on the value of x.
+        cache_policy=CachePolicy(key=operator.itemgetter("x"), ttl=1),
+    )
+    workflow.set_entry_point("CharsCounter")
+    workflow.set_finish_point("CharsCounter")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        g = workflow.compile(checkpointer=checkpointer)
+
+        # Assert
+
+        cfg = {"configurable": {"thread_id": "thread-1"}}
+
+        assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+        assert counter.calls == 1
+
+        assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+        assert counter.calls == 1
+
+        await asyncio.sleep(1.1)
+
+        assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
+        assert counter.calls == 2
 
 
 class AwhileMaker:

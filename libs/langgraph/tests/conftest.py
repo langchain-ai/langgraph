@@ -449,3 +449,18 @@ ALL_STORES_ASYNC = [
     "postgres_aio_pool",
     "duckdb_aio",
 ]
+
+# TODO: Add SQLite to the list of supported savers.
+NODE_CACHE_SAVERS = [
+    "memory",
+    "postgres",
+    "postgres_pipe",
+    "postgres_pool",
+]
+
+ASYNC_NODE_CACHE_SAVERS = [
+    "memory",
+    "postgres_aio",
+    "postgres_aio_pipe",
+    "postgres_aio_pool",
+]

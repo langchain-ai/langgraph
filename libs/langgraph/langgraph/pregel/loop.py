@@ -591,6 +591,7 @@ class PregelLoop(LoopProtocol):
                 "checkpoint_ns": ckpt_ns,
             }
         }
+        assert self.checkpointer is not None, "Internal error: checkpointer is None"
         ckpt_tup = self.checkpointer.get_tuple(cfg)
         if not ckpt_tup:
             return True

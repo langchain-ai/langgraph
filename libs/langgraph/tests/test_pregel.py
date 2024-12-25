@@ -80,6 +80,7 @@ from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
     ALL_STORES_SYNC,
+    NODE_CACHE_SAVERS,
     SHOULD_CHECK_SNAPSHOTS,
 )
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
@@ -5219,7 +5220,10 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
 
 
-def test_node_caching() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_x(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
 
     # Graph sketch:
@@ -5270,7 +5274,10 @@ def test_node_caching() -> None:
     assert counter.calls == 4
 
 
-def test_node_caching_with_ttl():
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_with_ttl(request: pytest.FixtureRequest, checkpointer_name: str):
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
 
     # Graph sketch:
@@ -5293,7 +5300,6 @@ def test_node_caching_with_ttl():
     )
     workflow.set_entry_point("CharsCounter")
     workflow.set_finish_point("CharsCounter")
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer)
 
     # Assert
@@ -5312,7 +5318,12 @@ def test_node_caching_with_ttl():
     assert counter.calls == 2
 
 
-def test_node_caching_with_parralel_nodes_one_cached_the_other_not() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_with_parralel_nodes_one_cached_the_other_not(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
 
     # Graph sketch:
@@ -5344,7 +5355,6 @@ def test_node_caching_with_parralel_nodes_one_cached_the_other_not() -> None:
     workflow.add_edge("CharsCounter", "B")
     workflow.add_edge("B", END)
 
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer)
 
     # Asserts
@@ -5407,7 +5417,12 @@ def test_node_caching_when_no_checkpointer_set() -> None:
     assert counter.calls == 2
 
 
-def test_node_caching_with_multiple_nodes_cached() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_with_multiple_nodes_cached(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
     # Graph sketch:
     #
@@ -5447,7 +5462,6 @@ def test_node_caching_with_multiple_nodes_cached() -> None:
     workflow.add_edge("A", "VowelCounter")
     workflow.add_edge("VowelCounter", END)
 
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer)
 
     # Assert.
@@ -5478,7 +5492,12 @@ def test_node_caching_with_multiple_nodes_cached() -> None:
     assert vowel_counter.calls == 2
 
 
-def test_node_caching_when_cached_node_fails_then_gets_resumed() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_when_cached_node_fails_then_gets_resumed(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
     # Graph sketch:
     #
@@ -5500,7 +5519,6 @@ def test_node_caching_when_cached_node_fails_then_gets_resumed() -> None:
     workflow.add_edge(START, "CharsCounter")
     workflow.add_edge("CharsCounter", END)
 
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer)
 
     # Assert that the cached node fails.
@@ -5519,9 +5537,12 @@ def test_node_caching_when_cached_node_fails_then_gets_resumed() -> None:
     assert counter.calls == 2
 
 
-def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_multistep() -> (
-    None
-):
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_multistep(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
     # Graph sketch:
     #
@@ -5554,7 +5575,6 @@ def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_mult
     workflow.add_edge("CharsCounter", "B")
     workflow.add_edge("B", END)
 
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer)
 
     # Assert.
@@ -5576,7 +5596,12 @@ def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_mult
     assert do_nothing.calls == 1
 
 
-def test_node_caching_with_subgraph_as_node_cached() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_with_subgraph_as_node_cached(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
 
     # Graph sketch:
@@ -5609,7 +5634,6 @@ def test_node_caching_with_subgraph_as_node_cached() -> None:
     builder.add_node("outer_node", subgraph)
     builder.set_entry_point("outer_node")
     builder.set_finish_point("outer_node")
-    checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Assert subgraph node is cached.
@@ -5621,7 +5645,12 @@ def test_node_caching_with_subgraph_as_node_cached() -> None:
     assert inner_node_wrap.calls == 1
 
 
-def test_node_caching_with_subgraph_as_node_cached_with_ttl() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_with_subgraph_as_node_cached_with_ttl(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
 
     # Graph sketch:
@@ -5654,7 +5683,6 @@ def test_node_caching_with_subgraph_as_node_cached_with_ttl() -> None:
     builder.add_node("outer_node", subgraph)
     builder.set_entry_point("outer_node")
     builder.set_finish_point("outer_node")
-    checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Assert subgraph node is cached.
@@ -5671,7 +5699,12 @@ def test_node_caching_with_subgraph_as_node_cached_with_ttl() -> None:
     assert inner_node_wrap.calls == 2
 
 
-def test_node_caching_when_subgraph_as_func_is_cached() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_when_subgraph_as_func_is_cached(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
     # Graph sketch:
     #
@@ -5703,7 +5736,6 @@ def test_node_caching_when_subgraph_as_func_is_cached() -> None:
     builder.add_node("subgraph_fn", lambda s: subgraph.invoke(s))
     builder.set_entry_point("subgraph_fn")
     builder.set_finish_point("subgraph_fn")
-    checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Assert subgraph node is cached.
@@ -5715,7 +5747,12 @@ def test_node_caching_when_subgraph_as_func_is_cached() -> None:
     assert inner_node_wrap.calls == 1
 
 
-def test_node_caching_when_cached_node_is_interrupted() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_when_cached_node_is_interrupted(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     # Arrange graph.
 
     # Graph sketch:
@@ -5738,7 +5775,6 @@ def test_node_caching_when_cached_node_is_interrupted() -> None:
     )
     workflow.add_edge(START, "Oracle")
     workflow.add_edge("Oracle", END)
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer)
 
     # Run & resume the graph.
@@ -5754,7 +5790,12 @@ def test_node_caching_when_cached_node_is_interrupted() -> None:
     assert oracle_wrap.calls == 2
 
 
-def test_node_caching_works_with_update_graph_state() -> None:
+@pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
+def test_node_caching_works_with_update_graph_state(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     class State(TypedDict):
         x: int
 
@@ -5770,7 +5811,6 @@ def test_node_caching_works_with_update_graph_state() -> None:
     )
     workflow.add_edge(START, "Oracle")
     workflow.add_edge("Oracle", END)
-    checkpointer = MemorySaver()
     g = workflow.compile(checkpointer=checkpointer, interrupt_before=["Oracle"])
 
     # Assert.
