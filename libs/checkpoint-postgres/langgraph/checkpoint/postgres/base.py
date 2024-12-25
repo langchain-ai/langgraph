@@ -70,6 +70,19 @@ MIGRATIONS = [
     """,
 ]
 
+SELECT_LATEST_WRITES_SQL = """
+SELECT
+    thread_id,
+    checkpoint_ns,
+    checkpoint_id,
+    ARRAY_AGG(ARRAY[cw.channel::bytea, cw.type::bytea, cw.blob] ORDER BY cw.idx) AS writes
+FROM checkpoint_writes cw
+WHERE cw.thread_id = %s AND cw.task_id = %s
+GROUP BY thread_id, checkpoint_ns, checkpoint_id
+ORDER BY checkpoint_id DESC
+LIMIT 1;
+"""
+
 SELECT_SQL = f"""
 select
     thread_id,
@@ -138,6 +151,7 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 
 class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
+    SELECT_LATEST_WRITES_SQL = SELECT_LATEST_WRITES_SQL
     MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL

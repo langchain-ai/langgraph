@@ -13,8 +13,10 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
+    CheckpointKey,
     CheckpointMetadata,
     CheckpointTuple,
+    WriteObject,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.postgres import _internal
@@ -320,6 +322,38 @@ class PostgresSaver(BasePostgresSaver):
                 ),
             )
         return next_config
+
+    def get_writes(
+        self, config: RunnableConfig, *, task_id: str
+    ) -> Optional[tuple[CheckpointKey, Sequence[WriteObject]]]:
+        """Retrieves the most recent writes produced by a task.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            task_id (str): Identifier for the task for which to retrieve its writes.
+
+        Note:
+            Recency here refers to the checkpoint that the writes are linked to.
+
+        Returns:
+            Optional[tuple[CheckpointKey, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
+            and a key that identifies the checkpoint the writes originated from. Or None if no writes are found.
+        """
+        with self._cursor(pipeline=True) as cur:
+            thread_id = config["configurable"]["thread_id"]
+            result = cur.execute(self.SELECT_LATEST_WRITES_SQL, (thread_id, task_id))
+            row = result.fetchone()
+            if row is None:
+                return None
+
+            ckpt_key = CheckpointKey(
+                thread_id=row["thread_id"],
+                checkpoint_ns=row["checkpoint_ns"],
+                checkpoint_id=row["checkpoint_id"],
+            )
+            writes = self._load_blobs(row["writes"])
+            writes = [WriteObject(c, v) for c, v in writes.items()]
+            return ckpt_key, tuple(writes)
 
     def put_writes(
         self,

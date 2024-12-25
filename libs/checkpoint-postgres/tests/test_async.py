@@ -12,6 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.base import (
     Checkpoint,
+    CheckpointKey,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
@@ -225,3 +226,89 @@ async def test_null_chars(request, saver_name: str, test_data) -> None:
         assert [c async for c in saver.alist(None, filter={"my_key": "abc"})][
             0
         ].metadata["my_key"] == "abc"
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+async def test_aput_aget_writes(request, saver_name: str, test_data) -> None:
+    CONFIG = test_data["configs"][1]
+    CKPT_ID = CONFIG["configurable"]["checkpoint_id"]
+    THREAD_ID = CONFIG["configurable"]["thread_id"]
+    CKPT_KEY = CheckpointKey(
+        thread_id=THREAD_ID, checkpoint_ns="", checkpoint_id=CKPT_ID
+    )
+
+    TASK1 = "task1"
+    TASK2 = "task2"
+
+    async with _saver(saver_name) as saver:
+        assert await saver.aget_writes(CONFIG, task_id=TASK1) is None
+
+        # Test that writes are saved and retrieved correctly.
+        writes1 = (("node1", 1), ("node2", "a"), ("node3", 1.0), ("node4", True))
+        await saver.aput_writes(CONFIG, writes1, TASK1)
+        assert await saver.aget_writes(CONFIG, task_id=TASK1) == (CKPT_KEY, writes1)
+
+        # Write to another task and check that writes are saved and retrieved correctly.
+        writes2 = (("node1", 2), ("node2", "b"), ("node3", 2.0), ("node4", False))
+        await saver.aput_writes(CONFIG, writes2, TASK2)
+        assert await saver.aget_writes(CONFIG, task_id=TASK2) == (CKPT_KEY, writes2)
+
+        # Test that writes are not overwritten
+        assert await saver.aget_writes(CONFIG, task_id=TASK1) == (CKPT_KEY, writes1)
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+async def test_aget_writes_when_multiple_entries_exist_pick_the_latest(
+    request, saver_name: str, test_data
+) -> None:
+    TASK_ID = "task1"
+
+    async with _saver(saver_name) as saver:
+        # Write writes associated with checkpoint 000.
+        cfg1: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "",
+                "checkpoint_id": "000",
+            }
+        }
+        writes1 = [("node", 1)]
+        await saver.aput_writes(cfg1, writes1, TASK_ID)
+
+        # Write writes associated with checkpoint 001.
+        cfg2: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "",
+                "checkpoint_id": "001",
+            }
+        }
+        writes2 = [("node", 2)]
+        await saver.aput_writes(cfg2, writes2, TASK_ID)
+
+        # Write writes associated with checkpoint 002 but different thread.
+        cfg3: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_ns": "",
+                "checkpoint_id": "002",
+            }
+        }
+        writes3 = [("node", 3)]
+        await saver.aput_writes(cfg3, writes3, TASK_ID)
+
+        # Check that the latest writes are returned.
+        cfg: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "any",
+                "checkpoint_id": "any",
+            }
+        }
+        want_key = CheckpointKey(
+            thread_id="thread-1", checkpoint_ns="", checkpoint_id="001"
+        )
+        assert await saver.aget_writes(cfg, task_id=TASK_ID) == (
+            want_key,
+            tuple(writes2),
+        )
