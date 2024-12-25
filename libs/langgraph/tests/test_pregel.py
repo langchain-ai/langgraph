@@ -2,6 +2,7 @@ import enum
 import json
 import logging
 import operator
+import os
 import threading
 import time
 import uuid
@@ -5537,6 +5538,10 @@ def test_node_caching_when_cached_node_fails_then_gets_resumed(
     assert counter.calls == 2
 
 
+@pytest.mark.skipif(
+    os.environ.get("LANGGRAPH_FF_SEND_V2", "false").lower == "true",
+    reason="In the V2 in case of a failure nodes in parallel will be canceled",
+)
 @pytest.mark.parametrize("checkpointer_name", NODE_CACHE_SAVERS)
 def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_multistep(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -5557,7 +5562,7 @@ def test_node_caching_when_noncached_node_fails_and_cached_node_succeeds_in_mult
         return {"counter": len(s["x"])}
 
     counter = AwhileMaker(0.1, count_chars)
-    node_a = AwhileMaker(0.0, ConnectionError("I'm not good"))
+    node_a = AwhileMaker(0.5, ConnectionError("I'm not good"))
     do_nothing = AwhileMaker(0.0, dict())
 
     workflow = StateGraph(State)
