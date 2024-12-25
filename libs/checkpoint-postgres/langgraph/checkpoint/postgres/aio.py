@@ -1,9 +1,9 @@
 import asyncio
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any, Optional
-import nest_asyncio
+from typing import Any, Awaitable, Optional, TypeVar
 
+import nest_asyncio  # type: ignore
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
 from psycopg.rows import DictRow, dict_row
@@ -300,7 +300,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         async with self._cursor(pipeline=True) as cur:
             thread_id = config["configurable"]["thread_id"]
-            result = await cur.execute(self.SELECT_LATEST_WRITES_SQL, (thread_id, task_id))
+            result = await cur.execute(
+                self.SELECT_LATEST_WRITES_SQL, (thread_id, task_id)
+            )
             row = await result.fetchone()
             if row is None:
                 return None
@@ -438,11 +440,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        if asyncio.get_running_loop() is self.loop:
-            # run_until_complete will result in a deadloack without nested `run_until_complete`.
-            nest_asyncio.apply(self.loop)
-        
-        return self.loop.run_until_complete(self.aget_tuple(config))
+        return _run_sync(self.aget_tuple(config), self.loop)
 
     def put(
         self,
@@ -465,9 +463,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
         """
-        return asyncio.run_coroutine_threadsafe(
+        return _run_sync(
             self.aput(config, checkpoint, metadata, new_versions), self.loop
-        ).result()
+        )
 
     def get_writes(
         self, config: RunnableConfig, *, task_id: str
@@ -485,12 +483,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             Optional[tuple[CheckpointKey, Sequence[WriteObject]]]: A sequence of writes (outputs) produced by the task
             and a key that identifies the checkpoint the writes originated from. Or None if no writes are found.
         """
-        if asyncio.get_running_loop() is self.loop:
-            # run_until_complete will result in a deadloack without nested `run_until_complete`.
-            nest_asyncio.apply(self.loop)
-        return self.loop.run_until_complete(
-            self.aget_writes(config, task_id=task_id)
-        )
+        return _run_sync(self.aget_writes(config, task_id=task_id), self.loop)
 
     def put_writes(
         self,
@@ -507,9 +500,27 @@ class AsyncPostgresSaver(BasePostgresSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
-        return asyncio.run_coroutine_threadsafe(
-            self.aput_writes(config, writes, task_id), self.loop
-        ).result()
+        return _run_sync(
+            self.aput_writes(config, writes, task_id),
+            self.loop,
+        )
+
+
+T = TypeVar("T")
+
+
+def _run_sync(coro: Awaitable[T], loop: asyncio.AbstractEventLoop) -> T:
+    try:
+        if asyncio.get_running_loop() is loop:
+            # Using `run_coroutine_threadsafe` will result in a deadlock.
+            # We first make the loop reentrant and then run the coroutine.
+            nest_asyncio.apply(loop)
+            return loop.run_until_complete(coro)
+        else:
+            return asyncio.run_coroutine_threadsafe(coro, loop).result()
+    except RuntimeError:
+        # There is no running event loop, we can run on the given loop.
+        return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 
 __all__ = ["AsyncPostgresSaver", "Conn"]
