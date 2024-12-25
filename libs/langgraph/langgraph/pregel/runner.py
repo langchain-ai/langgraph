@@ -111,9 +111,13 @@ class PregelRunner:
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = concurrent.futures.Future()
-                        if val := next(v for c, v in next_task.writes if c == RETURN):
+                        if val := next(
+                            (v for c, v in next_task.writes if c == RETURN), None
+                        ):
                             fut.set_result(val)
-                        elif exc := next(v for c, v in next_task.writes if c == ERROR):
+                        elif exc := next(
+                            (v for c, v in next_task.writes if c == ERROR), None
+                        ):
                             fut.set_exception(
                                 exc
                                 if isinstance(exc, BaseException)
@@ -150,7 +154,9 @@ class PregelRunner:
             retry: Optional[RetryPolicy] = None,
         ) -> concurrent.futures.Future[Any]:
             (fut,) = writer(
-                task, [(PUSH, None)], calls=[Call(func, input, retry=retry)]
+                task,
+                [(PUSH, None)],
+                calls=[Call(func, input, retry=retry, cache_policy=task.cache_policy)],
             )
             assert fut is not None, "writer did not return a future for call"
             return fut
@@ -294,9 +300,13 @@ class PregelRunner:
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = asyncio.Future()
-                        if val := next(v for c, v in next_task.writes if c == RETURN):
+                        if val := next(
+                            (v for c, v in next_task.writes if c == RETURN), None
+                        ):
                             fut.set_result(val)
-                        elif exc := next(v for c, v in next_task.writes if c == ERROR):
+                        elif exc := next(
+                            (v for c, v in next_task.writes if c == ERROR), None
+                        ):
                             fut.set_exception(
                                 exc
                                 if isinstance(exc, BaseException)
@@ -339,7 +349,9 @@ class PregelRunner:
             retry: Optional[RetryPolicy] = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
             (fut,) = writer(
-                task, [(PUSH, None)], calls=[Call(func, input, retry=retry)]
+                task,
+                [(PUSH, None)],
+                calls=[Call(func, input, retry=retry, cache_policy=task.cache_policy)],
             )
             assert fut is not None, "writer did not return a future for call"
             if asyncio.iscoroutinefunction(func):

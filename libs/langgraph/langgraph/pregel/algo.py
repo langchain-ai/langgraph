@@ -68,6 +68,7 @@ from langgraph.pregel.read import PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
+    CachePolicy,
     LoopProtocol,
     PregelExecutableTask,
     PregelTask,
@@ -107,18 +108,25 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input", "retry")
+    __slots__ = ("func", "input", "retry", "cache_policy")
 
     func: Callable
     input: Any
     retry: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
 
     def __init__(
-        self, func: Callable, input: Any, *, retry: Optional[RetryPolicy]
+        self,
+        func: Callable,
+        input: Any,
+        *,
+        retry: Optional[RetryPolicy],
+        cache_policy: Optional[CachePolicy],
     ) -> None:
         self.func = func
         self.input = input
         self.retry = retry
+        self.cache_policy = cache_policy
 
 
 def should_interrupt(
@@ -494,15 +502,27 @@ def prepare_single_task(
         # create task id
         triggers = [PUSH]
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        task_id = _uuid5_str(
-            checkpoint_id,
-            checkpoint_ns,
-            str(step),
-            name,
-            PUSH,
-            _tuple_str(task_path[1]),
-            str(task_path[2]),
-        )
+
+        if cache_policy := call.cache_policy:
+            # If the node is configured for caching, then we use the cache key to generate the task_id.
+            # This guarantees that the task_id is the same for the same input value.
+            cache_key = cache_policy.key(call.input).encode()
+            task_id = _uuid5_str(
+                cache_key,
+                name,
+                PUSH,
+                _tuple_str(task_path[1]),
+            )
+        else:
+            task_id = _uuid5_str(
+                checkpoint_id,
+                checkpoint_ns,
+                str(step),
+                name,
+                PUSH,
+                _tuple_str(task_path[1]),
+                str(task_path[2]),
+            )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         metadata = {
             "langgraph_step": step,
@@ -564,7 +584,7 @@ def prepare_single_task(
                 ),
                 triggers,
                 call.retry,
-                None,
+                call.cache_policy,
                 task_id,
                 task_path[:3],
             )
@@ -593,14 +613,26 @@ def prepare_single_task(
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                str(idx),
-            )
+
+            proc = processes[packet.node]
+            if cache_policy := proc.cache_policy:
+                # If the node is configured for caching, then we use the cache key to generate the task_id.
+                # This guarantees that the task_id is the same for the same input value.
+                cache_key = cache_policy.key(packet.arg).encode()
+                task_id = _uuid5_str(
+                    cache_key,
+                    packet.node,
+                    PUSH,
+                )
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    str(idx),
+                )
         elif len(task_path) >= 4:
             # new PUSH tasks, executed in superstep n
             # (PUSH, parent task path, idx of PUSH write, id of parent task)
@@ -629,15 +661,28 @@ def prepare_single_task(
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                _tuple_str(task_path[1]),
-                str(task_path[2]),
-            )
+
+            proc = processes[packet.node]
+            if cache_policy := proc.cache_policy:
+                # If the node is configured for caching, then we use the cache key to generate the task_id.
+                # This guarantees that the task_id is the same for the same input value.
+                cache_key = cache_policy.key(packet.arg).encode()
+                task_id = _uuid5_str(
+                    cache_key,
+                    packet.node,
+                    PUSH,
+                    _tuple_str(task_path[1]),
+                )
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    _tuple_str(task_path[1]),
+                    str(task_path[2]),
+                )
         else:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
@@ -713,7 +758,7 @@ def prepare_single_task(
                     ),
                     triggers,
                     proc.retry_policy,
-                    None,
+                    proc.cache_policy,
                     task_id,
                     task_path[:3],
                     writers=proc.flat_writers,

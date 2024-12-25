@@ -3,6 +3,7 @@ import logging
 import operator
 import random
 import sys
+import threading
 import uuid
 from collections import Counter, deque
 from contextlib import asynccontextmanager, contextmanager
@@ -6391,6 +6392,112 @@ async def test_node_caching_with_ttl_async(
 
         assert await g.ainvoke(dict(x="a"), config=cfg) == {"x": "a", "counter": 1}
         assert counter.calls == 2
+
+@pytest.mark.parametrize("checkpointer_name", ASYNC_NODE_CACHE_SAVERS)
+async def test_node_caching_with_send_api(
+    request: pytest.FixtureRequest, checkpointer_name: str
+):
+    class State(TypedDict):
+        x: str
+        seq: Annotated[list, operator.add]
+
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+            self._calls_lock = threading.Lock()
+            self.calls = 0
+
+        async def __call__(self, state):
+            with self._calls_lock:
+                self.calls += 1
+            return {"seq": [self.name]}
+
+    def send_for_fun(state):
+        return [Send("2", dict(x="a")), Send("2", dict(x="b"))]
+
+    def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    node2 = Node("2")
+
+    builder = StateGraph(State)
+    builder.add_node(Node("1"))
+    builder.add_node(node2, cache_policy=CachePolicy(key=operator.itemgetter("x")))
+    builder.add_node(Node("3"))
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("2", route_to_three)
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        cfg = {"configurable": {"thread_id": "thread-1"}}
+        graph = builder.compile(checkpointer=checkpointer)
+
+        assert (await graph.ainvoke(dict(seq=[]), config=cfg)).get("seq") == [
+            "1",
+            "2",
+            "2",
+            "3",
+        ]
+        assert node2.calls == 2
+
+        assert (await graph.ainvoke(dict(seq=[]), config=cfg)).get("seq") == [
+            "1",
+            "2",
+            "2",
+            "3",
+        ] * 2
+        assert node2.calls == 2
+
+
+@pytest.mark.parametrize("checkpointer_name", ASYNC_NODE_CACHE_SAVERS)
+async def test_node_caching_with_multiple_duplicate_sends(
+    request: pytest.FixtureRequest, checkpointer_name: str
+):
+    class State(TypedDict):
+        x: str
+        seq: Annotated[list, operator.add]
+
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+            self._calls_lock = threading.Lock()
+            self.calls = 0
+
+        async def __call__(self, state):
+            with self._calls_lock:
+                self.calls += 1
+            return {"seq": [self.name]}
+
+    def send_for_fun(state):
+        return [Send("2", dict(x="a"))] * 10
+
+    def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    node2 = Node("2")
+
+    builder = StateGraph(State)
+    builder.add_node(Node("1"))
+    builder.add_node(node2, cache_policy=CachePolicy(key=operator.itemgetter("x")))
+    builder.add_node(Node("3"))
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("2", route_to_three)
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        cfg = {"configurable": {"thread_id": "thread-1"}}
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # Save the number of calls to node2.
+        # Because nodes may run in parallel, we can't guarantee the number of calls.
+        await graph.ainvoke(dict(seq=[]), config=cfg)
+        n = node2.calls
+
+        # Assert that the cache is working.
+        await graph.ainvoke(dict(seq=[]), config=cfg)
+        assert node2.calls == n
 
 
 class AwhileMaker:
