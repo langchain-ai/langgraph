@@ -450,7 +450,7 @@ ALL_STORES_ASYNC = [
     "duckdb_aio",
 ]
 
-# TODO: Add SQLite to the list of supported savers.
+# TODO: One Sqlite is supported remove this in favor of the regular checkpointers.
 NODE_CACHE_SAVERS = [
     "memory",
     "postgres",
