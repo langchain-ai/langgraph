@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -37,7 +38,8 @@ PendingWrite = Tuple[str, str, Any]
 DEFAULT_TIMEZONE = timezone.utc
 
 
-class CheckpointKey(NamedTuple):
+@dataclass(frozen=True)
+class CheckpointKey:
     thread_id: str
     checkpoint_id: str
     checkpoint_ns: str

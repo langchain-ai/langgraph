@@ -5,6 +5,7 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     Checkpoint,
+    CheckpointKey,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
@@ -143,7 +144,9 @@ class TestMemorySaver:
         CONFIG = self.config_2
         CKPT_ID = CONFIG["configurable"]["checkpoint_id"]
         THREAD_ID = CONFIG["configurable"]["thread_id"]
-        CKPT_KEY = (THREAD_ID, "", CKPT_ID)
+        CKPT_KEY = CheckpointKey(
+            thread_id=THREAD_ID, checkpoint_ns="", checkpoint_id=CKPT_ID
+        )
 
         TASK1 = "task1"
         TASK2 = "task2"
@@ -154,15 +157,24 @@ class TestMemorySaver:
         # Test that writes are saved and retrieved correctly.
         writes1 = (("node1", 1), ("node2", "a"), ("node3", 1.0), ("node4", True))
         self.memory_saver.put_writes(CONFIG, writes1, TASK1)
-        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (CKPT_KEY, writes1)
+        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (
+            CKPT_KEY,
+            writes1,
+        )
 
         # Write to another task and check that writes are saved and retrieved correctly.
         writes2 = (("node1", 2), ("node2", "b"), ("node3", 2.0), ("node4", False))
         self.memory_saver.put_writes(CONFIG, writes2, TASK2)
-        assert self.memory_saver.get_writes(CONFIG, task_id=TASK2) == (CKPT_KEY, writes2)
+        assert self.memory_saver.get_writes(CONFIG, task_id=TASK2) == (
+            CKPT_KEY,
+            writes2,
+        )
 
         # Test that writes are not overwritten
-        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (CKPT_KEY, writes1)
+        assert self.memory_saver.get_writes(CONFIG, task_id=TASK1) == (
+            CKPT_KEY,
+            writes1,
+        )
 
     async def test_get_writes_when_multiple_entries_exist_pick_the_latest(self) -> None:
         TASK_ID = "task1"
@@ -197,7 +209,10 @@ class TestMemorySaver:
                 "checkpoint_id": "any",
             }
         }
+        ckpt_key = CheckpointKey(
+            thread_id="thread-1", checkpoint_ns="", checkpoint_id="001"
+        )
         assert self.memory_saver.get_writes(cfg, task_id=TASK_ID) == (
-            ("thread-1", "", "001"),
+            ckpt_key,
             tuple(writes2),
         )

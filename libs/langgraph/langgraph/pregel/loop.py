@@ -546,8 +546,15 @@ class PregelLoop(LoopProtocol):
         if not cache_result:
             return
 
-        (tid, ckpt_id, ckpt_ns), cached_writes = cache_result
-        assert tid == self.checkpoint_config["configurable"]["thread_id"], "Internal error: Found writes from a different thread."
+        ckpt_key, cached_writes = cache_result
+        tid, ckpt_ns, ckpt_id = (
+            ckpt_key.thread_id,
+            ckpt_key.checkpoint_ns,
+            ckpt_key.checkpoint_id,
+        )
+        assert (
+            tid == self.checkpoint_config["configurable"]["thread_id"]
+        ), "Internal error: Found writes from a different thread."
 
         # Ignore special channels (e.g., Errors, Interrupts, etc ...).
         # Those channel writes may come from a previous run. For example,
