@@ -22,6 +22,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _ainternal.Conn  # For backward compatibility
@@ -523,4 +524,4 @@ def _run_sync(coro: Awaitable[T], loop: asyncio.AbstractEventLoop) -> T:
         return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 
-__all__ = ["AsyncPostgresSaver", "Conn"]
+__all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]

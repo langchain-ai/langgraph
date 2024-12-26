@@ -21,6 +21,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _internal.Conn  # For backward compatibility
@@ -430,4 +431,4 @@ class PostgresSaver(BasePostgresSaver):
                     yield cur
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "Conn"]
+__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]

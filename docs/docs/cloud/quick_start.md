@@ -208,7 +208,6 @@ export LANGSMITH_API_KEY=...
     ```js
     const { Client } = await import("@langchain/langgraph-sdk");
 
-    // only set the apiUrl if you changed the default port when calling langgraph up
     const client = new Client({ apiUrl: "your-deployment-url", apiKey: "your-langsmith-api-key" });
 
     const streamResponse = client.runs.stream(

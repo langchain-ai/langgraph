@@ -80,6 +80,7 @@ from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
     ALL_STORES_ASYNC,
     ASYNC_NODE_CACHE_SAVERS,
+    REGULAR_CHECKPOINTERS_ASYNC,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
     awith_store,
@@ -352,22 +353,23 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 )
             },
         ]
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+        if "shallow" not in checkpointer_name:
+            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -395,9 +397,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "writes": None,
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
         # clear the interrupt and next tasks
@@ -417,9 +423,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
 
@@ -529,22 +539,25 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 )
             },
         ]
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1root)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+        if "shallow" not in checkpointer_name:
+            assert [
+                c.metadata async for c in tool_two.checkpointer.alist(thread1root)
+            ] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -578,9 +591,13 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 "writes": None,
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
+                ][-1].config
+            ),
         )
 
         # clear the interrupt and next tasks
@@ -600,9 +617,13 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
+                ][-1].config
+            ),
         )
 
 
@@ -704,22 +725,25 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             "my_key": "value ⛰️ one",
             "market": "DE",
         }
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": {"tool_one": {"my_key": " one"}},
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+
+        if "shallow" not in checkpointer_name:
+            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": {"tool_one": {"my_key": " one"}},
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
+
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️ one", "market": "DE"},
@@ -747,9 +771,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "writes": {"tool_one": {"my_key": " one"}},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
         # clear the interrupt and next tasks
         await tool_two.aupdate_state(thread1, None)
@@ -775,9 +803,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
 
@@ -1759,6 +1791,10 @@ async def test_pending_writes_resume(
         # both the pending write and the new write were applied, 1 + 2 + 3 = 6
         assert await graph.ainvoke(None, thread1) == {"value": 6}
 
+        if "shallow" in checkpointer_name:
+            assert len([c async for c in checkpointer.alist(thread1)]) == 1
+            return
+
         # check all final checkpoints
         checkpoints = [c async for c in checkpointer.alist(thread1)]
         # we should have 3
@@ -1916,7 +1952,7 @@ async def test_pending_writes_resume(
         )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_run_from_checkpoint_id_retains_previous_writes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -2344,7 +2380,7 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     if not FF_SEND_V2:
         pytest.skip("Send deduplication is only available in Send V2")
@@ -2797,13 +2833,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -2880,13 +2920,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -2956,13 +3000,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "3",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "3",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3065,13 +3113,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "3",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "3",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3265,13 +3317,17 @@ async def test_send_react_interrupt_control(
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3348,13 +3404,17 @@ async def test_send_react_interrupt_control(
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -3576,6 +3636,9 @@ async def test_invoke_checkpoint_three(
         assert state is not None
         assert state.values.get("total") == 5
         assert state.next == ()
+
+        if "shallow" in checkpointer_name:
+            return
 
         assert len([c async for c in app.aget_state_history(thread_1, limit=1)]) == 1
         # list all checkpoints for thread 1
@@ -4284,13 +4347,17 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         )
 
         async with assert_ctx_once():
@@ -5763,13 +5830,17 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 "parents": {},
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -6285,6 +6356,9 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         # Retry with updated attempt count
         result = await graph.ainvoke({"steps": [], "attempt": 2}, config)
         assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
+
+        if "shallow" in checkpointer_name:
+            return
 
         # Verify checkpoint history shows both attempts
         history = [c async for c in graph.aget_state_history(config)]
