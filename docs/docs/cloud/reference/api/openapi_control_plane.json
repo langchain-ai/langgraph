@@ -376,6 +376,7 @@
       },
       "Project": {
         "type": "object",
+        "description": "A project corresponds to a LangGraph Server deployment and the associated LangSmith tracing project.",
         "properties": {
           "id": {
             "type": "string",
@@ -463,18 +464,62 @@
             "description": "Do not use."
           },
           "metadata": {
-            "type": "object"
+            "$ref": "#/components/schemas/ProjectMetadata"
           },
           "resource": {
             "$ref": "#/components/schemas/ResourceService"
           }
         }
       },
+      "ProjectMetadata": {
+        "type": "object",
+        "description": "Metadata associated with a `Project`.",
+        "properties": {
+          "deployment_type": {
+            "type": "string",
+            "description": "Development (`dev`) or Production (`prod`) type deployment.",
+            "enum": [
+              "dev",
+              "prod"
+            ]
+          },
+          "image_source": {
+            "type": "string",
+            "description": "Do not use.",
+            "enum": [
+              "github",
+              "internal_docker",
+              "external_docker"
+            ]
+          },
+          "shareable": {
+            "type": "boolean",
+            "description": "Boolean flag to configure if a deployment is shareable through LangGraph Studio.\n\nThis field does not apply to BYOC deployments."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region of deployment.\n\nRegion value is cloud provider specific."
+          },
+          "aws_account_id": {
+            "type": "string",
+            "description": "AWS account ID of BYOC deployment.\n\nThis field does not apply to non-BYOC deployments."
+          },
+          "aws_external_id": {
+            "type": "string",
+            "description": "Do not use."
+          }
+        }
+      },
       "ResourceId": {
         "type": "object",
+        "description": "Internal identifier for a `ResourceRevision` or `ResourceService`.",
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "revisions",
+              "services"
+            ]
           },
           "name": {
             "type": "string"
@@ -483,6 +528,7 @@
       },
       "ResourceRevision": {
         "type": "object",
+        "description": "Internal revision resource for a `ResourceService`.",
         "properties": {
           "id": {
             "$ref": "#/components/schemas/ResourceId"
@@ -495,72 +541,122 @@
           },
           "hosted_langserve_revision_id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "References `id` of a `Revision`."
           }
         }
       },
       "ResourceService": {
         "type": "object",
+        "description": "Internal service resource for a `Project`.",
         "properties": {
           "id": {
             "$ref": "#/components/schemas/ResourceId"
           },
           "url": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "URL of LangGraph Server deployment."
           },
           "latest_revision": {
+            "description": "References latest `ResourceRevision`.\n\nThe latest `ResourceRevision` may not be active if it's currently being deployed.",
             "$ref": "#/components/schemas/ResourceRevision"
           },
           "latest_active_revision": {
+            "description": "References latest active `ResourceRevision`.\n\nThe latest active `ResourceRevision` is not always the latest `ResourceRevision`.",
             "$ref": "#/components/schemas/ResourceRevision"
           }
         }
       },
       "Revision": {
         "type": "object",
+        "description": "A revision is a version of a LangGraph Server deployment.\n\nDifferent revisions may contain different code and/or environment variables. A project can have many revisions.",
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "ID of the revision.",
+            "required": true
           },
           "project_id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "References `id` of `Project`.",
+            "required": true
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Timestamp of when the revision was created.",
+            "required": true
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Timestamp of when the revision was updated.",
+            "required": true
           },
           "repo_path": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Path to `langgraph.json` configuration file. For example, `langgraph.json` or `src/langgraph.json`.\n\nThis field only applies to deployments from a GitHub repository.",
+            "default": "null"
           },
           "repo_commit": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Git branch name of deployment.\n\nThis field only applies to deployments from a GitHub repository.",
+            "default": "null"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "CREATING",
+              "AWAITING_BUILD",
+              "BUILDING",
+              "AWAITING_DEPLOY",
+              "DEPLOYING",
+              "CREATE_FAILED",
+              "BUILD_FAILED",
+              "DEPLOY_FAILED",
+              "DEPLOYED",
+              "INTERRUPTED",
+              "UNKNOWN"
+            ],
+            "description": "Deployment status of the revision."
           },
           "status_message": {
-            "type": "string"
+            "type": "string",
+            "description": "Message associated with the `status`."
           },
           "gcp_build_name": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "Do not use."
           },
           "metadata": {
-            "type": "object"
+            "$ref": "#/components/schemas/RevisionMetadata"
           },
           "image_path": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "URI of the Docker image to deploy.\n\nThis field does not apply to deployments from a GitHub repository.",
+            "default": "null"
           },
           "container_spec": {
             "$ref": "#/components/schemas/ContainerSpec"
           },
           "resource": {
             "$ref": "#/components/schemas/ResourceRevision"
+          }
+        }
+      },
+      "RevisionMetadata": {
+        "type": "object",
+        "description": "Metadata associated with a `Revision`.",
+        "properties": {
+          "created_by": {
+            "type": "object",
+            "description": "Do not use."
+          },
+          "repo_commit_sha": {
+            "type": "string",
+            "description": "Git commit SHA of the deployment.\n\nThis field only applies to deployments from a GitHub repository."
           }
         }
       }
