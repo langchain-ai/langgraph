@@ -3,7 +3,7 @@
   "info": {
     "title": "LangGraph Control Plane API (Beta)",
     "version": "0.0.1",
-    "description": "The LangGraph Control Plane API is used to programmatically create and manage LangGraph Server deployments. For example, the APIs can be orchestrated to create custom CI/CD workflows.\n\n### Beta\nThis API is currently in beta and may change or break without notice. This API documentation may not be up-to-date with actual API functionality.\n### Host\nhttps://api.host.langchain.com/\n\n### Authentication\nTo authenticate with the LangGraph Control Plane API, set the `X-Api-Key` header to a valid LangSmith API key for each request.\n\n### Versioning\nEach endpoint path is prefixed with a version (e.g. `v1`)."
+    "description": "The LangGraph Control Plane API is used to programmatically create and manage LangGraph Server deployments. For example, the APIs can be orchestrated to create custom CI/CD workflows.\n\n### Beta\nThis API is currently in beta and may change or break without notice. This API documentation may not be up-to-date with actual API functionality.\n### Host\nhttps://api.host.langchain.com/\n\n### Authentication\nTo authenticate with the LangGraph Control Plane API, set the `X-Api-Key` header to a valid LangSmith API key for each request.\n\n### Versioning\nEach endpoint path is prefixed with a version (e.g. `v1`).\n\n### Quick Start\n\n1. Call `GET /{version}/projects` to retrieve the `Project` `id`. The `Project` `id` is needed in subsequent API calls.\n2. Call `POST /{version}/projects/{project_id}/revisions` to create a new `Revision` for the `Project`.\n3. Call `GET /{version}/projects/{project_id}/revisions` to get the latest `Revision` (first element in returned list). Get the `Revision` `id`.\n4. Poll for `Revision` `status` until `status` is `DEPLOYED` by calling `GET /{version}/projects/{project_id}/revisions/{revision_id}`."
   },
   "servers": [
     {
@@ -13,7 +13,7 @@
   "tags": [
     {
       "name": "Projects (v1)",
-      "description": "A project corresponds to a LangGraph Server deployment and the associated LangSmith tracing project."
+      "description": "A project corresponds to a LangGraph Server deployment and the associated LangSmith tracing project.\n\nCreating a project via API is not currently supported/documented."
     },
     {
       "name": "Revisions (v1)",
