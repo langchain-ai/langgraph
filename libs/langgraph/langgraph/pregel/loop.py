@@ -1032,6 +1032,4 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         # unwind stack
-        return await asyncio.shield(
-            self.stack.__aexit__(exc_type, exc_value, traceback)
-        )
+        return await self.stack.__aexit__(exc_type, exc_value, traceback)
