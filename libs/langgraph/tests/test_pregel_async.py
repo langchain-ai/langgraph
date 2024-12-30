@@ -284,25 +284,21 @@ async def test_checkpoint_put_after_cancellation() -> None:
     await asyncio.sleep(0.2)
     t.cancel()
     # check logs before cancellation is handled
-    assert logs == sorted(
-        [
-            "checkpoint.aput.start",
-            "awhile.start",
-        ]
-    ), "Cancelled before checkpoint put started"
+    assert sorted(logs) == [
+        "awhile.start",
+        "checkpoint.aput.start",
+    ], "Cancelled before checkpoint put started"
     # wait for task to finish
     try:
         await t
     except asyncio.CancelledError:
         # check logs after cancellation is handled
-        assert logs == sorted(
-            [
-                "checkpoint.aput.start",
-                "awhile.start",
-                "awhile.end",
-                "checkpoint.aput.end",
-            ]
-        ), "Checkpoint put is not cancelled"
+        assert sorted(logs) == [
+            "awhile.end",
+            "awhile.start",
+            "checkpoint.aput.end",
+            "checkpoint.aput.start",
+        ], "Checkpoint put is not cancelled"
     else:
         assert False, "Task should be cancelled"
 
