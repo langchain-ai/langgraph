@@ -32,7 +32,7 @@ export interface Command {
   /**
    * An object to update the thread state with.
    */
-  update?: Record<string, unknown>;
+  update?: Record<string, unknown> | Record<string, unknown>[];
 
   /**
    * The value to return from an `interrupt` function call.
