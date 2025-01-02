@@ -483,6 +483,7 @@ def prepare_single_task(
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
+    node_cache = None
     if task_path[0] == PUSH and isinstance(task_path[-1], Call):
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
         task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
@@ -497,7 +498,8 @@ def prepare_single_task(
 
         pregel_node = processes.get(name)
         if pregel_node and pregel_node.cache:
-            task_id = pregel_node.cache.generate_task_id(str(call.input))
+            node_cache = pregel_node.cache
+            task_id = node_cache.generate_task_id(str(call.input))
         else:
             task_id = _uuid5_str(
                 checkpoint_id,
@@ -569,7 +571,7 @@ def prepare_single_task(
                 ),
                 triggers,
                 call.retry,
-                pregel_node.cache,
+                node_cache,
                 task_id,
                 task_path[:3],
             )
@@ -600,7 +602,8 @@ def prepare_single_task(
             )
             proc = processes.get(packet.node)
             if proc and proc.cache:
-                task_id = proc.cache.generate_task_id(str(packet.arg))
+                node_cache = proc.cache
+                task_id = node_cache.generate_task_id(str(packet.arg))
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -640,7 +643,8 @@ def prepare_single_task(
             )
             proc = processes.get(packet.node)
             if proc and proc.cache:
-                task_id = proc.cache.generate_task_id(str(packet.arg))
+                node_cache = proc.cache
+                task_id = node_cache.generate_task_id(str(packet.arg))
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -726,7 +730,7 @@ def prepare_single_task(
                     ),
                     triggers,
                     proc.retry_policy,
-                    proc.cache,
+                    node_cache,
                     task_id,
                     task_path[:3],
                     writers=proc.flat_writers,
@@ -769,8 +773,9 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            if proc.cache:
-                task_id = proc.cache.generate_task_id(str(val))
+            if proc and proc.cache:
+                node_cache = proc.cache
+                task_id = node_cache.generate_task_id(str(val))
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -853,7 +858,7 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        proc.cache,
+                        node_cache,
                         task_id,
                         task_path[:3],
                         writers=proc.flat_writers,
