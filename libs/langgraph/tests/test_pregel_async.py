@@ -6618,3 +6618,54 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         # Verify the error was recorded in checkpoint
         failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
         assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+async def test_multiple_updates_root() -> None:
+    def node_a(state):
+        return [Command(update="a1"), Command(update="a2")]
+
+    def node_b(state):
+        return "b"
+
+    graph = (
+        StateGraph(Annotated[str, operator.add])
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert await graph.ainvoke("") == "a1a2b"
+
+    # only streams the last update from node_a
+    assert [c async for c in graph.astream("", stream_mode="updates")] == [
+        {"node_a": ["a1", "a2"]},
+        {"node_b": "b"},
+    ]
+
+
+async def test_multiple_updates() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def node_a(state):
+        return [Command(update={"foo": "a1"}), Command(update={"foo": "a2"})]
+
+    def node_b(state):
+        return {"foo": "b"}
+
+    graph = (
+        StateGraph(State)
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert await graph.ainvoke({"foo": ""}) == {
+        "foo": "a1a2b",
+    }
+
+    # only streams the last update from node_a
+    assert [c async for c in graph.astream({"foo": ""}, stream_mode="updates")] == [
+        {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
+        {"node_b": {"foo": "b"}},
+    ]
