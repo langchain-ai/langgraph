@@ -9,7 +9,6 @@ from typing import (
     AsyncIterator,
     Literal,
     Optional,
-    TypedDict,
     Union,
     cast,
 )
@@ -21,6 +20,7 @@ from langchain_core.runnables import RunnableConfig, RunnablePick
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue

@@ -13,14 +13,13 @@ from typing import (
     Optional,
     Sequence,
     Type,
-    TypedDict,
     TypeVar,
     Union,
     cast,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self
+from typing_extensions import Self, TypedDict
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -373,7 +372,8 @@ def interrupt(value: Any) -> Any:
     Example:
         ```python
         import uuid
-        from typing import TypedDict, Optional
+        from typing import Optional
+        from typing_extensions import TypedDict
 
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.constants import START

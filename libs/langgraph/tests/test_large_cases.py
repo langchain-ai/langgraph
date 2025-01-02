@@ -4,13 +4,14 @@ import re
 import time
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Annotated, Any, Iterator, Literal, Optional, TypedDict, Union, cast
+from typing import Annotated, Any, Iterator, Literal, Optional, Union, cast
 
 import httpx
 import pytest
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue

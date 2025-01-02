@@ -1,13 +1,14 @@
 import json
 import sys
 import time
-from typing import Any, Callable, Tuple, TypedDict, TypeVar
+from typing import Any, Callable, Tuple, TypeVar
 from unittest.mock import MagicMock
 
 import langsmith as ls
 import pytest
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers import LangChainTracer
+from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph
 

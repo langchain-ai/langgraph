@@ -1,7 +1,6 @@
-from typing import TypedDict
-
 import pytest
 from pytest_mock import MockerFixture
+from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from tests.conftest import (
