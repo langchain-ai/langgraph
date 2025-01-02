@@ -318,6 +318,22 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def get_writes(
+        self,
+        task_id: str,
+    ) -> Sequence[tuple[str, Any]]:
+        """
+        Retrieve cached writes for a specific task ID.
+
+        Args:
+            task_id (str): The identifier for the task.
+
+        Returns:
+            Sequence[tuple[str, Any]]: A list of tuples representing cached writes, 
+            where each tuple contains a channel name and its associated value.
+        """
+        raise NotImplementedError
+
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Asynchronously fetch a checkpoint using the given configuration.
 

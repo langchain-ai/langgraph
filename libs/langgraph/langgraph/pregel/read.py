@@ -21,6 +21,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.base import Input, Other, coerce_to_runnable
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
+from langgraph.caching.cache_control import CacheControl
 from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
@@ -145,6 +146,9 @@ class PregelNode(Runnable):
     metadata: Optional[Mapping[str, Any]]
     """Metadata to attach to the node for tracing."""
 
+    cache: Optional[CacheControl]
+    """The caching configuration for the node."""
+
     def __init__(
         self,
         *,
@@ -156,6 +160,7 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        cache: Optional[CacheControl] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -165,6 +170,7 @@ class PregelNode(Runnable):
         self.retry_policy = retry_policy
         self.tags = tags
         self.metadata = metadata
+        self.cache = cache
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
