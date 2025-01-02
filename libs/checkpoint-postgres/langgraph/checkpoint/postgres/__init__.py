@@ -322,31 +322,37 @@ class PostgresSaver(BasePostgresSaver):
             )
         return next_config
 
-    def get_writes(
-        self,
-        task_id: str,
-    ) -> Sequence[tuple[str, Any]]:
-        """ """
+    def get_writes(self, 
+                   task_id: str) -> Sequence[tuple[str, Any]]:
+        """
+        Retrieve cached writes for a specific task ID.
+
+        Args:
+            task_id (str): The identifier for the task.
+
+        Returns:
+            Sequence[tuple[str, Any]]: A list of tuples representing cached writes, 
+            where each tuple contains a channel name and its associated value.
+        """
         with self._cursor() as cur:
-            cur.execute(
-                self.GET_CHECKPOINT_WRITES_BY_TASK_ID_SQL,
-                (task_id,),
-            )
+            cur.execute(self.GET_CHECKPOINT_WRITES_BY_TASK_ID_SQL, (task_id,))
             rows = cur.fetchall()
 
-        writes = self._load_writes(
-            [
-                (
-                    row["task_id"].encode(),
-                    row["channel"].encode(),
-                    row["type"].encode(),
-                    row["blob"],
-                )
-                for row in rows
-            ]
-        )
+        serialized_writes = [
+            (
+                row["task_id"].encode(),
+                row["channel"].encode(),
+                row["type"].encode(),
+                row["blob"],
+            )
+            for row in rows
+        ]
 
-        return [(write[1], write[2]) for write in writes]
+        # Deserialize writes using `_load_writes` and return as (channel, value) pairs
+        return [
+            (channel, value)
+            for _, channel, value in self._load_writes(serialized_writes)
+        ]
 
     def put_writes(
         self,

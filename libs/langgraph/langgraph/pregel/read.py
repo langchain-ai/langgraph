@@ -134,7 +134,7 @@ class PregelNode(Runnable):
     taking the output of `bound` and writing it to the appropriate channels."""
 
     bound: Runnable[Any, Any]
-    """The main logic of the node. This will be invoked with the input from
+    """The main logic of the node. This will be invoked with the input from 
     `channels`."""
 
     retry_policy: Optional[RetryPolicy]
@@ -146,7 +146,8 @@ class PregelNode(Runnable):
     metadata: Optional[Mapping[str, Any]]
     """Metadata to attach to the node for tracing."""
 
-    cache: Optional[CacheControl] = None
+    cache: Optional[CacheControl]
+    """The caching configuration for the node."""
 
     def __init__(
         self,
@@ -167,9 +168,9 @@ class PregelNode(Runnable):
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         self.retry_policy = retry_policy
-        self.cache = cache
         self.tags = tags
         self.metadata = metadata
+        self.cache = cache
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}

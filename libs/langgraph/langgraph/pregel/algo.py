@@ -497,10 +497,7 @@ def prepare_single_task(
 
         pregel_node = processes.get(name)
         if pregel_node and pregel_node.cache:
-            cache_key = pregel_node.cache.cache_key
-            input_hash = sha1(str(call.input).encode()).hexdigest()
-            ttl_bucket = pregel_node.cache.compute_time_bucket()
-            task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+            task_id = pregel_node.cache.generate_task_id(str(call.input))
         else:
             task_id = _uuid5_str(
                 checkpoint_id,
@@ -603,10 +600,7 @@ def prepare_single_task(
             )
             proc = processes.get(packet.node)
             if proc and proc.cache:
-                cache_key = proc.cache.cache_key
-                input_hash = sha1(str(packet.arg).encode()).hexdigest()
-                ttl_bucket = proc.cache.compute_time_bucket()
-                task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+                task_id = proc.cache.generate_task_id(str(packet.arg))
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -646,10 +640,7 @@ def prepare_single_task(
             )
             proc = processes.get(packet.node)
             if proc and proc.cache:
-                cache_key = proc.cache.cache_key
-                input_hash = sha1(str(packet.arg).encode()).hexdigest()
-                ttl_bucket = proc.cache.compute_time_bucket()
-                task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+                task_id = proc.cache.generate_task_id(str(packet.arg))
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,
@@ -779,10 +770,7 @@ def prepare_single_task(
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             if proc.cache:
-                cache_key = proc.cache.cache_key
-                input_hash = sha1(str(val).encode()).hexdigest()
-                ttl_bucket = proc.cache.compute_time_bucket()
-                task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+                task_id = proc.cache.generate_task_id(str(val))
             else:
                 task_id = _uuid5_str(
                     checkpoint_id,

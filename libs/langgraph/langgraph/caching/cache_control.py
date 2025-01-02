@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha1
 from typing import Optional
 
 class CacheControl:
@@ -18,3 +19,22 @@ class CacheControl:
         now = datetime.now(timezone.utc)
         bucket_start = now - timedelta(seconds=now.timestamp() % self.ttl)
         return bucket_start.isoformat()
+    
+    def generate_task_id(self, input_data: str) -> str:
+        """
+        Generate a cache-enabled task ID based on cache key, stringified input data, and TTL bucket.
+
+        Args:
+            input_data (str): The stringified input data to be hashed for uniqueness.
+
+        Returns:
+            str: A unique task ID that includes the cache key, input hash, and TTL bucket.
+        """
+        # Hash the input data to create a unique identifier
+        input_hash = sha1(input_data.encode()).hexdigest()
+        
+        # Compute the TTL bucket
+        ttl_bucket = self.compute_time_bucket()
+        
+        # Combine the cache key, input hash, and TTL bucket to form the task ID
+        return f"{self.cache_key}:{input_hash}:{ttl_bucket}"

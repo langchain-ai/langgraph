@@ -29,7 +29,6 @@ from langgraph.checkpoint.base import (
     PendingWrite,
 )
 
-
 if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
 
