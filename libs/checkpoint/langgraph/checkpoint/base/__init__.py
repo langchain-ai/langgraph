@@ -318,6 +318,12 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def get_writes(
+        self,
+        task_id: str,
+    ) -> Sequence[tuple[str, Any]]:
+        raise NotImplementedError
+
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Asynchronously fetch a checkpoint using the given configuration.
 

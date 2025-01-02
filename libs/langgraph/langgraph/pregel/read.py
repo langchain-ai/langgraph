@@ -21,6 +21,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.base import Input, Other, coerce_to_runnable
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
+from langgraph.caching.cache_control import CacheControl
 from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
@@ -133,7 +134,7 @@ class PregelNode(Runnable):
     taking the output of `bound` and writing it to the appropriate channels."""
 
     bound: Runnable[Any, Any]
-    """The main logic of the node. This will be invoked with the input from 
+    """The main logic of the node. This will be invoked with the input from
     `channels`."""
 
     retry_policy: Optional[RetryPolicy]
@@ -144,6 +145,8 @@ class PregelNode(Runnable):
 
     metadata: Optional[Mapping[str, Any]]
     """Metadata to attach to the node for tracing."""
+
+    cache: Optional[CacheControl] = None
 
     def __init__(
         self,
@@ -156,6 +159,7 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        cache: Optional[CacheControl] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -163,6 +167,7 @@ class PregelNode(Runnable):
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         self.retry_policy = retry_policy
+        self.cache = cache
         self.tags = tags
         self.metadata = metadata
 

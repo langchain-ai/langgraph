@@ -10,6 +10,7 @@ from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_CHECKPOINTER,
     NS_SEP,
 )
 from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphBubbleUp, ParentCommand
@@ -26,6 +27,15 @@ def run_with_retry(
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task with retries."""
+    # Check for cached writes before running the task
+    if task.cache_policy:  # If the task is configured for caching
+        checkpointer = task.config[CONF][CONFIG_KEY_CHECKPOINTER]
+        cached_writes = checkpointer.get_writes(task.id)
+        if cached_writes:
+            task.writes.clear()  # Clear the existing deque
+            task.writes.extend(cached_writes)
+            return  # Skip execution
+
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0

@@ -22,11 +22,13 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
 
+from langgraph.caching.cache_control import CacheControl
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     CheckpointMetadata,
     PendingWrite,
 )
+
 
 if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
@@ -151,7 +153,7 @@ class PregelExecutableTask(NamedTuple):
     config: RunnableConfig
     triggers: list[str]
     retry_policy: Optional[RetryPolicy]
-    cache_policy: Optional[CachePolicy]
+    cache_policy: Optional[CacheControl]
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False

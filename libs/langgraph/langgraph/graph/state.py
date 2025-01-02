@@ -28,6 +28,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
+from langgraph.caching.cache_control import CacheControl
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
@@ -92,6 +93,7 @@ class StateNodeSpec(NamedTuple):
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
     ends: Optional[tuple[str, ...]] = EMPTY_SEQ
+    cache: Optional[CacheControl] = None
 
 
 class StateGraph(Graph):
@@ -232,6 +234,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CacheControl] = None,
     ) -> Self:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -256,6 +259,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CacheControl] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -279,6 +283,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CacheControl] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -290,6 +295,7 @@ class StateGraph(Graph):
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
             retry (Optional[RetryPolicy]): The policy for retrying the node. (default: None)
+            cache (Optional[CacheControl]): The caching configuration for the node. (default: None)
         Raises:
             ValueError: If the key is already being used as a state key.
 
@@ -394,6 +400,7 @@ class StateGraph(Graph):
             input=input or self.schema,
             retry_policy=retry,
             ends=ends,
+            cache=cache,
         )
         return self
 
@@ -719,6 +726,7 @@ class CompiledStateGraph(CompiledGraph):
                 ],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
+                cache=node.cache,
                 bound=node.runnable,
             )
         else:

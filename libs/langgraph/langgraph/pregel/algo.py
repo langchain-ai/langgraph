@@ -494,15 +494,23 @@ def prepare_single_task(
         # create task id
         triggers = [PUSH]
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        task_id = _uuid5_str(
-            checkpoint_id,
-            checkpoint_ns,
-            str(step),
-            name,
-            PUSH,
-            _tuple_str(task_path[1]),
-            str(task_path[2]),
-        )
+
+        pregel_node = processes.get(name)
+        if pregel_node and pregel_node.cache:
+            cache_key = pregel_node.cache.cache_key
+            input_hash = sha1(str(call.input).encode()).hexdigest()
+            ttl_bucket = pregel_node.cache.compute_time_bucket()
+            task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+        else:
+            task_id = _uuid5_str(
+                checkpoint_id,
+                checkpoint_ns,
+                str(step),
+                name,
+                PUSH,
+                _tuple_str(task_path[1]),
+                str(task_path[2]),
+            )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         metadata = {
             "langgraph_step": step,
@@ -564,7 +572,7 @@ def prepare_single_task(
                 ),
                 triggers,
                 call.retry,
-                None,
+                pregel_node.cache,
                 task_id,
                 task_path[:3],
             )
@@ -593,14 +601,21 @@ def prepare_single_task(
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                str(idx),
-            )
+            proc = processes.get(packet.node)
+            if proc and proc.cache:
+                cache_key = proc.cache.cache_key
+                input_hash = sha1(str(packet.arg).encode()).hexdigest()
+                ttl_bucket = proc.cache.compute_time_bucket()
+                task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    str(idx),
+                )
         elif len(task_path) >= 4:
             # new PUSH tasks, executed in superstep n
             # (PUSH, parent task path, idx of PUSH write, id of parent task)
@@ -629,15 +644,22 @@ def prepare_single_task(
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                _tuple_str(task_path[1]),
-                str(task_path[2]),
-            )
+            proc = processes.get(packet.node)
+            if proc and proc.cache:
+                cache_key = proc.cache.cache_key
+                input_hash = sha1(str(packet.arg).encode()).hexdigest()
+                ttl_bucket = proc.cache.compute_time_bucket()
+                task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    _tuple_str(task_path[1]),
+                    str(task_path[2]),
+                )
         else:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
@@ -713,7 +735,7 @@ def prepare_single_task(
                     ),
                     triggers,
                     proc.retry_policy,
-                    None,
+                    proc.cache,
                     task_id,
                     task_path[:3],
                     writers=proc.flat_writers,
@@ -756,14 +778,20 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                name,
-                PULL,
-                *triggers,
-            )
+            if proc.cache:
+                cache_key = proc.cache.cache_key
+                input_hash = sha1(str(val).encode()).hexdigest()
+                ttl_bucket = proc.cache.compute_time_bucket()
+                task_id = f"{cache_key}{input_hash}{ttl_bucket}"
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    name,
+                    PULL,
+                    *triggers,
+                )
             task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
             metadata = {
                 "langgraph_step": step,
@@ -837,7 +865,7 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        None,
+                        proc.cache,
                         task_id,
                         task_path[:3],
                         writers=proc.flat_writers,

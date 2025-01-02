@@ -322,6 +322,32 @@ class PostgresSaver(BasePostgresSaver):
             )
         return next_config
 
+    def get_writes(
+        self,
+        task_id: str,
+    ) -> Sequence[tuple[str, Any]]:
+        """ """
+        with self._cursor() as cur:
+            cur.execute(
+                self.GET_CHECKPOINT_WRITES_BY_TASK_ID_SQL,
+                (task_id,),
+            )
+            rows = cur.fetchall()
+
+        writes = self._load_writes(
+            [
+                (
+                    row["task_id"].encode(),
+                    row["channel"].encode(),
+                    row["type"].encode(),
+                    row["blob"],
+                )
+                for row in rows
+            ]
+        )
+
+        return [(write[1], write[2]) for write in writes]
+
     def put_writes(
         self,
         config: RunnableConfig,

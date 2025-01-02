@@ -133,6 +133,12 @@ UPSERT_CHECKPOINT_WRITES_SQL = """
         blob = EXCLUDED.blob;
 """
 
+GET_CHECKPOINT_WRITES_BY_TASK_ID_SQL = """
+    SELECT task_id, channel, type, blob
+    FROM checkpoint_writes
+    WHERE task_id = %s
+"""
+
 INSERT_CHECKPOINT_WRITES_SQL = """
     INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -175,6 +181,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
+    GET_CHECKPOINT_WRITES_BY_TASK_ID_SQL = GET_CHECKPOINT_WRITES_BY_TASK_ID_SQL
 
     lock: threading.Lock
 
