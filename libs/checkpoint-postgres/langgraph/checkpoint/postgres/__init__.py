@@ -322,8 +322,10 @@ class PostgresSaver(BasePostgresSaver):
             )
         return next_config
 
-    def get_writes(self, 
-                   task_id: str) -> Sequence[tuple[str, Any]]:
+    def get_writes(
+        self, 
+        task_id: str,
+    ) -> Sequence[tuple[str, Any]]:
         """
         Retrieve cached writes for a specific task ID.
 
