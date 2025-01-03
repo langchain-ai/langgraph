@@ -1515,27 +1515,32 @@ def test_imp_stream_order(
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     @task()
-    def foo(state: dict) -> dict:
-        return {"a": state["a"] + "foo", "b": "bar"}
+    def foo(state: dict) -> tuple:
+        return state["a"] + "foo", "bar"
 
-    @task()
-    def bar(state: dict) -> dict:
-        return {"a": state["a"] + state["b"], "c": "bark"}
+    @task
+    def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+        return {"a": a + b, "c": (c or "") + "bark"}
 
-    @task()
+    @task
     def baz(state: dict) -> dict:
         return {"a": state["a"] + "baz", "c": "something else"}
 
     @entrypoint(checkpointer=checkpointer)
     def graph(state: dict) -> dict:
         fut_foo = foo(state)
-        fut_bar = bar(fut_foo.result())
+        fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
-        {"foo": {"a": "0foo", "b": "bar"}},
+        {
+            "foo": (
+                "0foo",
+                "bar",
+            )
+        },
         {"bar": {"a": "0foobar", "c": "bark"}},
         {"baz": {"a": "0foobarbaz", "c": "something else"}},
         {"graph": {"a": "0foobarbaz", "c": "something else"}},
@@ -4168,10 +4173,12 @@ def test_store_injected(
         def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):
             assert isinstance(store, BaseStore)
             store.put(
-                namespace
-                if self.i is not None
-                and config["configurable"]["thread_id"] in (thread_1, thread_2)
-                else (f"foo_{self.i}", "bar"),
+                (
+                    namespace
+                    if self.i is not None
+                    and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                    else (f"foo_{self.i}", "bar")
+                ),
                 doc_id,
                 {
                     **doc,

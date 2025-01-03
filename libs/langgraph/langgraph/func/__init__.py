@@ -1,9 +1,9 @@
 import asyncio
 import concurrent
 import concurrent.futures
+import functools
 import inspect
 import types
-from functools import partial, update_wrapper
 from typing import (
     Any,
     Awaitable,
@@ -33,17 +33,17 @@ T = TypeVar("T")
 
 
 def call(
-    func: Callable[[P1], T],
-    input: P1,
-    *,
+    func: Callable[P, T],
+    *args: Any,
     retry: Optional[RetryPolicy] = None,
+    **kwargs: Any,
 ) -> concurrent.futures.Future[T]:
     from langgraph.constants import CONFIG_KEY_CALL
     from langgraph.utils.config import get_configurable
 
     conf = get_configurable()
     impl = conf[CONFIG_KEY_CALL]
-    fut = impl(func, input, retry=retry)
+    fut = impl(func, (args, kwargs), retry=retry)
     return fut
 
 
@@ -59,16 +59,51 @@ def task(  # type: ignore[overload-cannot-match]
 ) -> Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]]: ...
 
 
+@overload
 def task(
-    *, retry: Optional[RetryPolicy] = None
+    __func_or_none__: Callable[P, T],
+) -> Callable[P, concurrent.futures.Future[T]]: ...
+
+
+@overload
+def task(
+    __func_or_none__: Callable[P, Awaitable[T]],
+) -> Callable[P, asyncio.Future[T]]: ...
+
+
+def task(
+    __func_or_none__: Optional[Union[Callable[P, T], Callable[P, Awaitable[T]]]] = None,
+    *,
+    retry: Optional[RetryPolicy] = None,
 ) -> Union[
     Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]],
     Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
+    Callable[P, asyncio.Future[T]],
+    Callable[P, concurrent.futures.Future[T]],
 ]:
-    def _task(func: Callable[P, T]) -> Callable[P, concurrent.futures.Future[T]]:
-        return update_wrapper(partial(call, func, retry=retry), func)
+    def decorator(
+        func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
+    ) -> Callable[P, concurrent.futures.Future[T]]:
+        if asyncio.iscoroutinefunction(func):
 
-    return _task
+            @functools.wraps(func)
+            async def _tick(__allargs__: tuple) -> T:
+                return await func(*__allargs__[0], **__allargs__[1])
+
+        else:
+
+            @functools.wraps(func)
+            def _tick(__allargs__: tuple) -> T:
+                return func(*__allargs__[0], **__allargs__[1])
+
+        return functools.update_wrapper(
+            functools.partial(call, _tick, retry=retry), func
+        )
+
+    if __func_or_none__ is not None:
+        return decorator(__func_or_none__)
+
+    return decorator
 
 
 def entrypoint(
