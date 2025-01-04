@@ -2571,9 +2571,9 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         def foo(state: dict) -> dict:
             return {"a": state["a"] + "foo", "b": "bar"}
 
-        @task()
-        def bar(state: dict) -> dict:
-            return {"a": state["a"] + state["b"], "c": "bark"}
+        @task
+        def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+            return {"a": a + b, "c": (c or "") + "bark"}
 
         @task()
         def baz(state: dict) -> dict:
@@ -2581,8 +2581,8 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
 
         @entrypoint(checkpointer=checkpointer)
         def graph(state: dict) -> dict:
-            fut_foo = foo(state)
-            fut_bar = bar(fut_foo.result())
+            foo_result = foo(state).result()
+            fut_bar = bar(foo_result["a"], foo_result["b"])
             fut_baz = baz(fut_bar.result())
             return fut_baz.result()
 
@@ -2607,9 +2607,9 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         async def foo(state: dict) -> dict:
             return {"a": state["a"] + "foo", "b": "bar"}
 
-        @task()
-        async def bar(state: dict) -> dict:
-            return {"a": state["a"] + state["b"], "c": "bark"}
+        @task
+        async def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+            return {"a": a + b, "c": (c or "") + "bark"}
 
         @task()
         async def baz(state: dict) -> dict:
@@ -2617,8 +2617,9 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
 
         @entrypoint(checkpointer=checkpointer)
         async def graph(state: dict) -> dict:
-            fut_foo = foo(state)
-            fut_bar = bar(await fut_foo)
+            foo_res = await foo(state)
+
+            fut_bar = bar(foo_res["a"], foo_res["b"])
             fut_baz = baz(await fut_bar)
             return await fut_baz
 

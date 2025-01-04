@@ -386,16 +386,16 @@
           },
           "env_vars": {
             "type": "array",
-            "description": "List of environment variables or secrets.\n\nThe complete list of environment variables and secrets must ALWAYS be specified in every request to `POST /{version}/projects/{project_id}/revisions`.",
+            "description": "List of environment variables or secrets.\n\nIf this field is omitted or set to `null`, the previous revision's `env_vars` value is used.",
             "items": {
               "$ref": "#/components/schemas/EnvVar"
             },
             "default": "null"
           },
           "shareable": {
-            "type": "boolean",
-            "description": "Boolean flag to configure if a deployment is shareable through LangGraph Studio.\n\nThis field does not apply to BYOC deployments.",
-            "default": false
+            "type": ["boolean", "null"],
+            "description": "Boolean flag to configure if a deployment is shareable through LangGraph Studio.\n\nIf this field is omitted or set to `null`, the previous revision's `shareable` value is used. This field does not apply to BYOC deployments.",
+            "default": "null"
           },
           "container_spec": {
             "description": "If this field is omitted or set to `null`, the previous revision's `container_spec` value is used.",
