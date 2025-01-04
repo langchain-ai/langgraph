@@ -10,13 +10,13 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    TypedDict,
     Union,
 )
 from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
+from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite

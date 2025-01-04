@@ -381,7 +381,7 @@ def create_react_agent(
         Add complex prompt with custom graph state:
 
         ```pycon
-        >>> from typing import TypedDict
+        >>> from typing_extensions import TypedDict
         >>>
         >>> from langgraph.managed import IsLastStep
         >>> prompt = ChatPromptTemplate.from_messages(
