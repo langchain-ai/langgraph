@@ -61,6 +61,7 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
 All deployments come with a DB-backed BaseStore. Adding an "index" configuration to your `langgraph.json` will enable [semantic search](../deployment/semantic_search.md) within the BaseStore of your deployment.
 
 The `fields` configuration determines which parts of your documents to embed:
+
 - If omitted or set to `["$"]`, the entire document will be embedded
 - To embed specific fields, use JSON path notation: `["metadata.title", "content.text"]`
 - Documents missing specified fields will still be stored but won't have embeddings for those fields
