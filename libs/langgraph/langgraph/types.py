@@ -465,7 +465,7 @@ def interrupt(value: Any) -> Any:
     idx = scratchpad["interrupt_counter"]
     # find previous resume values
     task_id = conf[CONFIG_KEY_TASK_ID]
-    writes: list[PendingWrite] = conf[CONFIG_KEY_WRITES]
+    writes: list[PendingWrite] = conf[CONFIG_KEY_WRITES] if CONFIG_KEY_WRITES in conf and any(write[1] == '__interrupt__' for write in conf[CONFIG_KEY_WRITES]) else []
     scratchpad.setdefault(
         "resume", next((w[2] for w in writes if w[0] == task_id and w[1] == RESUME), [])
     )
