@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
 from uuid import UUID
 
@@ -181,12 +182,27 @@ def map_output_updates(
                 (task.name, value) for chan, value in writes if chan == output_channels
             )
         elif any(chan in output_channels for chan, _ in writes):
-            updated.append(
-                (
-                    task.name,
-                    {chan: value for chan, value in writes if chan in output_channels},
+            counts = Counter(chan for chan, _ in writes)
+            if any(counts[chan] > 1 for chan in output_channels):
+                updated.extend(
+                    (
+                        task.name,
+                        {chan: value},
+                    )
+                    for chan, value in writes
+                    if chan in output_channels
                 )
-            )
+            else:
+                updated.append(
+                    (
+                        task.name,
+                        {
+                            chan: value
+                            for chan, value in writes
+                            if chan in output_channels
+                        },
+                    )
+                )
     grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)

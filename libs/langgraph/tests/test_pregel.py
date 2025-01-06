@@ -21,7 +21,6 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    TypedDict,
     Union,
     get_type_hints,
 )
@@ -36,6 +35,7 @@ from langchain_core.runnables import (
 from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -1515,27 +1515,32 @@ def test_imp_stream_order(
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     @task()
-    def foo(state: dict) -> dict:
-        return {"a": state["a"] + "foo", "b": "bar"}
+    def foo(state: dict) -> tuple:
+        return state["a"] + "foo", "bar"
 
-    @task()
-    def bar(state: dict) -> dict:
-        return {"a": state["a"] + state["b"], "c": "bark"}
+    @task
+    def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+        return {"a": a + b, "c": (c or "") + "bark"}
 
-    @task()
+    @task
     def baz(state: dict) -> dict:
         return {"a": state["a"] + "baz", "c": "something else"}
 
     @entrypoint(checkpointer=checkpointer)
     def graph(state: dict) -> dict:
         fut_foo = foo(state)
-        fut_bar = bar(fut_foo.result())
+        fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
-        {"foo": {"a": "0foo", "b": "bar"}},
+        {
+            "foo": (
+                "0foo",
+                "bar",
+            )
+        },
         {"bar": {"a": "0foobar", "c": "bark"}},
         {"baz": {"a": "0foobarbaz", "c": "something else"}},
         {"graph": {"a": "0foobarbaz", "c": "something else"}},
@@ -4168,10 +4173,12 @@ def test_store_injected(
         def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):
             assert isinstance(store, BaseStore)
             store.put(
-                namespace
-                if self.i is not None
-                and config["configurable"]["thread_id"] in (thread_1, thread_2)
-                else (f"foo_{self.i}", "bar"),
+                (
+                    namespace
+                    if self.i is not None
+                    and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                    else (f"foo_{self.i}", "bar")
+                ),
                 doc_id,
                 {
                     **doc,
@@ -5242,3 +5249,54 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+def test_multiple_updates_root() -> None:
+    def node_a(state):
+        return [Command(update="a1"), Command(update="a2")]
+
+    def node_b(state):
+        return "b"
+
+    graph = (
+        StateGraph(Annotated[str, operator.add])
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert graph.invoke("") == "a1a2b"
+
+    # only streams the last update from node_a
+    assert [c for c in graph.stream("", stream_mode="updates")] == [
+        {"node_a": ["a1", "a2"]},
+        {"node_b": "b"},
+    ]
+
+
+def test_multiple_updates() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def node_a(state):
+        return [Command(update={"foo": "a1"}), Command(update={"foo": "a2"})]
+
+    def node_b(state):
+        return {"foo": "b"}
+
+    graph = (
+        StateGraph(State)
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert graph.invoke({"foo": ""}) == {
+        "foo": "a1a2b",
+    }
+
+    # only streams the last update from node_a
+    assert [c for c in graph.stream({"foo": ""}, stream_mode="updates")] == [
+        {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
+        {"node_b": {"foo": "b"}},
+    ]

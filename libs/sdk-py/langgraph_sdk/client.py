@@ -1779,7 +1779,7 @@ class RunsClient:
 
         Args:
             thread_id: The thread ID to cancel.
-            run_id: The run ID to cancek.
+            run_id: The run ID to cancel.
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
@@ -3917,7 +3917,7 @@ class SyncRunsClient:
 
         Args:
             thread_id: The thread ID to cancel.
-            run_id: The run ID to cancek.
+            run_id: The run ID to cancel.
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.

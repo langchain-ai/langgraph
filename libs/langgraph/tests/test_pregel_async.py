@@ -19,7 +19,6 @@ from typing import (
     Literal,
     Optional,
     Tuple,
-    TypedDict,
     Union,
 )
 from uuid import UUID
@@ -34,6 +33,7 @@ from langchain_core.runnables import (
 from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -178,6 +178,262 @@ async def test_checkpoint_errors() -> None:
             "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):
             pass
+
+
+async def test_py_async_with_cancel_behavior() -> None:
+    """This test confirms that in all versions of Python we support, __aexit__
+    is not cancelled when the coroutine containing the async with block is cancelled."""
+
+    logs: list[str] = []
+
+    class MyContextManager:
+        async def __aenter__(self):
+            logs.append("Entering")
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            logs.append("Starting exit")
+            try:
+                # Simulate some cleanup work
+                await asyncio.sleep(2)
+                logs.append("Cleanup completed")
+            except asyncio.CancelledError:
+                logs.append("Cleanup was cancelled!")
+                raise
+            logs.append("Exit finished")
+
+    async def main():
+        try:
+            async with MyContextManager():
+                logs.append("In context")
+                await asyncio.sleep(1)
+                logs.append("This won't print if cancelled")
+        except asyncio.CancelledError:
+            logs.append("Context was cancelled")
+            raise
+
+    # create task
+    t = asyncio.create_task(main())
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert logs == [
+        "Entering",
+        "In context",
+    ], "Cancelled before cleanup started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert logs == [
+            "Entering",
+            "In context",
+            "Starting exit",
+            "Cleanup completed",
+            "Exit finished",
+            "Context was cancelled",
+        ], "Cleanup started and finished after cancellation"
+    else:
+        assert False, "Task should be cancelled"
+
+
+async def test_checkpoint_put_after_cancellation() -> None:
+    logs: list[str] = []
+
+    class LongPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            logs.append("checkpoint.aput.start")
+            try:
+                await asyncio.sleep(1)
+                return await super().aput(config, checkpoint, metadata, new_versions)
+            finally:
+                logs.append("checkpoint.aput.end")
+
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        logs.append("awhile.start")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+        finally:
+            logs.append("awhile.end")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=LongPutCheckpointer())
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # start the task
+    t = asyncio.create_task(graph.ainvoke(1, thread1))
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert sorted(logs) == [
+        "awhile.start",
+        "checkpoint.aput.start",
+    ], "Cancelled before checkpoint put started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert sorted(logs) == [
+            "awhile.end",
+            "awhile.start",
+            "checkpoint.aput.end",
+            "checkpoint.aput.start",
+        ], "Checkpoint put is not cancelled"
+    else:
+        assert False, "Task should be cancelled"
+
+
+async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
+    logs: list[str] = []
+
+    class LongPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            logs.append("checkpoint.aput.start")
+            try:
+                await asyncio.sleep(1)
+                return await super().aput(config, checkpoint, metadata, new_versions)
+            finally:
+                logs.append("checkpoint.aput.end")
+
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        logs.append("awhile.start")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+        finally:
+            logs.append("awhile.end")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=LongPutCheckpointer())
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # start the task
+    s = graph.astream(1, thread1)
+    t = asyncio.create_task(s.__anext__())
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert sorted(logs) == [
+        "awhile.start",
+        "checkpoint.aput.start",
+    ], "Cancelled before checkpoint put started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert sorted(logs) == [
+            "awhile.end",
+            "awhile.start",
+            "checkpoint.aput.end",
+            "checkpoint.aput.start",
+        ], "Checkpoint put is not cancelled"
+    else:
+        assert False, "Task should be cancelled"
+
+
+async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
+    logs: list[str] = []
+
+    class LongPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            logs.append("checkpoint.aput.start")
+            try:
+                await asyncio.sleep(1)
+                return await super().aput(config, checkpoint, metadata, new_versions)
+            finally:
+                logs.append("checkpoint.aput.end")
+
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        logs.append("awhile.start")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+        finally:
+            logs.append("awhile.end")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=LongPutCheckpointer())
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # start the task
+    s = graph.astream_events(1, thread1, version="v2", include_names=["LangGraph"])
+    # skip first event (happens right away)
+    await s.__anext__()
+    # start the task for 2nd event
+    t = asyncio.create_task(s.__anext__())
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert logs == [
+        "checkpoint.aput.start",
+        "awhile.start",
+    ], "Cancelled before checkpoint put started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert logs == [
+            "checkpoint.aput.start",
+            "awhile.start",
+            "awhile.end",
+            "checkpoint.aput.end",
+        ], "Checkpoint put is not cancelled"
+    else:
+        assert False, "Task should be cancelled"
 
 
 async def test_node_cancellation_on_external_cancel() -> None:
@@ -2315,9 +2571,9 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         def foo(state: dict) -> dict:
             return {"a": state["a"] + "foo", "b": "bar"}
 
-        @task()
-        def bar(state: dict) -> dict:
-            return {"a": state["a"] + state["b"], "c": "bark"}
+        @task
+        def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+            return {"a": a + b, "c": (c or "") + "bark"}
 
         @task()
         def baz(state: dict) -> dict:
@@ -2325,8 +2581,8 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
 
         @entrypoint(checkpointer=checkpointer)
         def graph(state: dict) -> dict:
-            fut_foo = foo(state)
-            fut_bar = bar(fut_foo.result())
+            foo_result = foo(state).result()
+            fut_bar = bar(foo_result["a"], foo_result["b"])
             fut_baz = baz(fut_bar.result())
             return fut_baz.result()
 
@@ -2351,9 +2607,9 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         async def foo(state: dict) -> dict:
             return {"a": state["a"] + "foo", "b": "bar"}
 
-        @task()
-        async def bar(state: dict) -> dict:
-            return {"a": state["a"] + state["b"], "c": "bark"}
+        @task
+        async def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+            return {"a": a + b, "c": (c or "") + "bark"}
 
         @task()
         async def baz(state: dict) -> dict:
@@ -2361,8 +2617,9 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
 
         @entrypoint(checkpointer=checkpointer)
         async def graph(state: dict) -> dict:
-            fut_foo = foo(state)
-            fut_bar = bar(await fut_foo)
+            foo_res = await foo(state)
+
+            fut_bar = bar(foo_res["a"], foo_res["b"])
             fut_baz = baz(await fut_bar)
             return await fut_baz
 
@@ -6362,3 +6619,54 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         # Verify the error was recorded in checkpoint
         failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
         assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+async def test_multiple_updates_root() -> None:
+    def node_a(state):
+        return [Command(update="a1"), Command(update="a2")]
+
+    def node_b(state):
+        return "b"
+
+    graph = (
+        StateGraph(Annotated[str, operator.add])
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert await graph.ainvoke("") == "a1a2b"
+
+    # only streams the last update from node_a
+    assert [c async for c in graph.astream("", stream_mode="updates")] == [
+        {"node_a": ["a1", "a2"]},
+        {"node_b": "b"},
+    ]
+
+
+async def test_multiple_updates() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def node_a(state):
+        return [Command(update={"foo": "a1"}), Command(update={"foo": "a2"})]
+
+    def node_b(state):
+        return {"foo": "b"}
+
+    graph = (
+        StateGraph(State)
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert await graph.ainvoke({"foo": ""}) == {
+        "foo": "a1a2b",
+    }
+
+    # only streams the last update from node_a
+    assert [c async for c in graph.astream({"foo": ""}, stream_mode="updates")] == [
+        {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
+        {"node_b": {"foo": "b"}},
+    ]
