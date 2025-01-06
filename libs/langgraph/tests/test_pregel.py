@@ -5262,10 +5262,29 @@ def test_multiple_updates() -> None:
     ]
 
 
+def test_falsy_return_from_task() -> None:
+    """Test with a falsy return from a task."""
+    checkpointer = MemorySaver()
+
+    @task
+    def falsy_task() -> bool:
+        return False
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(state: dict) -> dict:
+        """React tool."""
+        task_result = falsy_task().result()
+        human_value = interrupt("test")
+
+    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+    graph.invoke({"a": 5}, configurable)
+    graph.invoke(Command(resume="123"), configurable)
+
+
 def test_multiple_interrupts_imperative() -> None:
     """Test multiple interrupts with an imperative API."""
-    from langgraph.func import entrypoint, task
     from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.func import entrypoint, task
 
     checkpointer = MemorySaver()
     counter = 0
@@ -5281,24 +5300,21 @@ def test_multiple_interrupts_imperative() -> None:
     def graph(state: dict) -> dict:
         """React tool."""
 
-        all_values = []
+        values = []
 
-        for idx in range(3):
-            value = double(idx).result()
-            all_values.append(value)
-            hil_value = interrupt({"a": "boo"})
-            all_values.append(hil_value)
+        for idx in [1, 2, 3]:
+            values.extend([double(idx).result(), interrupt({"a": "boo"})])
 
-        return {"all_values": all_values}
+        return {"values": values}
 
     configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     graph.invoke({}, configurable)
     # Currently fails when double accepts a variable
     graph.invoke(Command(resume="a"), configurable)
-
-    # Code currently fails before this block is reached
-    # # Provide 2 other values
-    # graph.invoke(Command(resume="a"), configurable)
-    # graph.invoke(Command(resume="a"), configurable)
-    # # `double` value should be cached appropriately when used w/ `interrupt`
-    # assert counter == 3
+    graph.invoke(Command(resume="b"), configurable)
+    result = graph.invoke(Command(resume="c"), configurable)
+    # `double` value should be cached appropriately when used w/ `interrupt`
+    assert result == {
+        "values": [2, "a", 4, "b", 6, "c"],
+    }
+    assert counter == 3
