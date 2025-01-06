@@ -5260,3 +5260,45 @@ def test_multiple_updates() -> None:
         {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
         {"node_b": {"foo": "b"}},
     ]
+
+
+def test_multiple_interrupts_imperative() -> None:
+    """Test multiple interrupts with an imperative API."""
+    from langgraph.func import entrypoint, task
+    from langgraph.checkpoint.memory import MemorySaver
+
+    checkpointer = MemorySaver()
+    counter = 0
+
+    @task
+    def double(x: int) -> int:
+        """Increment the counter."""
+        nonlocal counter
+        counter += 1
+        return 2 * x
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(state: dict) -> dict:
+        """React tool."""
+
+        all_values = []
+
+        for idx in range(3):
+            value = double(idx).result()
+            all_values.append(value)
+            hil_value = interrupt({"a": "boo"})
+            all_values.append(hil_value)
+
+        return {"all_values": all_values}
+
+    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+    graph.invoke({}, configurable)
+    # Currently fails when double accepts a variable
+    graph.invoke(Command(resume="a"), configurable)
+
+    # Code currently fails before this block is reached
+    # # Provide 2 other values
+    # graph.invoke(Command(resume="a"), configurable)
+    # graph.invoke(Command(resume="a"), configurable)
+    # # `double` value should be cached appropriately when used w/ `interrupt`
+    # assert counter == 3
