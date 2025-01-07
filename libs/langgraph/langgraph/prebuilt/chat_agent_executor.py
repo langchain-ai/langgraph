@@ -554,6 +554,10 @@ def create_react_agent(
     )
     model_runnable = preprocessor | model
 
+    # If any of the tools are configured to return_directly after running,
+    # our graph needs to check if these were called
+    should_return_direct = {t.name for t in tool_classes if t.return_direct}
+
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         _validate_chat_history(state["messages"])
@@ -672,10 +676,6 @@ def create_react_agent(
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
     )
-
-    # If any of the tools are configured to return_directly after running,
-    # our graph needs to check if these were called
-    should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
     def route_tool_responses(state: AgentState) -> Literal["agent", "__end__"]:
         for m in reversed(state["messages"]):
