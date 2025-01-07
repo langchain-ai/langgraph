@@ -359,7 +359,13 @@ class PregelLoop(LoopProtocol):
         input_keys: Union[str, Sequence[str]],
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
-        Returns True if more iterations are needed."""
+
+        Args:
+            input_keys: The key(s) to read input from.
+
+        Returns:
+            True if more iterations are needed.
+        """
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
