@@ -44,7 +44,8 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
     "docs/docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
-    "docs/docs/tutorials/tot/tot.ipynb"
+    "docs/docs/tutorials/tot/tot.ipynb",
+    "docs/docs/how-tos/visualization.ipynb"
 ]
 
 
