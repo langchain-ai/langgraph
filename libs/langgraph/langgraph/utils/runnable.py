@@ -298,21 +298,22 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """A simpler version of RunnableSequence."""
+    """Sequence of Runnables, where the output of each is the input of the next.
+    
+    RunnableSeq is a simpler version of RunnableSequence that is internal to
+    LangGraph.
+    """
 
     def __init__(
         self,
         *steps: RunnableLike,
         name: Optional[str] = None,
     ) -> None:
-        """Create a new RunnableSequence.
+        """Create a new RunnableSeq.
 
         Args:
             steps: The steps to include in the sequence.
             name: The name of the Runnable. Defaults to None.
-            first: The first Runnable in the sequence. Defaults to None.
-            middle: The middle Runnables in the sequence. Defaults to None.
-            last: The last Runnable in the sequence. Defaults to None.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
