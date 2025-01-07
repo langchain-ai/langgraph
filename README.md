@@ -8,7 +8,7 @@
 ⚡ Building language agents as graphs ⚡
 
 > [!NOTE]
-> Looking for the JS version? Click [here](https://github.com/langchain-ai/langgraphjs) ([JS docs](https://langchain-ai.github.io/langgraphjs/)).
+> Looking for the JS version? See the [JS repo](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://langchain-ai.github.io/langgraphjs/).
 
 ## Overview
 
