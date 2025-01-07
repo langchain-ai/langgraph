@@ -1,4 +1,5 @@
 import dataclasses
+import inspect
 import json
 from functools import partial
 from typing import (
@@ -2040,3 +2041,9 @@ def test__get_state_args() -> None:
         return 0.0
 
     assert _get_state_args(foo) == {"a": None, "b": "bar"}
+
+
+def test_inspect_react() -> None:
+    model = FakeToolCallingModel(tool_calls=[])
+    agent = create_react_agent(model, [])
+    inspect.getclosurevars(agent)
