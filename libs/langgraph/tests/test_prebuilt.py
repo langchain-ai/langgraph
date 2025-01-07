@@ -2046,4 +2046,4 @@ def test__get_state_args() -> None:
 def test_inspect_react() -> None:
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_react_agent(model, [])
-    inspect.getclosurevars(agent.invoke)
+    inspect.getclosurevars(agent.nodes["agent"].bound.func)
