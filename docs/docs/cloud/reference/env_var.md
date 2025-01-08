@@ -24,14 +24,15 @@ For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deploy
 
 Specify `POSTGRES_URI_CUSTOM` to use an externally managed Postgres instance. The value of `POSTGRES_URI_CUSTOM` must be a valid [Postgres connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
 
-Mechanics:
+Control Plane Functionality:
 
 - If `POSTGRES_URI_CUSTOM` is specified, the LangGraph Control Plane will not provision a database for the server.
 - If `POSTGRES_URI_CUSTOM` is removed, the LangGraph Control Plane will not provision a database for the server and will not delete the externally managed Postgres instance.
 - If `POSTGRES_URI_CUSTOM` is removed, deployment of the revision will not succeed. Once `POSTGRES_URI_CUSTOM` is specified, it must always be set for the lifecycle of the deployment.
+- If the deployment is deleted, the LangGraph Control Plane will not delete the externally managed Postgres instance.
 - The value of `POSTGRES_URI_CUSTOM` can be updated. For example, a password in the URI can be updated.
 
 Database Connectivity:
 
-- The externally managed Postgres instance must be accessible by the service in the ECS cluster. The BYOC user is responsible for ensuring connectivity.
+- The externally managed Postgres instance must be accessible by the LangGraph Server service in the ECS cluster. The BYOC user is responsible for ensuring connectivity.
 - For example, if an AWS RDS Postgres instance is provisioned, it can be provisioned in the same VPC (`langgraph-cloud-vpc`) as the ECS cluster with the `langgraph-cloud-service-sg` security group to ensure connectivity.
