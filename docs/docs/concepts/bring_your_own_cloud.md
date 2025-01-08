@@ -39,6 +39,7 @@ LangChain has no direct access to the resources created in your cloud account, a
             - Read CloudWatch metrics/logs to monitor your instances/push deployment logs
         - https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonRDSFullAccess.html
             - Provision `RDS` instances for your LangGraph Cloud instances
+            - Alternatively, an externally managed Postgres instance can be used instead of the default `RDS` instance. LangChain does not monitor or manage the externally managed Postgres instance. See details for [`POSTGRES_URI_CUSTOM` environment variable](../cloud/reference/env_var.md#postgres_uri_custom).
     2. Either
         - Tags an existing vpc / subnets as `langgraph-cloud-enabled`
         - Creates a new vpc and subnets and tags them as `langgraph-cloud-enabled`
