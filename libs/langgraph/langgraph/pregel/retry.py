@@ -174,6 +174,8 @@ async def arun_with_retry(
                 exception_handler = retry_policy.retry_on.get(type(exc), False)
                 if callable(exception_handler):
                     exception_handler(task.input, exc)
+                else:
+                    raise
             else:
                 raise TypeError(
                     "retry_on must be an Exception class, a list or tuple of Exception classes, or a callable"
