@@ -162,7 +162,23 @@ export interface RunsStreamPayload extends RunsInvokePayload {
   feedbackKeys?: string[];
 }
 
-export interface RunsCreatePayload extends RunsInvokePayload {}
+export interface RunsCreatePayload extends RunsInvokePayload {
+  /**
+   * One of `"values"`, `"messages"`, `"updates"` or `"events"`.
+   * - `"values"`: Stream the thread state any time it changes.
+   * - `"messages"`: Stream chat messages from thread state and calls to chat models,
+   *                 token-by-token where possible.
+   * - `"updates"`: Stream the state updates returned by each node.
+   * - `"events"`: Stream all events produced by the run. You can also access these
+   *               afterwards using the `client.runs.listEvents()` method.
+   */
+  streamMode?: StreamMode | Array<StreamMode>;
+
+  /**
+   * Stream output from subgraphs. By default, streams only the top graph.
+   */
+  streamSubgraphs?: boolean;
+}
 
 export interface CronsCreatePayload extends RunsCreatePayload {
   /**
