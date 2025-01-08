@@ -24,6 +24,11 @@ For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deploy
 
 Specify `POSTGRES_URI_CUSTOM` to use an externally managed Postgres instance. The value of `POSTGRES_URI_CUSTOM` must be a valid [Postgres connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
 
+Postgres:
+
+- Version 15.8 or higher.
+- An initial database must be present and the connection URI must reference the database.
+
 Control Plane Functionality:
 
 - If `POSTGRES_URI_CUSTOM` is specified, the LangGraph Control Plane will not provision a database for the server.
