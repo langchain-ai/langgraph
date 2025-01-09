@@ -51,5 +51,5 @@ LangChain has no direct access to the resources created in your cloud account, a
 
 Notes for customers using [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting):
 
-- Creation of new LangGraph Cloud projects and revisions currently needs to be done on smith.langchain.com.
-- You can however set up the project to trace to your self-hosted LangSmith instance if desired
+- Creation of new LangGraph Cloud projects and revisions currently needs to be done on `smith.langchain.com`.
+- However, you can set up the project to trace to your self-hosted LangSmith instance if desired. See details for [`LANGSMITH_RUNS_ENDPOINTS` environment variable](../cloud/reference/env_var.md#langsmith_runs_endpoints).
