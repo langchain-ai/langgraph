@@ -510,7 +510,7 @@ class _StoreOn:
         """
         if fn is not None:
             # Used as a plain decorator
-            _register_handler(self._auth, None, None, fn)
+            _register_handler(self._auth, "store", None, fn)
             return fn
 
         # Used with parameters, return a decorator
