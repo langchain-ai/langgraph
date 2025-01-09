@@ -817,6 +817,8 @@ export class RunsClient extends BaseClient {
       command: payload?.command,
       config: payload?.config,
       metadata: payload?.metadata,
+      stream_mode: payload?.streamMode,
+      stream_subgraphs: payload?.streamSubgraphs,
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
