@@ -601,7 +601,8 @@ def tools_condition(
         >>> from langgraph.prebuilt import ToolNode, tools_condition
         >>> from langgraph.graph.message import add_messages
         ...
-        >>> from typing import TypedDict, Annotated
+        >>> from typing import Annotated
+        >>> from typing_extensions import TypedDict
         ...
         >>> @tool
         >>> def divide(a: float, b: float) -> int:

@@ -1032,6 +1032,13 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         # unwind stack
-        return await asyncio.shield(
+        exit_task = asyncio.create_task(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
+        try:
+            return await exit_task
+        except asyncio.CancelledError as e:
+            # Bubble up the exit task upon cancellation to permit the API
+            # consumer to await it before e.g., re-using the DB connection.
+            e.args = (*e.args, exit_task)
+            raise

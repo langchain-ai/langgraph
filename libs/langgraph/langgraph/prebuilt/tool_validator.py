@@ -74,7 +74,8 @@ class ValidationNode(RunnableCallable):
 
     Examples:
         Example usage for re-prompting the model to generate a valid response:
-        >>> from typing import Literal, Annotated, TypedDict
+        >>> from typing import Literal, Annotated
+        >>> from typing_extensions import TypedDict
         ...
         >>> from langchain_anthropic import ChatAnthropic
         >>> from pydantic import BaseModel, validator

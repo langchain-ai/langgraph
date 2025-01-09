@@ -19,7 +19,6 @@ from typing import (
     Literal,
     Optional,
     Tuple,
-    TypedDict,
     Union,
 )
 from uuid import UUID
@@ -34,6 +33,7 @@ from langchain_core.runnables import (
 from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -75,6 +75,7 @@ from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
     ALL_STORES_ASYNC,
+    REGULAR_CHECKPOINTERS_ASYNC,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
     awith_store,
@@ -177,6 +178,262 @@ async def test_checkpoint_errors() -> None:
             "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):
             pass
+
+
+async def test_py_async_with_cancel_behavior() -> None:
+    """This test confirms that in all versions of Python we support, __aexit__
+    is not cancelled when the coroutine containing the async with block is cancelled."""
+
+    logs: list[str] = []
+
+    class MyContextManager:
+        async def __aenter__(self):
+            logs.append("Entering")
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            logs.append("Starting exit")
+            try:
+                # Simulate some cleanup work
+                await asyncio.sleep(2)
+                logs.append("Cleanup completed")
+            except asyncio.CancelledError:
+                logs.append("Cleanup was cancelled!")
+                raise
+            logs.append("Exit finished")
+
+    async def main():
+        try:
+            async with MyContextManager():
+                logs.append("In context")
+                await asyncio.sleep(1)
+                logs.append("This won't print if cancelled")
+        except asyncio.CancelledError:
+            logs.append("Context was cancelled")
+            raise
+
+    # create task
+    t = asyncio.create_task(main())
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert logs == [
+        "Entering",
+        "In context",
+    ], "Cancelled before cleanup started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert logs == [
+            "Entering",
+            "In context",
+            "Starting exit",
+            "Cleanup completed",
+            "Exit finished",
+            "Context was cancelled",
+        ], "Cleanup started and finished after cancellation"
+    else:
+        assert False, "Task should be cancelled"
+
+
+async def test_checkpoint_put_after_cancellation() -> None:
+    logs: list[str] = []
+
+    class LongPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            logs.append("checkpoint.aput.start")
+            try:
+                await asyncio.sleep(1)
+                return await super().aput(config, checkpoint, metadata, new_versions)
+            finally:
+                logs.append("checkpoint.aput.end")
+
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        logs.append("awhile.start")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+        finally:
+            logs.append("awhile.end")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=LongPutCheckpointer())
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # start the task
+    t = asyncio.create_task(graph.ainvoke(1, thread1))
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert sorted(logs) == [
+        "awhile.start",
+        "checkpoint.aput.start",
+    ], "Cancelled before checkpoint put started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert sorted(logs) == [
+            "awhile.end",
+            "awhile.start",
+            "checkpoint.aput.end",
+            "checkpoint.aput.start",
+        ], "Checkpoint put is not cancelled"
+    else:
+        assert False, "Task should be cancelled"
+
+
+async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
+    logs: list[str] = []
+
+    class LongPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            logs.append("checkpoint.aput.start")
+            try:
+                await asyncio.sleep(1)
+                return await super().aput(config, checkpoint, metadata, new_versions)
+            finally:
+                logs.append("checkpoint.aput.end")
+
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        logs.append("awhile.start")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+        finally:
+            logs.append("awhile.end")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=LongPutCheckpointer())
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # start the task
+    s = graph.astream(1, thread1)
+    t = asyncio.create_task(s.__anext__())
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert sorted(logs) == [
+        "awhile.start",
+        "checkpoint.aput.start",
+    ], "Cancelled before checkpoint put started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert sorted(logs) == [
+            "awhile.end",
+            "awhile.start",
+            "checkpoint.aput.end",
+            "checkpoint.aput.start",
+        ], "Checkpoint put is not cancelled"
+    else:
+        assert False, "Task should be cancelled"
+
+
+async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
+    logs: list[str] = []
+
+    class LongPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            logs.append("checkpoint.aput.start")
+            try:
+                await asyncio.sleep(1)
+                return await super().aput(config, checkpoint, metadata, new_versions)
+            finally:
+                logs.append("checkpoint.aput.end")
+
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        logs.append("awhile.start")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+        finally:
+            logs.append("awhile.end")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=LongPutCheckpointer())
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # start the task
+    s = graph.astream_events(1, thread1, version="v2", include_names=["LangGraph"])
+    # skip first event (happens right away)
+    await s.__anext__()
+    # start the task for 2nd event
+    t = asyncio.create_task(s.__anext__())
+    # cancel after 0.2 seconds
+    await asyncio.sleep(0.2)
+    t.cancel()
+    # check logs before cancellation is handled
+    assert logs == [
+        "checkpoint.aput.start",
+        "awhile.start",
+    ], "Cancelled before checkpoint put started"
+    # wait for task to finish
+    try:
+        await t
+    except asyncio.CancelledError:
+        # check logs after cancellation is handled
+        assert logs == [
+            "checkpoint.aput.start",
+            "awhile.start",
+            "awhile.end",
+            "checkpoint.aput.end",
+        ], "Checkpoint put is not cancelled"
+    else:
+        assert False, "Task should be cancelled"
 
 
 async def test_node_cancellation_on_external_cancel() -> None:
@@ -347,22 +604,23 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 )
             },
         ]
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+        if "shallow" not in checkpointer_name:
+            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -390,9 +648,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "writes": None,
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
         # clear the interrupt and next tasks
@@ -412,9 +674,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
 
@@ -524,22 +790,25 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 )
             },
         ]
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1root)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+        if "shallow" not in checkpointer_name:
+            assert [
+                c.metadata async for c in tool_two.checkpointer.alist(thread1root)
+            ] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -573,9 +842,13 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 "writes": None,
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
+                ][-1].config
+            ),
         )
 
         # clear the interrupt and next tasks
@@ -595,9 +868,13 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [
+                    c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
+                ][-1].config
+            ),
         )
 
 
@@ -699,22 +976,25 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             "my_key": "value ⛰️ one",
             "market": "DE",
         }
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": {"tool_one": {"my_key": " one"}},
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                "thread_id": "1",
-            },
-        ]
+
+        if "shallow" not in checkpointer_name:
+            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+                {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": {"tool_one": {"my_key": " one"}},
+                    "thread_id": "1",
+                },
+                {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                    "thread_id": "1",
+                },
+            ]
+
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️ one", "market": "DE"},
@@ -742,9 +1022,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "writes": {"tool_one": {"my_key": " one"}},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
         # clear the interrupt and next tasks
         await tool_two.aupdate_state(thread1, None)
@@ -770,9 +1054,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "writes": {},
                 "thread_id": "1",
             },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                    -1
+                ].config
+            ),
         )
 
 
@@ -1754,6 +2042,10 @@ async def test_pending_writes_resume(
         # both the pending write and the new write were applied, 1 + 2 + 3 = 6
         assert await graph.ainvoke(None, thread1) == {"value": 6}
 
+        if "shallow" in checkpointer_name:
+            assert len([c async for c in checkpointer.alist(thread1)]) == 1
+            return
+
         # check all final checkpoints
         checkpoints = [c async for c in checkpointer.alist(thread1)]
         # we should have 3
@@ -1911,7 +2203,7 @@ async def test_pending_writes_resume(
         )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_run_from_checkpoint_id_retains_previous_writes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -2279,9 +2571,9 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         def foo(state: dict) -> dict:
             return {"a": state["a"] + "foo", "b": "bar"}
 
-        @task()
-        def bar(state: dict) -> dict:
-            return {"a": state["a"] + state["b"], "c": "bark"}
+        @task
+        def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+            return {"a": a + b, "c": (c or "") + "bark"}
 
         @task()
         def baz(state: dict) -> dict:
@@ -2289,8 +2581,8 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
 
         @entrypoint(checkpointer=checkpointer)
         def graph(state: dict) -> dict:
-            fut_foo = foo(state)
-            fut_bar = bar(fut_foo.result())
+            foo_result = foo(state).result()
+            fut_bar = bar(foo_result["a"], foo_result["b"])
             fut_baz = baz(fut_bar.result())
             return fut_baz.result()
 
@@ -2315,9 +2607,9 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         async def foo(state: dict) -> dict:
             return {"a": state["a"] + "foo", "b": "bar"}
 
-        @task()
-        async def bar(state: dict) -> dict:
-            return {"a": state["a"] + state["b"], "c": "bark"}
+        @task
+        async def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+            return {"a": a + b, "c": (c or "") + "bark"}
 
         @task()
         async def baz(state: dict) -> dict:
@@ -2325,8 +2617,9 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
 
         @entrypoint(checkpointer=checkpointer)
         async def graph(state: dict) -> dict:
-            fut_foo = foo(state)
-            fut_bar = bar(await fut_foo)
+            foo_res = await foo(state)
+
+            fut_bar = bar(foo_res["a"], foo_res["b"])
             fut_baz = baz(await fut_bar)
             return await fut_baz
 
@@ -2339,7 +2632,7 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     if not FF_SEND_V2:
         pytest.skip("Send deduplication is only available in Send V2")
@@ -2792,13 +3085,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -2875,13 +3172,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -2951,13 +3252,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "3",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "3",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3060,13 +3365,17 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "3",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "3",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3260,13 +3569,17 @@ async def test_send_react_interrupt_control(
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -3343,13 +3656,17 @@ async def test_send_react_interrupt_control(
                 "thread_id": "2",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "2",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -3571,6 +3888,9 @@ async def test_invoke_checkpoint_three(
         assert state is not None
         assert state.values.get("total") == 5
         assert state.next == ()
+
+        if "shallow" in checkpointer_name:
+            return
 
         assert len([c async for c in app.aget_state_history(thread_1, limit=1)]) == 1
         # list all checkpoints for thread 1
@@ -4279,13 +4599,17 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         )
 
         async with assert_ctx_once():
@@ -5758,13 +6082,17 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 "parents": {},
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         )
 
@@ -6281,6 +6609,9 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         result = await graph.ainvoke({"steps": [], "attempt": 2}, config)
         assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
 
+        if "shallow" in checkpointer_name:
+            return
+
         # Verify checkpoint history shows both attempts
         history = [c async for c in graph.aget_state_history(config)]
         assert len(history) == 6  # Initial + failed attempt + successful attempt
@@ -6288,3 +6619,54 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         # Verify the error was recorded in checkpoint
         failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
         assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+async def test_multiple_updates_root() -> None:
+    def node_a(state):
+        return [Command(update="a1"), Command(update="a2")]
+
+    def node_b(state):
+        return "b"
+
+    graph = (
+        StateGraph(Annotated[str, operator.add])
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert await graph.ainvoke("") == "a1a2b"
+
+    # only streams the last update from node_a
+    assert [c async for c in graph.astream("", stream_mode="updates")] == [
+        {"node_a": ["a1", "a2"]},
+        {"node_b": "b"},
+    ]
+
+
+async def test_multiple_updates() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def node_a(state):
+        return [Command(update={"foo": "a1"}), Command(update={"foo": "a2"})]
+
+    def node_b(state):
+        return {"foo": "b"}
+
+    graph = (
+        StateGraph(State)
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert await graph.ainvoke({"foo": ""}) == {
+        "foo": "a1a2b",
+    }
+
+    # only streams the last update from node_a
+    assert [c async for c in graph.astream({"foo": ""}, stream_mode="updates")] == [
+        {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
+        {"node_b": {"foo": "b"}},
+    ]

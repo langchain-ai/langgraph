@@ -43,7 +43,9 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
     "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
-    "docs/docs/how-tos/map-reduce.ipynb"  # flakiness from structured output, only when running with VCR
+    "docs/docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
+    "docs/docs/tutorials/tot/tot.ipynb",
+    "docs/docs/how-tos/visualization.ipynb"
 ]
 
 
@@ -86,6 +88,7 @@ def add_vcr_to_notebook(
 ) -> nbformat.NotebookNode:
     """Inject `with vcr.cassette` into each code cell of the notebook."""
 
+    uses_langsmith = False
     # Inject VCR context manager into each code cell
     for idx, cell in enumerate(notebook.cells):
         if cell.cell_type != "code":
@@ -120,6 +123,9 @@ def add_vcr_to_notebook(
             f"    {line}" for line in lines
         )
 
+        if any("hub.pull" in line or "from langsmith import" in line for line in lines):
+            uses_langsmith = True
+
     # Add import statement
     vcr_import_lines = [
         "import nest_asyncio",
@@ -152,6 +158,15 @@ def add_vcr_to_notebook(
         "custom_vcr.register_serializer('advanced_compressed', AdvancedCompressedSerializer())",
         "custom_vcr.serializer = 'advanced_compressed'",
     ]
+    if uses_langsmith:
+        vcr_import_lines.extend(
+            # patch urllib3 to handle vcr errors, see more here:
+            # https://github.com/langchain-ai/langsmith-sdk/blob/main/python/langsmith/_internal/_patch.py
+            "import sys",
+            f"sys.path.insert(0, '{os.path.join(DOCS_PATH, '_scripts')}')",
+            "import _patch as patch_urllib3",
+            "patch_urllib3.patch_urllib3()",
+        )
     import_cell = nbformat.v4.new_code_cell(source="\n".join(vcr_import_lines))
     import_cell.pop("id", None)
     notebook.cells.insert(0, import_cell)

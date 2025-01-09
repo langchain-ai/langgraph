@@ -4,13 +4,14 @@ import re
 import time
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Annotated, Any, Iterator, Literal, Optional, TypedDict, Union, cast
+from typing import Annotated, Any, Iterator, Literal, Optional, Union, cast
 
 import httpx
 import pytest
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
@@ -38,7 +39,11 @@ from langgraph.types import (
 )
 from tests.agents import AgentAction, AgentFinish
 from tests.any_str import AnyDict, AnyStr, UnsortedSequence
-from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
+from tests.conftest import (
+    ALL_CHECKPOINTERS_SYNC,
+    REGULAR_CHECKPOINTERS_SYNC,
+    SHOULD_CHECK_SNAPSHOTS,
+)
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.messages import (
@@ -111,6 +116,9 @@ def test_invoke_two_processes_in_out_interrupt(
     # no pending tasks
     snapshot = app.get_state(thread2)
     assert snapshot.next == ()
+
+    if "shallow" in checkpointer_name:
+        return
 
     # list history
     history = [c for c in app.get_state_history(thread1)]
@@ -296,7 +304,7 @@ def test_invoke_two_processes_in_out_interrupt(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_fork_always_re_runs_nodes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -742,8 +750,14 @@ def test_conditional_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=AnyStr(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
         metadata={
             "parents": {},
             "source": "loop",
@@ -762,7 +776,11 @@ def test_conditional_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
@@ -796,8 +814,14 @@ def test_conditional_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -814,7 +838,11 @@ def test_conditional_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -908,8 +936,14 @@ def test_conditional_graph(
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -935,7 +969,11 @@ def test_conditional_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # test state get/update methods with interrupt_before
@@ -971,8 +1009,14 @@ def test_conditional_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -991,7 +1035,11 @@ def test_conditional_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -1019,8 +1067,14 @@ def test_conditional_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -1037,7 +1091,11 @@ def test_conditional_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1131,8 +1189,14 @@ def test_conditional_graph(
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -1158,7 +1222,11 @@ def test_conditional_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1194,8 +1262,14 @@ def test_conditional_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -1214,7 +1288,11 @@ def test_conditional_graph(
             },
             "thread_id": "3",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1583,8 +1661,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -1600,7 +1684,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     with assert_ctx_once():
@@ -1626,8 +1714,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -1643,7 +1737,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     with assert_ctx_once():
@@ -1704,8 +1802,14 @@ def test_conditional_state_graph(
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -1720,7 +1824,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # test state get/update methods with interrupt_before
@@ -1755,8 +1863,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -1772,7 +1886,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -1797,8 +1915,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -1814,7 +1938,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1873,8 +2001,14 @@ def test_conditional_state_graph(
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -1889,7 +2023,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # test w interrupt before all
@@ -1913,8 +2051,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -1922,7 +2066,11 @@ def test_conditional_state_graph(
             "writes": None,
             "thread_id": "3",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1945,8 +2093,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -1962,7 +2116,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "3",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2001,8 +2159,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -2023,7 +2187,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "3",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2069,8 +2237,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "4",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -2086,7 +2260,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "4",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2125,8 +2303,14 @@ def test_conditional_state_graph(
         },
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "4",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -2147,7 +2331,11 @@ def test_conditional_state_graph(
             },
             "thread_id": "4",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2882,8 +3070,14 @@ def test_state_graph_packets(
             PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
         ),
         next=("tools",),
-        config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -2891,7 +3085,11 @@ def test_state_graph_packets(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     # modify ai message
@@ -2921,8 +3119,14 @@ def test_state_graph_packets(
         },
         tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -2945,7 +3149,11 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3052,8 +3260,14 @@ def test_state_graph_packets(
             PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
         ),
         next=("tools", "tools"),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -3069,7 +3283,11 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -3106,8 +3324,14 @@ def test_state_graph_packets(
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -3120,7 +3344,11 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     # interrupt before tools
@@ -3199,8 +3427,14 @@ def test_state_graph_packets(
             PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
         ),
         next=("tools",),
-        config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -3208,7 +3442,11 @@ def test_state_graph_packets(
             "writes": None,
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     # modify ai message
@@ -3239,7 +3477,7 @@ def test_state_graph_packets(
         tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -3262,7 +3500,11 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3369,8 +3611,14 @@ def test_state_graph_packets(
             PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
         ),
         next=("tools", "tools"),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -3386,7 +3634,11 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -3423,8 +3675,14 @@ def test_state_graph_packets(
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -3437,7 +3695,11 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        ),
     )
 
 
@@ -3702,8 +3964,14 @@ def test_message_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -3723,7 +3991,11 @@ def test_message_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # modify ai message
@@ -3770,7 +4042,11 @@ def test_message_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3832,8 +4108,14 @@ def test_message_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -3853,7 +4135,11 @@ def test_message_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -3885,8 +4171,14 @@ def test_message_graph(
         ],
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -3894,7 +4186,11 @@ def test_message_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt = workflow.compile(
@@ -3938,8 +4234,14 @@ def test_message_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -3959,7 +4261,11 @@ def test_message_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # modify ai message
@@ -3985,8 +4291,14 @@ def test_message_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4006,7 +4318,11 @@ def test_message_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4068,8 +4384,14 @@ def test_message_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -4089,7 +4411,11 @@ def test_message_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -4122,8 +4448,14 @@ def test_message_graph(
         ],
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4131,7 +4463,11 @@ def test_message_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # add an extra message as if it came from "tools" node
@@ -4164,8 +4500,14 @@ def test_message_graph(
         ],
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4173,7 +4515,11 @@ def test_message_graph(
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
 
@@ -4441,8 +4787,14 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -4462,7 +4814,11 @@ def test_root_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # modify ai message
@@ -4509,7 +4865,11 @@ def test_root_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4572,8 +4932,14 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -4593,7 +4959,11 @@ def test_root_graph(
             },
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -4626,8 +4996,14 @@ def test_root_graph(
         ],
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4635,7 +5011,11 @@ def test_root_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "1",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt = workflow.compile(
@@ -4679,8 +5059,14 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -4700,7 +5086,11 @@ def test_root_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # modify ai message
@@ -4726,8 +5116,14 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4747,7 +5143,11 @@ def test_root_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4810,8 +5210,14 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -4831,7 +5237,11 @@ def test_root_graph(
             },
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     app_w_interrupt.update_state(
@@ -4863,8 +5273,14 @@ def test_root_graph(
         ],
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4872,7 +5288,11 @@ def test_root_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # add an extra message as if it came from "tools" node
@@ -4905,8 +5325,14 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4914,7 +5340,11 @@ def test_root_graph(
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # create new graph with one more state key, reuse previous thread history
@@ -4978,8 +5408,14 @@ def test_root_graph(
         },
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -4987,7 +5423,11 @@ def test_root_graph(
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(new_app.checkpointer.list(config, limit=2))[-1].config
+        ),
     )
 
     # new input is merged to old state
@@ -5333,22 +5773,25 @@ def test_dynamic_interrupt(
         "my_key": "value ⛰️",
         "market": "DE",
     }
-    assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
-        {
-            "parents": {},
-            "source": "loop",
-            "step": 0,
-            "writes": None,
-            "thread_id": "1",
-        },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-            "thread_id": "1",
-        },
-    ]
+
+    if "shallow" not in checkpointer_name:
+        assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
+
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
         next=("tool_two",),
@@ -5366,8 +5809,14 @@ def test_dynamic_interrupt(
                 ),
             ),
         ),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5375,7 +5824,11 @@ def test_dynamic_interrupt(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None, as_node=END)
@@ -5384,8 +5837,14 @@ def test_dynamic_interrupt(
         values={"my_key": "value ⛰️", "market": "DE"},
         next=(),
         tasks=(),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -5393,7 +5852,11 @@ def test_dynamic_interrupt(
             "writes": {},
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
 
 
@@ -5487,22 +5950,24 @@ def test_copy_checkpoint(
         "my_key": "value ⛰️ one",
         "market": "DE",
     }
-    assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
-        {
-            "parents": {},
-            "source": "loop",
-            "step": 0,
-            "writes": {"tool_one": {"my_key": " one"}},
-            "thread_id": "1",
-        },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-            "thread_id": "1",
-        },
-    ]
+    if "shallow" not in checkpointer_name:
+        assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": {"tool_one": {"my_key": " one"}},
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
+
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️ one", "market": "DE"},
         next=("tool_two",),
@@ -5520,8 +5985,14 @@ def test_copy_checkpoint(
                 ),
             ),
         ),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5529,7 +6000,11 @@ def test_copy_checkpoint(
             "writes": {"tool_one": {"my_key": " one"}},
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*tool_two.checkpointer.list(thread1, limit=2)][-1].config
+        ),
     )
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None)
@@ -5545,8 +6020,14 @@ def test_copy_checkpoint(
                 interrupts=(),
             ),
         ),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -5554,7 +6035,11 @@ def test_copy_checkpoint(
             "writes": {},
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else [*tool_two.checkpointer.list(thread1, limit=2)][-1].config
+        ),
     )
 
 
@@ -5645,27 +6130,30 @@ def test_dynamic_interrupt_subgraph(
         "my_key": "value ⛰️",
         "market": "DE",
     }
-    assert [
-        c.metadata
-        for c in tool_two.checkpointer.list(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
-        )
-    ] == [
-        {
-            "parents": {},
-            "source": "loop",
-            "step": 0,
-            "writes": None,
-            "thread_id": "1",
-        },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-            "thread_id": "1",
-        },
-    ]
+
+    if "shallow" not in checkpointer_name:
+        assert [
+            c.metadata
+            for c in tool_two.checkpointer.list(
+                {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            )
+        ] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
+
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
         next=("tool_two",),
@@ -5689,8 +6177,14 @@ def test_dynamic_interrupt_subgraph(
                 },
             ),
         ),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5698,11 +6192,15 @@ def test_dynamic_interrupt_subgraph(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=[
-            *tool_two.checkpointer.list(
-                {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
-            )
-        ][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(
+                tool_two.checkpointer.list(
+                    {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
+                )
+            )[-1].config
+        ),
     )
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None, as_node=END)
@@ -5711,8 +6209,14 @@ def test_dynamic_interrupt_subgraph(
         values={"my_key": "value ⛰️", "market": "DE"},
         next=(),
         tasks=(),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -5720,11 +6224,15 @@ def test_dynamic_interrupt_subgraph(
             "writes": {},
             "thread_id": "1",
         },
-        parent_config=[
-            *tool_two.checkpointer.list(
-                {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
-            )
-        ][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(
+                tool_two.checkpointer.list(
+                    {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
+                )
+            )[-1].config
+        ),
     )
 
 
@@ -5794,30 +6302,39 @@ def test_start_branch_then(
         "my_key": "value ⛰️",
         "market": "DE",
     }
-    assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
-        {
-            "parents": {},
-            "source": "loop",
-            "step": 0,
-            "writes": None,
-            "assistant_id": "a",
-            "thread_id": "1",
-        },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-            "assistant_id": "a",
-            "thread_id": "1",
-        },
-    ]
+
+    if "shallow" not in checkpointer_name:
+        assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "assistant_id": "a",
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "assistant_id": "a",
+                "thread_id": "1",
+            },
+        ]
+
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
         tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5826,7 +6343,11 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread1, debug=1) == {
@@ -5837,8 +6358,14 @@ def test_start_branch_then(
         values={"my_key": "value ⛰️ slow", "market": "DE"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5847,7 +6374,11 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
 
     thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
@@ -5860,8 +6391,14 @@ def test_start_branch_then(
         values={"my_key": "value", "market": "US"},
         tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
-        config=tool_two.checkpointer.get_tuple(thread2).config,
-        created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5870,7 +6407,11 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "2",
         },
-        parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread2, debug=1) == {
@@ -5881,8 +6422,14 @@ def test_start_branch_then(
         values={"my_key": "value fast", "market": "US"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread2).config,
-        created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5891,7 +6438,11 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "2",
         },
-        parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
+        ),
     )
 
     thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
@@ -5904,8 +6455,14 @@ def test_start_branch_then(
         values={"my_key": "value", "market": "US"},
         tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
-        config=tool_two.checkpointer.get_tuple(thread3).config,
-        created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5914,7 +6471,11 @@ def test_start_branch_then(
             "assistant_id": "b",
             "thread_id": "3",
         },
-        parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
+        ),
     )
     # update state
     tool_two.update_state(thread3, {"my_key": "key"})  # appends to my_key
@@ -5922,8 +6483,14 @@ def test_start_branch_then(
         values={"my_key": "valuekey", "market": "US"},
         tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
-        config=tool_two.checkpointer.get_tuple(thread3).config,
-        created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -5932,7 +6499,11 @@ def test_start_branch_then(
             "assistant_id": "b",
             "thread_id": "3",
         },
-        parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread3, debug=1) == {
@@ -5943,8 +6514,14 @@ def test_start_branch_then(
         values={"my_key": "valuekey fast", "market": "US"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread3).config,
-        created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "3",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -5953,7 +6530,11 @@ def test_start_branch_then(
             "assistant_id": "b",
             "thread_id": "3",
         },
-        parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
+        ),
     )
 
 
@@ -6307,8 +6888,14 @@ def test_branch_then(
         values={"my_key": "value prepared", "market": "DE"},
         tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6316,7 +6903,11 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread1, debug=1) == {
@@ -6327,8 +6918,14 @@ def test_branch_then(
         values={"my_key": "value prepared slow finished", "market": "DE"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6336,7 +6933,11 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "1",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
 
     thread2 = {"configurable": {"thread_id": "2"}}
@@ -6349,8 +6950,14 @@ def test_branch_then(
         values={"my_key": "value prepared", "market": "US"},
         tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
-        config=tool_two.checkpointer.get_tuple(thread2).config,
-        created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6358,7 +6965,11 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "2",
         },
-        parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread2, debug=1) == {
@@ -6369,8 +6980,14 @@ def test_branch_then(
         values={"my_key": "value prepared fast finished", "market": "US"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread2).config,
-        created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6378,7 +6995,11 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "2",
         },
-        parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
+        ),
     )
 
     tool_two = tool_two_graph.compile(
@@ -6399,8 +7020,14 @@ def test_branch_then(
         },
         tasks=(PregelTask(AnyStr(), "finish", (PULL, "finish")),),
         next=("finish",),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "11",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6408,7 +7035,11 @@ def test_branch_then(
             "writes": {"tool_two_slow": {"my_key": " slow"}},
             "thread_id": "11",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
 
     # update state
@@ -6420,8 +7051,14 @@ def test_branch_then(
         },
         tasks=(PregelTask(AnyStr(), "finish", (PULL, "finish")),),
         next=("finish",),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "11",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -6429,7 +7066,11 @@ def test_branch_then(
             "writes": {"tool_two_slow": {"my_key": "er"}},
             "thread_id": "11",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
 
     tool_two = tool_two_graph.compile(
@@ -6450,8 +7091,14 @@ def test_branch_then(
         values={"my_key": "value prepared", "market": "DE"},
         tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "21",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6459,7 +7106,11 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "21",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread1, debug=1) == {
@@ -6470,8 +7121,14 @@ def test_branch_then(
         values={"my_key": "value prepared slow finished", "market": "DE"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread1).config,
-        created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "21",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6479,7 +7136,11 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "21",
         },
-        parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
+        ),
     )
 
     thread2 = {"configurable": {"thread_id": "22"}}
@@ -6492,8 +7153,14 @@ def test_branch_then(
         values={"my_key": "value prepared", "market": "US"},
         tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
         next=("tool_two_fast",),
-        config=tool_two.checkpointer.get_tuple(thread2).config,
-        created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "22",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6501,7 +7168,11 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "22",
         },
-        parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread2, debug=1) == {
@@ -6512,8 +7183,14 @@ def test_branch_then(
         values={"my_key": "value prepared fast finished", "market": "US"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread2).config,
-        created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "22",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6521,18 +7198,28 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "22",
         },
-        parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
+        ),
     )
 
     thread3 = {"configurable": {"thread_id": "23"}}
     # update an empty thread before first run
-    uconfig = tool_two.update_state(thread3, {"my_key": "key", "market": "DE"})
+    tool_two.update_state(thread3, {"my_key": "key", "market": "DE"})
     # check current state
     assert tool_two.get_state(thread3) == StateSnapshot(
         values={"my_key": "key", "market": "DE"},
         tasks=(PregelTask(AnyStr(), "prepare", (PULL, "prepare")),),
         next=("prepare",),
-        config=uconfig,
+        config={
+            "configurable": {
+                "thread_id": "23",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
         created_at=AnyStr(),
         metadata={
             "parents": {},
@@ -6553,8 +7240,14 @@ def test_branch_then(
         values={"my_key": "key prepared", "market": "DE"},
         tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
         next=("tool_two_slow",),
-        config=tool_two.checkpointer.get_tuple(thread3).config,
-        created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "23",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6562,7 +7255,11 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "23",
         },
-        parent_config=uconfig,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
+        ),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread3, debug=1) == {
@@ -6573,8 +7270,14 @@ def test_branch_then(
         values={"my_key": "key prepared slow finished", "market": "DE"},
         tasks=(),
         next=(),
-        config=tool_two.checkpointer.get_tuple(thread3).config,
-        created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "23",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "loop",
@@ -6582,7 +7285,11 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "23",
         },
-        parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
+        ),
     )
 
 
@@ -6656,8 +7363,10 @@ def test_send_dedupe_on_resume(
     state = graph.get_state(thread1)
     assert state.next == ("flaky",)
     # check history
-    history = [c for c in graph.get_state_history(thread1)]
-    assert len(history) == 2
+    if "shallow" not in checkpointer_name:
+        history = [c for c in graph.get_state_history(thread1)]
+        assert len(history) == 2
+
     # resume execution
     assert graph.invoke(None, thread1, debug=1) == [
         "0",
@@ -6678,7 +7387,7 @@ def test_send_dedupe_on_resume(
     assert state.next == ()
     # check history
     history = [c for c in graph.get_state_history(thread1)]
-    assert history == [
+    expected_history = [
         StateSnapshot(
             values=[
                 "0",
@@ -6706,13 +7415,17 @@ def test_send_dedupe_on_resume(
                 "parents": {},
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
             tasks=(),
         ),
         StateSnapshot(
@@ -6905,6 +7618,10 @@ def test_send_dedupe_on_resume(
             ),
         ),
     ]
+    if "shallow" in checkpointer_name:
+        expected_history = expected_history[:1]
+
+    assert history == expected_history
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -6990,13 +7707,17 @@ def test_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
     )
     # now, get_state with subgraphs state
     assert app.get_state(config, subgraphs=True) == StateSnapshot(
@@ -7050,16 +7771,20 @@ def test_nested_graph_state(
                         "langgraph_checkpoint_ns": AnyStr("inner:"),
                     },
                     created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr("inner:"),
-                            "checkpoint_id": AnyStr(),
-                            "checkpoint_map": AnyDict(
-                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                            ),
+                    parent_config=(
+                        None
+                        if "shallow" in checkpointer_name
+                        else {
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": AnyStr("inner:"),
+                                "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                                ),
+                            }
                         }
-                    },
+                    ),
                 ),
             ),
         ),
@@ -7079,17 +7804,21 @@ def test_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
     )
     # get_state_history returns outer graph checkpoints
     history = list(app.get_state_history(config))
-    assert history == [
+    expected_history = [
         StateSnapshot(
             values={"my_key": "hi my value"},
             tasks=(
@@ -7121,13 +7850,17 @@ def test_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -7192,9 +7925,15 @@ def test_nested_graph_state(
             parent_config=None,
         ),
     ]
+
+    if "shallow" in checkpointer_name:
+        expected_history = expected_history[:1]
+
+    assert history == expected_history
+
     # get_state_history for a subgraph returns its checkpoints
     child_history = [*app.get_state_history(history[0].tasks[0].state)]
-    assert child_history == [
+    expected_child_history = [
         StateSnapshot(
             values={"my_key": "hi my value here", "my_other_key": "hi my value"},
             next=("inner_2",),
@@ -7227,16 +7966,20 @@ def test_nested_graph_state(
                 "langgraph_checkpoint_ns": AnyStr("inner:"),
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr("inner:"),
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_map": AnyDict(
-                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                    ),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("inner:"),
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_map": AnyDict(
+                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                        ),
+                    }
                 }
-            },
+            ),
             tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
         ),
         StateSnapshot(
@@ -7327,6 +8070,11 @@ def test_nested_graph_state(
         ),
     ]
 
+    if "shallow" in checkpointer_name:
+        expected_child_history = expected_child_history[:1]
+
+    assert child_history == expected_child_history
+
     # resume
     app.invoke(None, config, debug=True)
     # test state w/ nested subgraph state (after resuming from interrupt)
@@ -7351,13 +8099,17 @@ def test_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
     )
     # test full history at the end
     actual_history = list(app.get_state_history(config))
@@ -7383,13 +8135,17 @@ def test_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
@@ -7525,6 +8281,9 @@ def test_nested_graph_state(
             parent_config=None,
         ),
     ]
+    if "shallow" in checkpointer_name:
+        expected_history = expected_history[:1]
+
     assert actual_history == expected_history
     # test looking up parent state by checkpoint ID
     for actual_snapshot, expected_snapshot in zip(actual_history, expected_history):
@@ -7629,13 +8388,17 @@ def test_doubly_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
     )
     child_state = app.get_state(outer_state.tasks[0].state)
     assert (
@@ -7671,13 +8434,17 @@ def test_doubly_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr("child:"),
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("child:"),
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         ).tasks[0]
     )
     grandchild_state = app.get_state(child_state.tasks[0].state)
@@ -7724,20 +8491,24 @@ def test_doubly_nested_graph_state(
             "langgraph_triggers": [AnyStr("start:child_1")],
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": AnyStr(),
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict(
-                    {
-                        "": AnyStr(),
-                        AnyStr("child:"): AnyStr(),
-                        AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                    }
-                ),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
             }
-        },
+        ),
     )
     # get state with subgraphs
     assert app.get_state(config, subgraphs=True) == StateSnapshot(
@@ -7804,22 +8575,26 @@ def test_doubly_nested_graph_state(
                                     "langgraph_triggers": [AnyStr("start:child_1")],
                                 },
                                 created_at=AnyStr(),
-                                parent_config={
-                                    "configurable": {
-                                        "thread_id": "1",
-                                        "checkpoint_ns": AnyStr(),
-                                        "checkpoint_id": AnyStr(),
-                                        "checkpoint_map": AnyDict(
-                                            {
-                                                "": AnyStr(),
-                                                AnyStr("child:"): AnyStr(),
-                                                AnyStr(
-                                                    re.compile(r"child:.+|child1:")
-                                                ): AnyStr(),
-                                            }
-                                        ),
+                                parent_config=(
+                                    None
+                                    if "shallow" in checkpointer_name
+                                    else {
+                                        "configurable": {
+                                            "thread_id": "1",
+                                            "checkpoint_ns": AnyStr(),
+                                            "checkpoint_id": AnyStr(),
+                                            "checkpoint_map": AnyDict(
+                                                {
+                                                    "": AnyStr(),
+                                                    AnyStr("child:"): AnyStr(),
+                                                    AnyStr(
+                                                        re.compile(r"child:.+|child1:")
+                                                    ): AnyStr(),
+                                                }
+                                            ),
+                                        }
                                     }
-                                },
+                                ),
                             ),
                         ),
                     ),
@@ -7848,16 +8623,20 @@ def test_doubly_nested_graph_state(
                         "langgraph_checkpoint_ns": AnyStr("child:"),
                     },
                     created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr("child:"),
-                            "checkpoint_id": AnyStr(),
-                            "checkpoint_map": AnyDict(
-                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                            ),
+                    parent_config=(
+                        None
+                        if "shallow" in checkpointer_name
+                        else {
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": AnyStr("child:"),
+                                "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                                ),
+                            }
                         }
-                    },
+                    ),
                 ),
             ),
         ),
@@ -7877,13 +8656,17 @@ def test_doubly_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
     )
     # # resume
     assert [c for c in app.stream(None, config, subgraphs=True)] == [
@@ -7920,15 +8703,23 @@ def test_doubly_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            parent_config=(
+                None
+                if "shallow" in checkpointer_name
+                else {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 }
-            },
+            ),
         )
     )
+
+    if "shallow" in checkpointer_name:
+        return
+
     # get outer graph history
     outer_history = list(app.get_state_history(config))
     assert outer_history == [
@@ -8628,19 +9419,23 @@ def test_send_to_nested_graphs(
             "langgraph_triggers": [PUSH],
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": AnyStr("generate_joke:"),
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict(
-                    {
-                        "": AnyStr(),
-                        AnyStr("generate_joke:"): AnyStr(),
-                    }
-                ),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("generate_joke:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("generate_joke:"): AnyStr(),
+                        }
+                    ),
+                }
             }
-        },
+        ),
         tasks=(PregelTask(id=AnyStr(""), name="generate", path=(PULL, "generate")),),
     )
     assert graph.get_state(outer_state.tasks[2].state) == StateSnapshot(
@@ -8673,19 +9468,23 @@ def test_send_to_nested_graphs(
             "langgraph_triggers": [PUSH],
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": AnyStr("generate_joke:"),
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict(
-                    {
-                        "": AnyStr(),
-                        AnyStr("generate_joke:"): AnyStr(),
-                    }
-                ),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("generate_joke:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("generate_joke:"): AnyStr(),
+                        }
+                    ),
+                }
             }
-        },
+        ),
         tasks=(PregelTask(id=AnyStr(""), name="generate", path=(PULL, "generate")),),
     )
     # update state of dogs joke graph
@@ -8729,15 +9528,22 @@ def test_send_to_nested_graphs(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
     )
     assert actual_snapshot == expected_snapshot
+
+    if "shallow" in checkpointer_name:
+        return
 
     # test full history
     actual_history = list(graph.get_state_history(config))
@@ -9000,13 +9806,17 @@ def test_send_react_interrupt(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "2",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9083,13 +9893,17 @@ def test_send_react_interrupt(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "2",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(),
     )
 
@@ -9159,13 +9973,17 @@ def test_send_react_interrupt(
             "thread_id": "3",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "3",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9268,13 +10086,17 @@ def test_send_react_interrupt(
             "thread_id": "3",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "3",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9469,13 +10291,17 @@ def test_send_react_interrupt_control(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "2",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9552,13 +10378,17 @@ def test_send_react_interrupt_control(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "2",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(),
     )
 
@@ -9732,13 +10562,17 @@ def test_weather_subgraph(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9820,13 +10654,17 @@ def test_weather_subgraph(
             "thread_id": "14",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "14",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "14",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9869,19 +10707,23 @@ def test_weather_subgraph(
                         "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "14",
-                            "checkpoint_ns": AnyStr("weather_graph:"),
-                            "checkpoint_id": AnyStr(),
-                            "checkpoint_map": AnyDict(
-                                {
-                                    "": AnyStr(),
-                                    AnyStr("weather_graph:"): AnyStr(),
-                                }
-                            ),
+                    parent_config=(
+                        None
+                        if "shallow" in checkpointer_name
+                        else {
+                            "configurable": {
+                                "thread_id": "14",
+                                "checkpoint_ns": AnyStr("weather_graph:"),
+                                "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {
+                                        "": AnyStr(),
+                                        AnyStr("weather_graph:"): AnyStr(),
+                                    }
+                                ),
+                            }
                         }
-                    },
+                    ),
                     tasks=(
                         PregelTask(
                             id=AnyStr(),
@@ -9920,13 +10762,17 @@ def test_weather_subgraph(
             "thread_id": "14",
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "14",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "14",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9975,19 +10821,23 @@ def test_weather_subgraph(
                         "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "14",
-                            "checkpoint_ns": AnyStr("weather_graph:"),
-                            "checkpoint_id": AnyStr(),
-                            "checkpoint_map": AnyDict(
-                                {
-                                    "": AnyStr(),
-                                    AnyStr("weather_graph:"): AnyStr(),
-                                }
-                            ),
+                    parent_config=(
+                        None
+                        if "shallow" in checkpointer_name
+                        else {
+                            "configurable": {
+                                "thread_id": "14",
+                                "checkpoint_ns": AnyStr("weather_graph:"),
+                                "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {
+                                        "": AnyStr(),
+                                        AnyStr("weather_graph:"): AnyStr(),
+                                    }
+                                ),
+                            }
                         }
-                    },
+                    ),
                     tasks=(),
                 ),
             ),

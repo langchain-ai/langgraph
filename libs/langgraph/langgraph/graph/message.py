@@ -8,7 +8,6 @@ from typing import (
     Literal,
     Optional,
     Sequence,
-    TypedDict,
     Union,
     cast,
 )
@@ -22,6 +21,7 @@ from langchain_core.messages import (
     convert_to_messages,
     message_chunk_to_message,
 )
+from typing_extensions import TypedDict
 
 from langgraph.graph.state import StateGraph
 
