@@ -22,7 +22,7 @@ from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
 from langgraph.errors import ErrorCode, create_error_message
-from langgraph.graph import StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
@@ -32,11 +32,14 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 from langgraph.utils.runnable import RunnableCallable
 
+StructuredResponse = Union[dict, BaseModel]
+StructuredResponseSchema = Union[dict, type[BaseModel]]
+
 
 # We create the AgentState that we will pass around
 # This simply involves a list of messages
 # We want steps to return messages to append to the list
-# So we annotate the messages attribute with operator.add
+# So we annotate the messages attribute with `add_messages` reducer
 class AgentState(TypedDict):
     """The state of the agent."""
 
@@ -46,7 +49,7 @@ class AgentState(TypedDict):
 
     remaining_steps: RemainingSteps
 
-    structured_response: Union[dict, BaseModel]
+    structured_response: StructuredResponse
 
 
 StateSchema = TypeVar("StateSchema", bound=AgentState)
@@ -226,7 +229,9 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
-    response_format: Optional[Union[dict, type[BaseModel]]] = None,
+    response_format: Optional[
+        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
+    ] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -272,12 +277,15 @@ def create_react_agent(
                 - a JSON Schema,
                 - a TypedDict class,
                 - or a Pydantic class.
+                - a tuple (prompt, schema), where schema is one of the above.
+                    The prompt will be used together with the model that is being used to generate the structured response.
 
             !!! Important
                 `response_format` requires the model to support `.with_structured_output`
 
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
+                This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -680,25 +688,35 @@ def create_react_agent(
     def generate_structured_response(
         state: AgentState, config: RunnableConfig
     ) -> AgentState:
-        model_with_structured_output = _get_model(model).with_structured_output(
-            cast(Union[dict, type[BaseModel]], response_format)
-        )
         # NOTE: we exclude the last message because there is enough information
         # for the LLM to generate the structured response
-        response = model_with_structured_output.invoke(state["messages"][:-1], config)
+        messages = state["messages"][:-1]
+        structured_response_schema = response_format
+        if isinstance(response_format, tuple):
+            system_prompt, structured_response_schema = response_format
+            messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(StructuredResponseSchema, structured_response_schema)
+        )
+        response = model_with_structured_output.invoke(messages, config)
         return {"structured_response": response}
 
     async def agenerate_structured_response(
         state: AgentState, config: RunnableConfig
     ) -> AgentState:
-        model_with_structured_output = _get_model(model).with_structured_output(
-            cast(Union[dict, type[BaseModel]], response_format)
-        )
         # NOTE: we exclude the last message because there is enough information
         # for the LLM to generate the structured response
-        response = await model_with_structured_output.ainvoke(
-            state["messages"][:-1], config
+        messages = state["messages"][:-1]
+        structured_response_schema = response_format
+        if isinstance(response_format, tuple):
+            system_prompt, structured_response_schema = response_format
+            messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(StructuredResponseSchema, structured_response_schema)
         )
+        response = await model_with_structured_output.ainvoke(messages, config)
         return {"structured_response": response}
 
     if not tool_calling_enabled:
@@ -729,9 +747,7 @@ def create_react_agent(
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return (
-                "__end__" if response_format is None else "generate_structured_response"
-            )
+            return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
             return "tools"
@@ -755,10 +771,10 @@ def create_react_agent(
                 generate_structured_response, agenerate_structured_response
             ),
         )
-        workflow.add_edge("generate_structured_response", "__end__")
+        workflow.add_edge("generate_structured_response", END)
         should_continue_destinations = ["tools", "generate_structured_response"]
     else:
-        should_continue_destinations = ["tools", "__end__"]
+        should_continue_destinations = ["tools", END]
 
     # We now add a conditional edge
     workflow.add_conditional_edges(
@@ -775,7 +791,7 @@ def create_react_agent(
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
-                return "__end__"
+                return END
         return "agent"
 
     if should_return_direct:
