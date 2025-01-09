@@ -461,6 +461,73 @@ class _CronsOn(
     Search = types.CronsSearch
 
 
+class _StoreOn:
+    def __init__(self, auth: Auth) -> None:
+        self._auth = auth
+
+    @typing.overload
+    def __call__(
+        self,
+        *,
+        actions: typing.Optional[
+            typing.Union[
+                typing.Literal["put", "get", "search", "list_namespaces", "delete"],
+                Sequence[
+                    typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+                ],
+            ]
+        ] = None,
+    ) -> Callable[[AHO], AHO]: ...
+
+    @typing.overload
+    def __call__(self, fn: AHO) -> AHO: ...
+
+    def __call__(
+        self,
+        fn: typing.Optional[AHO] = None,
+        *,
+        actions: typing.Optional[
+            typing.Union[
+                typing.Literal["put", "get", "search", "list_namespaces", "delete"],
+                Sequence[
+                    typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+                ],
+            ]
+        ] = None,
+    ) -> typing.Union[AHO, Callable[[AHO], AHO]]:
+        """Register a handler for specific resources and actions.
+
+        Can be used as a decorator or with explicit resource/action parameters:
+
+        @auth.on.store
+        async def handler(): ... # Handle all store ops
+
+        @auth.on.store(actions=("put", "get", "search", "delete"))
+        async def handler(): ... # Handle specific store ops
+
+        @auth.on.store.put
+        async def handler(): ... # Handle store.put ops
+        """
+        if fn is not None:
+            # Used as a plain decorator
+            _register_handler(self._auth, None, None, fn)
+            return fn
+
+        # Used with parameters, return a decorator
+        def decorator(
+            handler: AHO,
+        ) -> AHO:
+            if isinstance(actions, str):
+                action_list = [actions]
+            else:
+                action_list = list(actions) if actions is not None else ["*"]
+            for action in action_list:
+                _register_handler(self._auth, "store", action, handler)
+            return handler
+
+        return decorator
+
+
 AHO = typing.TypeVar("AHO", bound=_ActionHandler[dict[str, typing.Any]])
 
 
@@ -524,6 +591,7 @@ class _On:
         "threads",
         "runs",
         "crons",
+        "store",
         "value",
     )
 
@@ -532,6 +600,7 @@ class _On:
         self.assistants = _AssistantsOn(auth, "assistants")
         self.threads = _ThreadsOn(auth, "threads")
         self.crons = _CronsOn(auth, "crons")
+        self.store = _StoreOn(auth)
         self.value = dict[str, typing.Any]
 
     @typing.overload
