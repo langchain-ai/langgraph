@@ -69,6 +69,10 @@ class Auth:
         async def authorize_thread_create(params: Auth.on.threads.create.value):
             # Allow the allowed user to create a thread
             assert params.get("metadata", {}).get("owner") == "allowed_user"
+
+        @auth.on.store
+        async def authorize_store(ctx: Auth.types.AuthContext, value: Auth.types.on):
+            assert ctx.user.identity in value["namespace"], "Not authorized"
         ```
 
     ???+ note "Request Processing Flow"
@@ -156,6 +160,15 @@ class Auth:
             async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:
                 # Implement rate limiting for write operations
                 return await check_rate_limit(ctx.user.identity)
+            ```
+
+            Auth for the `store` resource is a bit different since its structure is developer defined.
+            You typically want to enforce user creds in the namespace. Y
+            ```python
+            @auth.on.store
+            async def check_store_access(ctx: AuthContext, value: Auth.types.on) -> bool:
+                # Assuming you structure your store like (store.aput((user_id, application_context), key, value))
+                assert value["namespace"][0] == ctx.user.identity
             ```
         """
         # These are accessed by the API. Changes to their names or types is

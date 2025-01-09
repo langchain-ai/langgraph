@@ -37,7 +37,7 @@ async def authenticate(authorization: str) -> str:
             detail="Invalid token"
         )
 
-# Optional: Add authorization rules
+# Add authorization rules to actually control access to resources
 @my_auth.on
 async def add_owner(
     ctx: Auth.types.AuthContext,
@@ -48,6 +48,13 @@ async def add_owner(
     metadata = value.setdefault("metadata", {})
     metadata.update(filters)
     return filters
+
+# Assumes you organize information in store like (user_id, resource_type, resource_id)
+@my_auth.on.store()
+async def authorize_store(ctx: Auth.types.AuthContext, value: dict):
+    namespace: tuple = value["namespace"]
+    assert namespace[0] == ctx.user.identity, "Not authorized"
+
 ```
 
 ## 2. Update configuration
