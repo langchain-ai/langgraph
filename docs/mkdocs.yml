@@ -29,9 +29,6 @@ theme:
     - navigation.instant.progress
     - navigation.path
     - navigation.prune
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.top
     - navigation.tracking
     - search.highlight
     - search.share
@@ -91,6 +88,9 @@ plugins:
                 - "!^_"
 nav:
   - Home: index.md
+  - about.md
+  - Cats:
+      - meow/cats.md
   - Tutorials:
       - tutorials/index.md
       - Quick Start:
