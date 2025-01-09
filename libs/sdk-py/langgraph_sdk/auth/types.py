@@ -795,17 +795,8 @@ class StoreGet(typing.TypedDict):
 class StoreSearch(typing.TypedDict):
     """Operation to search for items within a specified namespace hierarchy."""
 
-    namespace_prefix: tuple[str, ...]
-    """Hierarchical path prefix defining the search scope.
-
-    ???+ example "Examples"
-
-        ```python
-        ()  # Search entire store
-        ("documents",)  # Search all documents
-        ("users", "content")  # Search within user content
-        ```
-    """
+    namespace: tuple[str, ...]
+    """Prefix filter for defining the search scope."""
 
     filter: typing.Optional[dict[str, typing.Any]]
     """Key-value pairs for filtering results based on exact matches or comparison operators."""
@@ -823,8 +814,8 @@ class StoreSearch(typing.TypedDict):
 class StoreListNamespaces(typing.TypedDict):
     """Operation to list and filter namespaces in the store."""
 
-    prefix: typing.Optional[tuple[str, ...]]
-    """Optional conditions for filtering namespaces."""
+    namespace: typing.Optional[tuple[str, ...]]
+    """Prefix filter namespaces."""
 
     suffix: typing.Optional[tuple[str, ...]]
     """Optional conditions for filtering namespaces."""
