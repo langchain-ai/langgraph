@@ -18,6 +18,8 @@ import {
   ListNamespaceResponse,
   Item,
   ThreadStatus,
+  CronCreateResponse,
+  CronCreateForThreadResponse,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import {
@@ -184,7 +186,7 @@ export class CronsClient extends BaseClient {
     threadId: string,
     assistantId: string,
     payload?: CronsCreatePayload,
-  ): Promise<Run> {
+  ): Promise<CronCreateForThreadResponse> {
     const json: Record<string, any> = {
       schedule: payload?.schedule,
       input: payload?.input,
@@ -197,10 +199,13 @@ export class CronsClient extends BaseClient {
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
     };
-    return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
-      method: "POST",
-      json,
-    });
+    return this.fetch<CronCreateForThreadResponse>(
+      `/threads/${threadId}/runs/crons`,
+      {
+        method: "POST",
+        json,
+      },
+    );
   }
 
   /**
@@ -212,7 +217,7 @@ export class CronsClient extends BaseClient {
   async create(
     assistantId: string,
     payload?: CronsCreatePayload,
-  ): Promise<Run> {
+  ): Promise<CronCreateResponse> {
     const json: Record<string, any> = {
       schedule: payload?.schedule,
       input: payload?.input,
@@ -225,7 +230,7 @@ export class CronsClient extends BaseClient {
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
     };
-    return this.fetch<Run>(`/runs/crons`, {
+    return this.fetch<CronCreateResponse>(`/runs/crons`, {
       method: "POST",
       json,
     });
