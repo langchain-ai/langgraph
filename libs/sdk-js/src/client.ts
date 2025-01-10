@@ -37,7 +37,7 @@ import {
 } from "./types.js";
 import { mergeSignals } from "./utils/signals.js";
 import { getEnvironmentVariable } from "./utils/env.js";
-
+import { _getFetchImplementation } from "./singletons/fetch.js";
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -164,7 +164,8 @@ class BaseClient {
       signal?: AbortSignal;
     },
   ): Promise<T> {
-    const response = await this.asyncCaller.fetch(
+    const response = await this.asyncCaller.call(
+      _getFetchImplementation(),
       ...this.prepareFetchOptions(path, options),
     );
     if (response.status === 202 || response.status === 204) {
@@ -752,7 +753,8 @@ export class RunsClient extends BaseClient {
 
     const endpoint =
       threadId == null ? `/runs/stream` : `/threads/${threadId}/runs/stream`;
-    const response = await this.asyncCaller.fetch(
+    const response = await this.asyncCaller.call(
+      _getFetchImplementation(),
       ...this.prepareFetchOptions(endpoint, {
         method: "POST",
         json,
@@ -1044,7 +1046,8 @@ export class RunsClient extends BaseClient {
         ? { signal: options }
         : options;
 
-    const response = await this.asyncCaller.fetch(
+    const response = await this.asyncCaller.call(
+      _getFetchImplementation(),
       ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
         method: "GET",
         timeoutMs: null,
