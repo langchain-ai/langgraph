@@ -5,14 +5,14 @@
 const DEFAULT_FETCH_IMPLEMENTATION = (...args: any[]) => fetch(...args);
 
 const LANGSMITH_FETCH_IMPLEMENTATION_KEY = Symbol.for(
-  "ls:fetch_implementation",
+  "lg:fetch_implementation",
 );
 
 /**
  * Overrides the fetch implementation used for LangSmith calls.
  * You should use this if you need to use an implementation of fetch
  * other than the default global (e.g. for dealing with proxies).
- * @param fetch The new fetch functino to use.
+ * @param fetch The new fetch function to use.
  */
 export const overrideFetchImplementation = (fetch: (...args: any[]) => any) => {
   (globalThis as any)[LANGSMITH_FETCH_IMPLEMENTATION_KEY] = fetch;
