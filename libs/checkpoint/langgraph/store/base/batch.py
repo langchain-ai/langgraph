@@ -1,7 +1,18 @@
 import asyncio
 import functools
 import weakref
-from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, Union
+import sys
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Literal,
+    Optional,
+    TypeVar,
+    Union,
+    AsyncIterator,
+)
+from contextlib import asynccontextmanager
 
 from langgraph.store.base import (
     BaseStore,
@@ -17,8 +28,14 @@ from langgraph.store.base import (
     SearchOp,
     _validate_namespace,
 )
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable)
+
+SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
 def _check_loop(func: F) -> F:
@@ -67,7 +84,8 @@ class AsyncBatchedBaseStore(BaseStore):
     ) -> Optional[Item]:
         fut = self._loop.create_future()
         self._aqueue[fut] = GetOp(namespace, key)
-        return await fut
+        async with _raise_with_queue_stats(self._aqueue):
+            return await fut
 
     async def asearch(
         self,
@@ -81,7 +99,8 @@ class AsyncBatchedBaseStore(BaseStore):
     ) -> list[SearchItem]:
         fut = self._loop.create_future()
         self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
-        return await fut
+        async with _raise_with_queue_stats(self._aqueue):
+            return await fut
 
     async def aput(
         self,
@@ -93,7 +112,8 @@ class AsyncBatchedBaseStore(BaseStore):
         _validate_namespace(namespace)
         fut = self._loop.create_future()
         self._aqueue[fut] = PutOp(namespace, key, value, index)
-        return await fut
+        async with _raise_with_queue_stats(self._aqueue):
+            return await fut
 
     async def adelete(
         self,
@@ -102,7 +122,8 @@ class AsyncBatchedBaseStore(BaseStore):
     ) -> None:
         fut = self._loop.create_future()
         self._aqueue[fut] = PutOp(namespace, key, None)
-        return await fut
+        async with _raise_with_queue_stats(self._aqueue):
+            return await fut
 
     async def alist_namespaces(
         self,
@@ -127,7 +148,8 @@ class AsyncBatchedBaseStore(BaseStore):
             offset=offset,
         )
         self._aqueue[fut] = op
-        return await fut
+        async with _raise_with_queue_stats(self._aqueue):
+            return await fut
 
     @_check_loop
     def batch(self, ops: Iterable[Op]) -> list[Result]:
@@ -281,3 +303,17 @@ async def _run(
             break
         # remove strong ref to store
         del s
+
+
+@asynccontextmanager
+async def _raise_with_queue_stats(
+    queue: dict[asyncio.Future, Op]
+) -> AsyncIterator[None]:
+    try:
+        yield
+    except asyncio.CancelledError as e:
+        if SUPPORTS_EXC_NOTES:
+            e.add_note(f"Queue size: {len(queue)}")
+        else:
+            logger.warning(f"Queue size: {len(queue)}")
+        raise
