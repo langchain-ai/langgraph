@@ -283,7 +283,7 @@
       "post": {
         "tags": ["Revisions (v1)"],
         "summary": "Deploy Revision",
-        "description": "Deploy revision by ID.\n\nThis endpoint redeploys the deployment of a revision. Redeploying the deployment of a revision may mitigate intermittent issues with a deployment.\n\nThe revision must be in the `DEPLOYED` status and must be the latest revision of the project.",
+        "description": "Deploy revision by ID.\n\nThis endpoint redeploys the deployment of a revision without rebuilding the image for the deployment. Redeploying the deployment of a revision may mitigate intermittent issues with a deployment.\n\nThe revision must be in the `DEPLOYED` status and must be the latest revision of the project.",
         "operationId": "deploy_revision_projects__project_id__revisions__revision_id__deploy_post",
         "parameters": [
           {
