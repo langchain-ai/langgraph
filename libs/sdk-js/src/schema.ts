@@ -278,3 +278,17 @@ export interface SearchItem extends Item {
 export interface SearchItemsResponse {
   items: SearchItem[];
 }
+
+export interface CronCreateResponse {
+  cron_id: string;
+  assistant_id: string;
+  thread_id: string | undefined;
+  user_id: string;
+  payload: Record<string, unknown>;
+  schedule: string;
+  next_run_date: string;
+  end_time: string | undefined;
+  created_at: string;
+  updated_at: string;
+  metadata: Metadata;
+}
