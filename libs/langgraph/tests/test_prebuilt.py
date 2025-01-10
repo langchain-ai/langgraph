@@ -524,6 +524,10 @@ def test__infer_handled_types() -> None:
         _infer_handled_types(handler)
 
 
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
+)
 def test_react_agent_with_structured_response() -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
