@@ -87,6 +87,9 @@ jobs:
 
   lint-js:
     runs-on: ubuntu-latest
+    if: |
+      github.ref == 'refs/heads/main' ||
+      contains(github.event.pull_request.files.*.path, 'libs/sdk-js/')
     strategy:
       matrix:
         working-directory:
@@ -109,9 +112,34 @@ jobs:
       - name: Build
         run: yarn build
 
+  test-js:
+    runs-on: ubuntu-latest
+    if: |
+      github.ref == 'refs/heads/main' ||
+      contains(github.event.pull_request.files.*.path, 'libs/sdk-js/')
+    strategy:
+      matrix:
+        working-directory:
+          - "libs/sdk-js"
+    defaults:
+      run:
+        working-directory: ${{ matrix.working-directory }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: ${{ matrix.working-directory }}/yarn.lock
+      - name: Install dependencies
+        run: yarn install
+      - name: Run tests
+        run: yarn test
+
   ci_success:
     name: "CI Success"
-    needs: [lint, lint-js, test, test-langgraph, test-scheduler-kafka, integration-test]
+    needs: [lint, lint-js, test, test-langgraph, test-scheduler-kafka, integration-test, test-js]
     if: |
       always()
     runs-on: ubuntu-latest
