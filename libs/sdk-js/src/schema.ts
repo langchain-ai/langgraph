@@ -292,3 +292,8 @@ export interface CronCreateResponse {
   updated_at: string;
   metadata: Metadata;
 }
+
+export interface CronCreateForThreadResponse
+  extends Omit<CronCreateResponse, "thread_id"> {
+  thread_id: string;
+}
