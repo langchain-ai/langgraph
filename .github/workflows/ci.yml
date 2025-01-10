@@ -87,9 +87,6 @@ jobs:
 
   lint-js:
     runs-on: ubuntu-latest
-    if: |
-      github.ref == 'refs/heads/main' ||
-      contains(github.event.pull_request.files.*.path, 'libs/sdk-js/')
     strategy:
       matrix:
         working-directory:
@@ -114,9 +111,6 @@ jobs:
 
   test-js:
     runs-on: ubuntu-latest
-    if: |
-      github.ref == 'refs/heads/main' ||
-      contains(github.event.pull_request.files.*.path, 'libs/sdk-js/')
     strategy:
       matrix:
         working-directory:

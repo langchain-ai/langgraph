@@ -10,7 +10,7 @@
     "prepublish": "yarn run build",
     "format": "prettier --write src",
     "lint": "prettier --check src && tsc --noEmit",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathIgnorePatterns=\\.int\\.test.ts"
   },
   "main": "index.js",
   "license": "MIT",
