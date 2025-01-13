@@ -1,3 +1,12 @@
+from typing import (
+    Literal,
+    Optional,
+    Union,
+)
+
+from typing_extensions import TypedDict
+
+
 class HumanInterruptConfig(TypedDict):
     """Configuration that defines what actions are allowed for a human interrupt.
 
