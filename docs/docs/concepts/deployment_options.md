@@ -30,7 +30,7 @@ The guide below will explain the differences between the deployment options.
 
 !!! warning "Note"
 
-    The LangGraph Platform UI (within LangSmith) is not available for Self-Hosted Enterprise deployments.
+    The LangGraph Platform Deployments view (within LangSmith SaaS and self-hosted LangSmith) is not available for Self-Hosted Enterprise LangGraph deployments. Self-hosted LangGraph deployments are managed externally from LangSmith (e.g. there is no UI to manage these deployments).
 
 With a Self-Hosted Enterprise deployment, you are responsible for managing the infrastructure, including setting up and maintaining required databases and Redis instances.
 
@@ -49,7 +49,7 @@ For more information, please see:
 
 !!! warning "Note"
 
-    The LangGraph Platform UI (within LangSmith) is not available for Self-Hosted Lite deployments.
+    The LangGraph Platform Deployments view (within LangSmith SaaS and self-hosted LangSmith) is not available for Self-Hosted Lite LangGraph deployments. Self-hosted LangGraph deployments are managed externally from LangSmith (e.g. there is no UI to manage these deployments).
 
 The Self-Hosted Lite deployment option is a free (up to 1 million nodes executed), limited version of LangGraph Platform that you can run locally or in a self-hosted manner.
 
