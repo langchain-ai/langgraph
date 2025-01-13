@@ -23,7 +23,7 @@ theme:
     - navigation.expand
     - navigation.tabs
     - navigation.footer
-#    - navigation.indexes
+    - navigation.indexes
     - navigation.instant
     - navigation.sections
     - navigation.instant.prefetch
@@ -92,11 +92,34 @@ plugins:
 nav:
   - LangGraph:
     - Introduction: index.md
-    - Troubleshooting: troubleshooting/errors/index.md
-    - concepts/faq.md
-    - Getting Started:
-        - Learn the Basics: tutorials/introduction.ipynb
+    - Getting started: tutorials/introduction.ipynb
+    - FAQ: concepts/faq.md
+    - Guides:
+      - index.md
+      - How-to guides: how-tos/index.md
+        # - how-tos/index.md
+        # - Controllability: how-tos#controllability
+        # - Persistence: how-tos#persistence
+        # - Memory: how-tos#memory
+        # - Human-in-the-loop: how-tos#human-in-the-loop
+        # - Time travel: how-tos/#time-travel
+        # - Streaming: how-tos#streaming
+        # - Tool calling: how-tos#tool-calling
+        # - Subgraphs: how-tos#subgraphs
+        # - Multi-agent: how-tos#multi-agent
+        # - State Management: how-tos#state-management
+        # - Other: how-tos#other
+        # - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
+      - Tutorials & examples: tutorials/index.md
+        # - tutorials/index.md
+        # - Chatbots: tutorials#chatbots
+        # - RAG: tutorials#rag
+        # - Agent Architectures: tutorials#agent-architectures
+        # - Evaluation: tutorials#evaluation
+        # - Experimental: tutorials#experimental
+      - Troubleshooting: troubleshooting/errors/index.md
     - Learn:
+        - concepts/index.md
         - Why LangGraph: concepts/high_level.md
         - Primitives: concepts/low_level.md
         - Agents: concepts/agentic_concepts.md
@@ -105,8 +128,6 @@ nav:
         - concepts/persistence.md
         - concepts/memory.md
         - concepts/streaming.md
-    - How-to guides: how-tos/index.md
-    - Tutorials & examples: tutorials/index.md
   - LangGraph Platform:
     - Get Started:
         - Template Applications: concepts/template_applications.md
@@ -134,21 +155,22 @@ nav:
           - concepts/langgraph_cloud.md
           - concepts/bring_your_own_cloud.md
   - API reference:
-    - Graphs: reference/graphs.md
-    - Checkpointing: reference/checkpoints.md
-    - Storage: reference/store.md
-    - Prebuilt components: reference/prebuilt.md
-    - Channels: reference/channels.md
-    - Errors: reference/errors.md
-    - Types: reference/types.md
-    - Constants: reference/constants.md
-  - LangGraph Platform API reference:
-    - Server API: "cloud/reference/api/api_ref.md"
-    - CLI: "cloud/reference/cli.md"
-    - SDK (Python): "cloud/reference/sdk/python_sdk_ref.md"
-    - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
-    - RemoteGraph: reference/remote_graph.md
-    - Environment variables: "cloud/reference/env_var.md"
+    - LangGraph:
+      - Graphs: reference/graphs.md
+      - Checkpointing: reference/checkpoints.md
+      - Storage: reference/store.md
+      - Prebuilt components: reference/prebuilt.md
+      - Channels: reference/channels.md
+      - Errors: reference/errors.md
+      - Types: reference/types.md
+      - Constants: reference/constants.md
+    - LangGraph Platform API:
+      - Server API: "cloud/reference/api/api_ref.md"
+      - CLI: "cloud/reference/cli.md"
+      - SDK (Python): "cloud/reference/sdk/python_sdk_ref.md"
+      - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
+      - RemoteGraph: reference/remote_graph.md
+      - Environment variables: "cloud/reference/env_var.md"
 #
 #  - Tutorials & Examples:
 #      - tutorials/index.md
