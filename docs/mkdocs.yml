@@ -21,7 +21,7 @@ theme:
     - content.tooltips
     - header.autohide
     - navigation.expand
-#    - navigation.tabs
+    - navigation.tabs
     - navigation.footer
 #    - navigation.indexes
     - navigation.instant
@@ -94,20 +94,20 @@ nav:
     - Introduction: index.md
     - Troubleshooting: troubleshooting/errors/index.md
     - concepts/faq.md
-  - Getting Started:
-      - Learn the Basics: tutorials/introduction.ipynb
-      - Template application: concepts/template_applications.md
-  - Learn:
-      - Why LangGraph: concepts/high_level.md
-      - Primitives: concepts/low_level.md
-      - Agents: concepts/agentic_concepts.md
-      - Multi-agent systems: concepts/multi_agent.md
-      - Human-in-the-loop: concepts/human_in_the_loop.md
-      - concepts/persistence.md
-      - concepts/memory.md
-      - concepts/streaming.md
-      - How-to guides: how-tos/index.md
-      - Tutorials & examples: tutorials/index.md
+    - Getting Started:
+        - Learn the Basics: tutorials/introduction.ipynb
+        - Template application: concepts/template_applications.md
+    - Learn:
+        - Why LangGraph: concepts/high_level.md
+        - Primitives: concepts/low_level.md
+        - Agents: concepts/agentic_concepts.md
+        - Multi-agent systems: concepts/multi_agent.md
+        - Human-in-the-loop: concepts/human_in_the_loop.md
+        - concepts/persistence.md
+        - concepts/memory.md
+        - concepts/streaming.md
+    - How-to guides: how-tos/index.md
+    - Tutorials & examples: tutorials/index.md
   - LangGraph Platform:
     - Deploy:
         - Local server: tutorials/langgraph-platform/local-server.md
