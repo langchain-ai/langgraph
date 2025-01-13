@@ -181,7 +181,6 @@ def g(
         input: Schema projection applied to run input to the graph.
         output: Schema projection applied to run output from the graph.
 
-
     Returns:
         Callable: A decorator that can be applied to a function to generate a Pregel graph.
     """
