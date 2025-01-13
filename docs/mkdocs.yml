@@ -96,7 +96,6 @@ nav:
     - concepts/faq.md
     - Getting Started:
         - Learn the Basics: tutorials/introduction.ipynb
-        - Template application: concepts/template_applications.md
     - Learn:
         - Why LangGraph: concepts/high_level.md
         - Primitives: concepts/low_level.md
@@ -109,6 +108,8 @@ nav:
     - How-to guides: how-tos/index.md
     - Tutorials & examples: tutorials/index.md
   - LangGraph Platform:
+    - Get Started:
+        - Template Applications: concepts/template_applications.md
     - Deploy:
         - Local server: tutorials/langgraph-platform/local-server.md
         - LangGraph Cloud: cloud/quick_start.md
