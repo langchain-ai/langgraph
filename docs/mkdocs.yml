@@ -23,7 +23,7 @@ theme:
     - navigation.expand
     - navigation.tabs
     - navigation.footer
-    - navigation.indexes
+    # - navigation.indexes
     - navigation.instant
     - navigation.sections
     - navigation.instant.prefetch
@@ -92,10 +92,10 @@ plugins:
 nav:
   - LangGraph:
     - Introduction: index.md
-    - Getting started: tutorials/introduction.ipynb
-    - FAQ: concepts/faq.md
+    - Get started:
+      - Learn the basics: tutorials/introduction.ipynb
     - Guides:
-      - index.md
+      - Concepts: concepts/index.md
       - How-to guides: how-tos/index.md
         # - how-tos/index.md
         # - Controllability: how-tos#controllability
@@ -118,22 +118,26 @@ nav:
         # - Evaluation: tutorials#evaluation
         # - Experimental: tutorials#experimental
       - Troubleshooting: troubleshooting/errors/index.md
-    - Learn:
-        - concepts/index.md
-        - Why LangGraph: concepts/high_level.md
-        - Primitives: concepts/low_level.md
-        - Agents: concepts/agentic_concepts.md
-        - Multi-agent systems: concepts/multi_agent.md
-        - Human-in-the-loop: concepts/human_in_the_loop.md
-        - concepts/persistence.md
-        - concepts/memory.md
-        - concepts/streaming.md
+    # - Learn:
+    #     - concepts/index.md
+    #     - Why LangGraph: concepts/high_level.md
+    #     - Primitives: concepts/low_level.md
+    #     - Agents: concepts/agentic_concepts.md
+    #     - Multi-agent systems: concepts/multi_agent.md
+    #     - Human-in-the-loop: concepts/human_in_the_loop.md
+    #     - concepts/persistence.md
+    #     - concepts/memory.md
+    #     - concepts/streaming.md
   - LangGraph Platform:
+    - Introduction: concepts/langgraph_platform/
     - Get Started:
+        - Local Quickstart: tutorials/langgraph-platform/local-server.md
         - Template Applications: concepts/template_applications.md
-    - Deploy:
-        - Local server: tutorials/langgraph-platform/local-server.md
-        - LangGraph Cloud: cloud/quick_start.md
+        - Cloud Quickstart: langgraph/cloud/quick_stard.md
+    - Guides:
+        - Concepts: concepts/index.md
+        - How-to guides: how-tos/#langgraph-platform  # TODO: make own page
+        - Tutorials & examples: tutorials/#platform  # TODO: make own page(?)
     - Learn:
         - High level:
           - concepts/langgraph_platform.md
@@ -171,6 +175,7 @@ nav:
       - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: "cloud/reference/env_var.md"
+  - FAQ: concepts/faq.md
 #
 #  - Tutorials & Examples:
 #      - tutorials/index.md
