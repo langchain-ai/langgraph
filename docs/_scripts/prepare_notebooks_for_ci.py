@@ -159,14 +159,14 @@ def add_vcr_to_notebook(
         "custom_vcr.serializer = 'advanced_compressed'",
     ]
     if uses_langsmith:
-        vcr_import_lines.extend(
+        vcr_import_lines.extend([
             # patch urllib3 to handle vcr errors, see more here:
             # https://github.com/langchain-ai/langsmith-sdk/blob/main/python/langsmith/_internal/_patch.py
             "import sys",
             f"sys.path.insert(0, '{os.path.join(DOCS_PATH, '_scripts')}')",
             "import _patch as patch_urllib3",
             "patch_urllib3.patch_urllib3()",
-        )
+        ])
     import_cell = nbformat.v4.new_code_cell(source="\n".join(vcr_import_lines))
     import_cell.pop("id", None)
     notebook.cells.insert(0, import_cell)
