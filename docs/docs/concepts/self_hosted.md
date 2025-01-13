@@ -32,6 +32,10 @@ To use the Self-Hosted Enterprise version, you must acquire a license key that y
 - Build the docker image for [LangGraph Server](./langgraph_server.md) using the [LangGraph CLI](./langgraph_cli.md).
 - Deploy a web server that will run the docker image and pass in the necessary environment variables.
 
+!!! warning "Note"
+
+    The LangGraph Platform Deployments view (within LangSmith SaaS and self-hosted LangSmith) is not available for Self-Hosted Lite or Self-Hosted Enterprise LangGraph deployments. Self-hosted LangGraph deployments are managed externally from LangSmith (e.g. there is no UI to manage these deployments).
+
 For step-by-step instructions, see [How to set up a self-hosted deployment of LangGraph](../how-tos/deploy-self-hosted.md).
 
 ## Helm Chart
