@@ -275,6 +275,13 @@ async def on_assistants(
         status_code=403,
         detail="User lacks the required permissions.",
     )
+
+# Assumes you organize information in store like (user_id, resource_type, resource_id)
+@auth.on.store()
+async def authorize_store(ctx: Auth.types.AuthContext, value: dict):
+    # The "namespace" field for each store item is a tuple you can think of as the directory of an item.
+    namespace: tuple = value["namespace"]
+    assert namespace[0] == ctx.user.identity, "Not authorized"
 ```
 
 Notice that instead of one global handler, we now have specific handlers for:

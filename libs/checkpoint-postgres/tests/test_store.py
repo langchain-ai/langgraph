@@ -1,5 +1,6 @@
 # type: ignore
 
+import re
 from contextlib import contextmanager
 from typing import Any, Optional
 from uuid import uuid4
@@ -782,3 +783,10 @@ def test_scores(
 
         assert len(results) == 1
         assert results[0].score == pytest.approx(similarities[0], abs=1e-3)
+
+
+def test_nonnull_migrations() -> None:
+    _leading_comment_remover = re.compile(r"^/\*.*?\*/")
+    for migration in PostgresStore.MIGRATIONS:
+        statement = _leading_comment_remover.sub("", migration).split()[0]
+        assert statement.strip()

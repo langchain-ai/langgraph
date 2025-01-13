@@ -1,5 +1,6 @@
 # type: ignore
 
+import re
 from contextlib import contextmanager
 from typing import Any
 from uuid import uuid4
@@ -238,3 +239,10 @@ def test_null_chars(saver_name: str, test_data) -> None:
             list(saver.list(None, filter={"my_key": "abc"}))[0].metadata["my_key"]
             == "abc"
         )
+
+
+def test_nonnull_migrations() -> None:
+    _leading_comment_remover = re.compile(r"^/\*.*?\*/")
+    for migration in PostgresSaver.MIGRATIONS:
+        statement = _leading_comment_remover.sub("", migration).split()[0]
+        assert statement.strip()
