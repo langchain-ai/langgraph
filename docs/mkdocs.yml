@@ -52,6 +52,8 @@ theme:
   font:
     text: "Public Sans"
     code: "Roboto Mono"
+  navigation:
+    depth: 1
 plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
@@ -89,6 +91,10 @@ plugins:
               filters:
                 - "!^_"
                 -
+
+extra_css:
+  - stylesheets/hide_guides.css
+
 nav:
   - Home:
     - Introduction: index.md
@@ -100,20 +106,23 @@ nav:
         - Cloud Deploy: cloud/quick_start.md
     - Guides:
       - How-to guides: how-tos/index.md
-      - Concepts: concepts/index.md
-        # - how-tos/index.md
-        # - Controllability: how-tos#controllability
-        # - Persistence: how-tos#persistence
-        # - Memory: how-tos#memory
-        # - Human-in-the-loop: how-tos#human-in-the-loop
-        # - Time travel: how-tos/#time-travel
-        # - Streaming: how-tos#streaming
-        # - Tool calling: how-tos#tool-calling
-        # - Subgraphs: how-tos#subgraphs
-        # - Multi-agent: how-tos#multi-agent
-        # - State Management: how-tos#state-management
-        # - Other: how-tos#other
-        # - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
+      - Concepts:
+        - LangGraph:
+          - concepts/index.md
+          # - Why LangGraph: concepts/high_level.md
+          # - Primitives: concepts/low_level.md
+          - Agents: concepts/agentic_concepts.md
+          # - Multi-agent systems: concepts/multi_agent.md
+          # - Human-in-the-loop: concepts/human_in_the_loop.md
+          # - concepts/persistence.md
+          # - concepts/memory.md
+          # - concepts/streaming.md
+        - LangGraph Platform:
+          - concepts/langgraph_platform.md
+          - concepts/deployment_options.md
+          - concepts/plans.md
+          - concepts/template_applications.md
+          - concepts/langgraph_server.md
       - Tutorials & examples: tutorials/index.md
         # - tutorials/index.md
         # - Chatbots: tutorials#chatbots
