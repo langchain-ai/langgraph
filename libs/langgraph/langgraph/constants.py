@@ -81,6 +81,8 @@ CONFIG_KEY_WRITES = sys.intern("__pregel_writes")
 # read-only list of existing task writes
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
+CONFIG_KEY_END = sys.intern("__pregel_previous")
+# holds the previous return value from a stateful Pregel graph.
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

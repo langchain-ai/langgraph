@@ -34,7 +34,12 @@ from langchain_core.runnables.utils import Input
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
-from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_STORE,
+    CONFIG_KEY_END,
+    CONFIG_KEY_STREAM_WRITER,
+)
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 from langgraph.utils.config import (
@@ -58,6 +63,10 @@ class StrEnum(str, enum.Enum):
     """A string enum."""
 
 
+# Special type to denote any type is accepted
+ANY_TYPE = object()
+
+
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
@@ -73,9 +82,22 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         CONFIG_KEY_STORE,
         inspect.Parameter.empty,
     ),
+    (
+        sys.intern("previous"),
+        (ANY_TYPE, ),
+        CONFIG_KEY_END,
+        inspect.Parameter.empty,
+    ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
-config keys, default values and type annotations."""
+config keys, default values and type annotations.
+
+Each tuple contains:
+- the name of the kwarg in the function signature
+- the type annotation(s) for the kwarg
+- the config key to look for the value in
+- the default value for the kwarg
+"""
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
 
@@ -122,9 +144,12 @@ class RunnableCallable(Runnable):
         self.func_accepts: dict[str, bool] = {}
         for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
-            self.func_accepts[kw] = (
-                p is not None and p.annotation in typ and p.kind in VALID_KINDS
-            )
+            if typ == (ANY_TYPE, ):
+                self.func_accepts[kw] = p is not None and p.kind in VALID_KINDS
+            else:
+                self.func_accepts[kw] = (
+                    p is not None and p.annotation in typ and p.kind in VALID_KINDS
+                )
 
     def __repr__(self) -> str:
         repr_args = {
@@ -149,16 +174,20 @@ class RunnableCallable(Runnable):
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
-        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
+        for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
             if not self.func_accepts[kw]:
                 continue
 
-            if defv is inspect.Parameter.empty and kw not in kwargs and ck not in _conf:
+            if (
+                default_value is inspect.Parameter.empty
+                and kw not in kwargs
+                and config_key not in _conf
+            ):
                 raise ValueError(
-                    f"Missing required config key '{ck}' for '{self.name}'."
+                    f"Missing required config key '{config_key}' for '{self.name}'."
                 )
             elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(ck, defv)
+                kwargs[kw] = _conf.get(config_key, default_value)
 
         context = copy_context()
         if self.trace:
@@ -197,16 +226,20 @@ class RunnableCallable(Runnable):
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
-        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
+        for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
             if not self.func_accepts[kw]:
                 continue
 
-            if defv is inspect.Parameter.empty and kw not in kwargs and ck not in _conf:
+            if (
+                default_value is inspect.Parameter.empty
+                and kw not in kwargs
+                and config_key not in _conf
+            ):
                 raise ValueError(
-                    f"Missing required config key '{ck}' for '{self.name}'."
+                    f"Missing required config key '{config_key}' for '{self.name}'."
                 )
             elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(ck, defv)
+                kwargs[kw] = _conf.get(config_key, default_value)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)

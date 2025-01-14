@@ -112,27 +112,8 @@ def entrypoint(
     store: Optional[BaseStore] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
     def _imp(func: types.FunctionType) -> Pregel:
-        if inspect.isgeneratorfunction(func):
-
-            def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
-                for chunk in func(*args, **kwargs):
-                    writer(chunk)
-
-            bound = get_runnable_for_func(gen_wrapper)
-            stream_mode: StreamMode = "custom"
-        elif inspect.isasyncgenfunction(func):
-
-            async def agen_wrapper(
-                *args: Any, writer: StreamWriter, **kwargs: Any
-            ) -> Any:
-                async for chunk in func(*args, **kwargs):
-                    writer(chunk)
-
-            bound = get_runnable_for_func(agen_wrapper)
-            stream_mode = "custom"
-        else:
-            bound = get_runnable_for_func(func)
-            stream_mode = "updates"
+        bound = get_runnable_for_func(func)
+        stream_mode: StreamMode = "updates"
 
         return Pregel(
             nodes={

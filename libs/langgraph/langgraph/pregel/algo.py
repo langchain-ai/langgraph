@@ -42,6 +42,7 @@ from langgraph.constants import (
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_WRITES,
+    CONFIG_KEY_END,
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
@@ -560,6 +561,9 @@ def prepare_single_task(
                             if w[0] in (NULL_TASK_ID, task_id)
                         ],
                         CONFIG_KEY_SCRATCHPAD: {},
+                        CONFIG_KEY_END: checkpoint["channel_values"].get(
+                            "__end__", None
+                        ),
                     },
                 ),
                 triggers,
@@ -709,6 +713,9 @@ def prepare_single_task(
                                 if w[0] in (NULL_TASK_ID, task_id)
                             ],
                             CONFIG_KEY_SCRATCHPAD: {},
+                            CONFIG_KEY_END: checkpoint["channel_values"].get(
+                                "__end__", None
+                            ),
                         },
                     ),
                     triggers,
@@ -833,6 +840,9 @@ def prepare_single_task(
                                     if w[0] in (NULL_TASK_ID, task_id)
                                 ],
                                 CONFIG_KEY_SCRATCHPAD: {},
+                                CONFIG_KEY_END: checkpoint["channel_values"].get(
+                                    "__end__", None
+                                ),
                             },
                         ),
                         triggers,

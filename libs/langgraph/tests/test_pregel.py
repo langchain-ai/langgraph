@@ -5300,3 +5300,27 @@ def test_multiple_updates() -> None:
         {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
         {"node_b": {"foo": "b"}},
     ]
+
+
+def test_version_1_of_entrypoint() -> None:
+    from langgraph.func import entrypoint
+    from typing import TypedDict, Annotated, NotRequired, Any
+
+    states = []
+
+    # In this version reducers do not work
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    foo.invoke({"a": "1"}, config)
+    foo.invoke({"a": "2"}, config)
+    foo.invoke({"a": "3"}, config)
+    assert states == [
+        None,
+        {"current": {"a": "1"}, "previous": None},
+        {"current": {"a": "2"}, "previous": {"current": {"a": "1"}, "previous": None}},
+    ]
