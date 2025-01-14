@@ -92,6 +92,7 @@ plugins:
 nav:
   - LangGraph:
     - Introduction: index.md
+    - FAQ: concepts/faq.md
     - Get started:
       - Learn the basics: tutorials/introduction.ipynb
     - Guides:
@@ -117,7 +118,6 @@ nav:
         # - Agent Architectures: tutorials#agent-architectures
         # - Evaluation: tutorials#evaluation
         # - Experimental: tutorials#experimental
-      - Troubleshooting: troubleshooting/errors/index.md
     # - Learn:
     #     - concepts/index.md
     #     - Why LangGraph: concepts/high_level.md
@@ -128,36 +128,43 @@ nav:
     #     - concepts/persistence.md
     #     - concepts/memory.md
     #     - concepts/streaming.md
+    - Resources:
+      - Troubleshooting: troubleshooting/errors/index.md
+      - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
   - LangGraph Platform:
     - Introduction: concepts/langgraph_platform/
+    - FAQ: concepts/faq.md
     - Get Started:
         - Local Quickstart: tutorials/langgraph-platform/local-server.md
         - Template Applications: concepts/template_applications.md
-        - Cloud Quickstart: langgraph/cloud/quick_stard.md
+        - Cloud Quickstart: langgraph/cloud/quick_start.md
     - Guides:
-        - Concepts: concepts/index.md
+        - Concepts: concepts/#langgraph-platform  # TODO: make own page
         - How-to guides: how-tos/#langgraph-platform  # TODO: make own page
-        - Tutorials & examples: tutorials/#platform  # TODO: make own page(?)
+        - Tutorials & examples: tutorials/#platform  # TODO: make own page
+    - Resources:
+      - Troubleshooting: troubleshooting/errors/index.md
+      - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
     - Learn:
         - High level:
           - concepts/langgraph_platform.md
-          - concepts/deployment_options.md
-          - concepts/plans.md
-          - concepts/template_applications.md
-        - Components:
-          - Server: concepts/langgraph_server.md
-          - Studio: concepts/langgraph_studio.md
-          - CLI: concepts/langgraph_cli.md
-          - SDK: concepts/sdk.md
-          - RemoteGraph: how-tos/use-remote-graph.md
-        - LangGraph Server:
-          - concepts/application_structure.md
-          - concepts/assistants.md
-          - concepts/double_texting.md
-        - Deployment options:
-          - concepts/self_hosted.md
-          - concepts/langgraph_cloud.md
-          - concepts/bring_your_own_cloud.md
+        #   - concepts/deployment_options.md
+        #   - concepts/plans.md
+        #   - concepts/template_applications.md
+        # - Components:
+        #   - Server: concepts/langgraph_server.md
+        #   - Studio: concepts/langgraph_studio.md
+        #   - CLI: concepts/langgraph_cli.md
+        #   - SDK: concepts/sdk.md
+        #   - RemoteGraph: how-tos/use-remote-graph.md
+        # - LangGraph Server:
+        #   - concepts/application_structure.md
+        #   - concepts/assistants.md
+        #   - concepts/double_texting.md
+        # - Deployment options:
+        #   - concepts/self_hosted.md
+        #   - concepts/langgraph_cloud.md
+        #   - concepts/bring_your_own_cloud.md
   - API reference:
     - LangGraph:
       - Graphs: reference/graphs.md
@@ -175,7 +182,6 @@ nav:
       - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: "cloud/reference/env_var.md"
-  - FAQ: concepts/faq.md
 #
 #  - Tutorials & Examples:
 #      - tutorials/index.md
