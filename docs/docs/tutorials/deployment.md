@@ -1,7 +1,7 @@
 # Deployment
 
 Get started deploying your LangGraph applications locally or on the cloud with
-[LangGraph Platform](../concepts/langgraph_platform).
+[LangGraph Platform](../concepts/langgraph_platform.md).
 
 ## Get Started 🚀 {#quick-start}
 
