@@ -90,11 +90,14 @@ plugins:
                 - "!^_"
                 -
 nav:
-  - LangGraph:
+  - Guides:
     - Introduction: index.md
     - FAQ: concepts/faq.md
     - Get started:
       - Learn the basics: tutorials/introduction.ipynb
+      - Local Deploy: tutorials/langgraph-platform/local-server.md
+      - Template Applications: concepts/template_applications.md  # make tutorial?
+      - Cloud Deploy: cloud/quick_start.md
     - Guides:
       - Concepts: concepts/index.md
       - How-to guides: how-tos/index.md
@@ -131,23 +134,23 @@ nav:
     - Resources:
       - Troubleshooting: troubleshooting/errors/index.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
-  - LangGraph Platform:
-    - Introduction: concepts/langgraph_platform/
-    - FAQ: concepts/faq.md
-    - Get Started:
-        - Local Quickstart: tutorials/langgraph-platform/local-server.md
-        - Template Applications: concepts/template_applications.md
-        - Cloud Quickstart: langgraph/cloud/quick_start.md
-    - Guides:
-        - Concepts: concepts/#langgraph-platform  # TODO: make own page
-        - How-to guides: how-tos/#langgraph-platform  # TODO: make own page
-        - Tutorials & examples: tutorials/#platform  # TODO: make own page
-    - Resources:
-      - Troubleshooting: troubleshooting/errors/index.md
-      - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
-    - Learn:
-        - High level:
-          - concepts/langgraph_platform.md
+  # - LangGraph Platform:
+  #   - Introduction: concepts/langgraph_platform/
+  #   - FAQ: concepts/faq.md
+  #   - Get Started:
+  #       - Local Quickstart: tutorials/langgraph-platform/local-server.md
+  #       - Template Applications: concepts/template_applications.md
+  #       - Cloud Quickstart: langgraph/cloud/quick_start.md
+  #   - Guides:
+  #       - Concepts: concepts/#langgraph-platform  # TODO: make own page
+  #       - How-to guides: how-tos/#langgraph-platform  # TODO: make own page
+  #       - Tutorials & examples: tutorials/#platform  # TODO: make own page
+  #   - Resources:
+  #     - Troubleshooting: troubleshooting/errors/index.md
+  #     - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
+  #   - Learn:
+  #       - High level:
+  #         - concepts/langgraph_platform.md
         #   - concepts/deployment_options.md
         #   - concepts/plans.md
         #   - concepts/template_applications.md
