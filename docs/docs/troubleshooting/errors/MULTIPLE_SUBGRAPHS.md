@@ -1,6 +1,6 @@
 # MULTIPLE_SUBGRAPHS
 
-You are calling the same subgraph multiple times within a single LangGraph node with checkpointing enabled for each subgraph.
+You are calling subgraphs multiple times within a single LangGraph node with checkpointing enabled for each subgraph.
 
 This is currently not allowed due to internal restrictions on how checkpoint namespacing for subgraphs works.
 
