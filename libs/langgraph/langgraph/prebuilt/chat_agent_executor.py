@@ -223,7 +223,7 @@ def _validate_chat_history(
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
-    model: LanguageModelLike,
+    model: Union[str, LanguageModelLike],
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
@@ -594,6 +594,16 @@ def create_react_agent(
         tool_node = ToolNode(tools)
         # get the tool functions wrapped in a tool class from the ToolNode
         tool_classes = list(tool_node.tools_by_name.values())
+
+    if isinstance(model, str):
+        try:
+            from langchain.chat_models import init_chat_model
+        except ImportError:
+            raise ImportError(
+                "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
+            )
+
+        model = init_chat_model(model)
 
     tool_calling_enabled = len(tool_classes) > 0
 
