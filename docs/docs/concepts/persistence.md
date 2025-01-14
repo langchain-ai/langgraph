@@ -161,7 +161,7 @@ graph.invoke(None, config=config)
 
 Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps BEFORE the provided `checkpoint_id`. All of the steps AFTER `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-![Replay](img/persistence/re_play.jpg)
+![Replay](img/persistence/re_play.png)
 
 ### Update state
 
