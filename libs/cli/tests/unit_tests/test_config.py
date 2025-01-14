@@ -91,6 +91,24 @@ def test_validate_config():
         validate_config({"python_version": "3.10"})
     assert "Minimum required version" in str(exc_info.value)
 
+    config = validate_config(
+        {
+            "python_version": "3.11-bullseye",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    assert config["python_version"] == "3.11-bullseye"
+
+    config = validate_config(
+        {
+            "python_version": "3.12-slim",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    assert config["python_version"] == "3.12-slim"
+
 
 def test_validate_config_file():
     with tempfile.TemporaryDirectory() as tmpdir:

@@ -17,5 +17,6 @@ export type {
   Checkpoint,
   Interrupt,
 } from "./schema.js";
+export { overrideFetchImplementation } from "./singletons/fetch.js";
 
 export type { OnConflictBehavior, Command } from "./types.js";

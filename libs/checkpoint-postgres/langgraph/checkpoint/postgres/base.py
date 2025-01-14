@@ -58,8 +58,6 @@ MIGRATIONS = [
 );""",
     "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
     """
-    """,
-    """
     CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoints_thread_id_idx ON checkpoints(thread_id);
     """,
     """
