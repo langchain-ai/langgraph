@@ -356,7 +356,6 @@ nav:
           - troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md
           - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
           - troubleshooting/errors/INVALID_CHAT_HISTORY.md
-      - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
   
   - API reference:
     - Library:
