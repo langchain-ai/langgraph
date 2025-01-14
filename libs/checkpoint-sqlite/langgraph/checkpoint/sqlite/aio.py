@@ -159,7 +159,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
                     "Synchronous calls to AsyncSqliteSaver are only allowed from a "
-                    "different thread. From the main thread, use the async interface."
+                    "different thread. From the main thread, use the async interface. "
                     "For example, use `await checkpointer.aget_tuple(...)` or `await "
                     "graph.ainvoke(...)`."
                 )
@@ -197,7 +197,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
                     "Synchronous calls to AsyncSqliteSaver are only allowed from a "
-                    "different thread. From the main thread, use the async interface."
+                    "different thread. From the main thread, use the async interface. "
                     "For example, use `checkpointer.alist(...)` or `await "
                     "graph.ainvoke(...)`."
                 )
