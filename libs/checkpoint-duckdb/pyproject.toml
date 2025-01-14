@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-duckdb"
-version = "2.0.1"
+version = "2.0.2"
 description = "Library with a DuckDB implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"
