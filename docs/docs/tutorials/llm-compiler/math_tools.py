@@ -114,7 +114,9 @@ def get_math_tool(llm: ChatOpenAI):
             MessagesPlaceholder(variable_name="context", optional=True),
         ]
     )
-    extractor = prompt | llm.with_structured_output(ExecuteCode)
+    extractor = prompt | llm.with_structured_output(
+        ExecuteCode, method="function_calling"
+    )
 
     def calculate_expression(
         problem: str,
