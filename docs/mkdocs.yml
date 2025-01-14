@@ -23,7 +23,6 @@ theme:
     - navigation.expand
     - navigation.tabs
     - navigation.footer
-    # - navigation.indexes
     - navigation.instant
     - navigation.sections
     - navigation.instant.prefetch
@@ -52,8 +51,6 @@ theme:
   font:
     text: "Public Sans"
     code: "Roboto Mono"
-  navigation:
-    depth: 1
 plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
@@ -90,10 +87,6 @@ plugins:
             options:
               filters:
                 - "!^_"
-                -
-
-extra_css:
-  - stylesheets/hide_guides.css
 
 nav:
   - Home:
@@ -366,7 +359,7 @@ nav:
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
   
   - API reference:
-    - LangGraph:
+    - Library:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
@@ -375,7 +368,7 @@ nav:
       - Errors: reference/errors.md
       - Types: reference/types.md
       - Constants: reference/constants.md
-    - LangGraph Platform API:
+    - LangGraph Platform:
       - Server API: "cloud/reference/api/api_ref.md"
       - CLI: "cloud/reference/cli.md"
       - SDK (Python): "cloud/reference/sdk/python_sdk_ref.md"

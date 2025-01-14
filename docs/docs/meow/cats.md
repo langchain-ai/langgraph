@@ -1,3 +1,0 @@
-# Cats
-
-Cats are great!!
