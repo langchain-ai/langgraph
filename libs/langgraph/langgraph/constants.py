@@ -1,5 +1,4 @@
 import sys
-from os import getenv
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, cast
 
@@ -93,8 +92,6 @@ NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
-FF_SEND_V2 = getenv("LANGGRAPH_FF_SEND_V2", "false").lower() == "true"
-# temporary flag to enable new Send semantics
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
 
