@@ -15,6 +15,7 @@ from typing import (
     Any,
     Dict,
     Generator,
+    Iterable,
     Iterator,
     List,
     Literal,
@@ -5302,9 +5303,32 @@ def test_multiple_updates() -> None:
     ]
 
 
-def test_version_1_of_entrypoint() -> None:
-    from langgraph.func import entrypoint
+def test_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
 
+    # Test without previous
+    @entrypoint()
+    def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert foo.invoke({"a": "1"}, config) == {"a": "1"}
+
+    @entrypoint()
+    def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+
+
+def test_entrypoint_stateful() -> None:
+    """Test stateful entrypoint invoke."""
+
+    # Test invoke
     states = []
 
     # In this version reducers do not work
@@ -5315,11 +5339,49 @@ def test_version_1_of_entrypoint() -> None:
 
     config = {"configurable": {"thread_id": "1"}}
 
-    foo.invoke({"a": "1"}, config)
-    foo.invoke({"a": "2"}, config)
-    foo.invoke({"a": "3"}, config)
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "2"}, config) == {
+        "current": {"a": "2"},
+        "previous": {"current": {"a": "1"}, "previous": None},
+    }
+    assert foo.invoke({"a": "3"}, config) == {
+        "current": {"a": "3"},
+        "previous": {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": None},
+        },
+    }
     assert states == [
         None,
         {"current": {"a": "1"}, "previous": None},
         {"current": {"a": "2"}, "previous": {"current": {"a": "1"}, "previous": None}},
     ]
+
+    # Test stream
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+    items = [item for item in foo.stream({"a": "1"}, config)]
+    assert items == [{"foo": {"current": {"a": "1"}, "previous": None}}]
+
+
+async def test_entrypoint_from_generator() -> None:
+    """@entrypoint does not support sync generators."""
+
+    with pytest.raises(TypeError):
+
+        @entrypoint(checkpointer=MemorySaver())
+        def foo(inputs: Any) -> Iterable[dict]:
+            yield "a"
+
+
+async def test_entrypoint_from_async_generator() -> None:
+    """@entrypoint does not support async generators."""
+
+    with pytest.raises(TypeError):
+
+        @entrypoint(checkpointer=MemorySaver())
+        def foo(inputs: Any) -> Iterable[dict]:
+            yield "a"

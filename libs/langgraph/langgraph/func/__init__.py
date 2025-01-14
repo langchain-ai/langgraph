@@ -2,6 +2,7 @@ import asyncio
 import concurrent
 import concurrent.futures
 import functools
+import inspect
 import types
 from typing import (
     Any,
@@ -111,8 +112,13 @@ def entrypoint(
     store: Optional[BaseStore] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
     def _imp(func: types.FunctionType) -> Pregel:
-        bound = get_runnable_for_func(func)
-        stream_mode: StreamMode = "updates"
+        if inspect.isgeneratorfunction(func):
+            raise TypeError("@entrypoint does not support generator functions.")
+        elif inspect.isasyncgenfunction(func):
+            raise TypeError("@entrypoint does not support async generator functions.")
+        else:
+            bound = get_runnable_for_func(func)
+            stream_mode: StreamMode = "updates"
 
         return Pregel(
             nodes={
