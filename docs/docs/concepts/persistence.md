@@ -147,7 +147,7 @@ In our example, the output of `get_state_history` will look like this:
 
 ### Replay
 
-It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the previously executed steps BEFORE a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps AFTER the checkpoint.
+It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the previously executed steps _before_ a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps _after_ the checkpoint.
 
 * `thread_id` is the ID of a thread.
 * `checkpoint_id` is an identifier that refers to a specific checkpoint within a thread.
@@ -159,7 +159,7 @@ config = {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445
 graph.invoke(None, config=config)
 ```
 
-Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps BEFORE the provided `checkpoint_id`. All of the steps AFTER `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
+Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps _before_ the provided `checkpoint_id`. All of the steps _after_ `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
 ![Replay](img/persistence/re_play.png)
 

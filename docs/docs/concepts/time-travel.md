@@ -35,7 +35,7 @@ for event in graph.stream(None, config, stream_mode="values"):
     print(event)
 ```
 
-The graph replays previously executed steps BEFORE the provided `checkpoint_id` and executes the steps AFTER `checkpoint_id` (i.e., a new fork), even if they have been executed previously.
+The graph replays previously executed steps _before_ the provided `checkpoint_id` and executes the steps _after_ `checkpoint_id` (i.e., a new fork), even if they have been executed previously.
 
 ## Forking
 
