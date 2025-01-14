@@ -90,17 +90,17 @@ plugins:
                 - "!^_"
                 -
 nav:
-  - Guides:
+  - Home:
     - Introduction: index.md
-    - FAQ: concepts/faq.md
     - Get started:
       - Learn the basics: tutorials/introduction.ipynb
-      - Local Deploy: tutorials/langgraph-platform/local-server.md
-      - Template Applications: concepts/template_applications.md  # make tutorial?
-      - Cloud Deploy: cloud/quick_start.md
+      - Deployment:
+        - Local Deploy: tutorials/langgraph-platform/local-server.md
+        - Template Applications: concepts/template_applications.md  # make tutorial?
+        - Cloud Deploy: cloud/quick_start.md
     - Guides:
-      - Concepts: concepts/index.md
       - How-to guides: how-tos/index.md
+      - Concepts: concepts/index.md
         # - how-tos/index.md
         # - Controllability: how-tos#controllability
         # - Persistence: how-tos#persistence
@@ -132,6 +132,7 @@ nav:
     #     - concepts/memory.md
     #     - concepts/streaming.md
     - Resources:
+      - FAQ: concepts/faq.md
       - Troubleshooting: troubleshooting/errors/index.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
   # - LangGraph Platform:
