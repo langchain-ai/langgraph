@@ -1,4 +1,13 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+from typing import (
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -8,11 +17,12 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
 from langgraph.errors import ErrorCode, create_error_message
-from langgraph.graph import StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
@@ -22,11 +32,14 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 from langgraph.utils.runnable import RunnableCallable
 
+StructuredResponse = Union[dict, BaseModel]
+StructuredResponseSchema = Union[dict, type[BaseModel]]
+
 
 # We create the AgentState that we will pass around
 # This simply involves a list of messages
 # We want steps to return messages to append to the list
-# So we annotate the messages attribute with operator.add
+# So we annotate the messages attribute with `add_messages` reducer
 class AgentState(TypedDict):
     """The state of the agent."""
 
@@ -35,6 +48,8 @@ class AgentState(TypedDict):
     is_last_step: IsLastStep
 
     remaining_steps: RemainingSteps
+
+    structured_response: StructuredResponse
 
 
 StateSchema = TypeVar("StateSchema", bound=AgentState)
@@ -162,6 +177,19 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     return False
 
 
+def _get_model(model: LanguageModelLike) -> BaseChatModel:
+    """Get the underlying model from a RunnableBinding or return the model itself."""
+    if isinstance(model, RunnableBinding):
+        model = model.bound
+
+    if not isinstance(model, BaseChatModel):
+        raise TypeError(
+            f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(model)}"
+        )
+
+    return model
+
+
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -201,6 +229,9 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
+    response_format: Optional[
+        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
+    ] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -236,6 +267,25 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+        response_format: An optional schema for the final agent output.
+
+            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If not provided, `structured_response` will not be present in the output state.
+            Can be passed in as:
+
+                - an OpenAI function/tool schema,
+                - a JSON Schema,
+                - a TypedDict class,
+                - or a Pydantic class.
+                - a tuple (prompt, schema), where schema is one of the above.
+                    The prompt will be used together with the model that is being used to generate the structured response.
+
+            !!! Important
+                `response_format` requires the model to support `.with_structured_output`
+
+            !!! Note
+                The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
+                This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -527,9 +577,11 @@ def create_react_agent(
     """
 
     if state_schema is not None:
-        if missing_keys := {"messages", "is_last_step"} - set(
-            state_schema.__annotations__
-        ):
+        required_keys = {"messages", "remaining_steps"}
+        if response_format is not None:
+            required_keys.add("structured_response")
+
+        if missing_keys := required_keys - set(state_schema.__annotations__):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if isinstance(tools, ToolExecutor):
@@ -553,6 +605,10 @@ def create_react_agent(
         state_modifier, messages_modifier, store
     )
     model_runnable = preprocessor | model
+
+    # If any of the tools are configured to return_directly after running,
+    # our graph needs to check if these were called
+    should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -629,11 +685,54 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
+    def generate_structured_response(
+        state: AgentState, config: RunnableConfig
+    ) -> AgentState:
+        # NOTE: we exclude the last message because there is enough information
+        # for the LLM to generate the structured response
+        messages = state["messages"][:-1]
+        structured_response_schema = response_format
+        if isinstance(response_format, tuple):
+            system_prompt, structured_response_schema = response_format
+            messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(StructuredResponseSchema, structured_response_schema)
+        )
+        response = model_with_structured_output.invoke(messages, config)
+        return {"structured_response": response}
+
+    async def agenerate_structured_response(
+        state: AgentState, config: RunnableConfig
+    ) -> AgentState:
+        # NOTE: we exclude the last message because there is enough information
+        # for the LLM to generate the structured response
+        messages = state["messages"][:-1]
+        structured_response_schema = response_format
+        if isinstance(response_format, tuple):
+            system_prompt, structured_response_schema = response_format
+            messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(StructuredResponseSchema, structured_response_schema)
+        )
+        response = await model_with_structured_output.ainvoke(messages, config)
+        return {"structured_response": response}
+
     if not tool_calling_enabled:
         # Define a new graph
         workflow = StateGraph(state_schema or AgentState)
         workflow.add_node("agent", RunnableCallable(call_model, acall_model))
         workflow.set_entry_point("agent")
+        if response_format is not None:
+            workflow.add_node(
+                "generate_structured_response",
+                RunnableCallable(
+                    generate_structured_response, agenerate_structured_response
+                ),
+            )
+            workflow.add_edge("agent", "generate_structured_response")
+
         return workflow.compile(
             checkpointer=checkpointer,
             store=store,
@@ -643,12 +742,12 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+    def should_continue(state: AgentState) -> str:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return "__end__"
+            return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
             return "tools"
@@ -664,6 +763,19 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point("agent")
 
+    # Add a structured output node if response_format is provided
+    if response_format is not None:
+        workflow.add_node(
+            "generate_structured_response",
+            RunnableCallable(
+                generate_structured_response, agenerate_structured_response
+            ),
+        )
+        workflow.add_edge("generate_structured_response", END)
+        should_continue_destinations = ["tools", "generate_structured_response"]
+    else:
+        should_continue_destinations = ["tools", END]
+
     # We now add a conditional edge
     workflow.add_conditional_edges(
         # First, we define the start node. We use `agent`.
@@ -671,18 +783,15 @@ def create_react_agent(
         "agent",
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
+        path_map=should_continue_destinations,
     )
-
-    # If any of the tools are configured to return_directly after running,
-    # our graph needs to check if these were called
-    should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
     def route_tool_responses(state: AgentState) -> Literal["agent", "__end__"]:
         for m in reversed(state["messages"]):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
-                return "__end__"
+                return END
         return "agent"
 
     if should_return_direct:
