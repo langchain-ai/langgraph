@@ -296,7 +296,63 @@ nav:
             - concepts/self_hosted.md
             - concepts/langgraph_cloud.md
             - concepts/bring_your_own_cloud.md
-      - Tutorials & Examples: tutorials/index.md
+      - Tutorials:
+        - tutorials/index.md
+        - Quick Start:
+          - Quick Start: tutorials#quick-start
+          - tutorials/introduction.ipynb
+          - tutorials/langgraph-platform/local-server.md
+          - cloud/quick_start.md
+        - Chatbots:
+            - Chatbots: tutorials#chatbots
+            - tutorials/customer-support/customer-support.ipynb
+            - tutorials/chatbots/information-gather-prompting.ipynb
+            - tutorials/code_assistant/langgraph_code_assistant.ipynb
+        - RAG:
+            - RAG: tutorials#rag
+            - tutorials/rag/langgraph_adaptive_rag.ipynb
+            - tutorials/rag/langgraph_adaptive_rag_local.ipynb
+            - tutorials/rag/langgraph_agentic_rag.ipynb
+            - tutorials/rag/langgraph_crag.ipynb
+            - tutorials/rag/langgraph_crag_local.ipynb
+            - tutorials/rag/langgraph_self_rag.ipynb
+            - tutorials/rag/langgraph_self_rag_local.ipynb
+            - tutorials/sql-agent.ipynb
+        - Agent Architectures:
+            - Agent Architectures: tutorials#agent-architectures
+            - Multi-Agent Systems:
+                - Multi-Agent Systems: tutorials#multi-agent-systems
+                - tutorials/multi_agent/multi-agent-collaboration.ipynb
+                - tutorials/multi_agent/agent_supervisor.ipynb
+                - tutorials/multi_agent/hierarchical_agent_teams.ipynb
+            - Planning Agents:
+                - Planning Agents: tutorials#planning-agents
+                - tutorials/plan-and-execute/plan-and-execute.ipynb
+                - tutorials/rewoo/rewoo.ipynb
+                - tutorials/llm-compiler/LLMCompiler.ipynb
+            - Reflection & Critique:
+                - Reflection & Critique: tutorials#reflection-critique
+                - tutorials/reflection/reflection.ipynb
+                - tutorials/reflexion/reflexion.ipynb
+                - tutorials/tot/tot.ipynb
+                - tutorials/lats/lats.ipynb
+                - tutorials/self-discover/self-discover.ipynb
+        - Evaluation & Analysis:
+            - Evaluation & Analysis: tutorials#evaluation
+            - tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
+            - tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+        - Experimental:
+            - Experimental: tutorials#experimental
+            - tutorials/storm/storm.ipynb
+            - tutorials/tnt-llm/tnt-llm.ipynb
+            - tutorials/web-navigation/web_voyager.ipynb
+            - tutorials/usaco/usaco.ipynb
+            - tutorials/extraction/retries.ipynb
+        - LangGraph Platform:
+            - LangGraph Platform: concepts#langgraph-platform
+            - tutorials/auth/getting_started.md
+            - tutorials/auth/resource_auth.md
+            - tutorials/auth/add_auth_server.md
     - Resources:
       - FAQ: concepts/faq.md
       - Troubleshooting: troubleshooting/errors/index.md
