@@ -299,7 +299,7 @@ def coerce_to_runnable(
 
 class RunnableSeq(Runnable):
     """Sequence of Runnables, where the output of each is the input of the next.
-    
+
     RunnableSeq is a simpler version of RunnableSequence that is internal to
     LangGraph.
     """
