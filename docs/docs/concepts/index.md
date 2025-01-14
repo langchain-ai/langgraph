@@ -1,6 +1,4 @@
 ---
-hide:
-  - navigation
 title: Concepts
 description: Conceptual Guide for LangGraph
 ---
