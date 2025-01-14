@@ -5304,7 +5304,6 @@ def test_multiple_updates() -> None:
 
 def test_version_1_of_entrypoint() -> None:
     from langgraph.func import entrypoint
-    from typing import TypedDict, Annotated, NotRequired, Any
 
     states = []
 

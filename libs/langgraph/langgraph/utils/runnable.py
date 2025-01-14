@@ -36,8 +36,8 @@ from typing_extensions import TypeGuard
 
 from langgraph.constants import (
     CONF,
-    CONFIG_KEY_STORE,
     CONFIG_KEY_END,
+    CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM_WRITER,
 )
 from langgraph.store.base import BaseStore
@@ -84,7 +84,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     ),
     (
         sys.intern("previous"),
-        (ANY_TYPE, ),
+        (ANY_TYPE,),
         CONFIG_KEY_END,
         inspect.Parameter.empty,
     ),
@@ -144,7 +144,7 @@ class RunnableCallable(Runnable):
         self.func_accepts: dict[str, bool] = {}
         for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
-            if typ == (ANY_TYPE, ):
+            if typ == (ANY_TYPE,):
                 self.func_accepts[kw] = p is not None and p.kind in VALID_KINDS
             else:
                 self.func_accepts[kw] = (
