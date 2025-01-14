@@ -3006,18 +3006,18 @@ pillow = ">=10.3.0,<11.0.0"
 
 [[package]]
 name = "langchain-openai"
-version = "0.2.12"
+version = "0.3.0"
 description = "An integration package connecting OpenAI and LangChain"
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
-    {file = "langchain_openai-0.2.12-py3-none-any.whl", hash = "sha256:916965c45584d9ea565825ad3bb7629b1ff57f12f36d4b937e5b7d65903839d6"},
-    {file = "langchain_openai-0.2.12.tar.gz", hash = "sha256:8b92096623065a2820e89aa5fb0a262fb109d56c346e3b09ba319af424c45cd1"},
+    {file = "langchain_openai-0.3.0-py3-none-any.whl", hash = "sha256:49c921a22d272b04749a61e78bffa83aecdb8840b24b69f2909e115a357a9a5b"},
+    {file = "langchain_openai-0.3.0.tar.gz", hash = "sha256:88d623eeb2aaa1fff65c2b419a4a1cfd37d3a1d504e598b87cf0bc822a3b70d0"},
 ]
 
 [package.dependencies]
-langchain-core = ">=0.3.21,<0.4.0"
-openai = ">=1.55.3,<2.0.0"
+langchain-core = ">=0.3.29,<0.4.0"
+openai = ">=1.58.1,<2.0.0"
 tiktoken = ">=0.7,<1"
 
 [[package]]
@@ -3036,7 +3036,7 @@ langchain-core = ">=0.3.29,<0.4.0"
 
 [[package]]
 name = "langgraph"
-version = "0.2.61"
+version = "0.2.62"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -3088,7 +3088,7 @@ pymongo = ">=4.9.0,<4.10.0"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.9"
+version = "2.0.10"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3124,7 +3124,7 @@ url = "libs/checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.49"
+version = "0.1.51"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -4362,13 +4362,13 @@ sympy = "*"
 
 [[package]]
 name = "openai"
-version = "1.57.2"
+version = "1.59.7"
 description = "The official Python library for the openai API"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "openai-1.57.2-py3-none-any.whl", hash = "sha256:f7326283c156fdee875746e7e54d36959fb198eadc683952ee05e3302fbd638d"},
-    {file = "openai-1.57.2.tar.gz", hash = "sha256:5f49fd0f38e9f2131cda7deb45dafdd1aee4f52a637e190ce0ecf40147ce8cee"},
+    {file = "openai-1.59.7-py3-none-any.whl", hash = "sha256:cfa806556226fa96df7380ab2e29814181d56fea44738c2b0e581b462c268692"},
+    {file = "openai-1.59.7.tar.gz", hash = "sha256:043603def78c00befb857df9f0a16ee76a3af5984ba40cb7ee5e2f40db4646bf"},
 ]
 
 [package.dependencies]
@@ -4383,6 +4383,7 @@ typing-extensions = ">=4.11,<5"
 
 [package.extras]
 datalib = ["numpy (>=1)", "pandas (>=1.2.3)", "pandas-stubs (>=1.1.0.11)"]
+realtime = ["websockets (>=13,<15)"]
 
 [[package]]
 name = "opentelemetry-api"
@@ -7505,4 +7506,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "981f40de9c31530b17537a089651f9e51901b945fbc01b43ac33a466c8a7d9eb"
+content-hash = "17042b8ecd2c023fd9151609e5770ed5baac9c2b805dc4bc833525c5d400f944"
