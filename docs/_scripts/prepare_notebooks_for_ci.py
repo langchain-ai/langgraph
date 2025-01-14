@@ -42,6 +42,9 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
     "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
     "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
+    "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # flakiness only when running in GHA 
+    "docs/docs/tutorials/rag/langgraph_self_rag.ipynb",  # flakiness only when running in GHA
+    "docs/docs/tutorials/rag/langgraph_agentic_rag.ipynb",  # flakiness only when running in GHA
     "docs/docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
     "docs/docs/tutorials/tot/tot.ipynb",
     "docs/docs/how-tos/visualization.ipynb",
