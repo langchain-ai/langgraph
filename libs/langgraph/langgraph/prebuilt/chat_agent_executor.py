@@ -597,13 +597,15 @@ def create_react_agent(
 
     if isinstance(model, str):
         try:
-            from langchain.chat_models import init_chat_model
+            from langchain.chat_models import (  # type: ignore[import-not-found]
+                init_chat_model,
+            )
         except ImportError:
             raise ImportError(
                 "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
             )
 
-        model = init_chat_model(model)
+        model = cast(BaseChatModel, init_chat_model(model))
 
     tool_calling_enabled = len(tool_classes) > 0
 
