@@ -21,7 +21,6 @@ theme:
     - content.tooltips
     - header.autohide
     - navigation.expand
-    - navigation.tabs
     - navigation.footer
     - navigation.instant
     - navigation.sections
@@ -29,6 +28,7 @@ theme:
     - navigation.instant.progress
     - navigation.path
     - navigation.prune
+    - navigation.tabs
     - navigation.top
     - navigation.tracking
     - search.highlight
