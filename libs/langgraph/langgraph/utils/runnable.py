@@ -75,7 +75,20 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
-config keys, default values and type annotations."""
+config keys, default values and type annotations.
+
+Used to configure keyword arguments that can be injected at runtime
+from the config object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
+
+For a keyword to be injected from the config object, the function signature
+must contain a kwarg with the same name and a matching type annotation.
+
+Each tuple contains:
+- the name of the kwarg in the function signature
+- the type annotation(s) for the kwarg
+- the config key to look for the value in
+- the default value for the kwarg
+"""
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
 
