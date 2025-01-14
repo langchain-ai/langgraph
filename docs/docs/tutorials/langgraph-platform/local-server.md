@@ -1,4 +1,4 @@
-# QuickStart: Launch Local LangGraph Server
+# Quickstart: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
 
