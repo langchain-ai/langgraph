@@ -47,9 +47,7 @@ pip install -U langgraph
 
 ## Example
 
-One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state with its return value after it executes. The way that the graph updates its internal state is defined by either the type of graph chosen or a custom function.
-
-Let's take a look at a simple example of an agent that can use a search tool.
+Let's build a tool-calling [ReAct-style](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#react-implementation) agent that uses a search tool!
 
 ```shell
 pip install langchain-anthropic
@@ -66,102 +64,147 @@ export LANGSMITH_TRACING=true
 export LANGSMITH_API_KEY=lsv2_sk_...
 ```
 
-```python
-from typing import Annotated, Literal, TypedDict
+The simplest way to create a tool-calling agent in LangGraph is to use `create_react_agent`:
 
-from langchain_core.messages import HumanMessage
-from langchain_anthropic import ChatAnthropic
-from langchain_core.tools import tool
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, StateGraph, MessagesState
-from langgraph.prebuilt import ToolNode
+<details open>
+  <summary>High-level implementation</summary>
 
+    ```python
+    from langgraph.prebuilt import create_react_agent
+    from langgraph.checkpoint.memory import MemorySaver
+    from langchain_anthropic import ChatAnthropic
+    from langchain_core.tools import tool
 
-# Define the tools for the agent to use
-@tool
-def search(query: str):
-    """Call to surf the web."""
-    # This is a placeholder, but don't tell the LLM that...
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        return "It's 60 degrees and foggy."
-    return "It's 90 degrees and sunny."
-
-
-tools = [search]
-
-tool_node = ToolNode(tools)
-
-model = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0).bind_tools(tools)
-
-# Define the function that determines whether to continue or not
-def should_continue(state: MessagesState) -> Literal["tools", END]:
-    messages = state['messages']
-    last_message = messages[-1]
-    # If the LLM makes a tool call, then we route to the "tools" node
-    if last_message.tool_calls:
-        return "tools"
-    # Otherwise, we stop (reply to the user)
-    return END
+    # Define the tools for the agent to use
+    @tool
+    def search(query: str):
+        """Call to surf the web."""
+        # This is a placeholder, but don't tell the LLM that...
+        if "sf" in query.lower() or "san francisco" in query.lower():
+            return "It's 60 degrees and foggy."
+        return "It's 90 degrees and sunny."
 
 
-# Define the function that calls the model
-def call_model(state: MessagesState):
-    messages = state['messages']
-    response = model.invoke(messages)
-    # We return a list, because this will get added to the existing list
-    return {"messages": [response]}
+    tools = [search]
+    model = ChatAnthropic(model="claude-3-5-sonnet-latest", temperature=0)
 
+    # Initialize memory to persist state between graph runs
+    checkpointer = MemorySaver()
 
-# Define a new graph
-workflow = StateGraph(MessagesState)
+    app = create_react_agent(model, tools, checkpointer=checkpointer)
 
-# Define the two nodes we will cycle between
-workflow.add_node("agent", call_model)
-workflow.add_node("tools", tool_node)
-
-# Set the entrypoint as `agent`
-# This means that this node is the first one called
-workflow.add_edge(START, "agent")
-
-# We now add a conditional edge
-workflow.add_conditional_edges(
-    # First, we define the start node. We use `agent`.
-    # This means these are the edges taken after the `agent` node is called.
-    "agent",
-    # Next, we pass in the function that will determine which node is called next.
-    should_continue,
-)
-
-# We now add a normal edge from `tools` to `agent`.
-# This means that after `tools` is called, `agent` node is called next.
-workflow.add_edge("tools", 'agent')
-
-# Initialize memory to persist state between graph runs
-checkpointer = MemorySaver()
-
-# Finally, we compile it!
-# This compiles it into a LangChain Runnable,
-# meaning you can use it as you would any other runnable.
-# Note that we're (optionally) passing the memory when compiling the graph
-app = workflow.compile(checkpointer=checkpointer)
-
-# Use the Runnable
-final_state = app.invoke(
-    {"messages": [HumanMessage(content="what is the weather in sf")]},
-    config={"configurable": {"thread_id": 42}}
-)
-final_state["messages"][-1].content
-```
+    # Use the agent
+    final_state = app.invoke(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        config={"configurable": {"thread_id": 42}}
+    )
+    final_state["messages"][-1].content
+    ```
+</details>
 
 ```
 "Based on the search results, I can tell you that the current weather in San Francisco is:\n\nTemperature: 60 degrees Fahrenheit\nConditions: Foggy\n\nSan Francisco is known for its microclimates and frequent fog, especially during the summer months. The temperature of 60°F (about 15.5°C) is quite typical for the city, which tends to have mild temperatures year-round. The fog, often referred to as "Karl the Fog" by locals, is a characteristic feature of San Francisco\'s weather, particularly in the mornings and evenings.\n\nIs there anything else you\'d like to know about the weather in San Francisco or any other location?"
 ```
 
+!!! tip
+
+    LangGraph is a **low-level** framework that allows you to implement any custom agent architectures. Click on the low-level implementation below to see how to implement a tool-calling agent from scratch.
+
+<details>
+  <summary>Low-level implementation</summary>
+
+    ```python
+    from typing import Literal
+
+    from langchain_anthropic import ChatAnthropic
+    from langchain_core.tools import tool
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph, MessagesState
+    from langgraph.prebuilt import ToolNode
+
+
+    # Define the tools for the agent to use
+    @tool
+    def search(query: str):
+        """Call to surf the web."""
+        # This is a placeholder, but don't tell the LLM that...
+        if "sf" in query.lower() or "san francisco" in query.lower():
+            return "It's 60 degrees and foggy."
+        return "It's 90 degrees and sunny."
+
+
+    tools = [search]
+
+    tool_node = ToolNode(tools)
+
+    model = ChatAnthropic(model="claude-3-5-sonnet-latest", temperature=0).bind_tools(tools)
+
+    # Define the function that determines whether to continue or not
+    def should_continue(state: MessagesState) -> Literal["tools", END]:
+        messages = state['messages']
+        last_message = messages[-1]
+        # If the LLM makes a tool call, then we route to the "tools" node
+        if last_message.tool_calls:
+            return "tools"
+        # Otherwise, we stop (reply to the user)
+        return END
+
+
+    # Define the function that calls the model
+    def call_model(state: MessagesState):
+        messages = state['messages']
+        response = model.invoke(messages)
+        # We return a list, because this will get added to the existing list
+        return {"messages": [response]}
+
+
+    # Define a new graph
+    workflow = StateGraph(MessagesState)
+
+    # Define the two nodes we will cycle between
+    workflow.add_node("agent", call_model)
+    workflow.add_node("tools", tool_node)
+
+    # Set the entrypoint as `agent`
+    # This means that this node is the first one called
+    workflow.add_edge(START, "agent")
+
+    # We now add a conditional edge
+    workflow.add_conditional_edges(
+        # First, we define the start node. We use `agent`.
+        # This means these are the edges taken after the `agent` node is called.
+        "agent",
+        # Next, we pass in the function that will determine which node is called next.
+        should_continue,
+    )
+
+    # We now add a normal edge from `tools` to `agent`.
+    # This means that after `tools` is called, `agent` node is called next.
+    workflow.add_edge("tools", 'agent')
+
+    # Initialize memory to persist state between graph runs
+    checkpointer = MemorySaver()
+
+    # Finally, we compile it!
+    # This compiles it into a LangChain Runnable,
+    # meaning you can use it as you would any other runnable.
+    # Note that we're (optionally) passing the memory when compiling the graph
+    app = workflow.compile(checkpointer=checkpointer)
+
+    # Use the agent
+    final_state = app.invoke(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        config={"configurable": {"thread_id": 42}}
+    )
+    final_state["messages"][-1].content
+    ```
+</details>
+
 Now when we pass the same `"thread_id"`, the conversation context is retained via the saved state (i.e. stored list of messages)
 
 ```python
 final_state = app.invoke(
-    {"messages": [HumanMessage(content="what about ny")]},
+    {"messages": [{"role": "user", "content": "what about ny"}]},
     config={"configurable": {"thread_id": 42}}
 )
 final_state["messages"][-1].content
