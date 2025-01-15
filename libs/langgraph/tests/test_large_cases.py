@@ -7255,7 +7255,6 @@ def test_branch_then(
     )
 
 
-@pytest.mark.skip("TODO: re-enable in next PR")
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_dedupe_on_resume(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -7314,30 +7313,35 @@ def test_send_dedupe_on_resume(
     assert graph.invoke(["0"], thread1, debug=1) == [
         "0",
         "1",
+        "3.1",
         "2|Command(goto=Send(node='2', arg=3))",
         "2|Command(goto=Send(node='flaky', arg=4))",
+        "3",
         "2|3",
     ]
     assert builder.nodes["2"].runnable.func.ticks == 3
     assert builder.nodes["flaky"].runnable.func.ticks == 1
     # check state
     state = graph.get_state(thread1)
+    if "shallow" in checkpointer_name:
+        pytest.xfail("TODO: shallow checkpointer reports wrong next set")
     assert state.next == ("flaky",)
     # check history
     if "shallow" not in checkpointer_name:
         history = [c for c in graph.get_state_history(thread1)]
-        assert len(history) == 2
+        assert len(history) == 4
 
     # resume execution
     assert graph.invoke(None, thread1, debug=1) == [
         "0",
         "1",
+        "3.1",
         "2|Command(goto=Send(node='2', arg=3))",
         "2|Command(goto=Send(node='flaky', arg=4))",
+        "3",
         "2|3",
         "flaky|4",
         "3",
-        "3.1",
     ]
     # node "2" doesn't get called again, as we recover writes saved before
     assert builder.nodes["2"].runnable.func.ticks == 3
@@ -7353,12 +7357,13 @@ def test_send_dedupe_on_resume(
             values=[
                 "0",
                 "1",
+                "3.1",
                 "2|Command(goto=Send(node='2', arg=3))",
                 "2|Command(goto=Send(node='flaky', arg=4))",
+                "3",
                 "2|3",
                 "flaky|4",
                 "3",
-                "3.1",
             ],
             next=(),
             config={
@@ -7370,35 +7375,33 @@ def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "writes": {"3": ["3"], "3.1": ["3.1"]},
+                "writes": {"3": ["3"]},
                 "thread_id": "1",
-                "step": 2,
+                "step": 4,
                 "parents": {},
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
                 }
-            ),
+            },
             tasks=(),
         ),
         StateSnapshot(
             values=[
                 "0",
                 "1",
+                "3.1",
                 "2|Command(goto=Send(node='2', arg=3))",
                 "2|Command(goto=Send(node='flaky', arg=4))",
+                "3",
                 "2|3",
                 "flaky|4",
             ],
-            next=("3", "3.1"),
+            next=("3",),
             config={
                 "configurable": {
                     "thread_id": "1",
@@ -7408,17 +7411,9 @@ def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "1": ["1"],
-                    "2": [
-                        ["2|Command(goto=Send(node='2', arg=3))"],
-                        ["2|Command(goto=Send(node='flaky', arg=4))"],
-                        ["2|3"],
-                    ],
-                    "flaky": ["flaky|4"],
-                },
+                "writes": {"2": ["2|3"], "3": ["3"], "flaky": ["flaky|4"]},
                 "thread_id": "1",
-                "step": 1,
+                "step": 3,
                 "parents": {},
             },
             created_at=AnyStr(),
@@ -7439,6 +7434,123 @@ def test_send_dedupe_on_resume(
                     state=None,
                     result=["3"],
                 ),
+            ),
+        ),
+        StateSnapshot(
+            values=[
+                "0",
+                "1",
+                "3.1",
+                "2|Command(goto=Send(node='2', arg=3))",
+                "2|Command(goto=Send(node='flaky', arg=4))",
+            ],
+            next=("2", "flaky", "3"),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "2": [
+                        ["2|Command(goto=Send(node='2', arg=3))"],
+                        ["2|Command(goto=Send(node='flaky', arg=4))"],
+                    ],
+                    "3.1": ["3.1"],
+                },
+                "thread_id": "1",
+                "step": 2,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="2",
+                    path=("__pregel_push", 0),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["2|3"],
+                ),
+                PregelTask(
+                    id=AnyStr(),
+                    name="flaky",
+                    path=("__pregel_push", 1),
+                    error=None,
+                    interrupts=(
+                        Interrupt(
+                            value="Bahh", resumable=False, ns=None, when="during"
+                        ),
+                    ),
+                    state=None,
+                    result=["flaky|4"],
+                ),
+                PregelTask(
+                    id=AnyStr(),
+                    name="3",
+                    path=("__pregel_pull", "3"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["3"],
+                ),
+            ),
+        ),
+        StateSnapshot(
+            values=["0", "1"],
+            next=("2", "2", "3.1"),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"1": ["1"]},
+                "thread_id": "1",
+                "step": 1,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="2",
+                    path=("__pregel_push", 0),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["2|Command(goto=Send(node='2', arg=3))"],
+                ),
+                PregelTask(
+                    id=AnyStr(),
+                    name="2",
+                    path=("__pregel_push", 1),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["2|Command(goto=Send(node='flaky', arg=4))"],
+                ),
                 PregelTask(
                     id=AnyStr(),
                     name="3.1",
@@ -7452,7 +7564,7 @@ def test_send_dedupe_on_resume(
         ),
         StateSnapshot(
             values=["0"],
-            next=("1", "2", "2", "2", "flaky"),
+            next=("1",),
             config={
                 "configurable": {
                     "thread_id": "1",
@@ -7484,66 +7596,6 @@ def test_send_dedupe_on_resume(
                     interrupts=(),
                     state=None,
                     result=["1"],
-                ),
-                PregelTask(
-                    id=AnyStr(),
-                    name="2",
-                    path=(
-                        "__pregel_push",
-                        ("__pregel_pull", "1"),
-                        2,
-                    ),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result=["2|Command(goto=Send(node='2', arg=3))"],
-                ),
-                PregelTask(
-                    id=AnyStr(),
-                    name="2",
-                    path=(
-                        "__pregel_push",
-                        ("__pregel_pull", "1"),
-                        3,
-                    ),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result=["2|Command(goto=Send(node='flaky', arg=4))"],
-                ),
-                PregelTask(
-                    id=AnyStr(),
-                    name="2",
-                    path=(
-                        "__pregel_push",
-                        (
-                            "__pregel_push",
-                            ("__pregel_pull", "1"),
-                            2,
-                        ),
-                        2,
-                    ),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result=["2|3"],
-                ),
-                PregelTask(
-                    id=AnyStr(),
-                    name="flaky",
-                    path=(
-                        "__pregel_push",
-                        (
-                            "__pregel_push",
-                            ("__pregel_pull", "1"),
-                            3,
-                        ),
-                        2,
-                    ),
-                    error=None,
-                    interrupts=(Interrupt(value="Bahh", when="during"),),
-                    state=None,
-                    result=["flaky|4"],
                 ),
             ),
         ),

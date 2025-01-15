@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
+from inspect import signature
 from types import TracebackType
 from typing import (
     Any,
@@ -81,6 +82,7 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
     prepare_single_task,
     should_interrupt,
+    task_path_str,
 )
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
@@ -151,6 +153,7 @@ class PregelLoop(LoopProtocol):
     checkpointer_put_writes: Optional[
         Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
     ]
+    checkpointer_put_writes_accepts_task_path: bool
     _checkpointer_put_after_previous: Optional[
         Callable[
             [
@@ -288,20 +291,34 @@ class PregelLoop(LoopProtocol):
             else:
                 self.checkpoint_pending_writes.append((task_id, c, v))
         if self.checkpointer_put_writes is not None:
-            self.submit(
-                self.checkpointer_put_writes,
-                patch_configurable(
-                    self.checkpoint_config,
-                    {
-                        CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
-                            CONFIG_KEY_CHECKPOINT_NS, ""
-                        ),
-                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
-                    },
-                ),
-                writes,
-                task_id,
+            config = patch_configurable(
+                self.checkpoint_config,
+                {
+                    CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
+                    ),
+                    CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+                },
             )
+            if self.checkpointer_put_writes_accepts_task_path:
+                if hasattr(self, "tasks"):
+                    task = self.tasks.get(task_id)
+                else:
+                    task = None
+                self.submit(
+                    self.checkpointer_put_writes,
+                    config,
+                    writes,
+                    task_id,
+                    task_path_str(task.path) if task else "",
+                )
+            else:
+                self.submit(
+                    self.checkpointer_put_writes,
+                    config,
+                    writes,
+                    task_id,
+                )
         # output writes
         if hasattr(self, "tasks"):
             self._output_writes(task_id, writes)
@@ -813,10 +830,15 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
+            self.checkpointer_put_writes_accepts_task_path = (
+                signature(checkpointer.put_writes).parameters.get("task_path")
+                is not None
+            )
         else:
             self.checkpointer_get_next_version = increment
             self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
+            self.checkpointer_put_writes_accepts_task_path = False
 
     def _checkpointer_put_after_previous(
         self,
@@ -945,10 +967,15 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
+            self.checkpointer_put_writes_accepts_task_path = (
+                signature(checkpointer.aput_writes).parameters.get("task_path")
+                is not None
+            )
         else:
             self.checkpointer_get_next_version = increment
             self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
+            self.checkpointer_put_writes_accepts_task_path = False
 
     async def _checkpointer_put_after_previous(
         self,

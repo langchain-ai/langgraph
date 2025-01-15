@@ -2373,7 +2373,6 @@ async def test_concurrent_emit_sends() -> None:
     )
 
 
-@pytest.mark.skip("TODO: re-enable in next PR")
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_sequences(checkpointer_name: str) -> None:
     class Node:
@@ -2621,7 +2620,6 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.skip("TODO: re-enable in next PR")
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     class InterruptOnce:
@@ -2685,7 +2683,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         ]
         assert builder.nodes["2"].runnable.func.ticks == 3
         assert builder.nodes["flaky"].runnable.func.ticks == 1
-        print((await graph.aget_state(thread1)).tasks)
         # resume execution
         assert await graph.ainvoke(None, thread1, debug=1) == [
             "0",
@@ -2694,8 +2691,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
             "2|Command(goto=Send(node='2', arg=3))",
             "2|Command(goto=Send(node='flaky', arg=4))",
             "3",
-            "flaky|4",
             "2|3",
+            "flaky|4",
             "3",
         ]
         # node "2" doesn't get called again, as we recover writes saved before
@@ -2713,8 +2710,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     "2|Command(goto=Send(node='2', arg=3))",
                     "2|Command(goto=Send(node='flaky', arg=4))",
                     "3",
-                    "flaky|4",
                     "2|3",
+                    "flaky|4",
                     "3",
                 ],
                 next=(),
@@ -2750,8 +2747,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     "2|Command(goto=Send(node='2', arg=3))",
                     "2|Command(goto=Send(node='flaky', arg=4))",
                     "3",
-                    "flaky|4",
                     "2|3",
+                    "flaky|4",
                 ],
                 next=("3",),
                 config={

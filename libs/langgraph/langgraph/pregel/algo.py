@@ -236,7 +236,7 @@ def apply_writes(
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
-    tasks = sorted(tasks, key=lambda t: _tuple_str(t.path[:3]))
+    tasks = sorted(tasks, key=lambda t: task_path_str(t.path[:3]))
     # if no task has triggers this is applying writes from the null task only
     # so we don't do anything other than update the channels written to
     bump_step = any(t.triggers for t in tasks)
@@ -450,7 +450,7 @@ def prepare_single_task(
             str(step),
             name,
             PUSH,
-            _tuple_str(task_path[1]),
+            task_path_str(task_path[1]),
             str(task_path[2]),
         )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
@@ -813,10 +813,10 @@ def _uuid5_str(namespace: bytes, *parts: str) -> str:
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def _tuple_str(tup: Union[str, int, tuple]) -> str:
-    """Generate a string representation of a tuple."""
+def task_path_str(tup: Union[str, int, tuple]) -> str:
+    """Generate a string representation of the task path."""
     return (
-        f"~{', '.join(_tuple_str(x) for x in tup)}"
+        f"~{', '.join(task_path_str(x) for x in tup)}"
         if isinstance(tup, (tuple, list))
         else f"{tup:010d}"
         if isinstance(tup, int)
