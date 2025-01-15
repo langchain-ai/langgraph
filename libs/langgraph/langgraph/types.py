@@ -455,7 +455,6 @@ def interrupt(value: Any) -> Any:
     conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    print("interrupt", scratchpad)
     scratchpad["interrupt_counter"] += 1
     idx = scratchpad["interrupt_counter"]
     # find previous resume values
