@@ -6745,7 +6745,7 @@ async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
 
             return {"values": values}
 
-        configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
         await graph.ainvoke({}, configurable)
         await graph.ainvoke(Command(resume="a"), configurable)
         await graph.ainvoke(Command(resume="b"), configurable)
