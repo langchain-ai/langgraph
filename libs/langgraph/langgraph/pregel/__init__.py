@@ -930,7 +930,9 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -1024,7 +1026,9 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer or None,
+                    checkpointer=self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None,
                     manager=None,
                 )
                 # apply null writes
@@ -1213,7 +1217,9 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -1307,7 +1313,9 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer or None,
+                    checkpointer=self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None,
                     manager=None,
                 )
                 # apply null writes
