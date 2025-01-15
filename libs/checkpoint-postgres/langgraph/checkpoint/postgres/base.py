@@ -223,7 +223,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         task_id: str,
         task_path: str,
         writes: Sequence[tuple[str, Any]],
-    ) -> list[tuple[str, str, str, str, int, str, str, bytes]]:
+    ) -> list[tuple[str, str, str, str, str, int, str, str, bytes]]:
         return [
             (
                 thread_id,
