@@ -5262,9 +5262,10 @@ def test_multiple_updates() -> None:
     ]
 
 
-def test_falsy_return_from_task() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_name: str):
     """Test with a falsy return from a task."""
-    checkpointer = MemorySaver()
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     @task
     def falsy_task() -> bool:
@@ -5276,17 +5277,18 @@ def test_falsy_return_from_task() -> None:
         falsy_task().result()
         interrupt("test")
 
-    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({"a": 5}, configurable)
     graph.invoke(Command(resume="123"), configurable)
 
 
-def test_multiple_interrupts_imperative() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_interrupts_imperative(
+    request: pytest.FixtureRequest, checkpointer_name: str
+):
     """Test multiple interrupts with an imperative API."""
-    from langgraph.checkpoint.memory import MemorySaver
-    from langgraph.func import entrypoint, task
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
-    checkpointer = MemorySaver()
     counter = 0
 
     @task
@@ -5307,7 +5309,7 @@ def test_multiple_interrupts_imperative() -> None:
 
         return {"values": values}
 
-    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({}, configurable)
     graph.invoke(Command(resume="a"), configurable)
     graph.invoke(Command(resume="b"), configurable)
@@ -5317,3 +5319,115 @@ def test_multiple_interrupts_imperative() -> None:
         "values": [2, "a", 4, "b", 6, "c"],
     }
     assert counter == 3
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_double_interrupt_subgraph(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class AgentState(TypedDict):
+        input: str
+
+    def node_1(state: AgentState):
+        result = interrupt("interrupt node 1")
+        return {"input": result}
+
+    def node_2(state: AgentState):
+        result = interrupt("interrupt node 2")
+        return {"input": result}
+
+    subgraph_builder = (
+        StateGraph(AgentState)
+        .add_node("node_1", node_1)
+        .add_node("node_2", node_2)
+        .add_edge(START, "node_1")
+        .add_edge("node_1", "node_2")
+        .add_edge("node_2", END)
+    )
+
+    # invoke the sub graph
+    subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+    thread = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    assert [c for c in subgraph.stream({"input": "test"}, thread)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 1",
+                    resumable=True,
+                    ns=[AnyStr("node_1:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+    # resume from the first interrupt
+    assert [c for c in subgraph.stream(Command(resume="123"), thread)] == [
+        {
+            "node_1": {"input": "123"},
+        },
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 2",
+                    resumable=True,
+                    ns=[AnyStr("node_2:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+    # resume from the second interrupt
+    assert [c for c in subgraph.stream(Command(resume="123"), thread)] == [
+        {
+            "node_2": {"input": "123"},
+        },
+    ]
+
+    subgraph = subgraph_builder.compile()
+
+    def invoke_sub_agent(state: AgentState):
+        return subgraph.invoke(state)
+
+    parent_agent = (
+        StateGraph(AgentState)
+        .add_node("invoke_sub_agent", invoke_sub_agent)
+        .add_edge(START, "invoke_sub_agent")
+        .add_edge("invoke_sub_agent", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+    assert [c for c in parent_agent.stream({"input": "test"}, thread)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 1",
+                    resumable=True,
+                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+
+    # resume from the first interrupt
+    assert [c for c in parent_agent.stream(Command(resume=True), thread)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 2",
+                    resumable=True,
+                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    # resume from 2nd interrupt
+    assert [c for c in parent_agent.stream(Command(resume=True), thread)] == [
+        {
+            "invoke_sub_agent": {"input": True},
+        },
+    ]
