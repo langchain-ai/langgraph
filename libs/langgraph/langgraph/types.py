@@ -342,9 +342,12 @@ class LoopProtocol:
 
 
 class PregelScratchpad(TypedDict, total=False):
+    # interrupt
     interrupt_counter: int
     used_null_resume: bool
     resume: list[Any]
+    # call
+    call_counter: int
 
 
 def interrupt(value: Any) -> Any:

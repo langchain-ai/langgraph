@@ -5309,7 +5309,6 @@ def test_multiple_interrupts_imperative() -> None:
 
     configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     graph.invoke({}, configurable)
-    # Currently fails when double accepts a variable
     graph.invoke(Command(resume="a"), configurable)
     graph.invoke(Command(resume="b"), configurable)
     result = graph.invoke(Command(resume="c"), configurable)

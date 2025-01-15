@@ -1,6 +1,5 @@
 import asyncio
 import concurrent.futures
-import threading
 import time
 from functools import partial
 from typing import (
@@ -22,6 +21,7 @@ from langchain_core.callbacks import Callbacks
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CALL,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     ERROR,
     INTERRUPT,
@@ -71,8 +71,6 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
-        locks: dict[str, threading.Lock] = {}
-
         def writer(
             task: PregelExecutableTask,
             writes: Sequence[tuple[str, Any]],
@@ -82,24 +80,19 @@ class PregelRunner:
             if all(w[0] != PUSH for w in writes):
                 return task.config[CONF][CONFIG_KEY_SEND](writes)
 
-            if task.id not in locks:
-                locks[task.id] = threading.Lock()
-            with locks[task.id]:
-                prev_length = len(task.writes)
-                # delegate to the underlying writer
-                task.config[CONF][CONFIG_KEY_SEND](writes)
-                # confirm no other concurrent writes were added
-                assert len(task.writes) == prev_length + len(writes)
             # schedule PUSH tasks, collect futures
+            scratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+            scratchpad.setdefault("call_counter", 0)
             rtn: dict[int, Optional[concurrent.futures.Future]] = {}
-            for idx, w in enumerate(writes, start=prev_length):
+            for idx, w in enumerate(writes):
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
                 # schedule the next task, if the callback returns one
-                if next_task := self.schedule_task(
-                    task, idx, calls[idx - prev_length] if calls else None
-                ):
+                wcall = calls[idx] if calls else None
+                cnt = scratchpad["call_counter"]
+                scratchpad["call_counter"] += 1
+                if next_task := self.schedule_task(task, cnt, wcall):
                     if fut := next(
                         (
                             f
@@ -110,7 +103,7 @@ class PregelRunner:
                     ):
                         # if the parent task was retried,
                         # the next task might already be running
-                        rtn[idx - prev_length] = fut
+                        rtn[idx] = fut
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = concurrent.futures.Future()
@@ -130,7 +123,7 @@ class PregelRunner:
                             )
                         else:
                             fut.set_result(None)
-                        rtn[idx - prev_length] = fut
+                        rtn[idx] = fut
                     else:
                         # schedule the next task
                         fut = self.submit(
@@ -148,7 +141,7 @@ class PregelRunner:
                         )
                         fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
-                        rtn[idx - prev_length] = fut
+                        rtn[idx] = fut
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(
@@ -196,6 +189,8 @@ class PregelRunner:
                     raise
             if not futures:  # maybe `t` schuduled another task
                 return
+            else:
+                tasks = ()  # don't reschedule this task
         # add waiter task if requested
         if get_waiter is not None:
             futures[get_waiter()] = None
@@ -262,8 +257,6 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
-        locks: dict[str, threading.Lock] = {}
-
         def writer(
             task: PregelExecutableTask,
             writes: Sequence[tuple[str, Any]],
@@ -273,23 +266,19 @@ class PregelRunner:
             if all(w[0] != PUSH for w in writes):
                 return task.config[CONF][CONFIG_KEY_SEND](writes)
 
-            if task.id not in locks:
-                locks[task.id] = threading.Lock()
-            with locks[task.id]:
-                prev_length = len(task.writes)
-                # delegate to the underlying writer
-                task.config[CONF][CONFIG_KEY_SEND](writes)
-                # confirm no other concurrent writes were added
-                assert len(task.writes) == prev_length + len(writes)
             # schedule PUSH tasks, collect futures
+            scratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+            scratchpad.setdefault("call_counter", 0)
             rtn: dict[int, Optional[asyncio.Future]] = {}
-            for idx, w in enumerate(writes, start=prev_length):
+            for idx, w in enumerate(writes):
                 # bail if not a PUSH write
                 if w[0] != PUSH:
                     continue
                 # schedule the next task, if the callback returns one
-                wcall = calls[idx - prev_length] if calls is not None else None
-                if next_task := self.schedule_task(task, idx, wcall):
+                wcall = calls[idx] if calls is not None else None
+                cnt = scratchpad["call_counter"]
+                scratchpad["call_counter"] += 1
+                if next_task := self.schedule_task(task, cnt, wcall):
                     # if the parent task was retried,
                     # the next task might already be running
                     if fut := next(
@@ -302,7 +291,7 @@ class PregelRunner:
                     ):
                         # if the parent task was retried,
                         # the next task might already be running
-                        rtn[idx - prev_length] = fut
+                        rtn[idx] = fut
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = asyncio.Future()
@@ -322,7 +311,7 @@ class PregelRunner:
                             )
                         else:
                             fut.set_result(None)
-                        rtn[idx - prev_length] = fut
+                        rtn[idx] = fut
                     else:
                         # schedule the next task
                         fut = cast(
@@ -346,7 +335,7 @@ class PregelRunner:
                         )
                         fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
-                        rtn[idx - prev_length] = fut
+                        rtn[idx] = fut
             return [rtn.get(i) for i in range(len(writes))]
 
         def call(
@@ -401,6 +390,8 @@ class PregelRunner:
                     raise
             if not futures:  # maybe `t` schuduled another task
                 return
+            else:
+                tasks = ()  # don't reschedule this task
         # add waiter task if requested
         if get_waiter is not None:
             futures[get_waiter()] = None

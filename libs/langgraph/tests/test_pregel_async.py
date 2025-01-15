@@ -6712,3 +6712,41 @@ async def test_falsy_return_from_task() -> None:
     configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     await graph.ainvoke({"a": 5}, configurable)
     await graph.ainvoke(Command(resume="123"), configurable)
+
+
+async def test_multiple_interrupts_imperative() -> None:
+    """Test multiple interrupts with an imperative API."""
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.func import entrypoint, task
+
+    checkpointer = MemorySaver()
+    counter = 0
+
+    @task
+    async def double(x: int) -> int:
+        """Increment the counter."""
+        nonlocal counter
+        counter += 1
+        return 2 * x
+
+    @entrypoint(checkpointer=checkpointer)
+    async def graph(state: dict) -> dict:
+        """React tool."""
+
+        values = []
+
+        for idx in [1, 2, 3]:
+            values.extend([await double(idx), interrupt({"a": "boo"})])
+
+        return {"values": values}
+
+    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+    await graph.ainvoke({}, configurable)
+    await graph.ainvoke(Command(resume="a"), configurable)
+    await graph.ainvoke(Command(resume="b"), configurable)
+    result = await graph.ainvoke(Command(resume="c"), configurable)
+    # `double` value should be cached appropriately when used w/ `interrupt`
+    assert result == {
+        "values": [2, "a", 4, "b", 6, "c"],
+    }
+    assert counter == 3
