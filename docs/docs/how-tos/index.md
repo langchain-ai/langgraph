@@ -1,6 +1,4 @@
 ---
-hide:
-  - navigation
 title: How-to Guides
 description: How to accomplish common tasks in LangGraph
 ---

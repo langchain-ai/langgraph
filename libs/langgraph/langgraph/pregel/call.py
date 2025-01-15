@@ -1,3 +1,5 @@
+"""Utility to convert a user provided function into a Runnable with a ChannelWrite."""
+
 import sys
 import types
 from typing import Any, Callable, Optional
@@ -6,10 +8,9 @@ from langgraph.constants import RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.utils.runnable import RunnableSeq, coerce_to_runnable
 
-"""
-Utilities borrowed from cloudpickle.
-https://github.com/cloudpipe/cloudpickle/blob/6220b0ce83ffee5e47e06770a1ee38ca9e47c850/cloudpickle/cloudpickle.py#L265
-"""
+##
+# Utilities borrowed from cloudpickle.
+# https://github.com/cloudpipe/cloudpickle/blob/6220b0ce83ffee5e47e06770a1ee38ca9e47c850/cloudpickle/cloudpickle.py#L265
 
 
 def _getattribute(obj: Any, name: str) -> Any:

@@ -359,7 +359,13 @@ class PregelLoop(LoopProtocol):
         input_keys: Union[str, Sequence[str]],
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
-        Returns True if more iterations are needed."""
+
+        Args:
+            input_keys: The key(s) to read input from.
+
+        Returns:
+            True if more iterations are needed.
+        """
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
@@ -1034,4 +1040,13 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         # unwind stack
-        return await self.stack.__aexit__(exc_type, exc_value, traceback)
+        exit_task = asyncio.create_task(
+            self.stack.__aexit__(exc_type, exc_value, traceback)
+        )
+        try:
+            return await exit_task
+        except asyncio.CancelledError as e:
+            # Bubble up the exit task upon cancellation to permit the API
+            # consumer to await it before e.g., re-using the DB connection.
+            e.args = (*e.args, exit_task)
+            raise

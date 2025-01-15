@@ -100,7 +100,7 @@ class Config(TypedDict, total=False):
 def _parse_version(version_str: str) -> tuple[int, int]:
     """Parse a version string into a tuple of (major, minor)."""
     try:
-        major, minor = map(int, version_str.split("."))
+        major, minor = map(int, version_str.split("-")[0].split("."))
         return (major, minor)
     except ValueError:
         raise click.UsageError(f"Invalid version format: {version_str}") from None
@@ -159,7 +159,7 @@ def validate_config(config: Config) -> Config:
     if config.get("python_version"):
         pyversion = config["python_version"]
         if not pyversion.count(".") == 1 or not all(
-            part.isdigit() for part in pyversion.split(".")
+            part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
             raise click.UsageError(
                 f"Invalid Python version format: {pyversion}. "

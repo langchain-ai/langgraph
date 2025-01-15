@@ -1654,10 +1654,10 @@ class Pregel(PregelProtocol):
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
-                # computation proceeds in steps, while there are channel updates
-                # channel updates from step N are only visible in step N+1
+                # computation proceeds in steps, while there are channel updates.
+                # Channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
-                # with channel updates applied only at the transition between steps
+                # with channel updates applied only at the transition between steps.
                 while loop.tick(input_keys=self.input_channels):
                     for _ in runner.tick(
                         loop.tasks.values(),

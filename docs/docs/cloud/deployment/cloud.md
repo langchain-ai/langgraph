@@ -11,7 +11,7 @@ LangGraph Cloud is available within <a href="https://www.langchain.com/langsmith
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Cloud`. The `LangGraph Cloud` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
 1. In the top-right corner, select `+ New Deployment` to create a new deployment.
 1. In the `Create New Deployment` panel, fill out the required fields.
     1. `Deployment details`
@@ -38,7 +38,7 @@ When [creating a new deployment](#create-new-deployment), a new revision is crea
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Cloud`. The `LangGraph Cloud` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
 1. Select an existing deployment to create a new revision for.
 1. In the `Deployment` view, in the top-right corner, select `+ New Revision`.
 1. In the `New Revision` modal, fill out the required fields.
@@ -52,15 +52,15 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
         1. Update the value of existing secrets or environment variables.
 1. Select `Submit`. After a few seconds, the `New Revision` modal will close and the new revision will be queued for deployment.
 
-## View Build and Deployment Logs
+## View Build and Server Logs
 
-Build and deployment logs are available for each revision.
+Build and server logs are available for each revision.
 
-Starting from the `LangGraph Cloud` view...
+Starting from the `LangGraph Platform` view...
 
 1. Select the desired revision from the `Revisions` table. A panel slides open from the right-hand side and the `Build` tab is selected by default, which displays build logs for the revision.
-1. In the panel, select the `Deploy` tab to view deployment logs for the revision.
-1. Within the `Deploy` tab, adjust the date/time range picker as needed. By default, the date/time range picker is set to the `Last 15 minutes`.
+1. In the panel, select the `Server` tab to view server logs for the revision. Server logs are only available after a revision has been deployed.
+1. Within the `Server` tab, adjust the date/time range picker as needed. By default, the date/time range picker is set to the `Last 7 days`.
 
 ## Interrupt Revision
 
@@ -69,7 +69,7 @@ Interrupting a revision will stop deployment of the revision.
 !!! warning "Undefined Behavior"
     Interrupted revisions have undefined behavior. This is only useful if you need to deploy a new revision and you already have a revision "stuck" in progress. In the future, this feature may be removed.
 
-Starting from the `LangGraph Cloud` view...
+Starting from the `LangGraph Platform` view...
 
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired revision from the `Revisions` table.
 1. Select `Interrupt` from the menu.
@@ -79,13 +79,13 @@ Starting from the `LangGraph Cloud` view...
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Cloud`. The `LangGraph Cloud` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired deployment and select `Delete`.
 1. A `Confirmation` modal will appear. Select `Delete`.
 
 ## Deployment Settings
 
-Starting from the `LangGraph Cloud` view...
+Starting from the `LangGraph Platform` view...
 
 1. In the top-right corner, select the gear icon (`Deployment Settings`).
 1. Update the `Git Branch` to the desired branch.

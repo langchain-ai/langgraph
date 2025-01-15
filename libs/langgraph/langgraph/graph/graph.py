@@ -257,7 +257,7 @@ class Graph:
                 selected by `path`.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
 
         Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
@@ -308,7 +308,7 @@ class Graph:
             key (str): The key of the node to set as the entry point.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_edge(START, key)
 
@@ -334,7 +334,7 @@ class Graph:
                 selected by `path`.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_conditional_edges(START, path, path_map, then)
 
@@ -347,7 +347,7 @@ class Graph:
             key (str): The key of the node to set as the finish point.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_edge(key, END)
 

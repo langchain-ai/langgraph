@@ -5,7 +5,7 @@ request handling in LangGraph. It includes user protocols, authentication contex
 and typed dictionaries for various API operations.
 
 Note:
-    All typing.TypedDict classes use total=False to make all fields optional by default.
+    All typing.TypedDict classes use total=False to make all fields typing.Optional by default.
 """
 
 import functools
@@ -157,7 +157,7 @@ class MinimalUserDict(typing.TypedDict, total=False):
     identity: typing_extensions.Required[str]
     """The required unique identifier for the user."""
     display_name: str
-    """The optional display name for the user."""
+    """The typing.Optional display name for the user."""
     is_authenticated: bool
     """Whether the user is authenticated. Defaults to True."""
     permissions: Sequence[str]
@@ -358,11 +358,34 @@ class AuthContext(BaseAuthContext):
     allowing for fine-grained access control decisions.
     """
 
-    resource: typing.Literal["runs", "threads", "crons", "assistants"]
+    resource: typing.Literal["runs", "threads", "crons", "assistants", "store"]
     """The resource being accessed."""
 
-    action: typing.Literal["create", "read", "update", "delete", "search", "create_run"]
-    """The action being performed on the resource."""
+    action: typing.Literal[
+        "create",
+        "read",
+        "update",
+        "delete",
+        "search",
+        "create_run",
+        "put",
+        "get",
+        "list_namespaces",
+    ]
+    """The action being performed on the resource.
+    
+    Most resources support the following actions:
+    - create: Create a new resource
+    - read: Read information about a resource
+    - update: Update an existing resource
+    - delete: Delete a resource
+    - search: Search for resources
+
+    The store supports the following actions:
+    - put: Add or update a document in the store
+    - get: Get a document from the store
+    - list_namespaces: List the namespaces in the store
+    """
 
 
 class ThreadsCreate(typing.TypedDict, total=False):
@@ -759,6 +782,84 @@ class CronsSearch(typing.TypedDict, total=False):
     """Offset for pagination."""
 
 
+class StoreGet(typing.TypedDict):
+    """Operation to retrieve a specific item by its namespace and key."""
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that uniquely identifies the item's location."""
+
+    key: str
+    """Unique identifier for the item within its specific namespace."""
+
+
+class StoreSearch(typing.TypedDict):
+    """Operation to search for items within a specified namespace hierarchy."""
+
+    namespace: tuple[str, ...]
+    """Prefix filter for defining the search scope."""
+
+    filter: typing.Optional[dict[str, typing.Any]]
+    """Key-value pairs for filtering results based on exact matches or comparison operators."""
+
+    limit: int
+    """Maximum number of items to return in the search results."""
+
+    offset: int
+    """Number of matching items to skip for pagination."""
+
+    query: typing.Optional[str]
+    """Naturalj language search query for semantic search capabilities."""
+
+
+class StoreListNamespaces(typing.TypedDict):
+    """Operation to list and filter namespaces in the store."""
+
+    namespace: typing.Optional[tuple[str, ...]]
+    """Prefix filter namespaces."""
+
+    suffix: typing.Optional[tuple[str, ...]]
+    """Optional conditions for filtering namespaces."""
+
+    max_depth: typing.Optional[int]
+    """Maximum depth of namespace hierarchy to return.
+
+    Note:
+        Namespaces deeper than this level will be truncated.
+    """
+
+    limit: int
+    """Maximum number of namespaces to return."""
+
+    offset: int
+    """Number of namespaces to skip for pagination."""
+
+
+class StorePut(typing.TypedDict):
+    """Operation to store, update, or delete an item in the store."""
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that identifies the location of the item."""
+
+    key: str
+    """Unique identifier for the item within its namespace."""
+
+    value: typing.Optional[dict[str, typing.Any]]
+    """The data to store, or None to mark the item for deletion."""
+
+    index: typing.Optional[typing.Union[typing.Literal[False], list[str]]]
+    """Optional index configuration for full-text search."""
+
+
+class StoreDelete(typing.TypedDict):
+    """Operation to delete an item from the store."""
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that uniquely identifies the item's location."""
+
+    key: str
+    """Unique identifier for the item within its specific namespace."""
+
+
 class on:
     """Namespace for type definitions of different API operations.
 
@@ -894,6 +995,38 @@ class on:
 
             value = CronsSearch
 
+    class store:
+        """Types for store-related operations."""
+
+        value = typing.Union[
+            StoreGet, StoreSearch, StoreListNamespaces, StorePut, StoreDelete
+        ]
+
+        class put:
+            """Type for store put parameters."""
+
+            value = StorePut
+
+        class get:
+            """Type for store get parameters."""
+
+            value = StoreGet
+
+        class search:
+            """Type for store search parameters."""
+
+            value = StoreSearch
+
+        class delete:
+            """Type for store delete parameters."""
+
+            value = StoreDelete
+
+        class list_namespaces:
+            """Type for store list namespaces parameters."""
+
+            value = StoreListNamespaces
+
 
 __all__ = [
     "on",
@@ -909,4 +1042,9 @@ __all__ = [
     "AssistantsUpdate",
     "AssistantsDelete",
     "AssistantsSearch",
+    "StoreGet",
+    "StoreSearch",
+    "StoreListNamespaces",
+    "StorePut",
+    "StoreDelete",
 ]
