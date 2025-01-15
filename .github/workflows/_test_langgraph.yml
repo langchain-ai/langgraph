@@ -19,14 +19,9 @@ jobs:
           - "3.13"
         core-version:
           - "latest"
-        ff-send-v2:
-          - "false"
         include:
           - python-version: "3.11"
             core-version: ">=0.2.42,<0.3.0"
-          - python-version: "3.11"
-            core-version: "latest"
-            ff-send-v2: "true"
 
     defaults:
       run:
@@ -57,8 +52,6 @@ jobs:
 
       - name: Run tests
         shell: bash
-        env:
-          LANGGRAPH_FF_SEND_V2: ${{ matrix.ff-send-v2 }}
         run: |
           make test_parallel
 
