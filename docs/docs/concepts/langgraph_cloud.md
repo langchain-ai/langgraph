@@ -6,20 +6,28 @@
 
 ## Overview
 
-LangGraph's Cloud SaaS is a managed service for deploying LangGraph APIs, regardless of its definition or dependencies. The service offers managed implementations of checkpointers and stores, allowing you to focus on building the right cognitive architecture for your use case. By handling scalable & secure infrastructure, LangGraph Cloud offers the fastest path to getting your LangGraph API deployed to production.
+LangGraph's Cloud SaaS is a managed service for deploying LangGraph Servers, regardless of its definition or dependencies. The service offers managed implementations of checkpointers and stores, allowing you to focus on building the right cognitive architecture for your use case. By handling scalable & secure infrastructure, LangGraph Cloud SaaS offers the fastest path to getting your LangGraph Server deployed to production.
 
 ## Deployment
 
-A **deployment** is an instance of a LangGraph API. A single deployment can have many [revisions](#revision). When a deployment is created, all the necessary infrastructure (e.g. database, containers, secrets store) are automatically provisioned. See the [architecture diagram](#architecture) below for more details.
+A **deployment** is an instance of a LangGraph Server. A single deployment can have many [revisions](#revision). When a deployment is created, all the necessary infrastructure (e.g. database, containers, secrets store) are automatically provisioned. See the [architecture diagram](#architecture) below for more details.
 
-See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for creating a new deployment.
-
-## Resource Allocation
+Resource Allocation:
 
 | **Deployment Type** | **CPU** | **Memory** | **Scaling**         |
 |---------------------|---------|------------|---------------------|
 | Development         | 1 CPU   | 1 GB       | Up to 1 container   |
 | Production          | 2 CPU   | 2 GB       | Up to 10 containers |
+
+See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for creating a new deployment.
+
+## Persistence
+
+A dedicated database is automatically created for each deployment. The database serves as the [persistence layer](../concepts/persistence.md) for the deployment.
+
+When defining a graph to be deployed to LangGraph Cloud SaaS, a [checkpointer](../concepts/persistence.md#checkpointer-libraries) should not be configured by the user. Instead, a checkpointer is automatically configured for the graph.
+
+There is no direct access to the database. All access to the database occurs through the LangGraph Server APIs.
 
 ## Autoscaling
 `Production` type deployments automatically scale up to 10 containers. Scaling is based on the current request load for a single container. Specifically, the autoscaling implementation scales the deployment so that each container is processing about 10 concurrent requests. For example... 
