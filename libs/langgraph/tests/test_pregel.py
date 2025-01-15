@@ -50,13 +50,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import (
-    CONFIG_KEY_NODE_FINISHED,
-    ERROR,
-    FF_SEND_V2,
-    PULL,
-    START,
-)
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
@@ -1375,31 +1369,17 @@ def test_concurrent_emit_sends() -> None:
     builder.add_conditional_edges("1.1", send_for_profit)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert graph.invoke(["0"]) == (
-        [
-            "0",
-            "1",
-            "1.1",
-            "2|1",
-            "2|2",
-            "2|3",
-            "2|4",
-            "3",
-            "3.1",
-        ]
-        if FF_SEND_V2
-        else [
-            "0",
-            "1",
-            "1.1",
-            "3.1",
-            "2|1",
-            "2|2",
-            "2|3",
-            "2|4",
-            "3",
-        ]
-    )
+    assert graph.invoke(["0"]) == [
+        "0",
+        "1",
+        "1.1",
+        "3.1",
+        "2|1",
+        "2|2",
+        "2|3",
+        "2|4",
+        "3",
+    ]
 
 
 def test_send_sequences() -> None:
@@ -1438,31 +1418,17 @@ def test_send_sequences() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert (
-        graph.invoke(["0"])
-        == [
-            "0",
-            "1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "2|3",
-            "2|4",
-            "3",
-            "3.1",
-        ]
-        if FF_SEND_V2
-        else [
-            "0",
-            "1",
-            "3.1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "3",
-            "2|3",
-            "2|4",
-            "3",
-        ]
-    )
+    assert graph.invoke(["0"]) == [
+        "0",
+        "1",
+        "3.1",
+        "2|Command(goto=Send(node='2', arg=3))",
+        "2|Command(goto=Send(node='2', arg=4))",
+        "3",
+        "2|3",
+        "2|4",
+        "3",
+    ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

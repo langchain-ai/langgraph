@@ -966,7 +966,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # no values, copy checkpoint
+            # no values, empty checkpoint
             if values is None and as_node is None:
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -985,6 +985,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            # no values, copy checkpoint
             if values is None and as_node == "__copy__":
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1248,7 +1249,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # no values, copy checkpoint
+            # no values, empty checkpoint
             if values is None and as_node is None:
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1267,6 +1268,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            # no values, copy checkpoint
             if values is None and as_node == "__copy__":
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint

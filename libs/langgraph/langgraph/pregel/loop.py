@@ -699,9 +699,6 @@ class PregelLoop(LoopProtocol):
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
-        if suppress or exc_type is None:
-            # save final output
-            self.output = read_channels(self.channels, self.output_keys)
         if suppress:
             # emit one last "values" event, with pending writes applied
             if (
@@ -729,8 +726,13 @@ class PregelLoop(LoopProtocol):
                 "updates",
                 lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]),
             )
+            # save final output
+            self.output = read_channels(self.channels, self.output_keys)
             # suppress interrupt
             return True
+        elif exc_type is None:
+            # save final output
+            self.output = read_channels(self.channels, self.output_keys)
 
     def _emit(
         self,

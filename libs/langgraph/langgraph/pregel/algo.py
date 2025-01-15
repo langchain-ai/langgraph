@@ -228,7 +228,7 @@ def apply_writes(
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
-    tasks = sorted(tasks, key=lambda t: t.path[:3])
+    tasks = sorted(tasks, key=lambda t: _tuple_str(t.path[:3]))
     # if no task has triggers this is applying writes from the null task only
     # so we don't do anything other than update the channels written to
     bump_step = any(t.triggers for t in tasks)
@@ -273,7 +273,7 @@ def apply_writes(
         for chan, val in task.writes:
             if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
                 pass
-            elif chan == TASKS:  # TODO: remove branch in 1.0
+            elif chan == TASKS:
                 checkpoint["pending_sends"].append(val)
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
@@ -363,8 +363,8 @@ def prepare_next_tasks(
     This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
     by edges)."""
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
-    # Consume pending_sends from previous step (legacy version of Send)
-    for idx, _ in enumerate(checkpoint["pending_sends"]):  # TODO: remove branch in 1.0
+    # Consume pending_sends from previous step
+    for idx, _ in enumerate(checkpoint["pending_sends"]):
         if task := prepare_single_task(
             (PUSH, idx),
             None,
@@ -400,65 +400,7 @@ def prepare_next_tasks(
             manager=manager,
         ):
             tasks.append(task)
-    # Consume pending Sends from this step (new version of Send)
-    if any(c == PUSH for _, c, _ in pending_writes):
-        # group writes by task id
-        grouped_by_task = defaultdict(list)
-        for tid, c, _ in pending_writes:
-            grouped_by_task[tid].append(c)
-        # prepare send tasks from grouped writes
-        # 1. start from sends originating from existing tasks
-        tidx = 0
-        while tidx < len(tasks):
-            task = tasks[tidx]
-            if twrites := grouped_by_task.pop(task.id, None):
-                for idx, c in enumerate(twrites):
-                    if c != PUSH:
-                        continue
-                    if next_task := prepare_single_task(
-                        (PUSH, task.path, idx, task.id),
-                        None,
-                        checkpoint=checkpoint,
-                        pending_writes=pending_writes,
-                        processes=processes,
-                        channels=channels,
-                        managed=managed,
-                        config=config,
-                        step=step,
-                        for_execution=for_execution,
-                        store=store,
-                        checkpointer=checkpointer,
-                        manager=manager,
-                    ):
-                        tasks.append(next_task)
-            tidx += 1
-        # key tasks by id
-        task_map = {t.id: t for t in tasks}
-        # 2. create new tasks for remaining sends (eg. from update_state)
-        for tid, writes in grouped_by_task.items():
-            task = task_map.get(tid)
-            for idx, c in enumerate(writes):
-                if c != PUSH:
-                    continue
-                if next_task := prepare_single_task(
-                    (PUSH, task.path if task else (), idx, tid),
-                    None,
-                    checkpoint=checkpoint,
-                    pending_writes=pending_writes,
-                    processes=processes,
-                    channels=channels,
-                    managed=managed,
-                    config=config,
-                    step=step,
-                    for_execution=for_execution,
-                    store=store,
-                    checkpointer=checkpointer,
-                    manager=manager,
-                ):
-                    task_map[next_task.id] = next_task
-    else:
-        task_map = {t.id: t for t in tasks}
-    return task_map
+    return {t.id: t for t in tasks}
 
 
 def prepare_single_task(
@@ -571,8 +513,8 @@ def prepare_single_task(
         else:
             return PregelTask(task_id, name, task_path[:3])
     elif task_path[0] == PUSH:
-        if len(task_path) == 2:  # TODO: remove branch in 1.0
-            # legacy SEND tasks, executed in superstep n+1
+        if len(task_path) == 2:
+            # SEND tasks, executed in superstep n+1
             # (PUSH, idx of pending send)
             idx = cast(int, task_path[1])
             if idx >= len(checkpoint["pending_sends"]):
@@ -600,43 +542,6 @@ def prepare_single_task(
                 packet.node,
                 PUSH,
                 str(idx),
-            )
-        elif len(task_path) >= 4:
-            # new PUSH tasks, executed in superstep n
-            # (PUSH, parent task path, idx of PUSH write, id of parent task)
-            task_path_tt = cast(tuple[str, tuple, int, str], task_path)
-            writes_for_path = [w for w in pending_writes if w[0] == task_path_tt[3]]
-            if task_path_tt[2] >= len(writes_for_path):
-                logger.warning(
-                    f"Ignoring invalid write index {task_path[2]} in pending writes"
-                )
-                return
-            packet = writes_for_path[task_path_tt[2]][2]
-            if packet is None:
-                return
-            if not isinstance(packet, Send):
-                logger.warning(
-                    f"Ignoring invalid packet type {type(packet)} in pending writes"
-                )
-                return
-            if packet.node not in processes:
-                logger.warning(
-                    f"Ignoring unknown node name {packet.node} in pending writes"
-                )
-                return
-            # create task id
-            triggers = [PUSH]
-            checkpoint_ns = (
-                f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
-            )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                _tuple_str(task_path[1]),
-                str(task_path[2]),
             )
         else:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
@@ -904,7 +809,9 @@ def _uuid5_str(namespace: bytes, *parts: str) -> str:
 def _tuple_str(tup: Union[str, int, tuple]) -> str:
     """Generate a string representation of a tuple."""
     return (
-        f"({', '.join(_tuple_str(x) for x in tup)})"
+        f"~{', '.join(_tuple_str(x) for x in tup)}"
         if isinstance(tup, (tuple, list))
+        else f"{tup:010d}"
+        if isinstance(tup, int)
         else str(tup)
     )

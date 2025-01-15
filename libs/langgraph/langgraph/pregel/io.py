@@ -9,10 +9,8 @@ from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
-    FF_SEND_V2,
     INTERRUPT,
     NULL_TASK_ID,
-    PUSH,
     RESUME,
     RETURN,
     SELF,
@@ -83,7 +81,7 @@ def map_command(
             sends = [cmd.goto]
         for send in sends:
             if isinstance(send, Send):
-                yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+                yield (NULL_TASK_ID, TASKS, send)
             elif isinstance(send, str):
                 yield (NULL_TASK_ID, f"branch:{START}:{SELF}:{send}", START)
             else:
