@@ -15,7 +15,7 @@ from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.default_sync import DefaultProducer
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from tests.any import AnyDict, AnyList
+from tests.any import AnyDict
 from tests.drain import drain_topics
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
