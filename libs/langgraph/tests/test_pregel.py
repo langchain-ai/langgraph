@@ -5331,7 +5331,6 @@ def test_entrypoint_stateful() -> None:
     # Test invoke
     states = []
 
-    # In this version reducers do not work
     @entrypoint(checkpointer=MemorySaver())
     def foo(inputs, *, previous: Any) -> Any:
         states.append(previous)
@@ -5367,21 +5366,71 @@ def test_entrypoint_stateful() -> None:
     assert items == [{"foo": {"current": {"a": "1"}, "previous": None}}]
 
 
-async def test_entrypoint_from_generator() -> None:
+def test_entrypoint_from_sync_generator() -> None:
     """@entrypoint does not support sync generators."""
+    previous_return_values = []
 
-    with pytest.raises(TypeError):
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
 
-        @entrypoint(checkpointer=MemorySaver())
-        def foo(inputs: Any) -> Iterable[dict]:
-            yield "a"
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert foo.invoke({"a": "1"}, config) == ["a", "b"]
+    assert previous_return_values == [None]
+    assert foo.invoke({"a": "2"}, config) == ["a", "b"]
+    assert previous_return_values == [None, ["a", "b"]]
+
+
+def test_entrypoint_request_stream_writer() -> None:
+    """Test using a stream writer with an entrypoint."""
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, writer: StreamWriter) -> Any:
+        writer("a")
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Different invocations
+    # Are any of these confusing or unexpected?
+    assert list(foo.invoke({}, config)) == ["b"]
+    assert list(foo.stream({}, config)) == ["a", "b"]
+
+    # Stream modes
+    assert list(foo.stream({}, config, stream_mode=["updates"])) == [
+        ("updates", {"foo": ["b"]})
+    ]
+    assert list(foo.stream({}, config, stream_mode=["values"])) == [("values", ["b"])]
+    assert list(foo.stream({}, config, stream_mode=["custom"])) == [
+        (
+            "custom",
+            "a",
+        ),
+        (
+            "custom",
+            "b",
+        ),
+    ]
 
 
 async def test_entrypoint_from_async_generator() -> None:
-    """@entrypoint does not support async generators."""
+    """@entrypoint does not support sync generators."""
+    # Test invoke
+    previous_return_values = []
 
-    with pytest.raises(TypeError):
+    # In this version reducers do not work
+    @entrypoint(checkpointer=MemorySaver())
+    async def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
 
-        @entrypoint(checkpointer=MemorySaver())
-        def foo(inputs: Any) -> Iterable[dict]:
-            yield "a"
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
+    assert previous_return_values == [None]
+    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
+    assert previous_return_values == [None, ["a", "b"]]

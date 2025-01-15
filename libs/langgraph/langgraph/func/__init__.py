@@ -19,13 +19,13 @@ from typing_extensions import ParamSpec
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN
+from langgraph.constants import CONF, END, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import get_runnable_for_func
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, StreamMode
+from langgraph.types import RetryPolicy, StreamMode, StreamWriter
 
 P = ParamSpec("P")
 P1 = TypeVar("P1")
@@ -112,13 +112,101 @@ def entrypoint(
     store: Optional[BaseStore] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
     def _imp(func: types.FunctionType) -> Pregel:
+        """Convert a function into a Pregel graph.
+
+        Args:
+            func: The function to convert. Support both sync and async functions, as well
+                   as generator and async generator functions.
+
+        Returns:
+            A Pregel graph.
+        """
         if inspect.isgeneratorfunction(func):
-            raise TypeError("@entrypoint does not support generator functions.")
+            original_sig = inspect.signature(func)
+            # Check if original signature has a writer argument with a matching type.
+            # If not, we'll inject it into the decorator, but not pass it
+            # to the wrapped function.
+            if "writer" in original_sig.parameters:
+
+                @functools.wraps(func)
+                def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
+                    chunks = []
+                    for chunk in func(*args, writer=writer, **kwargs):
+                        writer(chunk)
+                        chunks.append(chunk)
+                    return chunks
+            else:
+
+                @functools.wraps(func)
+                def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
+                    chunks = []
+                    # Do not pass the writer argument to the wrapped function
+                    # as it does not have a matching parameter
+                    for chunk in func(*args, **kwargs):
+                        writer(chunk)
+                        chunks.append(chunk)
+                    return chunks
+
+                # Create a new parameter for the writer argument
+                extra_param = inspect.Parameter(
+                    "writer",
+                    inspect.Parameter.KEYWORD_ONLY,
+                    # The extra argument is a keyword-only argument
+                    default=lambda _: None,
+                )
+                # Update the function's signature to include the extra argument
+                new_params = list(original_sig.parameters.values()) + [extra_param]
+                new_sig = original_sig.replace(parameters=new_params)
+                # Update the signature of the wrapper function
+                gen_wrapper.__signature__ = new_sig
+            bound = get_runnable_for_func(gen_wrapper)
+            stream_mode: StreamMode = "custom"
         elif inspect.isasyncgenfunction(func):
-            raise TypeError("@entrypoint does not support async generator functions.")
+            original_sig = inspect.signature(func)
+            # Check if original signature has a writer argument with a matching type.
+            # If not, we'll inject it into the decorator, but not pass it
+            # to the wrapped function.
+            if "writer" in original_sig.parameters:
+
+                @functools.wraps(func)
+                async def agen_wrapper(
+                    *args: Any, writer: StreamWriter, **kwargs: Any
+                ) -> Any:
+                    chunks = []
+                    async for chunk in func(*args, writer=writer, **kwargs):
+                        writer(chunk)
+                        chunks.append(chunk)
+                    return chunks
+            else:
+
+                @functools.wraps(func)
+                async def agen_wrapper(
+                    *args: Any, writer: StreamWriter, **kwargs: Any
+                ) -> Any:
+                    chunks = []
+                    async for chunk in func(*args, **kwargs):
+                        writer(chunk)
+                        chunks.append(chunk)
+                    return chunks
+
+                # Create a new parameter for the writer argument
+                extra_param = inspect.Parameter(
+                    "writer",
+                    inspect.Parameter.KEYWORD_ONLY,
+                    # The extra argument is a keyword-only argument
+                    default=lambda _: None,
+                )
+                # Update the function's signature to include the extra argument
+                new_params = list(original_sig.parameters.values()) + [extra_param]
+                new_sig = original_sig.replace(parameters=new_params)
+                # Update the signature of the wrapper function
+                agen_wrapper.__signature__ = new_sig
+
+            bound = get_runnable_for_func(agen_wrapper)
+            stream_mode = "custom"
         else:
             bound = get_runnable_for_func(func)
-            stream_mode: StreamMode = "updates"
+            stream_mode = "updates"
 
         return Pregel(
             nodes={
