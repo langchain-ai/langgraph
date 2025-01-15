@@ -346,6 +346,8 @@ class PregelScratchpad(TypedDict):
     interrupt_counter: int
     resume: list[Any]
     null_resume: Any
+    # subgraph
+    subgraph_counter: int
 
 
 def interrupt(value: Any) -> Any:

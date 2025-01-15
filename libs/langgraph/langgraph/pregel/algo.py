@@ -766,6 +766,8 @@ def _scratchpad(
             (w[2] for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME),
             MISSING,
         ),
+        # subgraph
+        subgraph_counter=0,
     )
 
 

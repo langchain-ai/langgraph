@@ -12,7 +12,7 @@ from langgraph.constants import (
     CONFIG_KEY_RESUMING,
     NS_SEP,
 )
-from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphBubbleUp, ParentCommand
+from langgraph.errors import GraphBubbleUp, ParentCommand
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
@@ -96,13 +96,6 @@ def run_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
-        finally:
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
 
 
 async def arun_with_retry(
@@ -188,10 +181,3 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
-        finally:
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
