@@ -113,7 +113,7 @@ class Call:
     func: Callable
     input: Any
     retry: Optional[RetryPolicy]
-    callbacks: Optional[Callbacks]
+    callbacks: Callbacks
 
     def __init__(
         self,
@@ -121,7 +121,7 @@ class Call:
         input: Any,
         *,
         retry: Optional[RetryPolicy],
-        callbacks: Optional[Callbacks],
+        callbacks: Callbacks,
     ) -> None:
         self.func = func
         self.input = input

@@ -150,7 +150,7 @@ class PregelRunner:
             input: Any,
             *,
             retry: Optional[RetryPolicy] = None,
-            callbacks: Optional[Callbacks] = None,
+            callbacks: Callbacks = None,
         ) -> concurrent.futures.Future[Any]:
             (fut,) = writer(
                 task,
@@ -342,7 +342,7 @@ class PregelRunner:
             input: Any,
             *,
             retry: Optional[RetryPolicy] = None,
-            callbacks: Optional[Callbacks] = None,
+            callbacks: Callbacks = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
             (fut,) = writer(
                 task,

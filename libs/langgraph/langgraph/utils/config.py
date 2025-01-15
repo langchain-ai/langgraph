@@ -132,7 +132,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
 def patch_config(
     config: Optional[RunnableConfig],
     *,
-    callbacks: Optional[Callbacks] = None,
+    callbacks: Callbacks = None,
     recursion_limit: Optional[int] = None,
     max_concurrency: Optional[int] = None,
     run_name: Optional[str] = None,
