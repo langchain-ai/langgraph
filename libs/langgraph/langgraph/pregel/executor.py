@@ -63,10 +63,11 @@ class BackgroundExecutor(ContextManager):
         __next_tick__: bool = False,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]:
+        ctx = copy_context()
         if __next_tick__:
-            task = self.executor.submit(next_tick, fn, *args, **kwargs)
+            task = self.executor.submit(next_tick, ctx.run, fn, *args, **kwargs)
         else:
-            task = self.executor.submit(fn, *args, **kwargs)
+            task = self.executor.submit(ctx.run, fn, *args, **kwargs)
         self.tasks[task] = (__cancel_on_exit__, __reraise_on_exit__)
         task.add_done_callback(self.done)
         return task

@@ -2465,7 +2465,8 @@ async def test_imp_task(checkpointer_name: str) -> None:
             answer = interrupt("question")
             return [m + answer for m in mapped]
 
-        thread1 = {"configurable": {"thread_id": "1"}}
+        tracer = FakeTracer()
+        thread1 = {"configurable": {"thread_id": "1"}, "callbacks": [tracer]}
         assert [c async for c in graph.astream([0, 1], thread1)] == [
             {"mapper": "00"},
             {"mapper": "11"},
@@ -2481,6 +2482,9 @@ async def test_imp_task(checkpointer_name: str) -> None:
             },
         ]
         assert mapper_calls == 2
+        assert len(tracer.runs) == 1
+        assert len(tracer.runs[0].child_runs) == 1
+        assert tracer.runs[0].child_runs[0].name == "graph"
 
         assert await graph.ainvoke(Command(resume="answer"), thread1) == [
             "00answer",

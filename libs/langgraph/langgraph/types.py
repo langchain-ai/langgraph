@@ -443,6 +443,7 @@ def interrupt(value: Any) -> Any:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
     from langgraph.constants import (
+        CONF,
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
@@ -453,9 +454,9 @@ def interrupt(value: Any) -> Any:
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_configurable
+    from langgraph.utils.config import get_config
 
-    conf = get_configurable()
+    conf = get_config()[CONF]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     if "interrupt_counter" not in scratchpad:

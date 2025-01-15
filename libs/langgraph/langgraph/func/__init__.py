@@ -19,7 +19,7 @@ from typing_extensions import ParamSpec
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN
+from langgraph.constants import CONF, END, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import get_runnable_for_func
 from langgraph.pregel.read import PregelNode
@@ -39,11 +39,11 @@ def call(
     retry: Optional[RetryPolicy] = None,
 ) -> concurrent.futures.Future[T]:
     from langgraph.constants import CONFIG_KEY_CALL
-    from langgraph.utils.config import get_configurable
+    from langgraph.utils.config import get_config
 
-    conf = get_configurable()
-    impl = conf[CONFIG_KEY_CALL]
-    fut = impl(func, input, retry=retry)
+    config = get_config()
+    impl = config[CONF][CONFIG_KEY_CALL]
+    fut = impl(func, input, retry=retry, callbacks=config["callbacks"])
     return fut
 
 
