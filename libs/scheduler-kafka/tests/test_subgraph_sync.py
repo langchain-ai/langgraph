@@ -202,7 +202,6 @@ def test_subgraph_w_interrupt(
                                 "null_resume": None,
                                 "resume": [],
                             },
-                            "__pregel_writes": AnyList(),
                             "checkpoint_id": None,
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -274,7 +273,6 @@ def test_subgraph_w_interrupt(
                                 "null_resume": None,
                                 "resume": [],
                             },
-                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -376,7 +374,6 @@ def test_subgraph_w_interrupt(
                                 "null_resume": None,
                                 "resume": [],
                             },
-                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -487,7 +484,6 @@ def test_subgraph_w_interrupt(
                                 "null_resume": None,
                                 "resume": [],
                             },
-                            "__pregel_writes": AnyList(),
                             "checkpoint_id": None,
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
@@ -554,7 +550,6 @@ def test_subgraph_w_interrupt(
                                 "null_resume": None,
                                 "resume": [],
                             },
-                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
@@ -677,7 +672,6 @@ def test_subgraph_w_interrupt(
                                 "null_resume": None,
                                 "resume": [],
                             },
-                            "__pregel_writes": AnyList(),
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
