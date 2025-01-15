@@ -1,16 +1,13 @@
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from datetime import datetime, timezone
-from typing import (
+from typing import (  # noqa: UP035
     Any,
-    AsyncIterator,
     Dict,
     Generic,
-    Iterator,
     List,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
-    Sequence,
     Tuple,
     TypedDict,
     TypeVar,
@@ -305,6 +302,7 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -312,6 +310,7 @@ class BaseCheckpointSaver(Generic[V]):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -397,6 +396,7 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Asynchronously store intermediate writes linked to a checkpoint.
 
@@ -404,6 +404,7 @@ class BaseCheckpointSaver(Generic[V]):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
