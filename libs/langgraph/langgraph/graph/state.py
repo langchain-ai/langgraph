@@ -847,14 +847,10 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     commands: list[Command] = []
     if isinstance(value, Command):
         commands.append(value)
-    elif (
-        isinstance(value, (list, tuple))
-        and value
-        and all(isinstance(i, Command) for i in value)
-    ):
-        commands.extend(value)
-    else:
-        return EMPTY_SEQ
+    elif isinstance(value, (list, tuple)):
+        for cmd in value:
+            if isinstance(cmd, Command):
+                commands.append(cmd)
     rtn: list[Union[str, Send]] = []
     for command in commands:
         if command.graph == Command.PARENT:
@@ -874,14 +870,10 @@ async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     commands: list[Command] = []
     if isinstance(value, Command):
         commands.append(value)
-    elif (
-        isinstance(value, (list, tuple))
-        and value
-        and all(isinstance(i, Command) for i in value)
-    ):
-        commands.extend(value)
-    else:
-        return EMPTY_SEQ
+    elif isinstance(value, (list, tuple)):
+        for cmd in value:
+            if isinstance(cmd, Command):
+                commands.append(cmd)
     rtn: list[Union[str, Send]] = []
     for command in commands:
         if command.graph == Command.PARENT:
