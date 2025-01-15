@@ -1,6 +1,5 @@
 import sys
 from collections import defaultdict, deque
-from contextvars import Context
 from functools import partial
 from hashlib import sha1
 from typing import (
@@ -122,7 +121,7 @@ class Call:
         input: Any,
         *,
         retry: Optional[RetryPolicy],
-        callbacks: Optional[Context],
+        callbacks: Optional[Callbacks],
     ) -> None:
         self.func = func
         self.input = input
