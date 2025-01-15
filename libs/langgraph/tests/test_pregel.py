@@ -5273,8 +5273,8 @@ def test_falsy_return_from_task() -> None:
     @entrypoint(checkpointer=checkpointer)
     def graph(state: dict) -> dict:
         """React tool."""
-        task_result = falsy_task().result()
-        human_value = interrupt("test")
+        falsy_task().result()
+        interrupt("test")
 
     configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     graph.invoke({"a": 5}, configurable)

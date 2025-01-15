@@ -6693,3 +6693,22 @@ async def test_multiple_updates() -> None:
         {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
         {"node_b": {"foo": "b"}},
     ]
+
+
+async def test_falsy_return_from_task() -> None:
+    """Test with a falsy return from a task."""
+    checkpointer = MemorySaver()
+
+    @task
+    async def falsy_task() -> bool:
+        return False
+
+    @entrypoint(checkpointer=checkpointer)
+    async def graph(state: dict) -> dict:
+        """React tool."""
+        await falsy_task()
+        interrupt("test")
+
+    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
+    await graph.ainvoke({"a": 5}, configurable)
+    await graph.ainvoke(Command(resume="123"), configurable)

@@ -25,6 +25,7 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     ERROR,
     INTERRUPT,
+    MISSING,
     NO_WRITES,
     PUSH,
     RESUME,
@@ -113,9 +114,15 @@ class PregelRunner:
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = concurrent.futures.Future()
-                        if val := next(v for c, v in next_task.writes if c == RETURN):
+                        if (
+                            val := next(
+                                (v for c, v in next_task.writes if c == RETURN), MISSING
+                            )
+                        ) and val is not MISSING:
                             fut.set_result(val)
-                        elif exc := next(v for c, v in next_task.writes if c == ERROR):
+                        elif exc := next(
+                            (v for c, v in next_task.writes if c == ERROR), None
+                        ):
                             fut.set_exception(
                                 exc
                                 if isinstance(exc, BaseException)
@@ -299,9 +306,15 @@ class PregelRunner:
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = asyncio.Future()
-                        if val := next(v for c, v in next_task.writes if c == RETURN):
+                        if (
+                            val := next(
+                                (v for c, v in next_task.writes if c == RETURN), MISSING
+                            )
+                        ) and val is not MISSING:
                             fut.set_result(val)
-                        elif exc := next(v for c, v in next_task.writes if c == ERROR):
+                        elif exc := next(
+                            (v for c, v in next_task.writes if c == ERROR), None
+                        ):
                             fut.set_exception(
                                 exc
                                 if isinstance(exc, BaseException)

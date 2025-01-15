@@ -10,6 +10,7 @@ from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
+    MISSING,
     NULL_TASK_ID,
     RESUME,
     RETURN,
@@ -173,7 +174,8 @@ def map_output_updates(
         return
     updated: list[tuple[str, Any]] = []
     for task, writes in output_tasks:
-        if rtn := next((value for chan, value in writes if chan == RETURN), None):
+        rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
+        if rtn is not MISSING:
             updated.append((task.name, rtn))
         elif isinstance(output_channels, str):
             updated.extend(
