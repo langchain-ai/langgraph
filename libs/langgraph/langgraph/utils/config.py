@@ -132,7 +132,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
 def patch_config(
     config: Optional[RunnableConfig],
     *,
-    callbacks: Optional[Callbacks] = None,
+    callbacks: Callbacks = None,
     recursion_limit: Optional[int] = None,
     max_concurrency: Optional[int] = None,
     run_name: Optional[str] = None,
@@ -304,7 +304,7 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     return empty
 
 
-def get_configurable() -> dict[str, Any]:
+def get_config() -> RunnableConfig:
     if sys.version_info < (3, 11):
         try:
             if asyncio.current_task():
@@ -314,6 +314,6 @@ def get_configurable() -> dict[str, Any]:
         except RuntimeError:
             pass
     if var_config := var_child_runnable_config.get():
-        return var_config[CONF]
+        return var_config
     else:
         raise RuntimeError("Called get_configurable outside of a runnable context")

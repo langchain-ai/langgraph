@@ -17,6 +17,8 @@ from typing import (
     cast,
 )
 
+from langchain_core.callbacks import Callbacks
+
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CALL,
@@ -148,9 +150,12 @@ class PregelRunner:
             input: Any,
             *,
             retry: Optional[RetryPolicy] = None,
+            callbacks: Callbacks = None,
         ) -> concurrent.futures.Future[Any]:
             (fut,) = writer(
-                task, [(PUSH, None)], calls=[Call(func, input, retry=retry)]
+                task,
+                [(PUSH, None)],
+                calls=[Call(func, input, retry=retry, callbacks=callbacks)],
             )
             assert fut is not None, "writer did not return a future for call"
             return fut
@@ -337,9 +342,12 @@ class PregelRunner:
             input: Any,
             *,
             retry: Optional[RetryPolicy] = None,
+            callbacks: Callbacks = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
             (fut,) = writer(
-                task, [(PUSH, None)], calls=[Call(func, input, retry=retry)]
+                task,
+                [(PUSH, None)],
+                calls=[Call(func, input, retry=retry, callbacks=callbacks)],
             )
             assert fut is not None, "writer did not return a future for call"
             if asyncio.iscoroutinefunction(func):

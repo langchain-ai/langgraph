@@ -19,6 +19,7 @@ from typing import (
 )
 from uuid import UUID
 
+from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
 
@@ -107,18 +108,25 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input", "retry")
+    __slots__ = ("func", "input", "retry", "callbacks")
 
     func: Callable
     input: Any
     retry: Optional[RetryPolicy]
+    callbacks: Callbacks
 
     def __init__(
-        self, func: Callable, input: Any, *, retry: Optional[RetryPolicy]
+        self,
+        func: Callable,
+        input: Any,
+        *,
+        retry: Optional[RetryPolicy],
+        callbacks: Callbacks,
     ) -> None:
         self.func = func
         self.input = input
         self.retry = retry
+        self.callbacks = callbacks
 
 
 def should_interrupt(
@@ -465,9 +473,8 @@ def prepare_single_task(
                 patch_config(
                     merge_configs(config, {"metadata": metadata}),
                     run_name=name,
-                    callbacks=(
-                        manager.get_child(f"graph:step:{step}") if manager else None
-                    ),
+                    callbacks=call.callbacks
+                    or (manager.get_child(f"graph:step:{step}") if manager else None),
                     configurable={
                         CONFIG_KEY_TASK_ID: task_id,
                         # deque.extend is thread-safe
