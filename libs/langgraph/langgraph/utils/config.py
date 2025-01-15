@@ -250,6 +250,13 @@ def get_async_callback_manager_for_config(
         )
 
 
+def _is_not_empty(value: Any) -> bool:
+    if isinstance(value, (list, tuple, dict)):
+        return len(value) > 0
+    else:
+        return value is not None
+
+
 def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     """Ensure that a config is a dict with all keys present.
 
@@ -272,20 +279,20 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             {
                 k: v.copy() if k in COPIABLE_KEYS else v  # type: ignore[attr-defined]
                 for k, v in var_config.items()
-                if v is not None
+                if _is_not_empty(v)
             },
         )
     for config in configs:
         if config is None:
             continue
         for k, v in config.items():
-            if v is not None and k in CONFIG_KEYS:
+            if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
                     empty[k] = cast(dict, v).copy()
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
-            if v is not None and k not in CONFIG_KEYS:
+            if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
     for key, value in empty[CONF].items():
         if (
