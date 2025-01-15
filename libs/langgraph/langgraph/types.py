@@ -21,11 +21,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self, TypedDict
 
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    CheckpointMetadata,
-    PendingWrite,
-)
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
@@ -341,13 +337,13 @@ class LoopProtocol:
         self.stop = stop
 
 
-class PregelScratchpad(TypedDict, total=False):
-    # interrupt
-    interrupt_counter: int
-    used_null_resume: bool
-    resume: list[Any]
+class PregelScratchpad(TypedDict):
     # call
     call_counter: int
+    # interrupt
+    interrupt_counter: int
+    resume: list[Any]
+    null_resume: Any
 
 
 def interrupt(value: Any) -> Any:
@@ -449,10 +445,8 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        CONFIG_KEY_TASK_ID,
-        CONFIG_KEY_WRITES,
+        MISSING,
         NS_SEP,
-        NULL_TASK_ID,
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
@@ -461,29 +455,20 @@ def interrupt(value: Any) -> Any:
     conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    if "interrupt_counter" not in scratchpad:
-        scratchpad["interrupt_counter"] = 0
-    else:
-        scratchpad["interrupt_counter"] += 1
+    scratchpad["interrupt_counter"] += 1
     idx = scratchpad["interrupt_counter"]
     # find previous resume values
-    task_id = conf[CONFIG_KEY_TASK_ID]
-    writes: list[PendingWrite] = conf[CONFIG_KEY_WRITES]
-    scratchpad.setdefault(
-        "resume", next((w[2] for w in writes if w[0] == task_id and w[1] == RESUME), [])
-    )
     if scratchpad["resume"]:
         if idx < len(scratchpad["resume"]):
             return scratchpad["resume"][idx]
     # find current resume value
-    if not scratchpad.get("used_null_resume"):
-        scratchpad["used_null_resume"] = True
-        for tid, c, v in sorted(writes, key=lambda x: x[0], reverse=True):
-            if tid == NULL_TASK_ID and c == RESUME:
-                assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
-                scratchpad["resume"].append(v)
-                conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
-                return v
+    if scratchpad["null_resume"] is not MISSING:
+        assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
+        v = scratchpad["null_resume"]
+        scratchpad["null_resume"] = MISSING
+        scratchpad["resume"].append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
+        return v
     # no resume value found
     raise GraphInterrupt(
         (

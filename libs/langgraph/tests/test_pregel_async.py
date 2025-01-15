@@ -6696,23 +6696,25 @@ async def test_multiple_updates() -> None:
     sys.version_info < (3, 11),
     reason="Python 3.11+ is required for async contextvars support",
 )
-async def test_falsy_return_from_task() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_falsy_return_from_task(checkpointer_name: str) -> None:
     """Test with a falsy return from a task."""
-    checkpointer = MemorySaver()
 
     @task
     async def falsy_task() -> bool:
         return False
 
-    @entrypoint(checkpointer=checkpointer)
-    async def graph(state: dict) -> dict:
-        """React tool."""
-        await falsy_task()
-        interrupt("test")
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
 
-    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
-    await graph.ainvoke({"a": 5}, configurable)
-    await graph.ainvoke(Command(resume="123"), configurable)
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(state: dict) -> dict:
+            """React tool."""
+            await falsy_task()
+            interrupt("test")
+
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({"a": 5}, configurable)
+        await graph.ainvoke(Command(resume="123"), configurable)
 
 
 @pytest.mark.skipif(
@@ -6756,3 +6758,120 @@ async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
             "values": [2, "a", 4, "b", 6, "c"],
         }
         assert counter == 3
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_double_interrupt_subgraph(checkpointer_name: str) -> None:
+    class AgentState(TypedDict):
+        input: str
+
+    def node_1(state: AgentState):
+        result = interrupt("interrupt node 1")
+        return {"input": result}
+
+    def node_2(state: AgentState):
+        result = interrupt("interrupt node 2")
+        return {"input": result}
+
+    subgraph_builder = (
+        StateGraph(AgentState)
+        .add_node("node_1", node_1)
+        .add_node("node_2", node_2)
+        .add_edge(START, "node_1")
+        .add_edge("node_1", "node_2")
+        .add_edge("node_2", END)
+    )
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        # invoke the sub graph
+        subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+        thread = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        assert [c async for c in subgraph.astream({"input": "test"}, thread)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 1",
+                        resumable=True,
+                        ns=[AnyStr("node_1:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        # resume from the first interrupt
+        assert [c async for c in subgraph.astream(Command(resume="123"), thread)] == [
+            {
+                "node_1": {"input": "123"},
+            },
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 2",
+                        resumable=True,
+                        ns=[AnyStr("node_2:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        # resume from the second interrupt
+        assert [c async for c in subgraph.astream(Command(resume="123"), thread)] == [
+            {
+                "node_2": {"input": "123"},
+            },
+        ]
+
+        subgraph = subgraph_builder.compile()
+
+        def invoke_sub_agent(state: AgentState):
+            return subgraph.invoke(state)
+
+        parent_agent = (
+            StateGraph(AgentState)
+            .add_node("invoke_sub_agent", invoke_sub_agent)
+            .add_edge(START, "invoke_sub_agent")
+            .add_edge("invoke_sub_agent", END)
+            .compile(checkpointer=checkpointer)
+        )
+
+        assert [c async for c in parent_agent.astream({"input": "test"}, thread)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 1",
+                        resumable=True,
+                        ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+
+        # resume from the first interrupt
+        assert [
+            c async for c in parent_agent.astream(Command(resume=True), thread)
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 2",
+                        resumable=True,
+                        ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        # resume from 2nd interrupt
+        assert [
+            c async for c in parent_agent.astream(Command(resume=True), thread)
+        ] == [
+            {
+                "invoke_sub_agent": {"input": True},
+            },
+        ]
