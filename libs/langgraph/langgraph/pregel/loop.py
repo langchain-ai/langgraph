@@ -202,7 +202,6 @@ class PregelLoop(LoopProtocol):
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -822,7 +821,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -837,7 +835,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
-            check_subgraphs=check_subgraphs,
             manager=manager,
             debug=debug,
         )
@@ -959,7 +956,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -974,7 +970,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
-            check_subgraphs=check_subgraphs,
             manager=manager,
             debug=debug,
         )
