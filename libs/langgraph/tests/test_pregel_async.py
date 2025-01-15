@@ -2456,6 +2456,7 @@ async def test_imp_task(checkpointer_name: str) -> None:
         async def mapper(input: int) -> str:
             nonlocal mapper_calls
             mapper_calls += 1
+            await asyncio.sleep(0.1 * input)
             return str(input) * 2
 
         @entrypoint(checkpointer=checkpointer)
