@@ -1869,7 +1869,6 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                check_subgraphs=self.checkpointer is not True,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
