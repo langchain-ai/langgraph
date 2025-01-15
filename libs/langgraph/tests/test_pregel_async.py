@@ -6695,6 +6695,10 @@ async def test_multiple_updates() -> None:
     ]
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 async def test_falsy_return_from_task() -> None:
     """Test with a falsy return from a task."""
     checkpointer = MemorySaver()
