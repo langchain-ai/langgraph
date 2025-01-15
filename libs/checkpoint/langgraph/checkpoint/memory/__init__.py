@@ -462,6 +462,7 @@ class MemorySaver(
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Asynchronous version of put_writes.
 
@@ -472,9 +473,12 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the writes.
             writes (List[Tuple[str, Any]]): The writes to save, each as a (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
-        return self.put_writes(config, writes, task_id)
+            task_path (str): Path of the task creating the writes.
+
+        Returns:
+            None
         """
-        return self.put_writes(config, writes, task_id)
+        return self.put_writes(config, writes, task_id, task_path)
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
