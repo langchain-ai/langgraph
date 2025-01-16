@@ -110,6 +110,7 @@ def entrypoint(
     *,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     store: Optional[BaseStore] = None,
+    config_schema: Optional[type[Any]] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
     def _imp(func: types.FunctionType) -> Pregel:
         # wrap generators in a function that writes to StreamWriter
@@ -172,6 +173,7 @@ def entrypoint(
             stream_eager=True,
             checkpointer=checkpointer,
             store=store,
+            config_type=config_schema,
         )
 
     return _imp
