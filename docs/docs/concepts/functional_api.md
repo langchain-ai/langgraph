@@ -2,6 +2,14 @@
 
 ## Overview
 
+LangGraph's Functional API enables building applications that persist state across successive invocations. These applications can manage state, work with LLMs, support Human-in-the-Loop (HIL) patterns, and stream results.
+
+The Functional API is built around two key primitives: `entrypoint` and `task`. These primitives allow you to define modular workflows that are flexible and reusable. 
+
+You can intermix the Functional API and the Graph API within the same application. For example:
+- Invoke `@entrypoint` or `@task` from within a node in a state graph.
+- Call a state graph from inside a task or entrypoint.
+
 LangGraph's functional API allows building applications that persist state in between successive invocations.
 
 The applications are able to manage state, work with LLMs, support HIL patterns and stream results.
@@ -15,7 +23,7 @@ inside a task or entrypoint.
 
 ## Example
 
-Here's a quick example to get the gist of the Functional API:
+Here's a quick example to demonstrate the Functional API in action:
 
 ```python
 from langgraph.func import entrypoint, task
@@ -62,21 +70,18 @@ for item in workflow.stream(Command(resume="yes"), config):
 ```
 
 
-The Functional API is composed of two key primitives: entrypoint and task. These primitives work together to define modular, reusable workflows. While entrypoint serves as the starting point for a functional graph, task encapsulates units of work that can be executed independently or in sequence. This API is designed for flexibility and scalability, supporting features like checkpointing, streaming, and deterministic execution.
+The Functional API enables streamlined, Pythonic workflows. The entrypoint serves as the starting point for a functional graph, while task defines units of work that can execute independently or in sequence. The API supports features like checkpointing, streaming, and deterministic execution, making it both flexible and scalable.
 
 
 ### Difference from the Graph API
 
-LangGraph's GraphAPI defines its control flow by designing an explicit state machine. The state machine
-can be used to control branching and cyclical behavior. 
+LangGraph's Graph API uses an explicit state machine to define control flow, enabling precise control over branching and cyclical behavior.
 
-
-The Functional API, on the other hand, does not require users to declare the control flow explicitly. 
-Instead users can call tasks and entrypoints as they would with regular Python code. 
+The Functional API, in contrast, does not require explicit control flow declarations. Instead, tasks and entrypoints can be called directly, just like standard Python functions. This approach simplifies development while maintaining the flexibility to handle complex workflows.
 
 ## Entrypoint
 
-An entrypoint is a decorated function that serves as the starting point for executing a langgraph workflow.
+An entrypoint is a decorator that you can apply
 
 ### Interface
 
@@ -120,6 +125,7 @@ assert [*graph.stream([0, 1], thread1)] == [
 ### What happens when one yields from an entrypoint?
 
 Yielding from an entrypoint streams intermediate results to the consumer. This can be useful for long-running workflows or providing partial results in real-time.
+
 
 ## Task
 
