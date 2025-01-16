@@ -122,7 +122,7 @@ def entrypoint(
         Returns:
             A Pregel graph.
         """
-	# wrap generators in a function that writes to StreamWriter
+        # wrap generators in a function that writes to StreamWriter
         if inspect.isgeneratorfunction(func):
             original_sig = inspect.signature(func)
             # Check if original signature has a writer argument with a matching type.
