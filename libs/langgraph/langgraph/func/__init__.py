@@ -112,6 +112,7 @@ def entrypoint(
     store: Optional[BaseStore] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
     def _imp(func: types.FunctionType) -> Pregel:
+        # wrap generators in a function that writes to StreamWriter
         if inspect.isgeneratorfunction(func):
 
             def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
@@ -134,6 +135,23 @@ def entrypoint(
             bound = get_runnable_for_func(func)
             stream_mode = "updates"
 
+        # get input and output types
+        sig = inspect.signature(func)
+        first_parameter_name = next(iter(sig.parameters.keys()), None)
+        if not first_parameter_name:
+            raise ValueError("Entrypoint function must have at least one parameter")
+        input_type = (
+            sig.parameters[first_parameter_name].annotation
+            if sig.parameters[first_parameter_name].annotation
+            is not inspect.Signature.empty
+            else Any
+        )
+        output_type = (
+            sig.return_annotation
+            if sig.return_annotation is not inspect.Signature.empty
+            else Any
+        )
+
         return Pregel(
             nodes={
                 func.__name__: PregelNode(
@@ -143,7 +161,10 @@ def entrypoint(
                     writers=[ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])],
                 )
             },
-            channels={START: EphemeralValue(Any), END: LastValue(Any, END)},
+            channels={
+                START: EphemeralValue(input_type),
+                END: LastValue(output_type, END),
+            },
             input_channels=START,
             output_channels=END,
             stream_channels=END,
