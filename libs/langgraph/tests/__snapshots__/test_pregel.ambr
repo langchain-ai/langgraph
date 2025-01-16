@@ -3627,6 +3627,91 @@
   
   '''
 # ---
+# name: test_interrupt_functional[postgres]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__graph(graph)
+  	__bar(bar)
+  	__foo(foo)
+  	__graph -.-> __bar;
+  	__bar --> __graph;
+  	__graph -.-> __foo;
+  	__foo --> __graph;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_interrupt_functional[postgres_pipe]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__graph(graph)
+  	__bar(bar)
+  	__foo(foo)
+  	__graph -.-> __bar;
+  	__bar --> __graph;
+  	__graph -.-> __foo;
+  	__foo --> __graph;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_interrupt_functional[postgres_pool]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__graph(graph)
+  	__bar(bar)
+  	__foo(foo)
+  	__graph -.-> __bar;
+  	__bar --> __graph;
+  	__graph -.-> __foo;
+  	__foo --> __graph;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_interrupt_functional[postgres_shallow]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__graph(graph)
+  	__bar(bar)
+  	__foo(foo)
+  	__graph -.-> __bar;
+  	__bar --> __graph;
+  	__graph -.-> __foo;
+  	__foo --> __graph;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_interrupt_functional[sqlite]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__graph(graph)
+  	__bar(bar)
+  	__foo(foo)
+  	__graph -.-> __bar;
+  	__bar --> __graph;
+  	__graph -.-> __foo;
+  	__foo --> __graph;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_interrupt_task_functional[memory]
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%

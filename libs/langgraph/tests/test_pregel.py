@@ -1546,8 +1546,7 @@ def test_imp_stream_order(
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
 
-    if checkpointer_name == "memory":
-        assert graph.get_graph().draw_mermaid() == snapshot
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
@@ -5009,8 +5008,7 @@ def test_interrupt_task_functional(
         fut_bar = bar(fut_foo.result())
         return fut_bar.result()
 
-    if checkpointer_name == "memory":
-        assert graph.get_graph().draw_mermaid() == snapshot
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
@@ -5456,8 +5454,7 @@ def test_falsy_return_from_task(
         falsy_task().result()
         interrupt("test")
 
-    if checkpointer_name == "memory":
-        assert graph.get_graph().draw_mermaid() == snapshot
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({"a": 5}, configurable)
@@ -5491,8 +5488,7 @@ def test_multiple_interrupts_imperative(
 
         return {"values": values}
 
-    if checkpointer_name == "memory":
-        assert graph.get_graph().draw_mermaid() == snapshot
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({}, configurable)
