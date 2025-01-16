@@ -5550,8 +5550,6 @@ def test_map_reduce() -> None:
         return {"best_selected_joke": best_joke}
 
     builder = StateGraph(OverallState)
-    builder.add_node(generate_jokes)
-    builder.add_node(generate_joke)
     builder.add_node(grade_joke)
     builder.add_node(count_grade)
     builder.add_conditional_edges("__start__", generate_jokes, ["generate_joke"])
