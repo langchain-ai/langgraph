@@ -494,7 +494,9 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer or None,
+                checkpointer=self.checkpointer
+                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
                 manager=None,
             )
             # get the subgraphs
@@ -606,7 +608,9 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer or None,
+                checkpointer=self.checkpointer
+                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
                 manager=None,
             )
             # get the subgraphs
@@ -926,7 +930,9 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -1020,7 +1026,9 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer or None,
+                    checkpointer=self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None,
                     manager=None,
                 )
                 # apply null writes
@@ -1209,7 +1217,9 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -1303,7 +1313,9 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer or None,
+                    checkpointer=self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None,
                     manager=None,
                 )
                 # apply null writes
@@ -1455,6 +1467,8 @@ class Pregel(PregelProtocol):
             checkpointer: Optional[BaseCheckpointSaver] = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
             checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
+        elif self.checkpointer is True:
+            raise RuntimeError("checkpointer=True cannot be used for root graphs.")
         else:
             checkpointer = self.checkpointer
         if checkpointer and not config.get(CONF):
@@ -1598,6 +1612,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up subgraph checkpointing
+            if self.checkpointer is True:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
+                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1622,6 +1642,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                check_subgraphs=self.checkpointer is not True,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -1849,6 +1870,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                check_subgraphs=self.checkpointer is not True,
             ) as loop:
                 # create runner
                 runner = PregelRunner(

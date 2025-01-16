@@ -3190,6 +3190,66 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_subgraph_checkpoint_true(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    def inner_1(state: InnerState):
+        return {"my_key": " got here", "my_other_key": state["my_key"]}
+
+    def inner_2(state: InnerState):
+        return {"my_key": " and there"}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile(checkpointer=True))
+    graph.add_edge(START, "inner")
+    graph.add_conditional_edges(
+        "inner", lambda s: "inner" if s["my_key"].count("there") < 2 else END
+    )
+    app = graph.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "2"}}
+    assert [c for c in app.stream({"my_key": ""}, config, subgraphs=True)] == [
+        (("inner",), {"inner_1": {"my_key": " got here", "my_other_key": ""}}),
+        (("inner",), {"inner_2": {"my_key": " and there"}}),
+        ((), {"inner": {"my_key": " got here and there"}}),
+        (
+            ("inner",),
+            {
+                "inner_1": {
+                    "my_key": " got here",
+                    "my_other_key": " got here and there got here and there",
+                }
+            },
+        ),
+        (("inner",), {"inner_2": {"my_key": " and there"}}),
+        (
+            (),
+            {
+                "inner": {
+                    "my_key": " got here and there got here and there got here and there"
+                }
+            },
+        ),
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_stream_subgraphs_during_execution(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:

@@ -38,9 +38,11 @@ except ImportError:
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, Literal[False], BaseCheckpointSaver]
-"""Type of the checkpointer to use for a subgraph. False disables checkpointing,
-even if the parent graph has a checkpointer. None inherits checkpointer."""
+Checkpointer = Union[None, bool, BaseCheckpointSaver]
+"""Type of the checkpointer to use for a subgraph.
+- True enables persistent checkpointing for this subgraph.
+- False disables checkpointing, even if the parent graph has a checkpointer.
+- None inherits checkpointer from the parent graph."""
 
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
