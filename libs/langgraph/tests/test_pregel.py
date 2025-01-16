@@ -1,3 +1,4 @@
+import asyncio
 import enum
 import json
 import logging
@@ -35,6 +36,20 @@ from langchain_core.runnables import (
 from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from tests.agents import AgentAction, AgentFinish
+from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
+from tests.conftest import (
+    ALL_CHECKPOINTERS_SYNC,
+    ALL_STORES_SYNC,
+    REGULAR_CHECKPOINTERS_SYNC,
+    SHOULD_CHECK_SNAPSHOTS,
+)
+from tests.memory_assert import MemorySaverAssertCheckpointMetadata
+from tests.messages import (
+    _AnyIdAIMessage,
+    _AnyIdHumanMessage,
+    _AnyIdToolMessage,
+)
 from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
@@ -66,20 +81,6 @@ from langgraph.types import (
     Send,
     StreamWriter,
     interrupt,
-)
-from tests.agents import AgentAction, AgentFinish
-from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
-from tests.conftest import (
-    ALL_CHECKPOINTERS_SYNC,
-    ALL_STORES_SYNC,
-    REGULAR_CHECKPOINTERS_SYNC,
-    SHOULD_CHECK_SNAPSHOTS,
-)
-from tests.memory_assert import MemorySaverAssertCheckpointMetadata
-from tests.messages import (
-    _AnyIdAIMessage,
-    _AnyIdHumanMessage,
-    _AnyIdToolMessage,
 )
 
 logger = logging.getLogger(__name__)
@@ -5491,3 +5492,75 @@ def test_double_interrupt_subgraph(
             "invoke_sub_agent": {"input": True},
         },
     ]
+
+
+def test_sync_streaming_with_functional_api() -> None:
+    """Test streaming with functional API.
+
+    This test verifies that we're able to stream results as they're being generated
+    rather than have all the results arrive at once after the graph has completed.
+
+    The time of arrival between the two updates corresponding to the two `slow` tasks
+    should be greater than the time delay between the two tasks.
+    """
+
+    time_delay = 0.01
+
+    @task()
+    def slow() -> dict:
+        time.sleep(time_delay)  # Simulate a delay of 10 ms
+        return {"tic": time.time()}
+
+    @entrypoint()
+    def graph(inputs: dict) -> list:
+        first = slow().result()
+        second = slow().result()
+        return [first, second]
+
+    arrival_times = []
+
+    for chunk in graph.stream({}):
+        if "slow" not in chunk:  # We'll just look at the updates from `slow`
+            continue
+        arrival_times.append(time.time())
+
+    assert len(arrival_times) == 2
+    delta = arrival_times[1] - arrival_times[0]
+    # Delta cannot be less than 10 ms if it is streaming as results are generated.
+    assert delta > time_delay
+
+
+async def test_async_streaming_with_functional_api() -> None:
+    """Test streaming with functional API.
+
+    This test verifies that we're able to stream results as they're being generated
+    rather than have all the results arrive at once after the graph has completed.
+
+    The time of arrival between the two updates corresponding to the two `slow` tasks
+    should be greater than the time delay between the two tasks.
+    """
+
+    time_delay = 0.01
+
+    @task()
+    async def slow() -> dict:
+        await asyncio.sleep(time_delay)  # Simulate a delay of 10 ms
+        return {"tic": time.time()}
+
+    @entrypoint()
+    async def graph(inputs: dict) -> list:
+        first = await slow()
+        second = await slow()
+        return [first, second]
+
+    arrival_times = []
+
+    async for chunk in graph.astream({}):
+        if "slow" not in chunk:  # We'll just look at the updates from `slow`
+            continue
+        arrival_times.append(time.time())
+
+    assert len(arrival_times) == 2
+    delta = arrival_times[1] - arrival_times[0]
+    # Delta cannot be less than 10 ms if it is streaming as results are generated.
+    assert delta > time_delay
