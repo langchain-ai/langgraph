@@ -48,7 +48,10 @@ def run_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent
-                parent_ns = NS_SEP.join(ns.split(NS_SEP)[:-1])
+                parts = ns.split(NS_SEP)
+                if parts[-1].isdigit():
+                    parts.pop()
+                parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise
@@ -133,7 +136,10 @@ async def arun_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent
-                parent_ns = NS_SEP.join(ns.split(NS_SEP)[:-1])
+                parts = ns.split(NS_SEP)
+                if parts[-1].isdigit():
+                    parts.pop()
+                parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise

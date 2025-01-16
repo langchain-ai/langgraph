@@ -115,6 +115,7 @@ from langgraph.utils.config import (
     patch_checkpoint_map,
     patch_config,
     patch_configurable,
+    recast_checkpoint_ns,
 )
 from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model
@@ -694,19 +695,15 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.get_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     subgraphs=subgraphs,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
         saved = checkpointer.get_tuple(config)
@@ -731,19 +728,15 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.aget_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     subgraphs=subgraphs,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
         saved = await checkpointer.aget_tuple(config)
@@ -774,13 +767,9 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 yield from pregel.get_state_history(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     filter=filter,
@@ -789,7 +778,7 @@ class Pregel(PregelProtocol):
                 )
                 return
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(
             self.config,
@@ -824,13 +813,9 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 async for state in pregel.aget_state_history(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     filter=filter,
@@ -840,7 +825,7 @@ class Pregel(PregelProtocol):
                     yield state
                 return
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(
             self.config,
@@ -879,20 +864,16 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.update_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     values,
                     as_node,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         # get last checkpoint
         config = ensure_config(self.config, config)
@@ -1163,20 +1144,16 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.aupdate_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     values,
                     as_node,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         # get last checkpoint
         config = ensure_config(self.config, config)

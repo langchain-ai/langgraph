@@ -16,8 +16,6 @@ from langgraph.constants import (
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_ENSURE_LATEST,
     INTERRUPT,
-    NS_END,
-    NS_SEP,
     SCHEDULED,
 )
 from langgraph.errors import CheckpointNotLatest, GraphInterrupt
@@ -37,7 +35,7 @@ from langgraph.scheduler.kafka.types import (
     Topics,
 )
 from langgraph.types import RetryPolicy
-from langgraph.utils.config import patch_configurable
+from langgraph.utils.config import patch_configurable, recast_checkpoint_ns
 
 
 class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
@@ -140,14 +138,12 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
         # find graph
         if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            if recast_checkpoint_ns in self.subgraphs:
-                graph = self.subgraphs[recast_checkpoint_ns]
+            if recast in self.subgraphs:
+                graph = self.subgraphs[recast]
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
         else:
             graph = self.graph
         # process message
@@ -329,14 +325,12 @@ class KafkaOrchestrator(AbstractContextManager):
         # find graph
         if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            if recast_checkpoint_ns in self.subgraphs:
-                graph = self.subgraphs[recast_checkpoint_ns]
+            if recast in self.subgraphs:
+                graph = self.subgraphs[recast]
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
         else:
             graph = self.graph
         # process message
