@@ -1436,6 +1436,9 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     mapper_calls = 0
 
+    class Config:
+        model: str
+
     @task()
     def mapper(input: int) -> str:
         nonlocal mapper_calls
@@ -1443,7 +1446,7 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         time.sleep(input / 100)
         return str(input) * 2
 
-    @entrypoint(checkpointer=checkpointer)
+    @entrypoint(checkpointer=checkpointer, config_schema=Config)
     def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
@@ -1459,6 +1462,39 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         "type": "array",
         "items": {"type": "string"},
         "title": "LangGraphOutput",
+    }
+    assert graph.get_config_jsonschema() == {
+        "$defs": {
+            "Configurable": {
+                "properties": {
+                    "model": {"default": None, "title": "Model", "type": "string"},
+                    "checkpoint_id": {
+                        "anyOf": [{"type": "string"}, {"type": "null"}],
+                        "default": None,
+                        "description": "Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
+                        "title": "Checkpoint ID",
+                    },
+                    "checkpoint_ns": {
+                        "default": "",
+                        "description": 'Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
+                        "title": "Checkpoint NS",
+                        "type": "string",
+                    },
+                    "thread_id": {
+                        "default": "",
+                        "title": "Thread ID",
+                        "type": "string",
+                    },
+                },
+                "title": "Configurable",
+                "type": "object",
+            }
+        },
+        "properties": {
+            "configurable": {"$ref": "#/$defs/Configurable", "default": None}
+        },
+        "title": "LangGraphConfig",
+        "type": "object",
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
