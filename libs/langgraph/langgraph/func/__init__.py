@@ -193,10 +193,10 @@ class EntrypointPregel(Pregel):
     ) -> Graph:
         name, entrypoint = next(iter(self.nodes.items()))
         graph = Graph()
-        node = Node(f"__{name}", name, entrypoint, None)
+        node = Node(f"__{name}", name, entrypoint.bound, None)
         graph.nodes[node.id] = node
         candidates: list[tuple[Node, Union[Callable, PregelProtocol]]] = [
-            *_find_children(entrypoint, node)
+            *_find_children(entrypoint.bound, node)
         ]
         seen: set[Union[Callable, PregelProtocol]] = set()
         for parent, child in candidates:
@@ -243,7 +243,14 @@ def _find_children(
         RunnableSequence,
     )
 
-    candidates: list[Union[Callable, Runnable]] = [candidate]
+    candidates: list[Union[Callable, Runnable]] = []
+    if callable(candidate) and getattr(candidate, "_is_pregel_task", False) is True:
+        candidates.extend(
+            nl.__self__ if hasattr(nl, "__self__") else nl
+            for nl in get_function_nonlocals(candidate.__wrapped__)
+        )
+    else:
+        candidates.append(candidate)
 
     for c in candidates:
         if callable(c) and getattr(c, "_is_pregel_task", False) is True:
