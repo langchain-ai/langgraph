@@ -507,6 +507,7 @@ def prepare_single_task(
                         CONFIG_KEY_SCRATCHPAD: _scratchpad(
                             pending_writes,
                             task_id,
+                        ),
                         CONFIG_KEY_END: checkpoint["channel_values"].get(
                             "__end__", None
                         ),
@@ -745,7 +746,7 @@ def prepare_single_task(
                                 ),
                                 CONFIG_KEY_END: checkpoint["channel_values"].get(
                                     "__end__", None
-
+                                ),
                             },
                         ),
                         triggers,
