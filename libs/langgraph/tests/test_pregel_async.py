@@ -6281,6 +6281,7 @@ async def test_interrupt_loop(checkpointer_name: str):
         ]
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_functional(checkpointer_name: str) -> None:
     @task
@@ -6309,6 +6310,7 @@ async def test_interrupt_functional(checkpointer_name: str) -> None:
         assert res == {"a": "foobar", "b": "bar"}
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_task_functional(checkpointer_name: str) -> None:
     @task
