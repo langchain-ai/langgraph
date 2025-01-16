@@ -160,7 +160,7 @@ def entrypoint(
                 new_params = list(original_sig.parameters.values()) + [extra_param]
                 new_sig = original_sig.replace(parameters=new_params)
                 # Update the signature of the wrapper function
-                gen_wrapper.__signature__ = new_sig
+                gen_wrapper.__signature__ = new_sig  # type: ignore
             bound = get_runnable_for_func(gen_wrapper)
             stream_mode: StreamMode = "custom"
         elif inspect.isasyncgenfunction(func):
@@ -202,7 +202,7 @@ def entrypoint(
                 new_params = list(original_sig.parameters.values()) + [extra_param]
                 new_sig = original_sig.replace(parameters=new_params)
                 # Update the signature of the wrapper function
-                agen_wrapper.__signature__ = new_sig
+                agen_wrapper.__signature__ = new_sig  # type: ignore
 
             bound = get_runnable_for_func(agen_wrapper)
             stream_mode = "custom"
