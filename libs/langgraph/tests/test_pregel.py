@@ -5526,3 +5526,135 @@ def test_sync_streaming_with_functional_api() -> None:
     delta = arrival_times[1] - arrival_times[0]
     # Delta cannot be less than 10 ms if it is streaming as results are generated.
     assert delta > time_delay
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define the subgraphs
+    def add(state):
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+    )
+
+    def multiply(state):
+        return {"result": state["a"] * state["b"]}
+
+    multiply_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(multiply)
+        .add_edge(START, "multiply")
+        .compile()
+    )
+
+    # Test calling the same subgraph multiple times
+    def call_same_subgraph(state):
+        result = add_subgraph.invoke(state)
+        another_result = add_subgraph.invoke({"a": result["result"], "b": 10})
+        return another_result
+
+    parent_call_same_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(call_same_subgraph)
+        .add_edge(START, "call_same_subgraph")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_call_same_subgraph.invoke({"a": 2, "b": 3}, config) == {"result": 15}
+
+    # Test calling multiple subgraphs
+    class Output(TypedDict):
+        add_result: int
+        multiply_result: int
+
+    def call_multiple_subgraphs(state):
+        add_result = add_subgraph.invoke(state)
+        multiply_result = multiply_subgraph.invoke(state)
+        return {
+            "add_result": add_result["result"],
+            "multiply_result": multiply_result["result"],
+        }
+
+    parent_call_multiple_subgraphs = (
+        StateGraph(State, output=Output)
+        .add_node(call_multiple_subgraphs)
+        .add_edge(START, "call_multiple_subgraphs")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    assert parent_call_multiple_subgraphs.invoke({"a": 2, "b": 3}, config) == {
+        "add_result": 5,
+        "multiply_result": 6,
+    }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs_functional(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define the subgraphs
+    def add(state):
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+    )
+
+    def multiply(state):
+        return {"result": state["a"] * state["b"]}
+
+    multiply_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(multiply)
+        .add_edge(START, "multiply")
+        .compile()
+    )
+
+    # Test calling the same subgraph multiple times
+    @task
+    def call_same_subgraph(a, b):
+        result = add_subgraph.invoke({"a": a, "b": b})["result"]
+        another_result = add_subgraph.invoke({"a": result, "b": 10})["result"]
+        return another_result
+
+    @entrypoint(checkpointer=checkpointer)
+    def parent_call_same_subgraph(inputs):
+        return call_same_subgraph(*inputs).result()
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_call_same_subgraph.invoke([2, 3], config) == 15
+
+    # Test calling multiple subgraphs
+    @task
+    def call_multiple_subgraphs(a, b):
+        add_result = add_subgraph.invoke({"a": a, "b": b})["result"]
+        multiply_result = multiply_subgraph.invoke({"a": a, "b": b})["result"]
+        return [add_result, multiply_result]
+
+    @entrypoint(checkpointer=checkpointer)
+    def parent_call_multiple_subgraphs(inputs):
+        return call_multiple_subgraphs(*inputs).result()
+
+    config = {"configurable": {"thread_id": "2"}}
+    assert parent_call_multiple_subgraphs.invoke([2, 3], config) == [5, 6]

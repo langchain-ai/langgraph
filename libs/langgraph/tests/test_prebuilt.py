@@ -2088,3 +2088,82 @@ def test_inspect_react() -> None:
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_react_agent(model, [])
     inspect.getclosurevars(agent.nodes["agent"].bound.func)
+
+
+def test_react_with_subgraph_tools() -> None:
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define the subgraphs
+    def add(state):
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+    )
+
+    def multiply(state):
+        return {"result": state["a"] * state["b"]}
+
+    multiply_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(multiply)
+        .add_edge(START, "multiply")
+        .compile()
+    )
+
+    multiply_subgraph.invoke({"a": 2, "b": 3})
+
+    # Add subgraphs as tools
+
+    def addition(a: int, b: int):
+        """Add two numbers"""
+        return add_subgraph.invoke({"a": a, "b": b})["result"]
+
+    def multiplication(a: int, b: int):
+        """Multiply two numbers"""
+        return multiply_subgraph.invoke({"a": a, "b": b})["result"]
+
+    model = FakeToolCallingModel(
+        tool_calls=[
+            [
+                {"args": {"a": 2, "b": 3}, "id": "1", "name": "addition"},
+                {"args": {"a": 2, "b": 3}, "id": "2", "name": "multiplication"},
+            ],
+            [],
+        ]
+    )
+    checkpointer = MemorySaver()
+    tool_node = ToolNode([addition, multiplication], handle_tool_errors=False)
+    agent = create_react_agent(model, tool_node, checkpointer=checkpointer)
+    result = agent.invoke(
+        {"messages": [HumanMessage(content="What's 2 + 3 and 2 * 3?")]},
+        config={"configurable": {"thread_id": "1"}},
+    )
+    assert result["messages"] == [
+        _AnyIdHumanMessage(content="What's 2 + 3 and 2 * 3?"),
+        AIMessage(
+            content="What's 2 + 3 and 2 * 3?",
+            id="0",
+            tool_calls=[
+                ToolCall(name="addition", args={"a": 2, "b": 3}, id="1"),
+                ToolCall(name="multiplication", args={"a": 2, "b": 3}, id="2"),
+            ],
+        ),
+        ToolMessage(
+            content="5", name="addition", tool_call_id="1", id=result["messages"][2].id
+        ),
+        ToolMessage(
+            content="6",
+            name="multiplication",
+            tool_call_id="2",
+            id=result["messages"][3].id,
+        ),
+        AIMessage(
+            content="What's 2 + 3 and 2 * 3?-What's 2 + 3 and 2 * 3?-5-6", id="1"
+        ),
+    ]

@@ -6871,3 +6871,145 @@ async def test_async_streaming_with_functional_api() -> None:
     delta = arrival_times[1] - arrival_times[0]
     # Delta cannot be less than 10 ms if it is streaming as results are generated.
     assert delta > time_delay
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multiple_subgraphs(checkpointer_name: str) -> None:
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        # Define the subgraphs
+        async def add(state):
+            return {"result": state["a"] + state["b"]}
+
+        add_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(add)
+            .add_edge(START, "add")
+            .compile()
+        )
+
+        async def multiply(state):
+            return {"result": state["a"] * state["b"]}
+
+        multiply_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(multiply)
+            .add_edge(START, "multiply")
+            .compile()
+        )
+
+        # Test calling the same subgraph multiple times
+        async def call_same_subgraph(state):
+            result = await add_subgraph.ainvoke(state)
+            another_result = await add_subgraph.ainvoke(
+                {"a": result["result"], "b": 10}
+            )
+            return another_result
+
+        parent_call_same_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(call_same_subgraph)
+            .add_edge(START, "call_same_subgraph")
+            .compile(checkpointer=checkpointer)
+        )
+        config = {"configurable": {"thread_id": "1"}}
+        assert await parent_call_same_subgraph.ainvoke({"a": 2, "b": 3}, config) == {
+            "result": 15
+        }
+
+        # Test calling multiple subgraphs
+        class Output(TypedDict):
+            add_result: int
+            multiply_result: int
+
+        async def call_multiple_subgraphs(state):
+            add_result = await add_subgraph.ainvoke(state)
+            multiply_result = await multiply_subgraph.ainvoke(state)
+            return {
+                "add_result": add_result["result"],
+                "multiply_result": multiply_result["result"],
+            }
+
+        parent_call_multiple_subgraphs = (
+            StateGraph(State, output=Output)
+            .add_node(call_multiple_subgraphs)
+            .add_edge(START, "call_multiple_subgraphs")
+            .compile(checkpointer=checkpointer)
+        )
+        config = {"configurable": {"thread_id": "2"}}
+        assert await parent_call_multiple_subgraphs.ainvoke(
+            {"a": 2, "b": 3}, config
+        ) == {
+            "add_result": 5,
+            "multiply_result": 6,
+        }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multiple_subgraphs_functional(checkpointer_name: str) -> None:
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        # Define the subgraphs
+        async def add(state):
+            return {"result": state["a"] + state["b"]}
+
+        add_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(add)
+            .add_edge(START, "add")
+            .compile()
+        )
+
+        async def multiply(state):
+            return {"result": state["a"] * state["b"]}
+
+        multiply_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(multiply)
+            .add_edge(START, "multiply")
+            .compile()
+        )
+
+        # Test calling the same subgraph multiple times
+        @task
+        async def call_same_subgraph(a, b):
+            result = (await add_subgraph.ainvoke({"a": a, "b": b}))["result"]
+            another_result = (await add_subgraph.ainvoke({"a": result, "b": 10}))[
+                "result"
+            ]
+            return another_result
+
+        @entrypoint(checkpointer=checkpointer)
+        async def parent_call_same_subgraph(inputs):
+            return await call_same_subgraph(*inputs)
+
+        config = {"configurable": {"thread_id": "1"}}
+        assert await parent_call_same_subgraph.ainvoke([2, 3], config) == 15
+
+        # Test calling multiple subgraphs
+        @task
+        async def call_multiple_subgraphs(a, b):
+            add_result = (await add_subgraph.ainvoke({"a": a, "b": b}))["result"]
+            multiply_result = (await multiply_subgraph.ainvoke({"a": a, "b": b}))[
+                "result"
+            ]
+            return [add_result, multiply_result]
+
+        @entrypoint(checkpointer=checkpointer)
+        async def parent_call_multiple_subgraphs(inputs):
+            return await call_multiple_subgraphs(*inputs)
+
+        config = {"configurable": {"thread_id": "2"}}
+        assert await parent_call_multiple_subgraphs.ainvoke([2, 3], config) == [5, 6]
