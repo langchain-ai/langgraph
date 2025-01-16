@@ -1450,6 +1450,17 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         answer = interrupt("question")
         return [m + answer for m in mapped]
 
+    assert graph.get_input_jsonschema() == {
+        "type": "array",
+        "items": {"type": "integer"},
+        "title": "LangGraphInput",
+    }
+    assert graph.get_output_jsonschema() == {
+        "type": "array",
+        "items": {"type": "string"},
+        "title": "LangGraphOutput",
+    }
+
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [*graph.stream([0, 1], thread1)] == [
         {"mapper": "00"},
