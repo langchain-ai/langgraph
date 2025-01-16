@@ -424,6 +424,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -433,6 +434,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
         """
         query = (
             "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"

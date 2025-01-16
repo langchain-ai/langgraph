@@ -31,7 +31,6 @@ jobs:
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
-            "libs/checkpoint-duckdb",
             "libs/checkpoint-postgres",
             "libs/scheduler-kafka",
           ]
@@ -44,12 +43,12 @@ jobs:
     name: cd ${{ matrix.working-directory }}
     strategy:
       matrix:
-        working-directory: [
+        working-directory:
+          [
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
-            "libs/checkpoint-duckdb",
-            "libs/checkpoint-postgres"
+            "libs/checkpoint-postgres",
           ]
     uses: ./.github/workflows/_test.yml
     with:
@@ -76,7 +75,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - name: Run check_sdk_methods script
         run: python .github/scripts/check_sdk_methods.py
 
@@ -133,7 +132,16 @@ jobs:
 
   ci_success:
     name: "CI Success"
-    needs: [lint, lint-js, test, test-langgraph, test-scheduler-kafka, integration-test, test-js]
+    needs:
+      [
+        lint,
+        lint-js,
+        test,
+        test-langgraph,
+        test-scheduler-kafka,
+        integration-test,
+        test-js,
+      ]
     if: |
       always()
     runs-on: ubuntu-latest

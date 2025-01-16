@@ -47,14 +47,8 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import (
-    CONFIG_KEY_NODE_FINISHED,
-    ERROR,
-    FF_SEND_V2,
-    PULL,
-    START,
-)
-from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
+from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
@@ -94,6 +88,11 @@ from tests.messages import (
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 async def test_checkpoint_errors() -> None:
@@ -507,10 +506,7 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
         await graph.ainvoke(1)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt(checkpointer_name: str) -> None:
     class State(TypedDict):
@@ -684,10 +680,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
     class SubgraphState(TypedDict):
@@ -878,11 +871,7 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(not FF_SEND_V2, reason="send v2 is not enabled")
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_copy_checkpoint(checkpointer_name: str) -> None:
     class State(TypedDict):
@@ -914,7 +903,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
 
     tracer = FakeTracer()
     assert await tool_two.ainvoke(
-        {"my_key": "value", "market": "DE"}, {"callbacks": [tracer]}
+        {"my_key": "value", "market": "DE"}, {"callbacks": [tracer]}, debug=True
     ) == {
         "my_key": "value one",
         "market": "DE",
@@ -927,7 +916,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
     assert run.outputs == {"market": "DE", "my_key": "value one"}
 
     assert await tool_two.ainvoke({"my_key": "value", "market": "US"}) == {
-        "my_key": "value one all good",
+        "my_key": "value all good one",
         "market": "US",
     }
 
@@ -964,6 +953,10 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
         assert [
             c async for c in tool_two.astream(Command(resume=" my answer"), thread2)
         ] == [
+            {
+                "__metadata__": {"cached": True},
+                "tool_one": {"my_key": " one"},
+            },
             {"tool_two": {"my_key": " my answer"}},
         ]
 
@@ -983,7 +976,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                     "parents": {},
                     "source": "loop",
                     "step": 0,
-                    "writes": {"tool_one": {"my_key": " one"}},
+                    "writes": None,
                     "thread_id": "1",
                 },
                 {
@@ -1000,6 +993,15 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             values={"my_key": "value ⛰️ one", "market": "DE"},
             next=("tool_two",),
             tasks=(
+                PregelTask(
+                    AnyStr(),
+                    name="tool_one",
+                    path=("__pregel_push", 0),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result={"my_key": " one"},
+                ),
                 PregelTask(
                     AnyStr(),
                     "tool_two",
@@ -1019,7 +1021,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "parents": {},
                 "source": "loop",
                 "step": 0,
-                "writes": {"tool_one": {"my_key": " one"}},
+                "writes": None,
                 "thread_id": "1",
             },
             parent_config=(
@@ -1030,14 +1032,25 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 ].config
             ),
         )
+
+        if "shallow" in checkpointer_name:
+            # shallow checkpointer doesn't support copy
+            return
+
         # clear the interrupt and next tasks
-        await tool_two.aupdate_state(thread1, None)
+        await tool_two.aupdate_state(thread1, None, as_node="__copy__")
         # interrupt is cleared, next task is kept
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value ⛰️ one", "market": "DE"},
-            next=("tool_two",),
+            values={"my_key": "value ⛰️", "market": "DE"},
+            next=("tool_one", "tool_two"),
             tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_one",
+                    (PUSH, 0),
+                    result=None,
+                ),
                 PregelTask(
                     AnyStr(),
                     "tool_two",
@@ -1049,25 +1062,20 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
-                "source": "update",
+                "source": "fork",
                 "step": 1,
-                "writes": {},
+                "writes": None,
                 "thread_id": "1",
             },
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
-                ].config
+                ].parent_config
             ),
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_node_not_cancelled_on_other_node_interrupted(
     checkpointer_name: str,
@@ -2348,18 +2356,6 @@ async def test_concurrent_emit_sends() -> None:
             "0",
             "1",
             "1.1",
-            "2|1",
-            "2|2",
-            "2|3",
-            "2|4",
-            "3",
-            "3.1",
-        ]
-        if FF_SEND_V2
-        else [
-            "0",
-            "1",
-            "1.1",
             "3.1",
             "2|1",
             "2|2",
@@ -2407,34 +2403,17 @@ async def test_send_sequences(checkpointer_name: str) -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert (
-        await graph.ainvoke(["0"])
-        == [
-            "0",
-            "1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "2|3",
-            "2|4",
-            "3",
-            "3.1",
-        ]
-        if FF_SEND_V2
-        else [
-            "0",
-            "1",
-            "3.1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "3",
-            "2|3",
-            "2|4",
-            "3",
-        ]
-    )
-
-    if not FF_SEND_V2:
-        return
+    assert await graph.ainvoke(["0"]) == [
+        "0",
+        "1",
+        "3.1",
+        "2|Command(goto=Send(node='2', arg=3))",
+        "2|Command(goto=Send(node='2', arg=4))",
+        "3",
+        "2|3",
+        "2|4",
+        "3",
+    ]
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(checkpointer=checkpointer, interrupt_before=["3.1"])
@@ -2442,27 +2421,21 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         assert await graph.ainvoke(["0"], thread1) == [
             "0",
             "1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "2|3",
-            "2|4",
         ]
         assert await graph.ainvoke(None, thread1) == [
             "0",
             "1",
+            "3.1",
             "2|Command(goto=Send(node='2', arg=3))",
             "2|Command(goto=Send(node='2', arg=4))",
+            "3",
             "2|3",
             "2|4",
             "3",
-            "3.1",
         ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2472,6 +2445,7 @@ async def test_imp_task(checkpointer_name: str) -> None:
         async def mapper(input: int) -> str:
             nonlocal mapper_calls
             mapper_calls += 1
+            await asyncio.sleep(0.1 * input)
             return str(input) * 2
 
         @entrypoint(checkpointer=checkpointer)
@@ -2481,7 +2455,8 @@ async def test_imp_task(checkpointer_name: str) -> None:
             answer = interrupt("question")
             return [m + answer for m in mapped]
 
-        thread1 = {"configurable": {"thread_id": "1"}}
+        tracer = FakeTracer()
+        thread1 = {"configurable": {"thread_id": "1"}, "callbacks": [tracer]}
         assert [c async for c in graph.astream([0, 1], thread1)] == [
             {"mapper": "00"},
             {"mapper": "11"},
@@ -2497,6 +2472,9 @@ async def test_imp_task(checkpointer_name: str) -> None:
             },
         ]
         assert mapper_calls == 2
+        assert len(tracer.runs) == 1
+        assert len(tracer.runs[0].child_runs) == 1
+        assert tracer.runs[0].child_runs[0].name == "graph"
 
         assert await graph.ainvoke(Command(resume="answer"), thread1) == [
             "00answer",
@@ -2505,10 +2483,7 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert mapper_calls == 2
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task_cancel(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2559,10 +2534,7 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
         assert mapper_cancels == 2
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_sync_from_async(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2595,10 +2567,7 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_stream_order(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2634,9 +2603,6 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
-    if not FF_SEND_V2:
-        pytest.skip("Send deduplication is only available in Send V2")
-
     class InterruptOnce:
         ticks: int = 0
 
@@ -2690,8 +2656,10 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert await graph.ainvoke(["0"], thread1, debug=1) == [
             "0",
             "1",
+            "3.1",
             "2|Command(goto=Send(node='2', arg=3))",
             "2|Command(goto=Send(node='flaky', arg=4))",
+            "3",
             "2|3",
         ]
         assert builder.nodes["2"].runnable.func.ticks == 3
@@ -2700,12 +2668,13 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert await graph.ainvoke(None, thread1, debug=1) == [
             "0",
             "1",
+            "3.1",
             "2|Command(goto=Send(node='2', arg=3))",
             "2|Command(goto=Send(node='flaky', arg=4))",
+            "3",
             "2|3",
             "flaky|4",
             "3",
-            "3.1",
         ]
         # node "2" doesn't get called again, as we recover writes saved before
         assert builder.nodes["2"].runnable.func.ticks == 3
@@ -2718,12 +2687,13 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 values=[
                     "0",
                     "1",
+                    "3.1",
                     "2|Command(goto=Send(node='2', arg=3))",
                     "2|Command(goto=Send(node='flaky', arg=4))",
+                    "3",
                     "2|3",
                     "flaky|4",
                     "3",
-                    "3.1",
                 ],
                 next=(),
                 config={
@@ -2735,9 +2705,9 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 },
                 metadata={
                     "source": "loop",
-                    "writes": {"3": ["3"], "3.1": ["3.1"]},
+                    "writes": {"3": ["3"]},
                     "thread_id": "1",
-                    "step": 2,
+                    "step": 4,
                     "parents": {},
                 },
                 created_at=AnyStr(),
@@ -2754,12 +2724,14 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 values=[
                     "0",
                     "1",
+                    "3.1",
                     "2|Command(goto=Send(node='2', arg=3))",
                     "2|Command(goto=Send(node='flaky', arg=4))",
+                    "3",
                     "2|3",
                     "flaky|4",
                 ],
-                next=("3", "3.1"),
+                next=("3",),
                 config={
                     "configurable": {
                         "thread_id": "1",
@@ -2769,17 +2741,9 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 },
                 metadata={
                     "source": "loop",
-                    "writes": {
-                        "1": ["1"],
-                        "2": [
-                            ["2|Command(goto=Send(node='2', arg=3))"],
-                            ["2|Command(goto=Send(node='flaky', arg=4))"],
-                            ["2|3"],
-                        ],
-                        "flaky": ["flaky|4"],
-                    },
+                    "writes": {"2": ["2|3"], "3": ["3"], "flaky": ["flaky|4"]},
                     "thread_id": "1",
-                    "step": 1,
+                    "step": 3,
                     "parents": {},
                 },
                 created_at=AnyStr(),
@@ -2800,6 +2764,123 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         state=None,
                         result=["3"],
                     ),
+                ),
+            ),
+            StateSnapshot(
+                values=[
+                    "0",
+                    "1",
+                    "3.1",
+                    "2|Command(goto=Send(node='2', arg=3))",
+                    "2|Command(goto=Send(node='flaky', arg=4))",
+                ],
+                next=("2", "flaky", "3"),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "2": [
+                            ["2|Command(goto=Send(node='2', arg=3))"],
+                            ["2|Command(goto=Send(node='flaky', arg=4))"],
+                        ],
+                        "3.1": ["3.1"],
+                    },
+                    "thread_id": "1",
+                    "step": 2,
+                    "parents": {},
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(
+                    PregelTask(
+                        id=AnyStr(),
+                        name="2",
+                        path=("__pregel_push", 0),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["2|3"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="flaky",
+                        path=("__pregel_push", 1),
+                        error=None,
+                        interrupts=(
+                            Interrupt(
+                                value="Bahh", resumable=False, ns=None, when="during"
+                            ),
+                        ),
+                        state=None,
+                        result=["flaky|4"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="3",
+                        path=("__pregel_pull", "3"),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["3"],
+                    ),
+                ),
+            ),
+            StateSnapshot(
+                values=["0", "1"],
+                next=("2", "2", "3.1"),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"1": ["1"]},
+                    "thread_id": "1",
+                    "step": 1,
+                    "parents": {},
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(
+                    PregelTask(
+                        id=AnyStr(),
+                        name="2",
+                        path=("__pregel_push", 0),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["2|Command(goto=Send(node='2', arg=3))"],
+                    ),
+                    PregelTask(
+                        id=AnyStr(),
+                        name="2",
+                        path=("__pregel_push", 1),
+                        error=None,
+                        interrupts=(),
+                        state=None,
+                        result=["2|Command(goto=Send(node='flaky', arg=4))"],
+                    ),
                     PregelTask(
                         id=AnyStr(),
                         name="3.1",
@@ -2813,7 +2894,7 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
             ),
             StateSnapshot(
                 values=["0"],
-                next=("1", "2", "2", "2", "flaky"),
+                next=("1",),
                 config={
                     "configurable": {
                         "thread_id": "1",
@@ -2845,50 +2926,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         interrupts=(),
                         state=None,
                         result=["1"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="2",
-                        path=("__pregel_push", ("__pregel_pull", "1"), 2),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["2|Command(goto=Send(node='2', arg=3))"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="2",
-                        path=("__pregel_push", ("__pregel_pull", "1"), 3),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["2|Command(goto=Send(node='flaky', arg=4))"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="2",
-                        path=(
-                            "__pregel_push",
-                            ("__pregel_push", ("__pregel_pull", "1"), 2),
-                            2,
-                        ),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["2|3"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="flaky",
-                        path=(
-                            "__pregel_push",
-                            ("__pregel_push", ("__pregel_pull", "1"), 3),
-                            2,
-                        ),
-                        error=None,
-                        interrupts=(Interrupt(value="Bahh", when="during"),),
-                        state=None,
-                        result=["flaky|4"],
                     ),
                 ),
             ),
@@ -3047,9 +3084,6 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
         }
         assert foo_called == 0
 
-        if not FF_SEND_V2:
-            return
-
         # get state should show the pending task
         state = await graph.aget_state(thread1)
         assert state == StateSnapshot(
@@ -3078,9 +3112,24 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 0,
+                "step": 1,
                 "source": "loop",
-                "writes": None,
+                "writes": {
+                    "agent": {
+                        "messages": AIMessage(
+                            content="",
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "foo",
+                                    "args": {"hi": [1, 2, 3]},
+                                    "id": "",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    }
+                },
                 "parents": {},
                 "thread_id": "2",
             },
@@ -3099,32 +3148,8 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             tasks=(
                 PregelTask(
                     id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
-                        "messages": AIMessage(
-                            content="",
-                            additional_kwargs={},
-                            response_metadata={},
-                            id="ai1",
-                            tool_calls=[
-                                {
-                                    "name": "foo",
-                                    "args": {"hi": [1, 2, 3]},
-                                    "id": "",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    },
-                ),
-                PregelTask(
-                    id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", ("__pregel_pull", "agent"), 2),
+                    path=("__pregel_push", 0),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3158,7 +3183,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 1,
+                "step": 2,
                 "source": "update",
                 "writes": {
                     "agent": {
@@ -3245,9 +3270,24 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 0,
+                "step": 1,
                 "source": "loop",
-                "writes": None,
+                "writes": {
+                    "agent": {
+                        "messages": AIMessage(
+                            content="",
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "foo",
+                                    "args": {"hi": [1, 2, 3]},
+                                    "id": "",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    }
+                },
                 "parents": {},
                 "thread_id": "3",
             },
@@ -3266,30 +3306,8 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             tasks=(
                 PregelTask(
                     id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
-                        "messages": AIMessage(
-                            "",
-                            id="ai1",
-                            tool_calls=[
-                                {
-                                    "name": "foo",
-                                    "args": {"hi": [1, 2, 3]},
-                                    "id": "",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    },
-                ),
-                PregelTask(
-                    id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", ("__pregel_pull", "agent"), 2),
+                    path=("__pregel_push", 0),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3344,7 +3362,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "step": 1,
+                "step": 2,
                 "source": "update",
                 "writes": {
                     "agent": {
@@ -3380,7 +3398,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", (), 0),
+                    path=("__pregel_push", 0),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3531,9 +3549,6 @@ async def test_send_react_interrupt_control(
         }
         assert foo_called == 0
 
-        if not FF_SEND_V2:
-            return
-
         # get state should show the pending task
         state = await graph.aget_state(thread1)
         assert state == StateSnapshot(
@@ -3562,9 +3577,24 @@ async def test_send_react_interrupt_control(
                 }
             },
             metadata={
-                "step": 0,
+                "step": 1,
                 "source": "loop",
-                "writes": None,
+                "writes": {
+                    "agent": {
+                        "messages": AIMessage(
+                            content="",
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "foo",
+                                    "args": {"hi": [1, 2, 3]},
+                                    "id": "",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    }
+                },
                 "parents": {},
                 "thread_id": "2",
             },
@@ -3583,32 +3613,8 @@ async def test_send_react_interrupt_control(
             tasks=(
                 PregelTask(
                     id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
-                        "messages": AIMessage(
-                            content="",
-                            additional_kwargs={},
-                            response_metadata={},
-                            id="ai1",
-                            tool_calls=[
-                                {
-                                    "name": "foo",
-                                    "args": {"hi": [1, 2, 3]},
-                                    "id": "",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    },
-                ),
-                PregelTask(
-                    id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", ("__pregel_pull", "agent"), 2),
+                    path=("__pregel_push", 0),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3642,7 +3648,7 @@ async def test_send_react_interrupt_control(
                 }
             },
             metadata={
-                "step": 1,
+                "step": 2,
                 "source": "update",
                 "writes": {
                     "agent": {
@@ -4043,9 +4049,8 @@ async def test_invoke_join_then_call_other_pregel(
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         # add checkpointer
         app.checkpointer = checkpointer
-        # subgraph is called twice in the same node, through .map(), so raises
-        with pytest.raises(MultipleSubgraphsError):
-            await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}})
+        # subgraph is called twice, and that works
+        assert await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
         # set inner graph checkpointer NeverCheckpoint
         inner_app.checkpointer = False
@@ -4269,10 +4274,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge(checkpointer_name: str) -
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4359,10 +4364,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4776,11 +4781,11 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
         await asyncio.sleep(0.1)
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4870,10 +4875,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4954,13 +4959,13 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> N
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def retriever_picker(data: State) -> list[str]:
         return ["analyzer_one", "retriever_two"]
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -5722,20 +5727,15 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
 
     N = 500
     M = 1
-    if "duckdb" in store_name:
-        logger.warning(
-            "DuckDB store implementation has a known issue that does not"
-            " support concurrent writes, so we're reducing the test scope"
-        )
-        N = M = 1
 
     for i in range(N):
         builder.add_node(f"node_{i}", Node(i))
         builder.add_edge("__start__", f"node_{i}")
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer, awith_store(
-        store_name
-    ) as the_store:
+    async with (
+        awith_checkpointer(checkpointer_name) as checkpointer,
+        awith_store(store_name) as the_store,
+    ):
         graph = builder.compile(store=the_store, checkpointer=checkpointer)
 
         # Test batch operations with multiple threads
@@ -6097,10 +6097,7 @@ async def test_parent_command(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_subgraph(checkpointer_name: str):
     class State(TypedDict):
@@ -6133,10 +6130,7 @@ async def test_interrupt_subgraph(checkpointer_name: str):
         assert await graph.ainvoke(Command(resume="bar"), thread1)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_multiple(checkpointer_name: str):
     class State(TypedDict):
@@ -6200,10 +6194,7 @@ async def test_interrupt_multiple(checkpointer_name: str):
         ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_loop(checkpointer_name: str):
     class State(TypedDict):
@@ -6488,10 +6479,7 @@ async def test_parallel_node_execution():
     assert duration < 3.0
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupt_state_persistence(checkpointer_name: str) -> None:
     """Test that state is preserved correctly across multiple interrupts."""
@@ -6670,3 +6658,216 @@ async def test_multiple_updates() -> None:
         {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
         {"node_b": {"foo": "b"}},
     ]
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_falsy_return_from_task(checkpointer_name: str) -> None:
+    """Test with a falsy return from a task."""
+
+    @task
+    async def falsy_task() -> bool:
+        return False
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(state: dict) -> dict:
+            """React tool."""
+            await falsy_task()
+            interrupt("test")
+
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({"a": 5}, configurable)
+        await graph.ainvoke(Command(resume="123"), configurable)
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
+    """Test multiple interrupts with an imperative API."""
+    from langgraph.func import entrypoint, task
+
+    counter = 0
+
+    @task
+    async def double(x: int) -> int:
+        """Increment the counter."""
+        nonlocal counter
+        counter += 1
+        return 2 * x
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(state: dict) -> dict:
+            """React tool."""
+
+            values = []
+
+            for idx in [1, 2, 3]:
+                values.extend([await double(idx), interrupt({"a": "boo"})])
+
+            return {"values": values}
+
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({}, configurable)
+        await graph.ainvoke(Command(resume="a"), configurable)
+        await graph.ainvoke(Command(resume="b"), configurable)
+        result = await graph.ainvoke(Command(resume="c"), configurable)
+        # `double` value should be cached appropriately when used w/ `interrupt`
+        assert result == {
+            "values": [2, "a", 4, "b", 6, "c"],
+        }
+        assert counter == 3
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_double_interrupt_subgraph(checkpointer_name: str) -> None:
+    class AgentState(TypedDict):
+        input: str
+
+    def node_1(state: AgentState):
+        result = interrupt("interrupt node 1")
+        return {"input": result}
+
+    def node_2(state: AgentState):
+        result = interrupt("interrupt node 2")
+        return {"input": result}
+
+    subgraph_builder = (
+        StateGraph(AgentState)
+        .add_node("node_1", node_1)
+        .add_node("node_2", node_2)
+        .add_edge(START, "node_1")
+        .add_edge("node_1", "node_2")
+        .add_edge("node_2", END)
+    )
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        # invoke the sub graph
+        subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+        thread = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        assert [c async for c in subgraph.astream({"input": "test"}, thread)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 1",
+                        resumable=True,
+                        ns=[AnyStr("node_1:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        # resume from the first interrupt
+        assert [c async for c in subgraph.astream(Command(resume="123"), thread)] == [
+            {
+                "node_1": {"input": "123"},
+            },
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 2",
+                        resumable=True,
+                        ns=[AnyStr("node_2:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        # resume from the second interrupt
+        assert [c async for c in subgraph.astream(Command(resume="123"), thread)] == [
+            {
+                "node_2": {"input": "123"},
+            },
+        ]
+
+        subgraph = subgraph_builder.compile()
+
+        def invoke_sub_agent(state: AgentState):
+            return subgraph.invoke(state)
+
+        parent_agent = (
+            StateGraph(AgentState)
+            .add_node("invoke_sub_agent", invoke_sub_agent)
+            .add_edge(START, "invoke_sub_agent")
+            .add_edge("invoke_sub_agent", END)
+            .compile(checkpointer=checkpointer)
+        )
+
+        assert [c async for c in parent_agent.astream({"input": "test"}, thread)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 1",
+                        resumable=True,
+                        ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+
+        # resume from the first interrupt
+        assert [
+            c async for c in parent_agent.astream(Command(resume=True), thread)
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 2",
+                        resumable=True,
+                        ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        # resume from 2nd interrupt
+        assert [
+            c async for c in parent_agent.astream(Command(resume=True), thread)
+        ] == [
+            {
+                "invoke_sub_agent": {"input": True},
+            },
+        ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_streaming_with_functional_api() -> None:
+    """Test streaming with functional API.
+
+    This test verifies that we're able to stream results as they're being generated
+    rather than have all the results arrive at once after the graph has completed.
+
+    The time of arrival between the two updates corresponding to the two `slow` tasks
+    should be greater than the time delay between the two tasks.
+    """
+
+    time_delay = 0.01
+
+    @task()
+    async def slow() -> dict:
+        await asyncio.sleep(time_delay)  # Simulate a delay of 10 ms
+        return {"tic": asyncio.get_running_loop().time()}
+
+    @entrypoint()
+    async def graph(inputs: dict) -> list:
+        first = await slow()
+        second = await slow()
+        return [first, second]
+
+    arrival_times = []
+
+    async for chunk in graph.astream({}):
+        if "slow" not in chunk:  # We'll just look at the updates from `slow`
+            continue
+        arrival_times.append(asyncio.get_running_loop().time())
+
+    assert len(arrival_times) == 2
+    delta = arrival_times[1] - arrival_times[0]
+    # Delta cannot be less than 10 ms if it is streaming as results are generated.
+    assert delta > time_delay

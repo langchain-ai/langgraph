@@ -107,7 +107,6 @@ class StateGraph(Graph):
         config_schema (Optional[Type[Any]]): The schema class that defines the configuration.
             Use this to expose configurable parameters in your API.
 
-
     Examples:
         >>> from langchain_core.runnables import RunnableConfig
         >>> from typing_extensions import Annotated, TypedDict
@@ -243,7 +242,7 @@ class StateGraph(Graph):
             ValueError: If the key is already being used as a state key.
 
         Returns:
-            StateGraph
+            Self: The instance of the state graph, allowing for method chaining.
         """
         ...
 
@@ -267,7 +266,7 @@ class StateGraph(Graph):
             ValueError: If the key is already being used as a state key.
 
         Returns:
-            StateGraph
+            Self: The instance of the state graph, allowing for method chaining.
         """
         ...
 
@@ -290,9 +289,9 @@ class StateGraph(Graph):
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
             retry (Optional[RetryPolicy]): The policy for retrying the node. (default: None)
+
         Raises:
             ValueError: If the key is already being used as a state key.
-
 
         Examples:
             ```pycon
@@ -320,7 +319,7 @@ class StateGraph(Graph):
             ```
 
         Returns:
-            StateGraph
+            Self: The instance of the state graph, allowing for method chaining.
         """
         if not isinstance(node, str):
             action = node
@@ -361,7 +360,11 @@ class StateGraph(Graph):
 
         ends = EMPTY_SEQ
         try:
-            if (isfunction(action) or ismethod(getattr(action, "__call__", None))) and (
+            if (
+                isfunction(action)
+                or ismethod(action)
+                or ismethod(getattr(action, "__call__", None))
+            ) and (
                 hints := get_type_hints(getattr(action, "__call__"))
                 or get_type_hints(action)
             ):
@@ -412,7 +415,7 @@ class StateGraph(Graph):
             ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
 
         Returns:
-            StateGraph
+            Self: The instance of the state graph, allowing for method chaining.
         """
         if isinstance(start_key, str):
             return super().add_edge(start_key, end_key)
@@ -451,7 +454,7 @@ class StateGraph(Graph):
             ValueError: if the sequence contains duplicate node names.
 
         Returns:
-            StateGraph
+            Self: The instance of the state graph, allowing for method chaining.
         """
         if len(nodes) < 1:
             raise ValueError("Sequence requires at least one node.")
@@ -844,14 +847,10 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
     commands: list[Command] = []
     if isinstance(value, Command):
         commands.append(value)
-    elif (
-        isinstance(value, (list, tuple))
-        and value
-        and all(isinstance(i, Command) for i in value)
-    ):
-        commands.extend(value)
-    else:
-        return EMPTY_SEQ
+    elif isinstance(value, (list, tuple)):
+        for cmd in value:
+            if isinstance(cmd, Command):
+                commands.append(cmd)
     rtn: list[Union[str, Send]] = []
     for command in commands:
         if command.graph == Command.PARENT:
@@ -871,14 +870,10 @@ async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
     commands: list[Command] = []
     if isinstance(value, Command):
         commands.append(value)
-    elif (
-        isinstance(value, (list, tuple))
-        and value
-        and all(isinstance(i, Command) for i in value)
-    ):
-        commands.extend(value)
-    else:
-        return EMPTY_SEQ
+    elif isinstance(value, (list, tuple)):
+        for cmd in value:
+            if isinstance(cmd, Command):
+                commands.append(cmd)
     rtn: list[Union[str, Send]] = []
     for command in commands:
         if command.graph == Command.PARENT:

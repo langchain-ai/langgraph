@@ -39,11 +39,11 @@ def call(
     **kwargs: Any,
 ) -> concurrent.futures.Future[T]:
     from langgraph.constants import CONFIG_KEY_CALL
-    from langgraph.utils.config import get_configurable
+    from langgraph.utils.config import get_config
 
-    conf = get_configurable()
-    impl = conf[CONFIG_KEY_CALL]
-    fut = impl(func, (args, kwargs), retry=retry)
+    config = get_config()
+    impl = config[CONF][CONFIG_KEY_CALL]
+    fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
     return fut
 
 
@@ -110,6 +110,7 @@ def entrypoint(
     *,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     store: Optional[BaseStore] = None,
+    config_schema: Optional[type[Any]] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
     def _imp(func: types.FunctionType) -> Pregel:
         """Convert a function into a Pregel graph.
@@ -121,6 +122,7 @@ def entrypoint(
         Returns:
             A Pregel graph.
         """
+	# wrap generators in a function that writes to StreamWriter
         if inspect.isgeneratorfunction(func):
             original_sig = inspect.signature(func)
             # Check if original signature has a writer argument with a matching type.
@@ -208,6 +210,23 @@ def entrypoint(
             bound = get_runnable_for_func(func)
             stream_mode = "updates"
 
+        # get input and output types
+        sig = inspect.signature(func)
+        first_parameter_name = next(iter(sig.parameters.keys()), None)
+        if not first_parameter_name:
+            raise ValueError("Entrypoint function must have at least one parameter")
+        input_type = (
+            sig.parameters[first_parameter_name].annotation
+            if sig.parameters[first_parameter_name].annotation
+            is not inspect.Signature.empty
+            else Any
+        )
+        output_type = (
+            sig.return_annotation
+            if sig.return_annotation is not inspect.Signature.empty
+            else Any
+        )
+
         return Pregel(
             nodes={
                 func.__name__: PregelNode(
@@ -217,13 +236,18 @@ def entrypoint(
                     writers=[ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])],
                 )
             },
-            channels={START: EphemeralValue(Any), END: LastValue(Any, END)},
+            channels={
+                START: EphemeralValue(input_type),
+                END: LastValue(output_type, END),
+            },
             input_channels=START,
             output_channels=END,
             stream_channels=END,
             stream_mode=stream_mode,
+            stream_eager=True,
             checkpointer=checkpointer,
             store=store,
+            config_type=config_schema,
         )
 
     return _imp

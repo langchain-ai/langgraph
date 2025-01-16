@@ -9,10 +9,9 @@ from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
-    FF_SEND_V2,
     INTERRUPT,
+    MISSING,
     NULL_TASK_ID,
-    PUSH,
     RESUME,
     RETURN,
     SELF,
@@ -83,7 +82,7 @@ def map_command(
             sends = [cmd.goto]
         for send in sends:
             if isinstance(send, Send):
-                yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+                yield (NULL_TASK_ID, TASKS, send)
             elif isinstance(send, str):
                 yield (NULL_TASK_ID, f"branch:{START}:{SELF}:{send}", START)
             else:
@@ -175,7 +174,8 @@ def map_output_updates(
         return
     updated: list[tuple[str, Any]] = []
     for task, writes in output_tasks:
-        if rtn := next((value for chan, value in writes if chan == RETURN), None):
+        rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
+        if rtn is not MISSING:
             updated.append((task.name, rtn))
         elif isinstance(output_channels, str):
             updated.extend(

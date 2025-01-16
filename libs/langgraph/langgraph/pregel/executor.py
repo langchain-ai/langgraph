@@ -51,6 +51,7 @@ class BackgroundExecutor(ContextManager):
     def __init__(self, config: RunnableConfig) -> None:
         self.stack = ExitStack()
         self.executor = self.stack.enter_context(get_executor_for_config(config))
+        # mapping of Future to (__cancel_on_exit__, __reraise_on_exit__) flags
         self.tasks: dict[concurrent.futures.Future, tuple[bool, bool]] = {}
 
     def submit(  # type: ignore[valid-type]
@@ -63,15 +64,21 @@ class BackgroundExecutor(ContextManager):
         __next_tick__: bool = False,
         **kwargs: P.kwargs,
     ) -> concurrent.futures.Future[T]:
+        ctx = copy_context()
         if __next_tick__:
-            task = self.executor.submit(next_tick, fn, *args, **kwargs)
+            task = cast(
+                concurrent.futures.Future[T],
+                self.executor.submit(next_tick, ctx.run, fn, *args, **kwargs),  # type: ignore[arg-type]
+            )
         else:
-            task = self.executor.submit(fn, *args, **kwargs)
+            task = self.executor.submit(ctx.run, fn, *args, **kwargs)
         self.tasks[task] = (__cancel_on_exit__, __reraise_on_exit__)
+        # add a callback to remove the task from the tasks dict when it's done
         task.add_done_callback(self.done)
         return task
 
     def done(self, task: concurrent.futures.Future) -> None:
+        """Remove the task from the tasks dict when it's done."""
         try:
             task.result()
         except GraphBubbleUp:
@@ -103,9 +110,9 @@ class BackgroundExecutor(ContextManager):
             concurrent.futures.wait(pending)
         # shutdown the executor
         self.stack.__exit__(exc_type, exc_value, traceback)
-        # re-raise the first exception that occurred in a task
+        # if there's already an exception being raised, don't raise another one
         if exc_type is None:
-            # if there's already an exception being raised, don't raise another one
+            # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
                 if not reraise:
                     continue

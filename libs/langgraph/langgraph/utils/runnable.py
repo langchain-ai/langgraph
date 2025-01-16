@@ -92,6 +92,12 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
 """List of kwargs that can be passed to functions, and their corresponding
 config keys, default values and type annotations.
 
+Used to configure keyword arguments that can be injected at runtime
+from the config object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
+
+For a keyword to be injected from the config object, the function signature
+must contain a kwarg with the same name and a matching type annotation.
+
 Each tuple contains:
 - the name of the kwarg in the function signature
 - the type annotation(s) for the kwarg
@@ -331,21 +337,22 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """A simpler version of RunnableSequence."""
+    """Sequence of Runnables, where the output of each is the input of the next.
+
+    RunnableSeq is a simpler version of RunnableSequence that is internal to
+    LangGraph.
+    """
 
     def __init__(
         self,
         *steps: RunnableLike,
         name: Optional[str] = None,
     ) -> None:
-        """Create a new RunnableSequence.
+        """Create a new RunnableSeq.
 
         Args:
             steps: The steps to include in the sequence.
             name: The name of the Runnable. Defaults to None.
-            first: The first Runnable in the sequence. Defaults to None.
-            middle: The middle Runnables in the sequence. Defaults to None.
-            last: The last Runnable in the sequence. Defaults to None.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
