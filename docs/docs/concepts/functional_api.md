@@ -6,7 +6,7 @@ LangGraph's functional API allows building applications that persist state in be
 
 The applications are able to manage state, work with LLMs, support HIL patterns and stream results.
 
-The functional API is built using two key primitives: `entrypoint` and `task`.
+The functional API uses to primitives: `entrypoint` and `task`.
 
 You can intermix the Functional and the Graph API in the same application by invoking
 `@entrypoint` or `@task` from within a node in a state graph or vice versa invoking a stqte graph from
@@ -17,25 +17,49 @@ inside a task or entrypoint.
 
 Here's a quick example to get the gist of the Functional API:
 
-=== "Map-reduce"
+```python
+from langgraph.func import entrypoint, task
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import MemorySaver
 
-    ```python
-    from langgraph.func import entrypoint, task
-    from langgraph.types import interrupt
+@task
+def write_essay(topic: str) -> str:
+    return f"An essay about {topic}"
 
-    @task()
-    def mapper(i: int) -> str:
-        return str(i) * 2
+@entrypoint(checkpointer=MemorySaver())
+def workflow(inputs: dict) -> dict:
+    tasks = [write_essay(topic) for topic in inputs['topics']]
+    essays = [t.result() for t in tasks]
+    # Human-in-the-loop interrupt
+    value = interrupt({
+        "question": "Are these good?",
+        "essays": essays
+    })
+    return {
+        "essays": essays,
+        "review_result": value,
+    }
 
-    @entrypoint()
-    def graph(input: list[int]) -> list[str]:
-        futures = [mapper(i) for i in input]
-        mapped = [f.result() for f in futures]
-        answer = interrupt("question")
-        return [m + answer for m in mapped]
-    ```
+config = {
+    "configurable": {
+        "thread_id": "some_thread"
+    }
+}
+
+for item in workflow.stream({"topics": ["cats", "dogs"]}, config):
+    print(item)
 
 
+for item in workflow.stream(Command(resume="yes"), config):
+    print(item)
+```
+
+```pycon
+{'write_essay': 'An essay about dogs'}
+{'write_essay': 'An essay about cats'}
+{'__interrupt__': (Interrupt(value={'question': 'Are these good?', 'essays': ['An essay about cats', 'An essay about dogs']}, resumable=True, ns=['workflow:8f5c1b6e-a5b5-9107-30d8-c163528a35f8'], when='during'),)}
+{'workflow': {'essays': ['An essay about cats', 'An essay about dogs'], 'review_result': 'yes'}}
+```
 
 
 The Functional API is composed of two key primitives: entrypoint and task. These primitives work together to define modular, reusable workflows. While entrypoint serves as the starting point for a functional graph, task encapsulates units of work that can be executed independently or in sequence. This API is designed for flexibility and scalability, supporting features like checkpointing, streaming, and deterministic execution.
@@ -43,14 +67,23 @@ The Functional API is composed of two key primitives: entrypoint and task. These
 
 ### Difference from the Graph API
 
-- **Entrypoint**: Focuses on executing a sequence of tasks with a functional, linear workflow.
-- **StateGraph**: Phrases the control flow in terms of a state machine that allows branching and cycles. This makes checkpointing and time-travel easier, but comes at the cost of more boilerplate code.
+LangGraph's GraphAPI defines its control flow by designing an explicit state machine. The state machine
+can be used to control branching and cyclical behavior. 
+
+
+The Functional API, on the other hand, does not require users to declare the control flow explicitly. 
+Instead users can call tasks and entrypoints as they would with regular Python code. 
 
 ## Entrypoint
 
-### What is an entrypoint?
+An entrypoint is a decorated function that serves as the starting point for executing a langgraph workflow.
 
-An entrypoint is a decorated function that serves as the starting point for executing a functional workflow. It defines the input and output boundaries for a graph of tasks and provides mechanisms for checkpointing and streaming results.
+### Interface
+
+```python
+
+```
+
 
 
 ### How to define an entrypoint
