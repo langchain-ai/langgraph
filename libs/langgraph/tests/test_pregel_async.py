@@ -6873,6 +6873,7 @@ async def test_async_streaming_with_functional_api() -> None:
     assert delta > time_delay
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_subgraphs(checkpointer_name: str) -> None:
     class State(TypedDict):
@@ -6951,6 +6952,7 @@ async def test_multiple_subgraphs(checkpointer_name: str) -> None:
         }
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_subgraphs_functional(checkpointer_name: str) -> None:
     class State(TypedDict):
