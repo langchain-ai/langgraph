@@ -4916,6 +4916,38 @@ def test_interrupt_functional(
 
     @task
     def bar(state: dict) -> dict:
+        return {"a": state["a"] + "bar", "b": state["b"]}
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(inputs: dict) -> dict:
+        fut_foo = foo(inputs)
+        value = interrupt("Provide value for bar:")
+        bar_input = {**fut_foo.result(), "b": value}
+        fut_bar = bar(bar_input)
+        return fut_bar.result()
+
+    config = {"configurable": {"thread_id": "1"}}
+    # First run, interrupted at bar
+    graph.invoke({"a": ""}, config)
+    # Resume with an answer
+    res = graph.invoke(Command(resume="bar"), config)
+    assert res == {"a": "foobar", "b": "bar"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_interrupt_task_functional(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
+
+    @task
+    def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo"}
+
+    @task
+    def bar(state: dict) -> dict:
         value = interrupt("Provide value for bar:")
         return {"a": state["a"] + value}
 
