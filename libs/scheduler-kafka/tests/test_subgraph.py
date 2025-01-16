@@ -676,6 +676,7 @@ async def test_subgraph_w_interrupt(
                             "__pregel_ensure_latest": True,
                             "__pregel_dedupe_tasks": True,
                             "__pregel_resuming": True,
+                            "__pregel_previous": None,
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
                             "__pregel_scratchpad": {
