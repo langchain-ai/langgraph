@@ -35,20 +35,6 @@ from langchain_core.runnables import (
 from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
-from tests.agents import AgentAction, AgentFinish
-from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
-from tests.conftest import (
-    ALL_CHECKPOINTERS_SYNC,
-    ALL_STORES_SYNC,
-    REGULAR_CHECKPOINTERS_SYNC,
-    SHOULD_CHECK_SNAPSHOTS,
-)
-from tests.memory_assert import MemorySaverAssertCheckpointMetadata
-from tests.messages import (
-    _AnyIdAIMessage,
-    _AnyIdHumanMessage,
-    _AnyIdToolMessage,
-)
 from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
@@ -80,6 +66,20 @@ from langgraph.types import (
     Send,
     StreamWriter,
     interrupt,
+)
+from tests.agents import AgentAction, AgentFinish
+from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
+from tests.conftest import (
+    ALL_CHECKPOINTERS_SYNC,
+    ALL_STORES_SYNC,
+    REGULAR_CHECKPOINTERS_SYNC,
+    SHOULD_CHECK_SNAPSHOTS,
+)
+from tests.memory_assert import MemorySaverAssertCheckpointMetadata
+from tests.messages import (
+    _AnyIdAIMessage,
+    _AnyIdHumanMessage,
+    _AnyIdToolMessage,
 )
 
 logger = logging.getLogger(__name__)
@@ -5495,8 +5495,8 @@ def test_double_interrupt_subgraph(
 
 def test_map_reduce() -> None:
     """Test map reduce with Graph API."""
-    from typing import TypedDict, Annotated, NotRequired
     import operator
+    from typing import Annotated, NotRequired, TypedDict
 
     class OverallState(TypedDict):
         subjects: list
