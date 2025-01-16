@@ -5678,9 +5678,6 @@ def test_map_reduce_v3() -> None:
 
     def generate_joke(state: JokeState):
         # Come up with a joke and continue to grade the joke
-        if "subject" not in state:
-            raise ValueError(state)
-
         funny_joke = f"Funny joke about {state['subject']}"
         return Command(
             goto=[Send("grade_joke", {"joke": funny_joke, "subject": state["subject"]})]
