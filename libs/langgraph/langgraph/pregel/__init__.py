@@ -203,6 +203,10 @@ class Pregel(PregelProtocol):
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
 
+    stream_eager: bool = False
+    """Whether to force emitting stream events eagerly, automatically turned on
+    for stream_mode "messages" and "custom"."""
+
     output_channels: Union[str, Sequence[str]]
 
     stream_channels: Optional[Union[str, Sequence[str]]] = None
@@ -242,6 +246,7 @@ class Pregel(PregelProtocol):
         channels: Optional[dict[str, Union[BaseChannel, ManagedValueSpec]]],
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
+        stream_eager: bool = False,
         output_channels: Union[str, Sequence[str]],
         stream_channels: Optional[Union[str, Sequence[str]]] = None,
         interrupt_after_nodes: Union[All, Sequence[str]] = (),
@@ -259,6 +264,7 @@ class Pregel(PregelProtocol):
         self.nodes = nodes
         self.channels = channels or {}
         self.stream_mode = stream_mode
+        self.stream_eager = stream_eager
         self.output_channels = output_channels
         self.stream_channels = stream_channels
         self.interrupt_after_nodes = interrupt_after_nodes
@@ -1655,7 +1661,12 @@ class Pregel(PregelProtocol):
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
+                if (
+                    self.stream_eager
+                    or subgraphs
+                    or "messages" in stream_modes
+                    or "custom" in stream_modes
+                ):
                     # we are careful to have a single waiter live at any one time
                     # because on exit we increment semaphore count by exactly 1
                     waiter: Optional[concurrent.futures.Future] = None
@@ -1886,7 +1897,12 @@ class Pregel(PregelProtocol):
                         stream_put, stream_modes
                     )
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
+                if (
+                    self.stream_eager
+                    or subgraphs
+                    or "messages" in stream_modes
+                    or "custom" in stream_modes
+                ):
 
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())

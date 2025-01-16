@@ -148,6 +148,7 @@ def entrypoint(
             output_channels=END,
             stream_channels=END,
             stream_mode=stream_mode,
+            stream_eager=True,
             checkpointer=checkpointer,
             store=store,
         )
