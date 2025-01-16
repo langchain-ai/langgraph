@@ -5598,6 +5598,34 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
+async def test_async_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    async def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
+
+    @entrypoint()
+    async def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+
+
 def test_entrypoint_stateful() -> None:
     """Test stateful entrypoint invoke."""
 
