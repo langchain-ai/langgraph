@@ -78,6 +78,8 @@ CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # holds a callback to be called when a node is finished
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
+CONFIG_KEY_END = sys.intern("__pregel_previous")
+# holds the previous return value from a stateful Pregel graph.
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

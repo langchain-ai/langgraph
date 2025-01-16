@@ -5636,3 +5636,164 @@ def test_sync_streaming_with_functional_api() -> None:
     delta = arrival_times[1] - arrival_times[0]
     # Delta cannot be less than 10 ms if it is streaming as results are generated.
     assert delta > time_delay
+
+
+def test_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert foo.invoke({"a": "1"}, config) == {"a": "1"}
+
+    @entrypoint()
+    def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+
+
+async def test_async_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    async def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
+
+    @entrypoint()
+    async def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+
+
+def test_entrypoint_stateful() -> None:
+    """Test stateful entrypoint invoke."""
+
+    # Test invoke
+    states = []
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "2"}, config) == {
+        "current": {"a": "2"},
+        "previous": {"current": {"a": "1"}, "previous": None},
+    }
+    assert foo.invoke({"a": "3"}, config) == {
+        "current": {"a": "3"},
+        "previous": {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": None},
+        },
+    }
+    assert states == [
+        None,
+        {"current": {"a": "1"}, "previous": None},
+        {"current": {"a": "2"}, "previous": {"current": {"a": "1"}, "previous": None}},
+    ]
+
+    # Test stream
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+    items = [item for item in foo.stream({"a": "1"}, config)]
+    assert items == [{"foo": {"current": {"a": "1"}, "previous": None}}]
+
+
+def test_entrypoint_from_sync_generator() -> None:
+    """@entrypoint does not support sync generators."""
+    previous_return_values = []
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert foo.invoke({"a": "1"}, config) == ["a", "b"]
+    assert previous_return_values == [None]
+    assert foo.invoke({"a": "2"}, config) == ["a", "b"]
+    assert previous_return_values == [None, ["a", "b"]]
+
+
+def test_entrypoint_request_stream_writer() -> None:
+    """Test using a stream writer with an entrypoint."""
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, writer: StreamWriter) -> Any:
+        writer("a")
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Different invocations
+    # Are any of these confusing or unexpected?
+    assert list(foo.invoke({}, config)) == ["b"]
+    assert list(foo.stream({}, config)) == ["a", "b"]
+
+    # Stream modes
+    assert list(foo.stream({}, config, stream_mode=["updates"])) == [
+        ("updates", {"foo": ["b"]})
+    ]
+    assert list(foo.stream({}, config, stream_mode=["values"])) == [("values", ["b"])]
+    assert list(foo.stream({}, config, stream_mode=["custom"])) == [
+        (
+            "custom",
+            "a",
+        ),
+        (
+            "custom",
+            "b",
+        ),
+    ]
+
+
+async def test_entrypoint_from_async_generator() -> None:
+    """@entrypoint does not support sync generators."""
+    # Test invoke
+    previous_return_values = []
+
+    # In this version reducers do not work
+    @entrypoint(checkpointer=MemorySaver())
+    async def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
+    assert previous_return_values == [None]
+    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
+    assert previous_return_values == [None, ["a", "b"]]
