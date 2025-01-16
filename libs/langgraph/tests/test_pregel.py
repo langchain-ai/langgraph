@@ -1523,7 +1523,7 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_imp_stream_order(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -1545,6 +1545,9 @@ def test_imp_stream_order(
         fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
+
+    if checkpointer_name == "memory":
+        assert graph.get_graph().draw_mermaid() == snapshot
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
@@ -4951,7 +4954,7 @@ def test_interrupt_loop(request: pytest.FixtureRequest, checkpointer_name: str):
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_interrupt_functional(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
@@ -4973,6 +4976,8 @@ def test_interrupt_functional(
         fut_bar = bar(bar_input)
         return fut_bar.result()
 
+    assert graph.get_graph().draw_mermaid() == snapshot
+
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
     graph.invoke({"a": ""}, config)
@@ -4983,7 +4988,7 @@ def test_interrupt_functional(
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_interrupt_task_functional(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
@@ -5003,6 +5008,9 @@ def test_interrupt_task_functional(
         fut_foo = foo(inputs)
         fut_bar = bar(fut_foo.result())
         return fut_bar.result()
+
+    if checkpointer_name == "memory":
+        assert graph.get_graph().draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
@@ -5432,7 +5440,9 @@ def test_multiple_updates() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_name: str):
+def test_falsy_return_from_task(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+):
     """Test with a falsy return from a task."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -5446,6 +5456,9 @@ def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_nam
         falsy_task().result()
         interrupt("test")
 
+    if checkpointer_name == "memory":
+        assert graph.get_graph().draw_mermaid() == snapshot
+
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({"a": 5}, configurable)
     graph.invoke(Command(resume="123"), configurable)
@@ -5453,7 +5466,7 @@ def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_nam
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_multiple_interrupts_imperative(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
     """Test multiple interrupts with an imperative API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
@@ -5477,6 +5490,9 @@ def test_multiple_interrupts_imperative(
             values.extend([double(idx).result(), interrupt({"a": "boo"})])
 
         return {"values": values}
+
+    if checkpointer_name == "memory":
+        assert graph.get_graph().draw_mermaid() == snapshot
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({}, configurable)

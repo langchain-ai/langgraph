@@ -238,6 +238,8 @@ class Pregel(PregelProtocol):
 
     config: Optional[RunnableConfig] = None
 
+    graph: Optional[Graph] = None
+
     name: str = "LangGraph"
 
     def __init__(
@@ -260,6 +262,7 @@ class Pregel(PregelProtocol):
         retry_policy: Optional[RetryPolicy] = None,
         config_type: Optional[Type[Any]] = None,
         config: Optional[RunnableConfig] = None,
+        graph: Optional[Graph] = None,
         name: str = "LangGraph",
     ) -> None:
         self.nodes = nodes
@@ -278,6 +281,7 @@ class Pregel(PregelProtocol):
         self.retry_policy = retry_policy
         self.config_type = config_type
         self.config = config
+        self.graph = graph
         self.name = name
         if auto_validate:
             self.validate()
@@ -285,11 +289,17 @@ class Pregel(PregelProtocol):
     def get_graph(
         self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
+        if self.graph is not None:
+            # TODO xray
+            return self.graph
         raise NotImplementedError
 
     async def aget_graph(
         self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
+        if self.graph is not None:
+            # TODO xray
+            return self.graph
         raise NotImplementedError
 
     def copy(self, update: dict[str, Any] | None = None) -> Self:

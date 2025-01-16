@@ -4,6 +4,7 @@ import concurrent.futures
 import functools
 import inspect
 import types
+from collections.abc import Iterator
 from typing import (
     Any,
     Awaitable,
@@ -14,6 +15,8 @@ from typing import (
     overload,
 )
 
+from langchain_core.runnables.base import Runnable
+from langchain_core.runnables.graph import Graph, Node
 from typing_extensions import ParamSpec
 
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -22,6 +25,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import CONF, END, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import get_runnable_for_func
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -96,9 +100,9 @@ def task(
             def _tick(__allargs__: tuple) -> T:
                 return func(*__allargs__[0], **__allargs__[1])
 
-        return functools.update_wrapper(
-            functools.partial(call, _tick, retry=retry), func
-        )
+        wrapper = functools.partial(call, _tick, retry=retry)
+        object.__setattr__(wrapper, "_is_pregel_task", True)
+        return functools.update_wrapper(wrapper, func)
 
     if __func_or_none__ is not None:
         return decorator(__func_or_none__)
@@ -174,6 +178,84 @@ def entrypoint(
             checkpointer=checkpointer,
             store=store,
             config_type=config_schema,
+            graph=_entrypoint_graph(bound),
         )
 
     return _imp
+
+
+def _find_children(
+    candidate: Runnable, parent: Node
+) -> Iterator[tuple[Node, Union[Callable, PregelProtocol]]]:
+    from langchain_core.runnables.utils import get_function_nonlocals
+
+    from langgraph.utils.runnable import (
+        RunnableCallable,
+        RunnableLambda,
+        RunnableSeq,
+        RunnableSequence,
+    )
+
+    candidates: list[Runnable] = [candidate]
+
+    for c in candidates:
+        print(c, type(c))
+        if callable(c) and getattr(c, "_is_pregel_task", False) is True:
+            yield (parent, c)
+        elif isinstance(c, PregelProtocol):
+            yield (parent, c)
+        elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
+            candidates.extend(c.steps)
+        elif isinstance(c, RunnableLambda):
+            candidates.extend(c.deps)
+        elif isinstance(c, RunnableCallable):
+            if c.func is not None:
+                candidates.extend(
+                    nl.__self__ if hasattr(nl, "__self__") else nl
+                    for nl in get_function_nonlocals(c.func)
+                )
+            elif c.afunc is not None:
+                candidates.extend(
+                    nl.__self__ if hasattr(nl, "__self__") else nl
+                    for nl in get_function_nonlocals(c.afunc)
+                )
+
+
+def _entrypoint_graph(entrypoint: Runnable, xray: int = 0) -> Graph:
+    graph = Graph()
+    node = Node(f"__{entrypoint.name}", entrypoint.name, entrypoint, None)
+    graph.nodes[node.id] = node
+    candidates: list[tuple[Node, Union[Callable, PregelProtocol]]] = [
+        *_find_children(entrypoint, node)
+    ]
+    seen: set[Callable] = set()
+    for parent, child in candidates:
+        if child in seen:
+            continue
+        else:
+            seen.add(child)
+        if callable(child):
+            node = Node(f"__{child.__name__}", child.__name__, child, None)
+            graph.nodes[node.id] = node
+            graph.add_edge(parent, node, conditional=True)
+            graph.add_edge(node, parent)
+            candidates.extend(_find_children(child, node))
+        elif isinstance(child, Runnable):
+            if xray > 0:
+                graph = child.get_graph(xray=xray - 1 if xray else 0)
+                graph.trim_first_node()
+                graph.trim_last_node()
+                s, e = graph.extend(graph, prefix=child.name)
+                if s is None:
+                    raise ValueError(
+                        f"Could not extend subgraph '{child.name}' due to missing entrypoint"
+                    )
+                else:
+                    graph.add_edge(parent, s, conditional=True)
+                if e is not None:
+                    graph.add_edge(e, parent)
+            else:
+                node = graph.add_node(child, child.name)
+                graph.add_edge(parent, node, conditional=True)
+                graph.add_edge(node, parent)
+    return graph
