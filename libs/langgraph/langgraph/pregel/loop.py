@@ -229,7 +229,7 @@ class PregelLoop(LoopProtocol):
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: Optional[PregelScratchpad] = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
-        if scratchpad is not None:
+        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and scratchpad is not None:
             if scratchpad["subgraph_counter"]:
                 self.config = patch_configurable(
                     self.config,

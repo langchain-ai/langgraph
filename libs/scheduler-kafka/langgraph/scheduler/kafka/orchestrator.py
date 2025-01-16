@@ -13,8 +13,10 @@ from typing_extensions import Self
 
 import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import (
+    CONF,
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_ENSURE_LATEST,
+    CONFIG_KEY_SCRATCHPAD,
     INTERRUPT,
     SCHEDULED,
 )
@@ -168,6 +170,16 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                 if new_tasks := [
                     t for t in loop.tasks.values() if not t.scheduled and not t.writes
                 ]:
+                    config = patch_configurable(
+                        loop.config,
+                        {
+                            **loop.checkpoint_config["configurable"],
+                            CONFIG_KEY_DEDUPE_TASKS: True,
+                            CONFIG_KEY_ENSURE_LATEST: True,
+                        },
+                    )
+                    if CONFIG_KEY_SCRATCHPAD in config[CONF]:
+                        config[CONF][CONFIG_KEY_SCRATCHPAD]["subgraph_counter"] = 0
                     # send messages to executor
                     futures = await asyncio.gather(
                         *(
@@ -175,16 +187,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                                 self.topics.executor,
                                 value=serde.dumps(
                                     MessageToExecutor(
-                                        config=patch_configurable(
-                                            loop.config,
-                                            {
-                                                **loop.checkpoint_config[
-                                                    "configurable"
-                                                ],
-                                                CONFIG_KEY_DEDUPE_TASKS: True,
-                                                CONFIG_KEY_ENSURE_LATEST: True,
-                                            },
-                                        ),
+                                        config=config,
                                         task=ExecutorTask(id=task.id, path=task.path),
                                         finally_send=msg.get("finally_send"),
                                     )
