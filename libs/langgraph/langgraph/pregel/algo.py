@@ -680,7 +680,7 @@ def prepare_single_task(
                 "langgraph_checkpoint_ns": task_checkpoint_ns,
             }
             if task_id_checksum is not None:
-                assert task_id == task_id_checksum
+                assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
             if for_execution:
                 if node := proc.node:
                     if proc.metadata:
@@ -766,6 +766,8 @@ def _scratchpad(
             (w[2] for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME),
             MISSING,
         ),
+        # subgraph
+        subgraph_counter=0,
     )
 
 

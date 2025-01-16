@@ -48,7 +48,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
-from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
+from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
@@ -4068,9 +4068,8 @@ async def test_invoke_join_then_call_other_pregel(
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         # add checkpointer
         app.checkpointer = checkpointer
-        # subgraph is called twice in the same node, through .map(), so raises
-        with pytest.raises(MultipleSubgraphsError):
-            await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}})
+        # subgraph is called twice, and that works
+        assert await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
         # set inner graph checkpointer NeverCheckpoint
         inner_app.checkpointer = False
