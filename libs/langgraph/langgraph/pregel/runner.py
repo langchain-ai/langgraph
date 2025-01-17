@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import threading
 import time
 from functools import partial
 from typing import (
@@ -7,11 +8,13 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Generic,
     Iterable,
     Iterator,
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
     cast,
 )
@@ -38,6 +41,56 @@ from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
 from langgraph.types import PregelExecutableTask, RetryPolicy
 from langgraph.utils.future import chain_future
+
+F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
+E = TypeVar("E", threading.Event, asyncio.Event)
+
+
+class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
+    event: E
+    callback: Callable[[PregelExecutableTask, Optional[BaseException]], None]
+    counter: int
+    done: set[F]
+    lock: threading.Lock
+
+    def __init__(
+        self,
+        event: E,
+        callback: Callable[[PregelExecutableTask, Optional[BaseException]], None],
+        future_type: Type[F],
+        # used for generic typing, newer py supports FutureDict[...](...)
+    ) -> None:
+        super().__init__()
+        self.lock = threading.Lock()
+        self.event = event
+        self.callback = callback
+        self.counter = 0
+        self.done: set[F] = set()
+
+    def __setitem__(
+        self,
+        key: F,
+        value: Optional[PregelExecutableTask],
+    ) -> None:
+        super().__setitem__(key, value)  # type: ignore[index]
+        if value is not None:
+            with self.lock:
+                self.counter += 1
+            key.add_done_callback(partial(self.on_done, value))
+
+    def on_done(
+        self,
+        task: PregelExecutableTask,
+        fut: F,
+    ) -> None:
+        try:
+            self.callback(task, _exception(fut))
+        finally:
+            with self.lock:
+                self.done.add(fut)
+                self.counter -= 1
+                if self.counter == 0 or _should_stop_others(self.done):
+                    self.event.set()
 
 
 class PregelRunner:
@@ -138,7 +191,6 @@ class PregelRunner:
                             # updates from this tick are committed/streamed first
                             __next_tick__=True,
                         )
-                        fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
                         rtn[idx] = fut
             return [rtn.get(i) for i in range(len(writes))]
@@ -151,17 +203,26 @@ class PregelRunner:
             retry: Optional[RetryPolicy] = None,
             callbacks: Callbacks = None,
         ) -> concurrent.futures.Future[Any]:
+            if asyncio.iscoroutinefunction(func):
+                raise RuntimeError("In an sync context async tasks cannot be called")
             (fut,) = writer(
                 task,
                 [(PUSH, None)],
                 calls=[Call(func, input, retry=retry, callbacks=callbacks)],
             )
             assert fut is not None, "writer did not return a future for call"
-            return fut
+            # return a chained future to ensure commit() callback is called
+            # before the returned future is resolved, to ensure stream order etc
+            sfut: concurrent.futures.Future[Any] = concurrent.futures.Future()
+            chain_future(fut, sfut)
+            return sfut
 
         tasks = tuple(tasks)
-        futures: dict[concurrent.futures.Future, Optional[PregelExecutableTask]] = {}
-        done_futures: set[concurrent.futures.Future] = set()
+        futures = FuturesDict(
+            callback=self.commit,
+            event=threading.Event(),
+            future_type=concurrent.futures.Future,
+        )
         # give control back to the caller
         yield
         # fast path if single task with no timeout and no waiter
@@ -178,12 +239,12 @@ class PregelRunner:
                 )
                 self.commit(t, None)
             except Exception as exc:
-                self.commit(t, None, exc)
+                self.commit(t, exc)
                 if reraise and futures:
                     # will be re-raised after futures are done
                     fut: concurrent.futures.Future = concurrent.futures.Future()
                     fut.set_exception(exc)
-                    done_futures.add(fut)
+                    futures.done.add(fut)
                 elif reraise:
                     raise
             if not futures:  # maybe `t` schuduled another task
@@ -206,7 +267,6 @@ class PregelRunner:
                     },
                     __reraise_on_exit__=reraise,
                 )
-                fut.add_done_callback(partial(self.commit, t))
                 futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
@@ -226,9 +286,6 @@ class PregelRunner:
                     # waiter task finished, schedule another
                     if inflight and get_waiter is not None:
                         futures[get_waiter()] = None
-                else:
-                    # store for panic check
-                    done_futures.add(fut)
             else:
                 # remove references to loop vars
                 del fut, task
@@ -237,13 +294,13 @@ class PregelRunner:
                 break
             # give control back to the caller
             yield
-        # wait for pending done callbacks
-        # if a 2nd future finishes while `wait` is returning, it's possible
-        # that done callbacks for the 2nd future aren't called until next tick
-        time.sleep(0)
+        # wait for done callbacks
+        futures.event.wait(
+            timeout=(max(0, end_time - time.monotonic()) if end_time else None)
+        )
         # panic on failure or timeout
         _panic_or_proceed(
-            done_futures.union(f for f, t in futures.items() if t is not None),
+            futures.done.union(f for f, t in futures.items() if t is not None),
             panic=reraise,
         )
 
@@ -293,7 +350,7 @@ class PregelRunner:
                         rtn[idx] = fut
                     elif next_task.writes:
                         # if it already ran, return the result
-                        fut = asyncio.Future()
+                        fut = asyncio.Future(loop=loop)
                         ret = next(
                             (v for c, v in next_task.writes if c == RETURN), MISSING
                         )
@@ -331,7 +388,6 @@ class PregelRunner:
                                 __next_tick__=True,
                             ),
                         )
-                        fut.add_done_callback(partial(self.commit, next_task))
                         futures[fut] = next_task
                         rtn[idx] = fut
             return [rtn.get(i) for i in range(len(writes))]
@@ -344,23 +400,29 @@ class PregelRunner:
             retry: Optional[RetryPolicy] = None,
             callbacks: Callbacks = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
+            if not asyncio.iscoroutinefunction(func):
+                raise RuntimeError(
+                    "In an async context use func.to_thread(...) to invoke tasks"
+                )
             (fut,) = writer(
                 task,
                 [(PUSH, None)],
                 calls=[Call(func, input, retry=retry, callbacks=callbacks)],
             )
             assert fut is not None, "writer did not return a future for call"
-            if asyncio.iscoroutinefunction(func):
-                return fut
-            # adapted from asyncio.run_coroutine_threadsafe
-            sfut: concurrent.futures.Future = concurrent.futures.Future()
-            loop.call_soon_threadsafe(chain_future, fut, sfut)
+            # return a chained future to ensure commit() callback is called
+            # before the returned future is resolved, to ensure stream order etc
+            sfut: asyncio.Future[Any] = asyncio.Future(loop=loop)
+            chain_future(fut, sfut)
             return sfut
 
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
-        futures: dict[asyncio.Future, Optional[PregelExecutableTask]] = {}
-        done_futures: set[asyncio.Future] = set()
+        futures = FuturesDict(
+            callback=self.commit,
+            event=asyncio.Event(),
+            future_type=asyncio.Future,
+        )
         # give control back to the caller
         yield
         # fast path if single task with no waiter and no timeout
@@ -378,12 +440,12 @@ class PregelRunner:
                 )
                 self.commit(t, None)
             except Exception as exc:
-                self.commit(t, None, exc)
+                self.commit(t, exc)
                 if reraise and futures:
                     # will be re-raised after futures are done
                     fut: asyncio.Future = loop.create_future()
                     fut.set_exception(exc)
-                    done_futures.add(fut)
+                    futures.done.add(fut)
                 elif reraise:
                     raise
             if not futures:  # maybe `t` schuduled another task
@@ -412,7 +474,6 @@ class PregelRunner:
                         __reraise_on_exit__=reraise,
                     ),
                 )
-                fut.add_done_callback(partial(self.commit, t))
                 futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
@@ -432,9 +493,6 @@ class PregelRunner:
                     # waiter task finished, schedule another
                     if inflight and get_waiter is not None:
                         futures[get_waiter()] = None
-                else:
-                    # store for panic check
-                    done_futures.add(fut)
             else:
                 # remove references to loop vars
                 del fut, task
@@ -443,16 +501,17 @@ class PregelRunner:
                 break
             # give control back to the caller
             yield
-        # wait for pending done callbacks
-        # if a 2nd future finishes while `wait` is returning, it's possible
-        # that done callbacks for the 2nd future aren't called until next tick
-        await asyncio.sleep(0)
+        # wait for done callbacks
+        await asyncio.wait_for(
+            futures.event.wait(),
+            timeout=(max(0, end_time - loop.time()) if end_time else None),
+        )
         # cancel waiter task
         for fut in futures:
             fut.cancel()
         # panic on failure or timeout
         _panic_or_proceed(
-            done_futures.union(f for f, t in futures.items() if t is not None),
+            futures.done.union(f for f, t in futures.items() if t is not None),
             timeout_exc_cls=asyncio.TimeoutError,
             panic=reraise,
         )
@@ -460,11 +519,8 @@ class PregelRunner:
     def commit(
         self,
         task: PregelExecutableTask,
-        fut: Union[None, concurrent.futures.Future[Any], asyncio.Future[Any]],
-        exception: Optional[BaseException] = None,
+        exception: Optional[BaseException],
     ) -> None:
-        if fut is not None:
-            exception = _exception(fut)
         if isinstance(exception, asyncio.CancelledError):
             # for cancelled tasks, also save error in task,
             # so loop can finish super-step
@@ -495,7 +551,7 @@ class PregelRunner:
 
 
 def _should_stop_others(
-    done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Future[Any]]],
+    done: set[F],
 ) -> bool:
     """Check if any task failed, if so, cancel all other tasks.
     GraphInterrupts are not considered failures."""
