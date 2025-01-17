@@ -35,7 +35,7 @@ Through [LangGraph Platform](#langgraph-platform), LangGraph also provides tooli
 debugging, tracing and observability, evaluation, and deployment.
 
 LangGraph integrates seamlessly with
-[LangChain](https://github.com/langchain-ai/langchain/) and
+[LangChain](https://python.langchain.com/docs/introduction/) and
 [LangSmith](https://docs.smith.langchain.com/) (but does not require them).
 
 To learn more about LangGraph, check out our first LangChain Academy
