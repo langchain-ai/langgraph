@@ -9,7 +9,10 @@ The Functional API is designed to simplify the development of complex applicatio
 
 The Functional API consists of two main components: `entrypoint` and `task`.
 
+- **Entrypoint**: The starting point for a LangGraph workflow.
+- **Task**: A unit of work that can be executed. Tasks can be executed in parallel or sequentially.
 
+k
 
 These components allow you to define modular workflows that can be executed independently or in sequence. The API supports features like checkpointing, streaming, and interrupt handling, making it flexible and scalable.
 
