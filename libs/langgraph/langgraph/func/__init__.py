@@ -94,7 +94,8 @@ def task(
     Tasks can only be called from within an [entrypoint][langgraph.func.entrypoint] or
     from within a StateGraph. A task can be called like a regular function with the
     following differences:
-    - The function inputs and outputs must be python primitives or serializable objects.
+
+    - When a checkpointer is enabled, the function inputs and outputs must be serializable.
     - The decorated function can only be called from within an entrypoint or StateGraph.
     - Calling the function produces a future. This makes it easy to parallelize tasks.
 
@@ -184,6 +185,7 @@ def entrypoint(
     to pass multiple parameters to the function.
 
     The decorated function also has access to these optional parameters:
+
     - `writer`: A `StreamWriter` instance for writing data to a stream.
     - `config`: A configuration object for accessing workflow settings.
     - `previous`: The previous return value for the given thread (available only when
