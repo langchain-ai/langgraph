@@ -247,7 +247,11 @@ def _find_children(
     if callable(candidate) and getattr(candidate, "_is_pregel_task", False) is True:
         candidates.extend(
             nl.__self__ if hasattr(nl, "__self__") else nl
-            for nl in get_function_nonlocals(candidate.__wrapped__)
+            for nl in get_function_nonlocals(
+                candidate.__wrapped__
+                if hasattr(candidate, "__wrapped__") and callable(candidate.__wrapped__)
+                else candidate
+            )
         )
     else:
         candidates.append(candidate)
