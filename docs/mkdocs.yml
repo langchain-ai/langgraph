@@ -294,6 +294,7 @@ nav:
         - Quick Start:
           - Quick Start: tutorials#quick-start
           - tutorials/introduction.ipynb
+          - tutorials/workflows.ipynb
           - tutorials/langgraph-platform/local-server.md
           - cloud/quick_start.md
         - Chatbots:
