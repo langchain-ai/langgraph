@@ -536,18 +536,35 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
     """Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"
-        Basic setup and key-value storage:
+        Basic setup and usage:
+        ```python
+        from langgraph.store.postgres import PostgresStore
+        from psycopg import Connection
+
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+        
+        # Using direct connection
+        with Connection.connect(conn_string) as conn:
+            store = PostgresStore(conn)
+            store.setup() # Run migrations. Done once
+
+            # Store and retrieve data
+            store.put(("users", "123"), "prefs", {"theme": "dark"})
+            item = store.get(("users", "123"), "prefs")
+        ```
+
+        Or using the convenient from_conn_string helper:
         ```python
         from langgraph.store.postgres import PostgresStore
 
-        store = PostgresStore(
-            connection_string="postgresql://user:pass@localhost:5432/dbname"
-        )
-        store.setup()
-
-        # Store and retrieve data
-        store.put(("users", "123"), "prefs", {"theme": "dark"})
-        item = store.get(("users", "123"), "prefs")
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+        
+        with PostgresStore.from_conn_string(conn_string) as store:
+            store.setup()
+            
+            # Store and retrieve data
+            store.put(("users", "123"), "prefs", {"theme": "dark"})
+            item = store.get(("users", "123"), "prefs")
         ```
 
         Vector search using LangChain embeddings:
@@ -555,23 +572,25 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         from langchain.embeddings import init_embeddings
         from langgraph.store.postgres import PostgresStore
 
-        store = PostgresStore(
-            connection_string="postgresql://user:pass@localhost:5432/dbname",
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+        
+        with PostgresStore.from_conn_string(
+            conn_string,
             index={
                 "dims": 1536,
                 "embed": init_embeddings("openai:text-embedding-3-small"),
                 "fields": ["text"]  # specify which fields to embed. Default is the whole serialized value
             }
-        )
-        store.setup() # Do this once to run migrations
+        ) as store:
+            store.setup() # Do this once to run migrations
 
-        # Store documents
-        store.put(("docs",), "doc1", {"text": "Python tutorial"})
-        store.put(("docs",), "doc2", {"text": "TypeScript guide"})
-        store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
-
-        # Search by similarity
-        results = store.search(("docs",), query="python programming")
+            # Store documents
+            store.put(("docs",), "doc1", {"text": "Python tutorial"})
+            store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+            store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
+            
+            # Search by similarity
+            results = store.search(("docs",), "programming guides", limit=2)
         ```
 
     Note:
