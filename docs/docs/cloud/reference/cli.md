@@ -18,9 +18,12 @@ The LangGraph command line interface includes commands to build and run a LangGr
     === "JS"
         ```bash
         npx @langchain/langgraph-cli
+
+        # Install globally
+        npm install -g @langchain/langgraph-cli
         ```
 
-3.  Run the command `langgraph --help` to confirm that the CLI is installed.
+3.  Run the command `langgraph --help` or `npx @langchain/langgraph-cli --help` to confirm that the CLI is working correctly.
 
 [](){#langgraph.json}
 
@@ -55,7 +58,7 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
     | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
     | <span style="white-space: nowrap;">`graphs`</span>           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./src/graph.ts:variable`, where `variable` is an instance of `CompiledStateGraph`</li><li>`./src/graph.ts:makeGraph`, where `makeGraph` is a function that takes a config dictionary (`LangGraphRunnableConfig`) and creates an instance of `StateGraph` / `CompiledStateGraph`.</li></ul>                                    |
     | <span style="white-space: nowrap;">`env`</span>              | Path to `.env` file or a mapping from environment variable to its value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-    | <span style="white-space: nowrap;">`store`</span>            | Configuration for adding semantic search to the BaseStore. Contains the following fields: <ul><li>`index`: Configuration for semantic search indexing with fields:<ul><li>`embed`: Embedding provider (e.g., "openai:text-embedding-3-small") or path to custom embedding function</li><li>`dims`: Dimension size of the embedding model. Used to initialize the vector table.</li><li>`fields` (optional): List of fields to index. Defaults to `["$"]`, meaningto index entire documents. Can be specific fields like `["text", "summary", "some.value"]`</li></ul></li></ul> |
+    | <span style="white-space: nowrap;">`store`</span>            | Configuration for adding semantic search to the BaseStore. Contains the following fields: <ul><li>`index`: Configuration for semantic search indexing with fields:<ul><li>`embed`: Embedding provider (e.g., "openai:text-embedding-3-small") or path to custom embedding function</li><li>`dims`: Dimension size of the embedding model. Used to initialize the vector table.</li><li>`fields` (optional): List of fields to index. Defaults to `["$"]`, meaning to index entire documents. Can be specific fields like `["text", "summary", "some.value"]`</li></ul></li></ul> |
     | <span style="white-space: nowrap;">`node_version`</span>     | Specify `node_version: 20` to use LangGraph.js.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
     | <span style="white-space: nowrap;">`dockerfile_lines`</span> | Array of additional lines to add to Dockerfile following the import from parent image.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
@@ -183,22 +186,22 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
 
 ## Commands
 
-The base command for the LangGraph CLI is `langgraph`.
-
 **Usage**
 
 === "Python"
+
+    The base command for the LangGraph CLI is `langgraph`.
 
     ```
     langgraph [OPTIONS] COMMAND [ARGS]
     ```
 === "JS"
 
+    The base command for the LangGraph.js CLI is `langgraphjs`. We recommend using `npx` to always use the latest version of the CLI.
+
     ```
     npx @langchain/langgraph-cli [OPTIONS] COMMAND [ARGS]
     ```
-
-    We will be referring to `npx @langchain/langgraph-cli` as `langgraph` in the following commands.
 
 ### `dev`
 
@@ -244,7 +247,7 @@ The base command for the LangGraph CLI is `langgraph`.
     **Usage**
 
     ```
-    langgraph dev [OPTIONS]
+    npx @langchain/langgraph-cli dev [OPTIONS]
     ```
 
     **Options**
@@ -288,7 +291,7 @@ The base command for the LangGraph CLI is `langgraph`.
     **Usage**
 
     ```
-    langgraph build [OPTIONS]
+    npx @langchain/langgraph-cli build [OPTIONS]
     ```
 
     **Options**
@@ -338,7 +341,7 @@ The base command for the LangGraph CLI is `langgraph`.
     **Usage**
 
     ```
-    langgraph up [OPTIONS]
+    npx @langchain/langgraph-cli up [OPTIONS]
     ```
 
     **Options**
@@ -411,7 +414,7 @@ The base command for the LangGraph CLI is `langgraph`.
     **Usage**
 
     ```
-    langgraph dockerfile [OPTIONS] SAVE_PATH
+    npx @langchain/langgraph-cli dockerfile [OPTIONS] SAVE_PATH
     ```
 
     **Options**
