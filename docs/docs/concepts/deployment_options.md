@@ -57,6 +57,7 @@ With a Self-Hosted Lite deployment, you are responsible for managing the infrast
 
 You’ll build a Docker image using the [LangGraph CLI](./langgraph_cli.md), which can then be deployed on your own infrastructure.
 
+[Cron jobs](../cloud/how-tos/cron_jobs.md) are not available for Self-Hosted Lite deployments.
 
 For more information, please see:
 
