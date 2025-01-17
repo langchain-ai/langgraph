@@ -48,7 +48,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
-from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError, NodeInterrupt
+from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
@@ -88,6 +88,11 @@ from tests.messages import (
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 async def test_checkpoint_errors() -> None:
@@ -501,10 +506,7 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
         await graph.ainvoke(1)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt(checkpointer_name: str) -> None:
     class State(TypedDict):
@@ -678,10 +680,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
     class SubgraphState(TypedDict):
@@ -872,10 +871,7 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_copy_checkpoint(checkpointer_name: str) -> None:
     class State(TypedDict):
@@ -1079,10 +1075,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_node_not_cancelled_on_other_node_interrupted(
     checkpointer_name: str,
@@ -2442,10 +2435,7 @@ async def test_send_sequences(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2493,10 +2483,7 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert mapper_calls == 2
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task_cancel(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2547,10 +2534,7 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
         assert mapper_cancels == 2
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_sync_from_async(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -2583,10 +2567,7 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_stream_order(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -4068,9 +4049,8 @@ async def test_invoke_join_then_call_other_pregel(
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         # add checkpointer
         app.checkpointer = checkpointer
-        # subgraph is called twice in the same node, through .map(), so raises
-        with pytest.raises(MultipleSubgraphsError):
-            await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}})
+        # subgraph is called twice, and that works
+        assert await app.ainvoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
         # set inner graph checkpointer NeverCheckpoint
         inner_app.checkpointer = False
@@ -4294,10 +4274,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge(checkpointer_name: str) -
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4384,10 +4364,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4801,11 +4781,11 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
         await asyncio.sleep(0.1)
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4895,10 +4875,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -4979,13 +4959,13 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> N
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def retriever_picker(data: State) -> list[str]:
         return ["analyzer_one", "retriever_two"]
 
     async def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -6117,10 +6097,7 @@ async def test_parent_command(checkpointer_name: str) -> None:
         )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_subgraph(checkpointer_name: str):
     class State(TypedDict):
@@ -6153,10 +6130,7 @@ async def test_interrupt_subgraph(checkpointer_name: str):
         assert await graph.ainvoke(Command(resume="bar"), thread1)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_multiple(checkpointer_name: str):
     class State(TypedDict):
@@ -6220,10 +6194,7 @@ async def test_interrupt_multiple(checkpointer_name: str):
         ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_interrupt_loop(checkpointer_name: str):
     class State(TypedDict):
@@ -6308,6 +6279,63 @@ async def test_interrupt_loop(checkpointer_name: str):
         ] == [
             {"node": {"age": 19}},
         ]
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_functional(checkpointer_name: str) -> None:
+    @task
+    async def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo"}
+
+    @task
+    async def bar(state: dict) -> dict:
+        return {"a": state["a"] + "bar", "b": state["b"]}
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(inputs: dict) -> dict:
+            foo_result = await foo(inputs)
+            value = interrupt("Provide value for bar:")
+            bar_input = {**foo_result, "b": value}
+            bar_result = await bar(bar_input)
+            return bar_result
+
+        config = {"configurable": {"thread_id": "1"}}
+        # First run, interrupted at bar
+        await graph.ainvoke({"a": ""}, config)
+        # Resume with an answer
+        res = await graph.ainvoke(Command(resume="bar"), config)
+        assert res == {"a": "foobar", "b": "bar"}
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_task_functional(checkpointer_name: str) -> None:
+    @task
+    async def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo"}
+
+    @task
+    async def bar(state: dict) -> dict:
+        value = interrupt("Provide value for bar:")
+        return {"a": state["a"] + value}
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(inputs: dict) -> dict:
+            foo_result = await foo(inputs)
+            bar_result = await bar(foo_result)
+            return bar_result
+
+        config = {"configurable": {"thread_id": "1"}}
+        # First run, interrupted at bar
+        await graph.ainvoke({"a": ""}, config)
+        # Resume with an answer
+        res = await graph.ainvoke(Command(resume="bar"), config)
+        assert res == {"a": "foobar"}
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -6508,10 +6536,7 @@ async def test_parallel_node_execution():
     assert duration < 3.0
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupt_state_persistence(checkpointer_name: str) -> None:
     """Test that state is preserved correctly across multiple interrupts."""
@@ -6692,33 +6717,29 @@ async def test_multiple_updates() -> None:
     ]
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
-async def test_falsy_return_from_task() -> None:
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_falsy_return_from_task(checkpointer_name: str) -> None:
     """Test with a falsy return from a task."""
-    checkpointer = MemorySaver()
 
     @task
     async def falsy_task() -> bool:
         return False
 
-    @entrypoint(checkpointer=checkpointer)
-    async def graph(state: dict) -> dict:
-        """React tool."""
-        await falsy_task()
-        interrupt("test")
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
 
-    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
-    await graph.ainvoke({"a": 5}, configurable)
-    await graph.ainvoke(Command(resume="123"), configurable)
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(state: dict) -> dict:
+            """React tool."""
+            await falsy_task()
+            interrupt("test")
+
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({"a": 5}, configurable)
+        await graph.ainvoke(Command(resume="123"), configurable)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="Python 3.11+ is required for async contextvars support",
-)
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
     """Test multiple interrupts with an imperative API."""
@@ -6756,3 +6777,154 @@ async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
             "values": [2, "a", 4, "b", 6, "c"],
         }
         assert counter == 3
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_double_interrupt_subgraph(checkpointer_name: str) -> None:
+    class AgentState(TypedDict):
+        input: str
+
+    def node_1(state: AgentState):
+        result = interrupt("interrupt node 1")
+        return {"input": result}
+
+    def node_2(state: AgentState):
+        result = interrupt("interrupt node 2")
+        return {"input": result}
+
+    subgraph_builder = (
+        StateGraph(AgentState)
+        .add_node("node_1", node_1)
+        .add_node("node_2", node_2)
+        .add_edge(START, "node_1")
+        .add_edge("node_1", "node_2")
+        .add_edge("node_2", END)
+    )
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        # invoke the sub graph
+        subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+        thread = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        assert [c async for c in subgraph.astream({"input": "test"}, thread)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 1",
+                        resumable=True,
+                        ns=[AnyStr("node_1:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        # resume from the first interrupt
+        assert [c async for c in subgraph.astream(Command(resume="123"), thread)] == [
+            {
+                "node_1": {"input": "123"},
+            },
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 2",
+                        resumable=True,
+                        ns=[AnyStr("node_2:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+        # resume from the second interrupt
+        assert [c async for c in subgraph.astream(Command(resume="123"), thread)] == [
+            {
+                "node_2": {"input": "123"},
+            },
+        ]
+
+        subgraph = subgraph_builder.compile()
+
+        def invoke_sub_agent(state: AgentState):
+            return subgraph.invoke(state)
+
+        parent_agent = (
+            StateGraph(AgentState)
+            .add_node("invoke_sub_agent", invoke_sub_agent)
+            .add_edge(START, "invoke_sub_agent")
+            .add_edge("invoke_sub_agent", END)
+            .compile(checkpointer=checkpointer)
+        )
+
+        assert [c async for c in parent_agent.astream({"input": "test"}, thread)] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 1",
+                        resumable=True,
+                        ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+
+        # resume from the first interrupt
+        assert [
+            c async for c in parent_agent.astream(Command(resume=True), thread)
+        ] == [
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="interrupt node 2",
+                        resumable=True,
+                        ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
+                        when="during",
+                    ),
+                )
+            }
+        ]
+
+        # resume from 2nd interrupt
+        assert [
+            c async for c in parent_agent.astream(Command(resume=True), thread)
+        ] == [
+            {
+                "invoke_sub_agent": {"input": True},
+            },
+        ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_streaming_with_functional_api() -> None:
+    """Test streaming with functional API.
+
+    This test verifies that we're able to stream results as they're being generated
+    rather than have all the results arrive at once after the graph has completed.
+
+    The time of arrival between the two updates corresponding to the two `slow` tasks
+    should be greater than the time delay between the two tasks.
+    """
+
+    time_delay = 0.01
+
+    @task()
+    async def slow() -> dict:
+        await asyncio.sleep(time_delay)  # Simulate a delay of 10 ms
+        return {"tic": asyncio.get_running_loop().time()}
+
+    @entrypoint()
+    async def graph(inputs: dict) -> list:
+        first = await slow()
+        second = await slow()
+        return [first, second]
+
+    arrival_times = []
+
+    async for chunk in graph.astream({}):
+        if "slow" not in chunk:  # We'll just look at the updates from `slow`
+            continue
+        arrival_times.append(asyncio.get_running_loop().time())
+
+    assert len(arrival_times) == 2
+    delta = arrival_times[1] - arrival_times[0]
+    # Delta cannot be less than 10 ms if it is streaming as results are generated.
+    assert delta > time_delay

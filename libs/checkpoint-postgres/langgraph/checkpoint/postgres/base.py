@@ -57,6 +57,9 @@ MIGRATIONS = [
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
 );""",
     "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
+    # NOTE: this is a no-op migration to ensure that the versions in the migrations table are correct.
+    # This is necessary due to an empty migration previously added to the list.
+    "SELECT 1;",
     """
     CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoints_thread_id_idx ON checkpoints(thread_id);
     """,

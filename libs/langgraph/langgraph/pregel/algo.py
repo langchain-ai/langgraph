@@ -37,15 +37,16 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_END,
     CONFIG_KEY_READ,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_WRITES,
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
+    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -71,6 +72,7 @@ from langgraph.types import (
     All,
     LoopProtocol,
     PregelExecutableTask,
+    PregelScratchpad,
     PregelTask,
     RetryPolicy,
 )
@@ -502,13 +504,13 @@ def prepare_single_task(
                         },
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                        CONFIG_KEY_WRITES: [
-                            w
-                            for w in pending_writes
-                            + configurable.get(CONFIG_KEY_WRITES, [])
-                            if w[0] in (NULL_TASK_ID, task_id)
-                        ],
-                        CONFIG_KEY_SCRATCHPAD: {},
+                        CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                            pending_writes,
+                            task_id,
+                        ),
+                        CONFIG_KEY_END: checkpoint["channel_values"].get(
+                            "__end__", None
+                        ),
                     },
                 ),
                 triggers,
@@ -614,13 +616,13 @@ def prepare_single_task(
                             },
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                            CONFIG_KEY_WRITES: [
-                                w
-                                for w in pending_writes
-                                + configurable.get(CONFIG_KEY_WRITES, [])
-                                if w[0] in (NULL_TASK_ID, task_id)
-                            ],
-                            CONFIG_KEY_SCRATCHPAD: {},
+                            CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                                pending_writes,
+                                task_id,
+                            ),
+                            CONFIG_KEY_END: checkpoint["channel_values"].get(
+                                "__end__", None
+                            ),
                         },
                     ),
                     triggers,
@@ -685,7 +687,7 @@ def prepare_single_task(
                 "langgraph_checkpoint_ns": task_checkpoint_ns,
             }
             if task_id_checksum is not None:
-                assert task_id == task_id_checksum
+                assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
             if for_execution:
                 if node := proc.node:
                     if proc.metadata:
@@ -738,13 +740,13 @@ def prepare_single_task(
                                 },
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                                CONFIG_KEY_WRITES: [
-                                    w
-                                    for w in pending_writes
-                                    + configurable.get(CONFIG_KEY_WRITES, [])
-                                    if w[0] in (NULL_TASK_ID, task_id)
-                                ],
-                                CONFIG_KEY_SCRATCHPAD: {},
+                                CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                                    pending_writes,
+                                    task_id,
+                                ),
+                                CONFIG_KEY_END: checkpoint["channel_values"].get(
+                                    "__end__", None
+                                ),
                             },
                         ),
                         triggers,
@@ -756,6 +758,27 @@ def prepare_single_task(
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
+
+
+def _scratchpad(
+    pending_writes: Sequence[PendingWrite],
+    task_id: str,
+) -> PregelScratchpad:
+    return PregelScratchpad(
+        # call
+        call_counter=0,
+        # interrupt
+        interrupt_counter=-1,
+        resume=next(
+            (w[2] for w in pending_writes if w[0] == task_id and w[1] == RESUME), []
+        ),
+        null_resume=next(
+            (w[2] for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME),
+            MISSING,
+        ),
+        # subgraph
+        subgraph_counter=0,
+    )
 
 
 def _proc_input(

@@ -47,12 +47,14 @@ from langgraph.constants import (
     CONFIG_KEY_DELEGATE,
     CONFIG_KEY_ENSURE_LATEST,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
     EMPTY_SEQ,
     ERROR,
     INPUT,
     INTERRUPT,
+    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -61,12 +63,10 @@ from langgraph.constants import (
     TAG_HIDDEN,
 )
 from langgraph.errors import (
-    _SEEN_CHECKPOINT_NS,
     CheckpointNotLatest,
     EmptyInputError,
     GraphDelegate,
     GraphInterrupt,
-    MultipleSubgraphsError,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -114,6 +114,7 @@ from langgraph.types import (
     Command,
     LoopProtocol,
     PregelExecutableTask,
+    PregelScratchpad,
     StreamChunk,
     StreamProtocol,
 )
@@ -201,7 +202,6 @@ class PregelLoop(LoopProtocol):
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -228,20 +228,26 @@ class PregelLoop(LoopProtocol):
         self.debug = debug
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
+        scratchpad: Optional[PregelScratchpad] = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
+        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and scratchpad is not None:
+            if scratchpad["subgraph_counter"]:
+                self.config = patch_configurable(
+                    self.config,
+                    {
+                        CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
+                            (
+                                config[CONF][CONFIG_KEY_CHECKPOINT_NS],
+                                str(scratchpad["subgraph_counter"]),
+                            )
+                        )
+                    },
+                )
+            scratchpad["subgraph_counter"] += 1
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(
                 self.config,
                 {CONFIG_KEY_CHECKPOINT_NS: "", CONFIG_KEY_CHECKPOINT_ID: None},
             )
-        if check_subgraphs and self.is_nested and self.checkpointer is not None:
-            if self.config[CONF][CONFIG_KEY_CHECKPOINT_NS] in _SEEN_CHECKPOINT_NS:
-                raise MultipleSubgraphsError(
-                    "Multiple subgraphs called inside the same node\n\n"
-                    "Troubleshooting URL: https://python.langchain.com/docs"
-                    "/troubleshooting/errors/MULTIPLE_SUBGRAPHS/"
-                )
-            else:
-                _SEEN_CHECKPOINT_NS.add(self.config[CONF][CONFIG_KEY_CHECKPOINT_NS])
         if (
             CONFIG_KEY_CHECKPOINT_MAP in self.config[CONF]
             and self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
@@ -339,11 +345,11 @@ class PregelLoop(LoopProtocol):
                 (PUSH, task.path, write_idx, task.id, call),
                 None,
                 checkpoint=self.checkpoint,
-                pending_writes=[(task.id, *w) for w in task.writes],
+                pending_writes=self.checkpoint_pending_writes,
                 processes=self.nodes,
                 channels=self.channels,
                 managed=self.managed,
-                config=self.config,
+                config=task.config,
                 step=self.step,
                 for_execution=True,
                 store=self.store,
@@ -556,8 +562,16 @@ class PregelLoop(LoopProtocol):
             )
         )
 
+        # take resume value from parent
+        if scratchpad := configurable.get(CONFIG_KEY_SCRATCHPAD):
+            if scratchpad["null_resume"] is not MISSING:
+                self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad["null_resume"])])
         # map command to writes
         if isinstance(self.input, Command):
+            if self.input.resume is not None and not self.checkpointer:
+                raise RuntimeError(
+                    "Cannot use Command(resume=...) without checkpointer"
+                )
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
             for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
@@ -807,7 +821,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -822,7 +835,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
-            check_subgraphs=check_subgraphs,
             manager=manager,
             debug=debug,
         )
@@ -944,7 +956,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        check_subgraphs: bool = True,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -959,7 +970,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
-            check_subgraphs=check_subgraphs,
             manager=manager,
             debug=debug,
         )

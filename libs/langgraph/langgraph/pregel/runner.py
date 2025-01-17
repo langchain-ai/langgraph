@@ -107,12 +107,11 @@ class PregelRunner:
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = concurrent.futures.Future()
-                        if (
-                            val := next(
-                                (v for c, v in next_task.writes if c == RETURN), MISSING
-                            )
-                        ) and val is not MISSING:
-                            fut.set_result(val)
+                        ret = next(
+                            (v for c, v in next_task.writes if c == RETURN), MISSING
+                        )
+                        if ret is not MISSING:
+                            fut.set_result(ret)
                         elif exc := next(
                             (v for c, v in next_task.writes if c == ERROR), None
                         ):
@@ -295,12 +294,11 @@ class PregelRunner:
                     elif next_task.writes:
                         # if it already ran, return the result
                         fut = asyncio.Future()
-                        if (
-                            val := next(
-                                (v for c, v in next_task.writes if c == RETURN), MISSING
-                            )
-                        ) and val is not MISSING:
-                            fut.set_result(val)
+                        ret = next(
+                            (v for c, v in next_task.writes if c == RETURN), MISSING
+                        )
+                        if ret is not MISSING:
+                            fut.set_result(ret)
                         elif exc := next(
                             (v for c, v in next_task.writes if c == ERROR), None
                         ):

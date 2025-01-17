@@ -23,7 +23,23 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    NS_END,
+    NS_SEP,
 )
+
+
+def recast_checkpoint_ns(ns: str) -> str:
+    """Remove task IDs from checkpoint namespace.
+
+    Args:
+        ns (str): The checkpoint namespace with task IDs.
+
+    Returns:
+        str: The checkpoint namespace without task IDs.
+    """
+    return NS_SEP.join(
+        part.split(NS_END)[0] for part in ns.split(NS_SEP) if not part.isdigit()
+    )
 
 
 def patch_configurable(
