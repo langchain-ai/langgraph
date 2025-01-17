@@ -7116,8 +7116,12 @@ async def test_multiple_subgraphs_mixed_checkpointer(
         )
 
         config = {"configurable": {"thread_id": "1"}}
-        assert await parent_graph.ainvoke({"parent_counter": 0}, config) == {"parent_counter": 5}
-        assert await parent_graph.ainvoke({"parent_counter": 0}, config) == {"parent_counter": 7}
+        assert await parent_graph.ainvoke({"parent_counter": 0}, config) == {
+            "parent_counter": 5
+        }
+        assert await parent_graph.ainvoke({"parent_counter": 0}, config) == {
+            "parent_counter": 7
+        }
         config = {"configurable": {"thread_id": "2"}}
         assert [
             c
