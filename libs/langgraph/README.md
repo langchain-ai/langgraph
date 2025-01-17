@@ -105,7 +105,8 @@ final_state["messages"][-1].content
 ```
 </details>
 
-LangGraph is a **low-level** framework that allows you to implement any custom agent
+> [!TIP]
+> LangGraph is a **low-level** framework that allows you to implement any custom agent
 architectures. Click on the low-level implementation below to see how to implement a
 tool-calling agent from scratch.
 
