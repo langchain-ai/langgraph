@@ -14,7 +14,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_SEND, FF_SEND_V2, PUSH, TASKS, Send
+from langgraph.constants import CONF, CONFIG_KEY_SEND, TASKS, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.utils.runnable import RunnableCallable
 
@@ -125,7 +125,7 @@ class ChannelWrite(RunnableCallable):
         # validate
         for w in writes:
             if isinstance(w, ChannelWriteEntry):
-                if w.channel in (TASKS, PUSH):
+                if w.channel == TASKS:
                     raise InvalidUpdateError(
                         "Cannot write to the reserved channel TASKS"
                     )
@@ -138,7 +138,7 @@ class ChannelWrite(RunnableCallable):
         tuples: list[tuple[str, Any]] = []
         for w in writes:
             if isinstance(w, Send):
-                tuples.append((PUSH if FF_SEND_V2 else TASKS, w))
+                tuples.append((TASKS, w))
             elif isinstance(w, ChannelWriteTupleEntry):
                 if ww := w.mapper(w.value):
                     tuples.extend(ww)

@@ -34,7 +34,12 @@ from langchain_core.runnables.utils import Input
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
-from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
+from langgraph.constants import (
+    CONF,
+    CONFIG_KEY_END,
+    CONFIG_KEY_STORE,
+    CONFIG_KEY_STREAM_WRITER,
+)
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 from langgraph.utils.config import (
@@ -58,6 +63,10 @@ class StrEnum(str, enum.Enum):
     """A string enum."""
 
 
+# Special type to denote any type is accepted
+ANY_TYPE = object()
+
+
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
@@ -73,9 +82,28 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         CONFIG_KEY_STORE,
         inspect.Parameter.empty,
     ),
+    (
+        sys.intern("previous"),
+        (ANY_TYPE,),
+        CONFIG_KEY_END,
+        inspect.Parameter.empty,
+    ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
-config keys, default values and type annotations."""
+config keys, default values and type annotations.
+
+Used to configure keyword arguments that can be injected at runtime
+from the config object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
+
+For a keyword to be injected from the config object, the function signature
+must contain a kwarg with the same name and a matching type annotation.
+
+Each tuple contains:
+- the name of the kwarg in the function signature
+- the type annotation(s) for the kwarg
+- the config key to look for the value in
+- the default value for the kwarg
+"""
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
 
@@ -122,9 +150,12 @@ class RunnableCallable(Runnable):
         self.func_accepts: dict[str, bool] = {}
         for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
-            self.func_accepts[kw] = (
-                p is not None and p.annotation in typ and p.kind in VALID_KINDS
-            )
+            if typ == (ANY_TYPE,):
+                self.func_accepts[kw] = p is not None and p.kind in VALID_KINDS
+            else:
+                self.func_accepts[kw] = (
+                    p is not None and p.annotation in typ and p.kind in VALID_KINDS
+                )
 
     def __repr__(self) -> str:
         repr_args = {
@@ -149,16 +180,20 @@ class RunnableCallable(Runnable):
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
-        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
+        for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
             if not self.func_accepts[kw]:
                 continue
 
-            if defv is inspect.Parameter.empty and kw not in kwargs and ck not in _conf:
+            if (
+                default_value is inspect.Parameter.empty
+                and kw not in kwargs
+                and config_key not in _conf
+            ):
                 raise ValueError(
-                    f"Missing required config key '{ck}' for '{self.name}'."
+                    f"Missing required config key '{config_key}' for '{self.name}'."
                 )
             elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(ck, defv)
+                kwargs[kw] = _conf.get(config_key, default_value)
 
         context = copy_context()
         if self.trace:
@@ -197,16 +232,20 @@ class RunnableCallable(Runnable):
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
-        for kw, _, ck, defv in KWARGS_CONFIG_KEYS:
+        for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
             if not self.func_accepts[kw]:
                 continue
 
-            if defv is inspect.Parameter.empty and kw not in kwargs and ck not in _conf:
+            if (
+                default_value is inspect.Parameter.empty
+                and kw not in kwargs
+                and config_key not in _conf
+            ):
                 raise ValueError(
-                    f"Missing required config key '{ck}' for '{self.name}'."
+                    f"Missing required config key '{config_key}' for '{self.name}'."
                 )
             elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(ck, defv)
+                kwargs[kw] = _conf.get(config_key, default_value)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)
@@ -298,21 +337,22 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """A simpler version of RunnableSequence."""
+    """Sequence of Runnables, where the output of each is the input of the next.
+
+    RunnableSeq is a simpler version of RunnableSequence that is internal to
+    LangGraph.
+    """
 
     def __init__(
         self,
         *steps: RunnableLike,
         name: Optional[str] = None,
     ) -> None:
-        """Create a new RunnableSequence.
+        """Create a new RunnableSeq.
 
         Args:
             steps: The steps to include in the sequence.
             name: The name of the Runnable. Defaults to None.
-            first: The first Runnable in the sequence. Defaults to None.
-            middle: The middle Runnables in the sequence. Defaults to None.
-            last: The last Runnable in the sequence. Defaults to None.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.

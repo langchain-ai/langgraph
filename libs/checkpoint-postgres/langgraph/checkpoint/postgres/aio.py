@@ -285,6 +285,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint asynchronously.
 
@@ -306,6 +307,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config["configurable"]["checkpoint_ns"],
             config["configurable"]["checkpoint_id"],
             task_id,
+            task_path,
             writes,
         )
         async with self._cursor(pipeline=True) as cur:
@@ -385,7 +387,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `checkpointer.alist(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -462,6 +464,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -471,9 +474,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
         """
         return asyncio.run_coroutine_threadsafe(
-            self.aput_writes(config, writes, task_id), self.loop
+            self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
 
 

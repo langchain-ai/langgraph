@@ -327,6 +327,7 @@ class PostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -350,6 +351,7 @@ class PostgresSaver(BasePostgresSaver):
                     config["configurable"]["checkpoint_ns"],
                     config["configurable"]["checkpoint_id"],
                     task_id,
+                    task_path,
                     writes,
                 ),
             )

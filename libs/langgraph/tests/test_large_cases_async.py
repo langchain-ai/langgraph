@@ -25,7 +25,7 @@ from typing_extensions import TypedDict
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
-from langgraph.constants import END, FF_SEND_V2, PULL, PUSH, START
+from langgraph.constants import END, PULL, PUSH, START
 from langgraph.graph.graph import Graph
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
@@ -2740,9 +2740,6 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             {"__interrupt__": ()},
         ]
 
-        if not FF_SEND_V2:
-            return
-
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
                 "messages": [
@@ -2760,31 +2757,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
-                        "messages": AIMessage(
-                            "",
-                            id="ai1",
-                            tool_calls=[
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "query"},
-                                    "id": "tool_call123",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    },
-                ),
-                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
-            ),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
             next=("tools",),
             config={
                 "configurable": {
@@ -2797,8 +2770,23 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 0,
-                "writes": None,
+                "step": 1,
+                "writes": {
+                    "agent": {
+                        "messages": AIMessage(
+                            content="",
+                            id="ai1",
+                            tool_calls=[
+                                {
+                                    "name": "search_api",
+                                    "args": {"query": "query"},
+                                    "id": "tool_call123",
+                                    "type": "tool_call",
+                                }
+                            ],
+                        )
+                    }
+                },
                 "thread_id": "1",
             },
             parent_config=(
@@ -2834,14 +2822,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 1,
+                "step": 2,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(
@@ -2941,36 +2929,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 ]
             },
             tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
-                        "messages": AIMessage(
-                            "",
-                            id="ai2",
-                            tool_calls=[
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "another", "idx": 0},
-                                    "id": "tool_call234",
-                                    "type": "tool_call",
-                                },
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "a third one", "idx": 1},
-                                    "id": "tool_call567",
-                                    "type": "tool_call",
-                                },
-                            ],
-                        )
-                    },
-                ),
-                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
-                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
+                PregelTask(AnyStr(), "tools", (PUSH, 0)),
+                PregelTask(AnyStr(), "tools", (PUSH, 1)),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -2978,13 +2938,24 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 2,
+                "step": 4,
                 "writes": {
-                    "tools": {
-                        "messages": _AnyIdToolMessage(
-                            content="result for a different query",
-                            name="search_api",
-                            tool_call_id="tool_call123",
+                    "agent": {
+                        "messages": AIMessage(
+                            id="ai2",
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "tool_call234",
+                                    "name": "search_api",
+                                    "args": {"query": "another", "idx": 0},
+                                },
+                                {
+                                    "id": "tool_call567",
+                                    "name": "search_api",
+                                    "args": {"query": "a third one", "idx": 1},
+                                },
+                            ],
                         ),
                     },
                 },
@@ -3036,7 +3007,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 3,
+                "step": 5,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(content="answer", id="ai2"),
@@ -3103,15 +3074,16 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            next=("tools",),
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 1,
+                "writes": {
+                    "agent": {
                         "messages": AIMessage(
                             content="",
                             additional_kwargs={},
@@ -3126,18 +3098,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                                 }
                             ],
                         )
-                    },
-                ),
-                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
-            ),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
+                    }
+                },
                 "thread_id": "2",
             },
             parent_config=(
@@ -3173,14 +3135,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, (), 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 1,
+                "step": 2,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(
@@ -3280,38 +3242,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 ]
             },
             tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="agent",
-                    path=("__pregel_pull", "agent"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={
-                        "messages": AIMessage(
-                            content="",
-                            additional_kwargs={},
-                            response_metadata={},
-                            id="ai2",
-                            tool_calls=[
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "another", "idx": 0},
-                                    "id": "tool_call234",
-                                    "type": "tool_call",
-                                },
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "a third one", "idx": 1},
-                                    "id": "tool_call567",
-                                    "type": "tool_call",
-                                },
-                            ],
-                        )
-                    },
-                ),
-                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 2)),
-                PregelTask(AnyStr(), "tools", (PUSH, ("__pregel_pull", "agent"), 3)),
+                PregelTask(AnyStr(), "tools", (PUSH, 0)),
+                PregelTask(AnyStr(), "tools", (PUSH, 1)),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -3319,13 +3251,24 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "step": 2,
+                "step": 4,
                 "writes": {
-                    "tools": {
-                        "messages": _AnyIdToolMessage(
-                            content="result for a different query",
-                            name="search_api",
-                            tool_call_id="tool_call123",
+                    "agent": {
+                        "messages": AIMessage(
+                            id="ai2",
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "tool_call234",
+                                    "name": "search_api",
+                                    "args": {"query": "another", "idx": 0},
+                                },
+                                {
+                                    "id": "tool_call567",
+                                    "name": "search_api",
+                                    "args": {"query": "a third one", "idx": 1},
+                                },
+                            ],
                         ),
                     },
                 },
@@ -3377,7 +3320,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "update",
-                "step": 3,
+                "step": 5,
                 "writes": {
                     "agent": {
                         "messages": AIMessage(content="answer", id="ai2"),
@@ -6961,83 +6904,9 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
         # check state
         outer_state = await graph.aget_state(config)
 
-        if not FF_SEND_V2:
-            # update state of dogs joke graph
-            await graph.aupdate_state(
-                outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
-            )
-
-            # continue past interrupt
-            assert await graph.ainvoke(None, config=config) == {
-                "subjects": ["cats", "dogs"],
-                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
-            }
-            return
-
-        assert outer_state == StateSnapshot(
-            values={"subjects": ["cats", "dogs"], "jokes": []},
-            tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="__start__",
-                    path=("__pregel_pull", "__start__"),
-                    error=None,
-                    interrupts=(),
-                    state=None,
-                    result={"subjects": ["cats", "dogs"]},
-                ),
-                PregelTask(
-                    AnyStr(),
-                    "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 1),
-                    state={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr("generate_joke:"),
-                        }
-                    },
-                ),
-                PregelTask(
-                    AnyStr(),
-                    "generate_joke",
-                    (PUSH, ("__pregel_pull", "__start__"), 2),
-                    state={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr("generate_joke:"),
-                        }
-                    },
-                ),
-            ),
-            next=("generate_joke", "generate_joke"),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "input",
-                "writes": {
-                    "__start__": {
-                        "subjects": [
-                            "cats",
-                            "dogs",
-                        ],
-                    }
-                },
-                "step": -1,
-                "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=None,
-        )
-
         # update state of dogs joke graph
         await graph.aupdate_state(
-            outer_state.tasks[2].state, {"subject": "turtles - hohoho"}
+            outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
         )
 
         # continue past interrupt
@@ -7045,150 +6914,6 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
             "subjects": ["cats", "dogs"],
             "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
         }
-
-        actual_snapshot = await graph.aget_state(config)
-        expected_snapshot = StateSnapshot(
-            values={
-                "subjects": ["cats", "dogs"],
-                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
-            },
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {
-                    "generate_joke": [
-                        {"jokes": ["Joke about cats - hohoho"]},
-                        {"jokes": ["Joke about turtles - hohoho"]},
-                    ]
-                },
-                "step": 0,
-                "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                }
-            ),
-        )
-        assert actual_snapshot == expected_snapshot
-
-        if "shallow" in checkpointer_name:
-            return
-
-        # test full history
-        actual_history = [c async for c in graph.aget_state_history(config)]
-        expected_history = [
-            StateSnapshot(
-                values={
-                    "subjects": ["cats", "dogs"],
-                    "jokes": [
-                        "Joke about cats - hohoho",
-                        "Joke about turtles - hohoho",
-                    ],
-                },
-                tasks=(),
-                next=(),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": {
-                        "generate_joke": [
-                            {"jokes": ["Joke about cats - hohoho"]},
-                            {"jokes": ["Joke about turtles - hohoho"]},
-                        ]
-                    },
-                    "step": 0,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-            ),
-            StateSnapshot(
-                values={"jokes": []},
-                next=("__start__", "generate_joke", "generate_joke"),
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="__start__",
-                        path=("__pregel_pull", "__start__"),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result={"subjects": ["cats", "dogs"]},
-                    ),
-                    PregelTask(
-                        AnyStr(),
-                        "generate_joke",
-                        (PUSH, ("__pregel_pull", "__start__"), 1),
-                        state={
-                            "configurable": {
-                                "thread_id": "1",
-                                "checkpoint_ns": AnyStr("generate_joke:"),
-                            }
-                        },
-                        result={"jokes": ["Joke about cats - hohoho"]},
-                    ),
-                    PregelTask(
-                        AnyStr(),
-                        "generate_joke",
-                        (PUSH, ("__pregel_pull", "__start__"), 2),
-                        state={
-                            "configurable": {
-                                "thread_id": "1",
-                                "checkpoint_ns": AnyStr("generate_joke:"),
-                            }
-                        },
-                        result={"jokes": ["Joke about turtles - hohoho"]},
-                    ),
-                ),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "input",
-                    "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
-                    "step": -1,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-            ),
-        ]
-        assert actual_history == expected_history
 
 
 @pytest.mark.skipif(
