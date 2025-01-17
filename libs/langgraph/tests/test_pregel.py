@@ -5811,4 +5811,4 @@ async def test_invoking_sync_tasks_from_async_entrypoint() -> None:
         return add_one(1).result()
 
     config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    assert await workflow.ainvoke(1, config) == 2
+    assert await main.ainvoke(1, config) == 2
