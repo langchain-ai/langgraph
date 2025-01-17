@@ -112,6 +112,46 @@ def entrypoint(
     store: Optional[BaseStore] = None,
     config_schema: Optional[type[Any]] = None,
 ) -> Callable[[types.FunctionType], Pregel]:
+    """Define a LangGraph workflow using the `entrypoint` decorator.
+
+    The decorated function must accept a single parameter, which serves as the input
+    to the function. This input parameter can be of any type. Use a dictionary
+    to pass multiple parameters to the function.
+
+    The decorated function also has access to these optional parameters:
+    - `writer`: A `StreamWriter` instance for writing data to a stream.
+    - `config`: A configuration object for accessing workflow settings.
+    - `previous`: The previous return value for the given thread (available only when
+        a checkpointer is provided).
+
+    The entrypoint decorator can be applied to sync functions, async functions,
+    generator functions, and async generator functions.
+
+    For generator functions, the `previous` parameter will represent a list of
+    the values previously yielded by the generator. During a run any values yielded
+    by the generator, will be written to the `custom` stream.
+
+
+    Args:
+        checkpointer: Specify a checkpointer to create a workflow that can persist
+            its state across runs.
+        store: A generalized key-value store. Some implementations may support
+            semantic search capabilities through an optional `index` configuration.
+        config_schema: Specifies the schema for the configuration object that will be
+            passed to the workflow.
+
+    Returns:
+        A decorator that converts a function into a Pregel graph.
+
+    Example:
+
+        ```python
+        @entrypoint()
+        def my_workflow(data: str) -> str:
+            return data.upper()
+        ```
+    """
+
     def _imp(func: types.FunctionType) -> Pregel:
         """Convert a function into a Pregel graph.
 
