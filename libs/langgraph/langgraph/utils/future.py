@@ -112,13 +112,16 @@ def _chain_future(source: AnyFuture, destination: AnyFuture) -> None:
     source.add_done_callback(_call_set_state)
 
 
-def chain_future(source: AnyFuture, destination: concurrent.futures.Future) -> None:
+def chain_future(source: AnyFuture, destination: AnyFuture) -> None:
     # adapted from asyncio.run_coroutine_threadsafe
     try:
         _chain_future(source, destination)
     except (SystemExit, KeyboardInterrupt):
         raise
     except BaseException as exc:
-        if destination.set_running_or_notify_cancel():
+        if isinstance(destination, concurrent.futures.Future):
+            if destination.set_running_or_notify_cancel():
+                destination.set_exception(exc)
+        else:
             destination.set_exception(exc)
         raise
