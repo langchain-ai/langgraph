@@ -1831,6 +1831,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up subgraph checkpointing
+            if self.checkpointer is True:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
+                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
