@@ -605,6 +605,11 @@ def dev(
         ) from None
 
     config_json = langgraph_cli.config.validate_config_file(pathlib.Path(config))
+    if config_json.get("node_version"):
+        raise click.UsageError(
+            "In-mem server for JS graphs is not supported in this version of the LangGraph CLI. Please use `npx @langchain/langgraph-cli` instead."
+        ) from None
+
     cwd = os.getcwd()
     sys.path.append(cwd)
     dependencies = config_json.get("dependencies", [])
