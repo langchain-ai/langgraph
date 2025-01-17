@@ -2,9 +2,23 @@
 
 ## Overview
 
-LangGraph's Functional API enables building applications that persist state across successive invocations. These applications can manage state, work with LLMs, support Human-in-the-Loop (HIL) patterns, and stream results.
+The Functional API is designed to simplify the development of complex applications by providing a Pythonic interface for defining tasks, entrypoints, and interrupt handlers. It supports features like **checkpointing**, **streaming**, and **Human-in-the-Loop (HIL)** patterns, making it ideal for building scalable, interactive applications.
 
-The Functional API is built around two key primitives: `entrypoint` and `task`. These primitives allow you to define modular workflows that are flexible and reusable. 
+
+## Interface
+
+The Functional API consists of two main components: `entrypoint` and `task`.
+
+
+
+These components allow you to define modular workflows that can be executed independently or in sequence. The API supports features like checkpointing, streaming, and interrupt handling, making it flexible and scalable.
+
+## Functional vs. Graph API
+
+The GraphAPI takes a declarative approach to defining control flow in a workflow using a state machine.
+
+
+## Mixing Functional and Graph API
 
 You can intermix the Functional API and the Graph API within the same application. For example:
 - Invoke `@entrypoint` or `@task` from within a node in a state graph.
@@ -26,12 +40,15 @@ inside a task or entrypoint.
 Here's a quick example to demonstrate the Functional API in action:
 
 ```python
+import time
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import MemorySaver
 
 @task
 def write_essay(topic: str) -> str:
+    """Write an essay about the given topic."""
+    time.sleep(1) # Simulate a long-running task; e.g., due to an LLM call.
     return f"An essay about {topic}"
 
 @entrypoint(checkpointer=MemorySaver())
@@ -88,8 +105,6 @@ An entrypoint is a decorator that you can apply
 ```python
 
 ```
-
-
 
 ### How to define an entrypoint
 
@@ -165,7 +180,28 @@ fut_bar = bar(*fut_foo.result())
 - Inputs and outputs must be serializable to ensure compatibility with checkpointing and distributed execution.
 - Avoid complex, non-serializable objects unless custom serialization logic is implemented.
 
-### Eager map-reduce
+### Running tasks in parallel
+
+Tasks can be executed in parallel by invoking them concurrently and waiting for the results. This can improve performance by leveraging multiple cores or distributed resources.
+
+```python
+import time
+from langgraph.func import task, entrypoint
+
+    
+@task
+def slow_add_one(x: int) -> int:
+    """A slow task that takes 1 second to complete."""
+    time.sleep(1)
+    return x
+
+@entrypoint
+
+```
+
+
+
+
 
 The `@task` decorator supports eager evaluation of map-reduce operations, allowing partial results to be processed immediately as they become available.
 
