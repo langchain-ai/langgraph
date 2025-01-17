@@ -5708,3 +5708,82 @@ def test_multiple_subgraphs_mixed(
 
     config = {"configurable": {"thread_id": "2"}}
     assert parent_call_multiple_subgraphs.invoke([2, 3], config) == [5, 6]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs_mixed_checkpointer(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class SubgraphState(TypedDict):
+        sub_counter: Annotated[int, operator.add]
+
+    def subgraph_node(state):
+        return {"sub_counter": 2}
+
+    sub_graph_1 = (
+        StateGraph(SubgraphState)
+        .add_node(subgraph_node)
+        .add_edge(START, "subgraph_node")
+        .compile(checkpointer=True)
+    )
+
+    class OtherSubgraphState(TypedDict):
+        other_sub_counter: Annotated[int, operator.add]
+
+    def other_subgraph_node(state):
+        return {"other_sub_counter": 3}
+
+    sub_graph_2 = (
+        StateGraph(OtherSubgraphState)
+        .add_node(other_subgraph_node)
+        .add_edge(START, "other_subgraph_node")
+        .compile()
+    )
+
+    class ParentState(TypedDict):
+        parent_counter: int
+
+    def parent_node(state):
+        result = sub_graph_1.invoke({"sub_counter": state["parent_counter"]})
+        other_result = sub_graph_2.invoke({"other_sub_counter": result["sub_counter"]})
+        return {"parent_counter": other_result["other_sub_counter"]}
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node(parent_node)
+        .add_edge(START, "parent_node")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_graph.invoke({"parent_counter": 0}, config) == {"parent_counter": 5}
+    assert parent_graph.invoke({"parent_counter": 0}, config) == {"parent_counter": 7}
+    config = {"configurable": {"thread_id": "2"}}
+    assert [
+        c
+        for c in parent_graph.stream(
+            {"parent_counter": 0}, config, subgraphs=True, stream_mode="updates"
+        )
+    ] == [
+        (("parent_node",), {"subgraph_node": {"sub_counter": 2}}),
+        (
+            (AnyStr("parent_node:"), "1"),
+            {"other_subgraph_node": {"other_sub_counter": 3}},
+        ),
+        ((), {"parent_node": {"parent_counter": 5}}),
+    ]
+    assert [
+        c
+        for c in parent_graph.stream(
+            {"parent_counter": 0}, config, subgraphs=True, stream_mode="updates"
+        )
+    ] == [
+        (("parent_node",), {"subgraph_node": {"sub_counter": 2}}),
+        (
+            (AnyStr("parent_node:"), "1"),
+            {"other_subgraph_node": {"other_sub_counter": 3}},
+        ),
+        ((), {"parent_node": {"parent_counter": 7}}),
+    ]
