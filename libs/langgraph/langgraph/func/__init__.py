@@ -189,7 +189,7 @@ class EntrypointPregel(Pregel):
         self,
         config: Optional[RunnableConfig] = None,
         *,
-        xray: int | bool = False,
+        xray: Union[int, bool] = False,
     ) -> Graph:
         name, entrypoint = next(iter(self.nodes.items()))
         graph = Graph()
