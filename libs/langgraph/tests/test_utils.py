@@ -20,6 +20,7 @@ from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
+from langgraph.utils.config import _is_not_empty
 from langgraph.utils.fields import (
     _is_optional_type,
     get_enhanced_type_hints,
@@ -284,3 +285,14 @@ def test_enhanced_type_hints() -> None:
     assert hints[0] == ("val_1", str, None, "A description")
     assert hints[1] == ("val_2", int, 42, None)
     assert hints[2] == ("val_3", str, "default", "Another description")
+
+
+def test_is_not_empty() -> None:
+    assert _is_not_empty("foo")
+    assert _is_not_empty("")
+    assert _is_not_empty(1)
+    assert _is_not_empty(0)
+    assert not _is_not_empty(None)
+    assert not _is_not_empty([])
+    assert not _is_not_empty(())
+    assert not _is_not_empty({})

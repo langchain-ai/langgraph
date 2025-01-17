@@ -1,5 +1,4 @@
 import sys
-from os import getenv
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, cast
 
@@ -76,11 +75,11 @@ CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
 CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
-# holds the value that "answers" an interrupt() call
-CONFIG_KEY_WRITES = sys.intern("__pregel_writes")
-# read-only list of existing task writes
+# holds a callback to be called when a node is finished
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
+CONFIG_KEY_END = sys.intern("__pregel_previous")
+# holds the previous return value from a stateful Pregel graph.
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -93,8 +92,6 @@ NS_END = sys.intern(":")
 # for checkpoint_ns, for each level, separates the namespace from the task_id
 CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
-FF_SEND_V2 = getenv("LANGGRAPH_FF_SEND_V2", "false").lower() == "true"
-# temporary flag to enable new Send semantics
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
 

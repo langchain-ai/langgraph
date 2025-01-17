@@ -60,7 +60,18 @@ LangGraph Studio (desktop) requires Docker Desktop version 4.24 or higher. Pleas
 
 #### Configuration or environment issues
 
-Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables. 
+Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables.
+
+!!! Important "Note (desktop only)"
+
+    LangGraph Studio Desktop automatically populates `LANGCHAIN_*` environment variables for license verification and tracing, regardless of the contents of the `.env` file. All other environment variables defined in `.env` will be read as normal.
+
+#### Incorrect data region (desktop only)
+
+If you receive a license verification error when attempting to start the LangGraph Server, you may be logged into the incorrect LangSmith data region. Ensure that you're logged into the correct LangSmith data region and ensure that the LangSmith account has access to LangGraph platform.
+
+1. In the top right-hand corner, click the user icon and select `Logout`.
+1. At the login screen, click the `Data Region` dropdown menu and select the appropriate data region. Then click `Login to LangSmith`.
 
 ### How does interrupt work?
 

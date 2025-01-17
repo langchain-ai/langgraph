@@ -20,6 +20,7 @@ theme:
     - content.action.edit
     - content.tooltips
     - header.autohide
+    - navigation.indexes
     - navigation.expand
     - navigation.footer
     - navigation.instant
