@@ -19,7 +19,7 @@ The LangGraph command line interface includes commands to build and run a LangGr
         ```bash
         npx @langchain/langgraph-cli
 
-        # Install globally
+        # Install globally, will be available as `langgraphjs`
         npm install -g @langchain/langgraph-cli
         ```
 
@@ -197,11 +197,13 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
     ```
 === "JS"
 
-    The base command for the LangGraph.js CLI is `langgraphjs`. We recommend using `npx` to always use the latest version of the CLI.
+    The base command for the LangGraph.js CLI is `langgraphjs`. 
 
     ```
     npx @langchain/langgraph-cli [OPTIONS] COMMAND [ARGS]
     ```
+
+    We recommend using `npx` to always use the latest version of the CLI.
 
 ### `dev`
 
@@ -407,6 +409,9 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
     ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph", "storm": "/deps/__outer_graphs/src/storm.py:graph"}'
     ```
 
+    ???+ note "Updating your langgraph.json file"
+         The `langgraph dockerfile` command translates all the configuration in your `langgraph.json` file into Dockerfile commands. When using this command, you will have to re-run it whenever you update your `langgraph.json` file. Otherwise, your changes will not be reflected when you build or run the dockerfile.
+
 === "JS"
 
     Generate a Dockerfile for building a LangGraph Cloud API server Docker image.
@@ -427,7 +432,7 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
     Example:
 
     ```bash
-    langgraph dockerfile -c langgraph.json Dockerfile
+    npx @langchain/langgraph-cli dockerfile -c langgraph.json Dockerfile
     ```
 
     This generates a Dockerfile that looks similar to:
@@ -446,5 +451,5 @@ The LangGraph CLI requires a JSON configuration file with the following keys:
     RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts
     ```
 
-???+ note "Updating your langgraph.json file"
-     The `langgraph dockerfile` command translates all the configuration in your `langgraph.json` file into Dockerfile commands. When using this command, you will have to re-run it whenever you update your `langgraph.json` file. Otherwise, your changes will not be reflected when you build or run the dockerfile.
+    ???+ note "Updating your langgraph.json file"
+         The `npx @langchain/langgraph-cli dockerfile` command translates all the configuration in your `langgraph.json` file into Dockerfile commands. When using this command, you will have to re-run it whenever you update your `langgraph.json` file. Otherwise, your changes will not be reflected when you build or run the dockerfile.
