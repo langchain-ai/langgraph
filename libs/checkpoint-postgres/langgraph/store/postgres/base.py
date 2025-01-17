@@ -542,7 +542,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         from psycopg import Connection
 
         conn_string = "postgresql://user:pass@localhost:5432/dbname"
-        
+
         # Using direct connection
         with Connection.connect(conn_string) as conn:
             store = PostgresStore(conn)
@@ -558,10 +558,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         from langgraph.store.postgres import PostgresStore
 
         conn_string = "postgresql://user:pass@localhost:5432/dbname"
-        
+
         with PostgresStore.from_conn_string(conn_string) as store:
             store.setup()
-            
+
             # Store and retrieve data
             store.put(("users", "123"), "prefs", {"theme": "dark"})
             item = store.get(("users", "123"), "prefs")
@@ -573,7 +573,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         from langgraph.store.postgres import PostgresStore
 
         conn_string = "postgresql://user:pass@localhost:5432/dbname"
-        
+
         with PostgresStore.from_conn_string(
             conn_string,
             index={
@@ -588,7 +588,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             store.put(("docs",), "doc1", {"text": "Python tutorial"})
             store.put(("docs",), "doc2", {"text": "TypeScript guide"})
             store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
-            
+
             # Search by similarity
             results = store.search(("docs",), "programming guides", limit=2)
         ```
