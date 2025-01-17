@@ -81,6 +81,67 @@ def task(
     Callable[P, asyncio.Future[T]],
     Callable[P, concurrent.futures.Future[T]],
 ]:
+    """Define a LangGraph task using the `task` decorator.
+
+    !!! warning "Experimental"
+        This is an experimental API that is subject to change.
+        Do not use for production code.
+
+    !!! important "Requires python 3.11 or higher for async functions"
+        The `task` decorator supports both sync and async functions. To use async
+        functions, ensure that you are using Python 3.11 or higher.
+
+    Tasks can only be called from within an [entrypoint][langgraph.func.entrypoint] or
+    from within a StateGraph. A task can be called like a regular function with the
+    following differences:
+    - The function inputs and outputs must be python primitives or serializable objects.
+    - The decorated function can only be called from within an entrypoint or StateGraph.
+    - Calling the function produces a future. This makes it easy to parallelize tasks.
+
+    Args:
+        retry: The [retry policy](langgraph.types.RetryPolicy)
+            to use for the task in case of a failure.
+
+    Returns:
+        A callable function when used as a decorator.
+
+    Example: Sync Task
+        ```python
+        from langgraph.func import entrypoint, task
+
+        @task
+        def add_one(a: int) -> int:
+            return a + 1
+
+        @entrypoint()
+        def add_one(numbers: list[int]) -> list[int]:
+            futures = [add_one(n) for n in numbers]
+            results = [f.result() for f in futures]
+            return results
+
+        # Call the entrypoint
+        add_one.invoke([1, 2, 3])  # Returns [2, 3, 4]
+        ```
+
+    Example: Async Task
+        ```python
+        import asyncio
+        from langgraph.func import entrypoint, task
+
+        @task
+        async def add_one(a: int) -> int:
+            return a + 1
+
+        @entrypoint()
+        async def add_one(numbers: list[int]) -> list[int]:
+            futures = [add_one(n) for n in numbers]
+            return asyncio.gather(*futures)
+
+        # Call the entrypoint
+        await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
+        ```
+    """
+
     def decorator(
         func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
     ) -> Callable[P, concurrent.futures.Future[T]]:
@@ -114,6 +175,10 @@ def entrypoint(
 ) -> Callable[[types.FunctionType], Pregel]:
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
+    !!! warning "Experimental"
+        This is an experimental API that is subject to change.
+        Do not use for production code.
+
     The decorated function must accept a single parameter, which serves as the input
     to the function. This input parameter can be of any type. Use a dictionary
     to pass multiple parameters to the function.
@@ -131,7 +196,6 @@ def entrypoint(
     the values previously yielded by the generator. During a run any values yielded
     by the generator, will be written to the `custom` stream.
 
-
     Args:
         checkpointer: Specify a checkpointer to create a workflow that can persist
             its state across runs.
@@ -143,12 +207,88 @@ def entrypoint(
     Returns:
         A decorator that converts a function into a Pregel graph.
 
-    Example:
+    Example: Using entrypoint and tasks
+        ```python
+        import time
+
+        from langgraph.func import entrypoint, task
+        from langgraph.types import interrupt, Command
+        from langgraph.checkpoint.memory import MemorySaver
+
+        @task
+        def compose_essay(topic: str) -> str:
+            time.sleep(1.0)  # Simulate slow operation
+            return f"An essay about {topic}"
+
+        @entrypoint(checkpointer=MemorySaver())
+        def review_workflow(topic: str) -> dict:
+            \"\"\"Manages the workflow for generating and reviewing an essay.
+
+            The workflow includes:
+            1. Generating an essay about the given topic.
+            2. Interrupting the workflow for human review of the generated essay.
+
+            Upon resuming the workflow, compose_essay task will not be re-executed
+            as its result is cached by the checkpointer.
+
+            Args:
+                topic (str): The subject of the essay.
+
+            Returns:
+                dict: A dictionary containing the generated essay and the human review.
+            \"\"\"
+            essay_future = compose_essay(topic)
+            essay = essay_future.result()
+            human_review = interrupt({
+                \"question\": \"Please provide a review\",
+                \"essay\": essay
+            })
+            return {
+                \"essay\": essay,
+                \"review\": human_review,
+            }
+
+        # Example configuration for the workflow
+        config = {
+            \"configurable\": {
+                \"thread_id\": \"some_thread\"
+            }
+        }
+
+        # Topic for the essay
+        topic = \"cats\"
+
+        # Stream the workflow to generate the essay and await human review
+        for result in review_workflow.stream(topic, config):
+            print(result)
+
+        # Example human review provided after the interrupt
+        human_review = \"This essay is great.\"
+
+        # Resume the workflow with the provided human review
+        for result in review_workflow.stream(Command(resume=human_review), config):
+            print(result)
+        ```
+
+    Example: Accessing the previous return value
+        When a checkpointer is enabled the function can access the previous return value
+        of the previous invocation on the same thread id.
 
         ```python
-        @entrypoint()
-        def my_workflow(data: str) -> str:
-            return data.upper()
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.func import entrypoint, task
+
+        @entrypoint(checkpointer=MemorySaver())
+        def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
+            return "world"
+
+        # highlight-next-line
+        config = {
+            "configurable": {
+                "thread_id":
+            }
+        }
+        my_workflow.invoke("hello")
         ```
     """
 
