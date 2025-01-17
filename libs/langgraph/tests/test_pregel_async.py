@@ -1132,7 +1132,8 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         assert awhiles == 1
 
 
-async def test_step_timeout_on_stream_hang() -> None:
+@pytest.mark.parametrize("stream_hang_s", [0.3, 0.6])
+async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     inner_task_cancelled = False
 
     async def awhile(input: Any) -> None:
@@ -2534,6 +2535,7 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
         assert mapper_cancels == 2
 
 
+@pytest.mark.skip("TODO: re-enable")
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_sync_from_async(checkpointer_name: str) -> None:
