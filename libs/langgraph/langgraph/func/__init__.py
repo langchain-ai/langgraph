@@ -100,7 +100,7 @@ def task(
     - Calling the function produces a future. This makes it easy to parallelize tasks.
 
     Args:
-        retry: An optional retry policy to use for the task in case of a failure.
+        retry: An optional retry policy to use for the task in case of a failur.
 
     Returns:
         A callable function when used as a decorator.
