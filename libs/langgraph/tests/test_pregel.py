@@ -5807,8 +5807,6 @@ async def test_entrypoint_from_async_generator() -> None:
 )
 async def test_invoking_sync_tasks_from_async_entrypoint() -> None:
     """Test invoking sync tasks from an async entrypoint."""
-    import uuid
-    from langgraph.func import task, entrypoint
 
     @task
     def add_one(x: int) -> int:
