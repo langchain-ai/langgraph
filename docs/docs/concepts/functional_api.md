@@ -2,40 +2,30 @@
 
 ## Overview
 
-The Functional API is designed to simplify the development of complex applications by providing a Pythonic interface for defining tasks, entrypoints, and interrupt handlers. It supports features like **checkpointing**, **streaming**, and **Human-in-the-Loop (HIL)** patterns, making it ideal for building scalable, interactive applications.
+The Functional API is designed to provide an imperative programming model for building LangGraph workflows.
 
+LangGraph workflows support parallel execution of tasks, [persistence](persistence.md), recovery from failures, [human-in-the-loop](human_in_the_loop.md), and real-time [streaming](streaming.md) from anywhere in the workflow.
 
 ## Interface
 
-The Functional API consists of two main components: `entrypoint` and `task`.
+The Functional API consists of two main primitives: `entrypoint` and `task`.
 
-- **Entrypoint**: The starting point for a LangGraph workflow.
-- **Task**: A unit of work that can be executed. Tasks can be executed in parallel or sequentially.
-
-k
-
-These components allow you to define modular workflows that can be executed independently or in sequence. The API supports features like checkpointing, streaming, and interrupt handling, making it flexible and scalable.
+- **Entrypoint**: Defines the starting point for a LangGraph workflow.
+- **Task**: A unit of work that can be executed. Tasks can be executed in parallel or sequentially within the scope of an entrypoint.
 
 ## Functional vs. Graph API
 
-The GraphAPI takes a declarative approach to defining control flow in a workflow using a state machine.
+The functional and graph APIs are two ways to define workflows in LangGraph. They are both built on top of the same LangGraph runtime, allowing you to intermix the two APIs in the same application.
 
+The main difference between the two APIs is the programming model they provide:
 
-## Mixing Functional and Graph API
+* **Functional API**: Provides an *imperative* programming model for building workflows. It allows you to define workflows using standard Python functions and decorators.
+* **Graph API**: Provides a *declarative* programming model for defining control flow in a workflow using a state machine (graph).
 
-You can intermix the Functional API and the Graph API within the same application. For example:
-- Invoke `@entrypoint` or `@task` from within a node in a state graph.
-- Call a state graph from inside a task or entrypoint.
+The primary advantage of using the **Graph API** is that it:
 
-LangGraph's functional API allows building applications that persist state in between successive invocations.
-
-The applications are able to manage state, work with LLMs, support HIL patterns and stream results.
-
-The functional API uses to primitives: `entrypoint` and `task`.
-
-You can intermix the Functional and the Graph API in the same application by invoking
-`@entrypoint` or `@task` from within a node in a state graph or vice versa invoking a stqte graph from
-inside a task or entrypoint.
+* 
+* Define explicit states for separate parts of the workflow which can make it easiest to reason about what 
 
 
 ## Example
@@ -91,6 +81,11 @@ for item in workflow.stream(Command(resume="yes"), config):
 
 
 The Functional API enables streamlined, Pythonic workflows. The entrypoint serves as the starting point for a functional graph, while task defines units of work that can execute independently or in sequence. The API supports features like checkpointing, streaming, and deterministic execution, making it both flexible and scalable.
+
+## Workflows must be deterministic
+
+To leverage features like **human-in-the-loop** and **recovery from failures**, workflows must be **deterministic**.
+This means that the workflow should be written in a way such that a given set of inputs always produces the same set of outputs.
 
 
 ### Difference from the Graph API
