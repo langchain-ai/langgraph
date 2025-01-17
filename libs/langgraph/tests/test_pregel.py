@@ -5799,8 +5799,16 @@ async def test_entrypoint_from_async_generator() -> None:
     assert previous_return_values == [None, ["a", "b"]]
 
 
+@pytest.mark.skip(
+    reason=(
+        "This test passes incorrectly when using the pytest asyncio runner. "
+        "It hangs when run from a jupyter notebook or as an independent script."
+    )
+)
 async def test_invoking_sync_tasks_from_async_entrypoint() -> None:
     """Test invoking sync tasks from an async entrypoint."""
+    import uuid
+    from langgraph.func import task, entrypoint
 
     @task
     def add_one(x: int) -> int:
