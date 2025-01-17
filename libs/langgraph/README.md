@@ -12,7 +12,9 @@
 
 ## Overview
 
-[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows.
+[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building
+stateful, multi-actor applications with LLMs, used to create agent and multi-agent
+workflows. Check out an introductory tutorial [here](https://langchain-ai.github.io/langgraph/tutorials/introduction/).
 
 
 LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
@@ -23,7 +25,8 @@ LangGraph provides fine-grained control over both the flow and state of your
 agent applications. It implements a central persistence layer, enabling features that
 are common to most agent architectures:
 
-- **Memory**: LangGraph supports conversational memory within and across user
+- **Memory**: LangGraph persists arbitrary aspects of your application's state,
+supporting memory of conversations and other updates within and across user
 interactions;
 - **Human-in-the-loop**: Execution can be interrupted and resumed, allowing for
 decisions, validation, and corrections at key stages via human input.
@@ -32,7 +35,7 @@ Standardizing these components allows individuals and teams to focus on the beha
 of their agent, instead of its supporting infrastructure.
 
 Through [LangGraph Platform](#langgraph-platform), LangGraph also provides tooling for
-debugging, tracing and observability, evaluation, and deployment.
+the development, deployment, debugging, and monitoring of your applications.
 
 LangGraph integrates seamlessly with
 [LangChain](https://python.langchain.com/docs/introduction/) and
@@ -45,6 +48,9 @@ course, *Introduction to LangGraph*, available for free
 ### LangGraph Platform
 
 [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform) is infrastructure for deploying LangGraph agents. It is a commercial solution for deploying agentic applications to production, built on the open-source LangGraph framework. The LangGraph Platform consists of several components that work together to support the development, deployment, debugging, and monitoring of LangGraph applications: [LangGraph Server](https://langchain-ai.github.io/langgraph/concepts/langgraph_server) (APIs), [LangGraph SDKs](https://langchain-ai.github.io/langgraph/concepts/sdk) (clients for the APIs), [LangGraph CLI](https://langchain-ai.github.io/langgraph/concepts/langgraph_cli) (command line tool for building the server), and [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio) (UI/debugger).
+
+See deployment options [here](https://langchain-ai.github.io/langgraph/concepts/deployment_options/)
+(includes a free tier).
 
 Here are some common issues that arise in complex deployments, which LangGraph Platform addresses:
 
@@ -213,9 +219,8 @@ final_state = app.invoke(
 )
 final_state["messages"][-1].content
 ```
-</details>
 
-Now when we pass the same `"thread_id"`, the conversation context is retained via the saved state (i.e. stored list of messages)
+Now when we pass the same <code>"thread_id"</code>, the conversation context is retained via the saved state (i.e. stored list of messages)
 
 ```python
 final_state = app.invoke(
@@ -229,66 +234,94 @@ final_state["messages"][-1].content
 "Based on the search results, I can tell you that the current weather in New York City is:\n\nTemperature: 90 degrees Fahrenheit (approximately 32.2 degrees Celsius)\nConditions: Sunny\n\nThis weather is quite different from what we just saw in San Francisco. New York is experiencing much warmer temperatures right now. Here are a few points to note:\n\n1. The temperature of 90°F is quite hot, typical of summer weather in New York City.\n2. The sunny conditions suggest clear skies, which is great for outdoor activities but also means it might feel even hotter due to direct sunlight.\n3. This kind of weather in New York often comes with high humidity, which can make it feel even warmer than the actual temperature suggests.\n\nIt's interesting to see the stark contrast between San Francisco's mild, foggy weather and New York's hot, sunny conditions. This difference illustrates how varied weather can be across different parts of the United States, even on the same day.\n\nIs there anything else you'd like to know about the weather in New York or any other location?"
 ```
 
-### Step-by-step Breakdown
+<b>Step-by-step Breakdown</b>:
 
-1. <details>
-    <summary>Initialize the model and tools.</summary>
+<details>
+<summary>Initialize the model and tools.</summary>
+<ul>
+  <li>
+    We use <code>ChatAnthropic</code> as our LLM. <strong>NOTE:</strong> we need to make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the <code>.bind_tools()</code> method.
+  </li>
+  <li>
+    We define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that <a href="https://python.langchain.com/docs/modules/agents/tools/custom_tools">here</a>.
+  </li>
+</ul>
+</details>
 
-    - we use `ChatAnthropic` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
-    - we define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
-   </details>
+<details>
+<summary>Initialize graph with state.</summary>
 
-2. <details>
-    <summary>Initialize graph with state.</summary>
+<ul>
+    <li>We initialize graph (<code>StateGraph</code>) by passing state schema (in our case <code>MessagesState</code>)</li>
+    <li><code>MessagesState</code> is a prebuilt state schema that has one attribute -- a list of LangChain <code>Message</code> objects, as well as logic for merging the updates from each node into the state.</li>
+</ul>
+</details>
 
-    - we initialize graph (`StateGraph`) by passing state schema (in our case `MessagesState`)
-    - `MessagesState` is a prebuilt state schema that has one attribute -- a list of LangChain `Message` objects, as well as logic for merging the updates from each node into the state
-   </details>
+<details>
+<summary>Define graph nodes.</summary>
 
-3. <details>
-    <summary>Define graph nodes.</summary>
+There are two main nodes we need:
 
-    There are two main nodes we need:
+<ul>
+    <li>The <code>agent</code> node: responsible for deciding what (if any) actions to take.</li>
+    <li>The <code>tools</code> node that invokes tools: if the agent decides to take an action, this node will then execute that action.</li>
+</ul>
+</details>
 
-      - The `agent` node: responsible for deciding what (if any) actions to take.
-      - The `tools` node that invokes tools: if the agent decides to take an action, this node will then execute that action.
-   </details>
+<details>
+<summary>Define entry point and graph edges.</summary>
 
-4. <details>
-    <summary>Define entry point and graph edges.</summary>
+First, we need to set the entry point for graph execution - <code>agent</code> node.
 
-      First, we need to set the entry point for graph execution - `agent` node.
+Then we define one normal and one conditional edge. Conditional edge means that the destination depends on the contents of the graph's state (<code>MessagesState</code>). In our case, the destination is not known until the agent (LLM) decides.
 
-      Then we define one normal and one conditional edge. Conditional edge means that the destination depends on the contents of the graph's state (`MessageState`). In our case, the destination is not known until the agent (LLM) decides.
+<ul>
+  <li>Conditional edge: after the agent is called, we should either:
+    <ul>
+      <li>a. Run tools if the agent said to take an action, OR</li>
+      <li>b. Finish (respond to the user) if the agent did not ask to run tools</li>
+    </ul>
+  </li>
+  <li>Normal edge: after the tools are invoked, the graph should always return to the agent to decide what to do next</li>
+</ul>
+</details>
 
-      - Conditional edge: after the agent is called, we should either:
-        - a. Run tools if the agent said to take an action, OR
-        - b. Finish (respond to the user) if the agent did not ask to run tools
-      - Normal edge: after the tools are invoked, the graph should always return to the agent to decide what to do next
-   </details>
+<details>
+<summary>Compile the graph.</summary>
 
-5. <details>
-    <summary>Compile the graph.</summary>
+<ul>
+  <li>
+    When we compile the graph, we turn it into a LangChain 
+    <a href="https://python.langchain.com/v0.2/docs/concepts/#runnable-interface">Runnable</a>, 
+    which automatically enables calling <code>.invoke()</code>, <code>.stream()</code> and <code>.batch()</code> 
+    with your inputs
+  </li>
+  <li>
+    We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, 
+    human-in-the-loop workflows, time travel and more. In our case we use <code>MemorySaver</code> - 
+    a simple in-memory checkpointer
+  </li>
+</ul>
+</details>
 
-    - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
-    - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
-    </details>
+<details>
+<summary>Execute the graph.</summary>
 
-6. <details>
-   <summary>Execute the graph.</summary>
+<ol>
+  <li>LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, <code>"agent"</code>.</li>
+  <li>The <code>"agent"</code> node executes, invoking the chat model.</li>
+  <li>The chat model returns an <code>AIMessage</code>. LangGraph adds this to the state.</li>
+  <li>Graph cycles the following steps until there are no more <code>tool_calls</code> on <code>AIMessage</code>:
+    <ul>
+      <li>If <code>AIMessage</code> has <code>tool_calls</code>, <code>"tools"</code> node executes</li>
+      <li>The <code>"agent"</code> node executes again and returns <code>AIMessage</code></li>
+    </ul>
+  </li>
+  <li>Execution progresses to the special <code>END</code> value and outputs the final state. And as a result, we get a list of all our chat messages as output.</li>
+</ol>
+</details>
 
-    1. LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, `"agent"`.
-    2. The `"agent"` node executes, invoking the chat model.
-    3. The chat model returns an `AIMessage`. LangGraph adds this to the state.
-    4. Graph cycles the following steps until there are no more `tool_calls` on `AIMessage`:
-
-        - If `AIMessage` has `tool_calls`, `"tools"` node executes
-        - The `"agent"` node executes again and returns `AIMessage`
-
-    5. Execution progresses to the special `END` value and outputs the final state.
-    And as a result, we get a list of all our chat messages as output.
-   </details>
-
+</details>
 
 ## Documentation
 
