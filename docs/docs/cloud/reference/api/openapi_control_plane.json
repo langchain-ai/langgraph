@@ -561,6 +561,16 @@
           },
           "resource": {
             "$ref": "#/components/schemas/ResourceService"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AWAITING_DATABASE",
+              "READY",
+              "AWAITING_DELETE",
+              "UNKNOWN"
+            ],
+            "description": "Deployment status of the project.\n\nNon-terminal statuses: `AWAITING_DATABASE`, `AWAITING_DELETE`. All other statuses are terminal."
           }
         }
       },

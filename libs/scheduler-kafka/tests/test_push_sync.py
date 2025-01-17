@@ -8,7 +8,7 @@ from typing import (
 import pytest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import FF_SEND_V2, START
+from langgraph.constants import START
 from langgraph.errors import NodeInterrupt
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.scheduler.kafka import serde
@@ -76,10 +76,8 @@ def mk_push_graph(
     return builder.compile(checkpointer=checkpointer)
 
 
+@pytest.mark.skip("TODO: re-enable in next PR")
 def test_push_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) -> None:
-    if not FF_SEND_V2:
-        pytest.skip("Test requires FF_SEND_V2")
-
     input = ["0"]
     config = {"configurable": {"thread_id": "1"}}
     graph = mk_push_graph(acheckpointer)

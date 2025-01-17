@@ -85,7 +85,8 @@ jobs:
           if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
             echo "Running link check on all HTML files matching notebooks in docs directory..."
             poetry run pytest -v \
-              --check-links-ignore "https://(api|web|docs|academy)\.smith\.langchain\.com/.*" \
+              --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+              --check-links-ignore "https://academy\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
               --check-links-ignore "http://localhost:8123/.*" \
@@ -106,7 +107,8 @@ jobs:
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on HTML files matching changed notebook files..."
               poetry run pytest -v \
-                --check-links-ignore "https://(api|web|docs|academy)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "https://academy\.langchain\.com/.*" \
                 --check-links-ignore "http://localhost:8123/.*" \
                 --check-links-ignore "http://localhost:2024.*" \
                 --check-links-ignore "http://127.0.0.1:.*" \
