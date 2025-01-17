@@ -28,8 +28,9 @@ are common to most agent architectures:
 - **Memory**: LangGraph persists arbitrary aspects of your application's state,
 supporting memory of conversations and other updates within and across user
 interactions;
-- **Human-in-the-loop**: Execution can be interrupted and resumed, allowing for
-decisions, validation, and corrections at key stages via human input.
+- **Human-in-the-loop**: Because state is checkpointed, execution can be interrupted
+and resumed, allowing for decisions, validation, and corrections at key stages via
+human input.
 
 Standardizing these components allows individuals and teams to focus on the behavior
 of their agent, instead of its supporting infrastructure.
