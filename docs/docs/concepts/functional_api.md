@@ -2,60 +2,40 @@
 
 ## Overview
 
-The Functional API is designed to provide an imperative programming model for building LangGraph workflows.
+LangGraph's **Functional API** allows creating workflows using Python decorators and standard control 
+flow constructs (e.g., loops, conditionals) to define complex workflows needing to define a graph.
 
-LangGraph workflows support parallel execution of tasks, [persistence](persistence.md), recovery from failures, [human-in-the-loop](human_in_the_loop.md), and real-time [streaming](streaming.md) from anywhere in the workflow.
+The Functional API and the Graph API use the same LangGraph runtime, which manages the execution of workflows and provides [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md), and [streaming](streaming.md).
 
-## Interface
+The Functional and Graph APIs can be used together in the same application, allowing you to choose the best approach for each part of your workflow.
 
-The Functional API consists of two main primitives: `entrypoint` and `task`.
-
-- **Entrypoint**: Defines the starting point for a LangGraph workflow.
-- **Task**: A unit of work that can be executed. Tasks can be executed in parallel or sequentially within the scope of an entrypoint.
-
-## Functional vs. Graph API
-
-The functional and graph APIs are two ways to define workflows in LangGraph. They are both built on top of the same LangGraph runtime, allowing you to intermix the two APIs in the same application.
-
-The main difference between the two APIs is the programming model they provide:
-
-* **Functional API**: Provides an *imperative* programming model for building workflows. It allows you to define workflows using standard Python functions and decorators.
-* **Graph API**: Provides a *declarative* programming model for defining control flow in a workflow using a state machine (graph).
-
-The primary advantage of using the **Graph API** is that it:
-
-* 
-* Define explicit states for separate parts of the workflow which can make it easiest to reason about what 
-
-
-## Example
-
-Here's a quick example to demonstrate the Functional API in action:
+## See it in action
 
 ```python
 import time
+
 from langgraph.func import entrypoint, task
-from langgraph.types import interrupt, Command
+from langgraph.types import interrupt
 from langgraph.checkpoint.memory import MemorySaver
 
 @task
 def write_essay(topic: str) -> str:
     """Write an essay about the given topic."""
-    time.sleep(1) # Simulate a long-running task; e.g., due to an LLM call.
-    return f"An essay about {topic}"
+    time.sleep(1) # This is a placeholder for a long-running task.
+    return f"An essay about topic: {topic}"
 
 @entrypoint(checkpointer=MemorySaver())
-def workflow(inputs: dict) -> dict:
-    tasks = [write_essay(topic) for topic in inputs['topics']]
-    essays = [t.result() for t in tasks]
-    # Human-in-the-loop interrupt
+def workflow(topic: str) -> dict:
+    """A simple workflow that write an essay and asks for a review."""
+    essay = write_essay("cat").result()
     value = interrupt({
-        "question": "Are these good?",
-        "essays": essays
+        # Any json-serializable value can be used here.
+        "action": "review",
+        "essays": essay
     })
     return {
-        "essays": essays,
-        "review_result": value,
+        "essay": essay,
+        "review": value,
     }
 
 config = {
@@ -64,45 +44,75 @@ config = {
     }
 }
 
-for item in workflow.stream({"topics": ["cats", "dogs"]}, config):
+for item in workflow.stream("cat", config):
     print(item)
+```
 
+```python
+{'write_essay': 'An essay about topic: cat'}
+{'__interrupt__': (Interrupt(value={'action': 'review', 'essays': 'An essay about topic: cat'}, resumable=True, ns=['workflow:875155a0-97c1-7dc8-c216-f37c8d6b83c1'], when='during'),)}
+```
 
-for item in workflow.stream(Command(resume="yes"), config):
+An essay has been written and is ready for review. Once the review is provided, we can resume the workflow:
+
+```python
+from langgraph.types import Command
+
+for item in workflow.stream(Command(resume="This essay is great."), config):
     print(item)
 ```
 
 ```pycon
-{'write_essay': 'An essay about dogs'}
-{'write_essay': 'An essay about cats'}
-{'__interrupt__': (Interrupt(value={'question': 'Are these good?', 'essays': ['An essay about cats', 'An essay about dogs']}, resumable=True, ns=['workflow:8f5c1b6e-a5b5-9107-30d8-c163528a35f8'], when='during'),)}
-{'workflow': {'essays': ['An essay about cats', 'An essay about dogs'], 'review_result': 'yes'}}
+{'workflow': {'essay': 'An essay about topic: cat', 'review': 'This essay is great.'}}
 ```
 
+When checkpointing is enabled, LangGraph automatically saves the state of the workflow including
+the results of tasks and interrupts. 
 
-The Functional API enables streamlined, Pythonic workflows. The entrypoint serves as the starting point for a functional graph, while task defines units of work that can execute independently or in sequence. The API supports features like checkpointing, streaming, and deterministic execution, making it both flexible and scalable.
+!!! tip
+
+    When the workflow was resumed, it executes from the very start, but because 
+    the result of the `write_essay` task was already saved, it doesn't need to be recomputed
+    and instead is loaded from the checkpoint.
+
+
+## Primitives
+
+The Functional API consists of two primitives:
+
+- **[Entrypoint](#entrypoint)**: Defines the starting point for a LangGraph workflow.
+- **[Task](#task)**: A unit of work that can be executed. Tasks can be executed in parallel or sequentially within the scope of an entrypoint.
+
+
+## Functional API vs. Graph API
+
+The Functional API and the Graph APIs provide two different paradaigms to create workflows in LangGraph.
+
+These APIs can be thought of as two different paradigms for defining workflows, with the following differences:
+
+- **Resuming graph execution**: The execution of a LangGraph application can be interrupted (e.g., for human in the loop or due to an error). When the application is resumed, the 
+- **Control flow**: The Functional API does not require thinking about graph structure or state machines. You can use standard Python constructs to define workflows.
+- **GraphState** and **reducers**: In the functional API, the different functions can 
+- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others.
+* **Functional API**: Utilizes an *imperative* programming model for constructing **workflows**. The control flow leverages standard Python primitives, such as conditionals (if/else), loops (for/while), and function calls. This approach allows for a more traditional, step-by-step execution of tasks.
+* **Graph API**: Offers a *declarative* programming model for specifying control flow within a **workflow** through the use of a state machine (graph). This approach defines the workflow as a series of nodes and edges, where each node represents a task or, and edges define the flow of execution between them.
 
 ## Workflows must be deterministic
 
 To leverage features like **human-in-the-loop** and **recovery from failures**, workflows must be **deterministic**.
 This means that the workflow should be written in a way such that a given set of inputs always produces the same set of outputs.
 
-
-### Difference from the Graph API
-
-LangGraph's Graph API uses an explicit state machine to define control flow, enabling precise control over branching and cyclical behavior.
-
-The Functional API, in contrast, does not require explicit control flow declarations. Instead, tasks and entrypoints can be called directly, just like standard Python functions. This approach simplifies development while maintaining the flexibility to handle complex workflows.
-
 ## Entrypoint
 
 An entrypoint is a decorator that you can apply
 
+For more information please see the API reference for the [entrypoint][langgraph.func.entrypoint] decorator.
+
+## Task
+
+For more information please see the API reference for the [task][langgraph.func.task] decorator.
+
 ### Interface
-
-```python
-
-```
 
 ### How to define an entrypoint
 
@@ -196,8 +206,6 @@ def slow_add_one(x: int) -> int:
 @entrypoint
 
 ```
-
-
 
 
 
