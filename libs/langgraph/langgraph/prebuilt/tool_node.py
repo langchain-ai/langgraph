@@ -405,10 +405,15 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: BaseStore,
-    ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
+    ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         if isinstance(input, list):
-            input_type = "list"
-            message: AnyMessage = input[-1]
+            if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
+                input_type = "tool_calls"
+                tool_calls = input
+                return tool_calls, input_type
+            else:
+                input_type = "list"
+                message: AnyMessage = input[-1]
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
             message = messages[-1]
@@ -520,11 +525,11 @@ class ToolNode(RunnableCallable):
         return tool_call_with_store
 
     def _validate_tool_command(
-        self, command: Command, call: ToolCall, input_type: Literal["list", "dict"]
+        self, command: Command, call: ToolCall, input_type: Literal["list", "dict", "tool_calls"]
     ) -> Command:
         if isinstance(command.update, dict):
             # input type is dict when ToolNode is invoked with a dict input (e.g. {"messages": [AIMessage(..., tool_calls=[...])]})
-            if input_type != "dict":
+            if input_type not in ("dict", "tool_calls"):
                 raise ValueError(
                     f"Tools can provide a dict in Command.update only when using dict with '{self.messages_key}' key as ToolNode input, "
                     f"got: {command.update} for tool '{call['name']}'"
