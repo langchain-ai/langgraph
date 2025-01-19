@@ -237,6 +237,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    version: str = "v1"
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -762,14 +763,30 @@ def create_react_agent(
             return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
-            return "tools"
+            if version == "v1":
+                return "tools"
+            elif version == "v2":
+                return [tool_call["name"] for tool_call in last_message.tool_calls]
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState)
 
-    # Define the two nodes we will cycle between
+    # Define the nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(call_model, acall_model))
-    workflow.add_node("tools", tool_node)
+    if version == "v1":
+        workflow.add_node("tools", tool_node)
+        tool_node_names = ["tools"]
+    elif version == "v2":
+        from collections.abc import Sequence
+        assert isinstance(tools, Sequence)  # sequence of BaseTool
+        tool_node_names = []
+        for tool in tools:
+            tool_node = ToolNode(tools=[tool], ignore_unknown_tool_calls=True)
+            tool_name = cast(BaseTool, tool).name
+            tool_node_names.append(tool_name)
+            workflow.add_node(tool_name, tool_node)
+    else:
+        raise ValueError(f"Invalid version: {version}. Supports 'v1' or 'v2'.")
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -784,9 +801,9 @@ def create_react_agent(
             ),
         )
         workflow.add_edge("generate_structured_response", END)
-        should_continue_destinations = ["tools", "generate_structured_response"]
+        should_continue_destinations = tool_node_names + ["generate_structured_response"]
     else:
-        should_continue_destinations = ["tools", END]
+        should_continue_destinations = tool_node_names + [END]
 
     # We now add a conditional edge
     workflow.add_conditional_edges(
@@ -807,9 +824,11 @@ def create_react_agent(
         return "agent"
 
     if should_return_direct:
-        workflow.add_conditional_edges("tools", route_tool_responses)
+        for tool_node_name in tool_node_names:
+            workflow.add_conditional_edges(tool_node_name, route_tool_responses)
     else:
-        workflow.add_edge("tools", "agent")
+        for tool_node_name in tool_node_names:
+            workflow.add_edge(tool_node_name, "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
