@@ -39,14 +39,14 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
     """Asynchronous Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"
-        Basic setup and key-value storage:
+        Basic setup and usage:
         ```python
         from langgraph.store.postgres import AsyncPostgresStore
 
-        async with AsyncPostgresStore.from_conn_string(
-            "postgresql://user:pass@localhost:5432/dbname"
-        ) as store:
-            await store.setup()
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+
+        async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+            await store.setup()  # Run migrations. Done once
 
             # Store and retrieve data
             await store.aput(("users", "123"), "prefs", {"theme": "dark"})
@@ -58,38 +58,41 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         from langchain.embeddings import init_embeddings
         from langgraph.store.postgres import AsyncPostgresStore
 
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+
         async with AsyncPostgresStore.from_conn_string(
-            "postgresql://user:pass@localhost:5432/dbname",
+            conn_string,
             index={
                 "dims": 1536,
                 "embed": init_embeddings("openai:text-embedding-3-small"),
                 "fields": ["text"]  # specify which fields to embed. Default is the whole serialized value
             }
         ) as store:
-            await store.setup()  # Do this once to run migrations
+            await store.setup()  # Run migrations. Done once
 
             # Store documents
             await store.aput(("docs",), "doc1", {"text": "Python tutorial"})
             await store.aput(("docs",), "doc2", {"text": "TypeScript guide"})
-            # Don't index the following
-            await store.aput(("docs",), "doc3", {"text": "Other guide"}, index=False)
+            await store.aput(("docs",), "doc3", {"text": "Other guide"}, index=False)  # don't index
 
             # Search by similarity
-            results = await store.asearch(("docs",), query="python programming")
+            results = await store.asearch(("docs",), "programming guides", limit=2)
         ```
 
         Using connection pooling for better performance:
         ```python
         from langgraph.store.postgres import AsyncPostgresStore, PoolConfig
 
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+
         async with AsyncPostgresStore.from_conn_string(
-            "postgresql://user:pass@localhost:5432/dbname",
+            conn_string,
             pool_config=PoolConfig(
                 min_size=5,
                 max_size=20
             )
         ) as store:
-            await store.setup()
+            await store.setup()  # Run migrations. Done once
             # Use store with connection pooling...
         ```
 
@@ -102,7 +105,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
     Note:
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
         when creating the store. Without this configuration, all `index` arguments passed to
-        `put` or `aput`will have no effect.
+        `put` or `aput` will have no effect.
     """
 
     __slots__ = (
