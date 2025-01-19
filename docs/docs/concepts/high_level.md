@@ -2,7 +2,7 @@
 
 ## LLM applications
 
-LLMs make it possible to embed intelligence into a new class of applications. There are many emerging patterns for building applications that use LLMs. For example, [workflows](https://www.anthropic.com/research/building-effective-agents) create a scaffolding of predefined code paths around LLM calls. Sometimes LLMs can direct the control flow through these predefined code paths. In other cases, it's possible to remove this scaffolding, creating agents that can [plan their own control flow](https://huyenchip.com/2025/01/07/agents.html), take actions via [tool calls](https://python.langchain.com/docs/concepts/tool_calling/), and directly respond [to the feedback from their own actions](https://research.google/blog/react-synergizing-reasoning-and-acting-in-language-models/).
+LLMs make it possible to embed intelligence into a new class of applications. There are many emerging patterns for building applications that use LLMs. For example, [workflows](https://www.anthropic.com/research/building-effective-agents) create a scaffolding of predefined code paths around LLM calls. Sometimes LLMs can direct the control flow through these predefined code paths, which some consider to be an "[agentic system](https://www.anthropic.com/research/building-effective-agents)". In other cases, it's possible to remove this scaffolding, creating autonomous agents that can [plan their own control flow](https://huyenchip.com/2025/01/07/agents.html), take actions via [tool calls](https://python.langchain.com/docs/concepts/tool_calling/), and directly respond [to the feedback from their own actions](https://research.google/blog/react-synergizing-reasoning-and-acting-in-language-models/).
 
 ![Agent Workflow](img/agent_workflow.png)
 
