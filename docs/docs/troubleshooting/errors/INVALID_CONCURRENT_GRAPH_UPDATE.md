@@ -6,7 +6,7 @@ support it.
 One way this can occur is if you are using a [fanout](https://langchain-ai.github.io/langgraph/how-tos/map-reduce/)
 or other parallel execution in your graph and you have defined a graph like this:
 
-```python
+```python hl_lines="2"
 class State(TypedDict):
     some_key: str
 
@@ -31,7 +31,7 @@ there is uncertainty around how to update the internal state.
 
 To get around this, you can define a reducer that combines multiple values:
 
-```python
+```python hl_lines="5-6"
 import operator
 from typing import Annotated
 
