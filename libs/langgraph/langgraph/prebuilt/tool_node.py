@@ -186,6 +186,7 @@ class ToolNode(RunnableCallable):
         handle_tool_errors: Union[
             bool, str, Callable[..., str], tuple[type[Exception], ...]
         ] = True,
+        ignore_unknown_tool_calls: bool = False,
         messages_key: str = "messages",
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
@@ -193,6 +194,7 @@ class ToolNode(RunnableCallable):
         self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
+        self.ignore_unknown_tool_calls = ignore_unknown_tool_calls
         self.messages_key = messages_key
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
@@ -213,6 +215,12 @@ class ToolNode(RunnableCallable):
         store: BaseStore,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
+        if self.ignore_unknown_tool_calls:
+            tool_calls = [
+                tool_call
+                for tool_call in tool_calls
+                if tool_call["name"] in self.tools_by_name
+            ]
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -264,6 +272,12 @@ class ToolNode(RunnableCallable):
         store: BaseStore,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
+        if self.ignore_unknown_tool_calls:
+            tool_calls = [
+                tool_call
+                for tool_call in tool_calls
+                if tool_call["name"] in self.tools_by_name
+            ]
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
