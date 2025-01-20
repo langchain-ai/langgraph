@@ -177,7 +177,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
         else:
             run = RunnableCallable(
                 func,
-                functools.wraps(func)(functools.partial(run_in_executor, None, func)),  # type: ignore[arg-type]
+                functools.wraps(func)(functools.partial(run_in_executor, None, func)),
                 explode_args=True,
                 name=func.__name__,
                 trace=False,
