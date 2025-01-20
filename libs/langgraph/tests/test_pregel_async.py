@@ -7274,6 +7274,7 @@ async def test_multiple_subgraphs_mixed_checkpointer(
         ]
 
 
+@NEEDS_CONTEXTVARS
 async def test_async_entrypoint_without_checkpointer() -> None:
     """Test no checkpointer."""
     states = []
@@ -7302,6 +7303,7 @@ async def test_async_entrypoint_without_checkpointer() -> None:
     }
 
 
+@NEEDS_CONTEXTVARS
 async def test_entrypoint_from_async_generator() -> None:
     """@entrypoint does not support sync generators."""
     # Test invoke
