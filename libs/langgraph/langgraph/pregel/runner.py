@@ -75,6 +75,7 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
         super().__setitem__(key, value)  # type: ignore[index]
         if value is not None:
             with self.lock:
+                self.event.clear()
                 self.counter += 1
             key.add_done_callback(partial(self.on_done, value))
 
@@ -296,6 +297,8 @@ class PregelRunner:
         futures.event.wait(
             timeout=(max(0, end_time - time.monotonic()) if end_time else None)
         )
+        # give control back to the caller
+        yield
         # panic on failure or timeout
         _panic_or_proceed(
             futures.done.union(f for f, t in futures.items() if t is not None),
@@ -518,6 +521,8 @@ class PregelRunner:
             futures.event.wait(),
             timeout=(max(0, end_time - loop.time()) if end_time else None),
         )
+        # give control back to the caller
+        yield
         # cancel waiter task
         for fut in futures:
             fut.cancel()
