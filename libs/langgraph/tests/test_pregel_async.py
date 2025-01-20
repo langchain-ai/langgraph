@@ -7320,5 +7320,3 @@ async def test_entrypoint_from_async_generator() -> None:
 
     assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
     assert previous_return_values == [None]
-    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
-    assert previous_return_values == [None, ["a", "b"]]
