@@ -1,10 +1,18 @@
 # Functional API
 
+!!! warning "Experimental"
+    The Functional API is currently in **beta** and is subject to change. Please report any issues or feedback to the LangGraph team.
+
+Things that need to be clarified
+
+1. 
+
+
 ## Overview
 
-LangGraph's **Functional API** allows creating workflows using Python decorators and standard control flow constructs (e.g., loops, conditionals) to define complex workflows without having to define a graph.
+LangGraph's **Functional API** allows using standard control flow constructs (e.g., loops, conditionals) to define complex [workflows](#workflow) without having to define a graph.
 
-The Functional API uses the same LangGraph runtime as the Graph API, allowing you to benefit from features such as [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md), and [streaming](streaming.md) capabilities using an imperative programming approach. 
+The Functional API runs on the same LangGraph runtime as the Graph API, providing access to features like [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md), and [streaming](streaming.md).
 
 The Functional and Graph APIs can be used together in the same application, allowing you to intermix the two paradigms if needed.
 
@@ -81,12 +89,11 @@ A workflow defines the flow of an application. In LangGraph workflows can be bui
 
 LangGraph workflows are backed by a **persistence layer** that allows interrupting for human-in-the-loop, recovering from failures, and resuming from checkpoints.
 
-
 ## Building Blocks
 
 The functional API introduces two building blocks for defining workflows:
 
-- **[Entrypoint](#entrypoint)**: Defines a starting point for a workflow. It can include other workflows, tasks or graphs.
+- **[Entrypoint](#entrypoint)**: Defines a starting point for a workflow which will contain the main logic of the application. The logic can call tasks, other entrypoints, or state graph nodes, and it can be interrupted for human-in-the-loop.
 - **[Task](#task)**: A unit of work that can be executed like a future. Tasks can be used to encapsulate logic, parallelize execution, and support checkpointing.
 
 ### Entrypoint
@@ -95,6 +102,9 @@ An entrypoint is a decorator that you can apply to a function to define a LangGr
 with a checkpointer so that the state of the workflow is persisted.
 
 Here's a simple example of an entrypoint that adds one to an input:
+
+
+### Defining an entrypoint
 
 ```python
 from langgraph.func import entrypoint
@@ -111,10 +121,14 @@ For more information please see the API reference for the [entrypoint][langgraph
 
 ### Task
 
+A **task** is a regular function that performs operations such as API calls, data processing, or other computations.
+
+
+The LangGraph runtime manages the execution of tasks persisting their results to the persistence layer.
+
 Tasks are useful to define a unit of work that can be executed and whose result can be saved and restored.
 
 Use a task when you need to encapsulate a unit of work that can be executed independently. Tasks are useful for modularizing workflows, enabling parallel execution, and supporting checkpointing.
-
 
 Tasks are defined using the `@task` decorator. The function should adhere to the serialization requirements for inputs and outputs.
 
@@ -152,6 +166,17 @@ Tasks are called like a regular Python function, but the result is typically a f
 
 ## Determinism
 
+Leveraging a feature like **human-in-the-loop** or **recovery from failures** requires being able
+to resume execution of a workflow from a given point. 
+
+This behavior is achieved by saving the results of tasks or sub-graph calls to the persistence layer as they are
+executed.
+
+When the graph is resumed, the 
+
+This behavior is achieved by saving the
+
+requires workflows to be **deterministic**. This means that a given set of inputs should always produce the same set of outputs.
 
 To leverage features like **human-in-the-loop** and **recovery from failures**, workflows must be **deterministic**.
 This means that the workflow should be written in a way such that a given set of inputs always produces the same set of outputs.
