@@ -213,9 +213,7 @@ class PregelRunner:
             assert fut is not None, "writer did not return a future for call"
             # return a chained future to ensure commit() callback is called
             # before the returned future is resolved, to ensure stream order etc
-            sfut: concurrent.futures.Future[Any] = concurrent.futures.Future()
-            chain_future(fut, sfut)
-            return sfut
+            return chain_future(fut, concurrent.futures.Future())
 
         tasks = tuple(tasks)
         futures = FuturesDict(
@@ -400,10 +398,6 @@ class PregelRunner:
             retry: Optional[RetryPolicy] = None,
             callbacks: Callbacks = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
-            if not asyncio.iscoroutinefunction(func):
-                raise RuntimeError(
-                    "In an async context use func.to_thread(...) to invoke tasks"
-                )
             (fut,) = writer(
                 task,
                 [(PUSH, None)],
@@ -412,9 +406,25 @@ class PregelRunner:
             assert fut is not None, "writer did not return a future for call"
             # return a chained future to ensure commit() callback is called
             # before the returned future is resolved, to ensure stream order etc
-            sfut: asyncio.Future[Any] = asyncio.Future(loop=loop)
-            chain_future(fut, sfut)
-            return sfut
+            try:
+                asyncio.current_task()
+                in_async = True
+            except RuntimeError:
+                in_async = False
+            # if in async context return an async future
+            # otherwise return a chained sync future
+            if in_async:
+                if isinstance(fut, asyncio.Task):
+                    sfut = asyncio.Future(loop=loop)
+                    loop.call_soon_threadsafe(chain_future, fut, sfut)
+                    return sfut
+                else:
+                    # already wrapped in a future
+                    return fut
+            else:
+                sfut = concurrent.futures.Future()
+                loop.call_soon_threadsafe(chain_future, fut, sfut)
+                return sfut
 
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
