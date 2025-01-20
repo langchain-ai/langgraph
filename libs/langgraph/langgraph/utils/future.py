@@ -4,7 +4,7 @@ import contextvars
 import inspect
 import sys
 import types
-from typing import Coroutine, Optional, TypeVar, Union
+from typing import Awaitable, Coroutine, Generator, Optional, TypeVar, Union, cast
 
 T = TypeVar("T")
 AnyFuture = Union[asyncio.Future, concurrent.futures.Future]
@@ -137,7 +137,7 @@ def chain_future(source: AnyFuture, destination: AnyFuture) -> AnyFuture:
 
 
 def _ensure_future(
-    coro_or_future: Coroutine[None, None, T],
+    coro_or_future: Union[Coroutine[None, None, T], Awaitable[T]],
     *,
     loop: asyncio.AbstractEventLoop,
     name: Optional[str] = None,
@@ -146,7 +146,9 @@ def _ensure_future(
     called_wrap_awaitable = False
     if not asyncio.iscoroutine(coro_or_future):
         if inspect.isawaitable(coro_or_future):
-            coro_or_future = _wrap_awaitable(coro_or_future)
+            coro_or_future = cast(
+                Coroutine[None, None, T], _wrap_awaitable(coro_or_future)
+            )
             called_wrap_awaitable = True
         else:
             raise TypeError(
@@ -165,7 +167,7 @@ def _ensure_future(
 
 
 @types.coroutine
-def _wrap_awaitable(awaitable):
+def _wrap_awaitable(awaitable: Awaitable[T]) -> Generator[None, None, T]:
     """Helper for asyncio.ensure_future().
 
     Wraps awaitable (an object with __await__) into a coroutine
@@ -184,9 +186,9 @@ def run_coroutine_threadsafe(
 
     Return a asyncio.Future to access the result.
     """
-    future = asyncio.Future(loop=loop)
+    future: asyncio.Future[T] = asyncio.Future(loop=loop)
 
-    def callback():
+    def callback() -> None:
         try:
             chain_future(
                 _ensure_future(coro, loop=loop, name=name, context=context), future

@@ -415,7 +415,9 @@ class PregelRunner:
             # otherwise return a chained sync future
             if in_async:
                 if isinstance(fut, asyncio.Task):
-                    sfut = asyncio.Future(loop=loop)
+                    sfut: Union[asyncio.Future[Any], concurrent.futures.Future[Any]] = (
+                        asyncio.Future(loop=loop)
+                    )
                     loop.call_soon_threadsafe(chain_future, fut, sfut)
                     return sfut
                 else:
