@@ -88,9 +88,8 @@ def task(
 ]:
     """Define a LangGraph task using the `task` decorator.
 
-    !!! warning "Experimental"
-        This is an experimental API that is subject to change.
-        Do not use for production code.
+    !!! warning "Beta"
+        The Functional API is currently in beta and is subject to change.
 
     !!! important "Requires python 3.11 or higher for async functions"
         The `task` decorator supports both sync and async functions. To use async
@@ -180,9 +179,8 @@ def entrypoint(
 ) -> Callable[[types.FunctionType], Pregel]:
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
-    !!! warning "Experimental"
-        This is an experimental API that is subject to change.
-        Do not use for production code.
+    !!! warning "Beta"
+        The Functional API is currently in beta and is subject to change.
 
     The decorated function must accept a single parameter, which serves as the input
     to the function. This input parameter can be of any type. Use a dictionary
@@ -440,6 +438,11 @@ def entrypoint(
 
 
 class EntrypointPregel(Pregel):
+    """A Pregel graph created from an entrypoint function.
+
+    !!! warning "Beta"
+        The Functional API is currently in beta and is subject to change.
+    """
     def get_graph(
         self,
         config: Optional[RunnableConfig] = None,
