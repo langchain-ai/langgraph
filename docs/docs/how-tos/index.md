@@ -22,10 +22,10 @@ These how-to guides show how to achieve that controllability.
 
 ### Persistence
 
-[LangGraph Persistence](../concepts/persistence.md) makes it easy to persist state across graph runs (thread-level persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
+[LangGraph Persistence](../concepts/persistence.md) makes it easy to persist state across graph runs (per-thread persistence) and across threads (cross-thread persistence). These how-to guides show how to add persistence to your graph.
 
 - [How to add thread-level persistence to your graph](persistence.ipynb)
-- [How to add thread-level persistence to subgraphs](subgraph-persistence.ipynb)
+- [How to add thread-level persistence to a subgraph](subgraph-persistence.ipynb)
 - [How to add cross-thread persistence to your graph](cross-thread-persistence.ipynb)
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
@@ -83,7 +83,10 @@ Other methods:
 
 ### Tool calling
 
-[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of chat model API that accepts tool schemas, along with messages, as input and returns invocations of those tools as part of the output message.
+[Tool calling](https://python.langchain.com/docs/concepts/tool_calling/) is a type of
+[chat model](https://python.langchain.com/docs/concepts/chat_models/) API that accepts
+tool schemas, along with messages, as input and returns invocations of those tools as
+part of the output message.
 
 These how-to guides show common patterns for tool calling with LangGraph:
 
@@ -98,7 +101,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 [Subgraphs](../concepts/low_level.md#subgraphs) allow you to reuse an existing graph from another graph. These how-to guides show how to use subgraphs:
 
-- [How to add and use subgraphs](subgraph.ipynb)
+- [How to use subgraphs](subgraph.ipynb)
 - [How to view and update state in subgraphs](subgraphs-manage-state.ipynb)
 - [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
 
@@ -114,7 +117,7 @@ See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for i
 
 ### State Management
 
-- [How to use Pydantic model as state](state-model.ipynb)
+- [How to use Pydantic model as graph state](state-model.ipynb)
 - [How to define input/output schema for your graph](input_output_schema.ipynb)
 - [How to pass private state between nodes inside the graph](pass_private_state.ipynb)
 
@@ -137,13 +140,17 @@ One of the big benefits of LangGraph is that you can easily create your own agen
 
 These guides show how to use the prebuilt ReAct agent:
 
-- [How to create a ReAct agent](create-react-agent.ipynb)
-- [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
+- [How to use the pre-built ReAct agent](create-react-agent.ipynb)
+- [How to add thread-level memory to a ReAct Agent](create-react-agent-memory.ipynb)
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
 - [How to return structured output from a ReAct agent](create-react-agent-structured-output.ipynb)
-- [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 - [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
+
+Interested in further customizing the ReAct agent? This guide provides an
+overview of its underlying implementation to help you customize for your own needs:
+
+- [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 
 ## LangGraph Platform
 
@@ -188,10 +195,16 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.
 
+See [SDK Reference](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.client.AssistantsClient)
+for supported endpoints and other details.
+
 - [How to configure agents](../cloud/how-tos/configuration_cloud.md)
 - [How to version assistants](../cloud/how-tos/assistant_versioning.md)
 
 ### Threads
+
+See [SDK Reference](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.client.ThreadsClient)
+for supported endpoints and other details.
 
 - [How to copy threads](../cloud/how-tos/copy_threads.md)
 - [How to check status of your threads](../cloud/how-tos/check_thread_status.md)
