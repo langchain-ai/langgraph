@@ -231,26 +231,20 @@ def get_imports(code: str, doc_title: str) -> List[ImportInformation]:
 
 
 def update_markdown_with_imports(markdown: str) -> str:
-    """Update markdown to include API reference links for imports in Python code blocks.
-
-    This function scans the markdown content for Python code blocks, extracts any imports, and appends links to their API documentation.
+    """Update markdown to include API reference links for imports in Python code blocks with annotations.
 
     Args:
         markdown: The markdown content to process.
 
     Returns:
         Updated markdown with API reference links appended to Python code blocks.
-
-    Example:
-        Given a markdown with a Python code block:
-
-        ```python
-        from langchain.nlp import TextGenerator
-        ```
-        This function will append an API reference link to the `TextGenerator` class from the `langchain.nlp` module if it's recognized.
     """
     code_block_pattern = re.compile(
-        r"(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```",
+        r"(?P<indent>[ \t]*)"  # Capture leading spaces or tabs
+        r"```(?P<language>python|py)"  # Match Python code block start
+        r"\n(?P<code>.*?)"  # Capture the actual code content
+        r"\n(?P=indent)```"  # Ensure consistent indentation for closing delimiter
+        r"(?P<annotations>(?:\n\d+\. .*)*)",  # Capture optional numbered annotations
         re.DOTALL,
     )
 
@@ -265,7 +259,8 @@ def update_markdown_with_imports(markdown: str) -> str:
         """
         indent = match.group("indent")
         code_block = match.group("code")
-        language = match.group("language")  # Preserve the language from the regex match
+        annotations = match.group("annotations") or ""
+
         # Retrieve import information from the code block
         imports = get_imports(code_block, "__unused__")
 
@@ -278,8 +273,38 @@ def update_markdown_with_imports(markdown: str) -> str:
         api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
-        # Return the code block with appended API reference links
-        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
+
+        # If there are code annotations in the code itself AND there's a list of
+        # annotations following the code block, we'll put the API references after
+        # the annotation block.
+        # The format is
+        # ```python
+        # def foo(): # (1)!
+        # ...
+        # ```
+        # 1. This is an annotation (mkdocs style)
+        # Return the code block with appended API reference links after the annotations
+        # This is a bit hacky, but we always expect that the annotations are numbered
+        # and that the first annotation is always 1.
+
+        # Determine where to place API references based on annotations
+        if annotations and "# (1)!" in code_block:
+            # If annotations exist and include a reference marker
+            return (
+                f"{indent}```{match.group('language')}\n"
+                f"{code_block}\n"
+                f"{indent}```{annotations}\n\n"
+                f"{indent}API Reference: {api_links}"
+            )
+        else:
+            # Otherwise, place the API reference before annotations
+            return (
+                f"{indent}```{match.group('language')}\n"
+                f"{code_block}\n"
+                f"{indent}```\n\n"
+                f"{indent}API Reference: {api_links}\n\n"
+                f"{annotations}"
+            )
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
