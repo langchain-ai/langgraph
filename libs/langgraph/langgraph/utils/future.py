@@ -152,7 +152,8 @@ def _ensure_future(
             called_wrap_awaitable = True
         else:
             raise TypeError(
-                "An asyncio.Future, a coroutine or an awaitable is required"
+                "An asyncio.Future, a coroutine or an awaitable is required."
+                f" Got {type(future).__name__} instead."
             )
 
     try:
