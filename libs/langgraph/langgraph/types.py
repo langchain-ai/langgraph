@@ -18,9 +18,8 @@ from typing import (
     cast,
 )
 
-from pydantic import BaseModel
-
 from langchain_core.runnables import Runnable, RunnableConfig
+from pydantic import BaseModel
 from typing_extensions import Self, TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata

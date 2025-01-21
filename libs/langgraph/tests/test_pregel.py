@@ -5114,6 +5114,29 @@ def test_dict_mixed_return() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
 
 
+def test_command_pydantic() -> None:
+    from pydantic import BaseModel
+
+    class State(BaseModel):
+        foo: str
+
+    def node_a(state: State) -> Command[Literal["node_b"]]:
+        return Command(
+            update=State(foo="foo"),
+            goto="node_b",
+        )
+
+    def node_b(state: State):
+        return {"foo": state.foo + "bar"}
+
+    builder = StateGraph(State)
+    builder.add_edge(START, "node_a")
+    builder.add_node(node_a)
+    builder.add_node(node_b)
+    graph = builder.compile()
+    assert graph.invoke(State(foo="")) == {"foo": "foobar"}
+
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_command_with_static_breakpoints(
     request: pytest.FixtureRequest, checkpointer_name: str
