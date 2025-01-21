@@ -144,7 +144,9 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE[key]
     else:
         if is_async_callable(func):
-            run = RunnableCallable(None, func, name=func.__name__, trace=False)
+            run = RunnableCallable(
+                None, func, name=func.__name__, trace=False, recurse=False
+            )
         else:
             afunc = functools.update_wrapper(
                 functools.partial(run_in_executor, None, func), func
@@ -154,6 +156,7 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
                 afunc,
                 name=func.__name__,
                 trace=False,
+                recurse=False,
             )
         seq = RunnableSeq(
             run,
@@ -172,7 +175,12 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
     else:
         if is_async_callable(func):
             run = RunnableCallable(
-                None, func, explode_args=True, name=func.__name__, trace=False
+                None,
+                func,
+                explode_args=True,
+                name=func.__name__,
+                trace=False,
+                recurse=False,
             )
         else:
             run = RunnableCallable(
@@ -181,6 +189,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
                 explode_args=True,
                 name=func.__name__,
                 trace=False,
+                recurse=False,
             )
         seq = RunnableSeq(
             run,
