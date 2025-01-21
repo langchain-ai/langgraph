@@ -194,7 +194,7 @@ LangGraph applications can be deployed using LangGraph Cloud, which provides a r
 
 [Assistants](../concepts/assistants.md) is a configured instance of a template.
 
-See [SDK Reference](../cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.AssistantsClient)
+See [SDK Reference](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.client.AssistantsClient)
 for supported endpoints and other details.
 
 - [How to configure agents](../cloud/how-tos/configuration_cloud.md)
@@ -202,7 +202,7 @@ for supported endpoints and other details.
 
 ### Threads
 
-See [SDK Reference](../cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.ThreadsClient)
+See [SDK Reference](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.client.ThreadsClient)
 for supported endpoints and other details.
 
 - [How to copy threads](../cloud/how-tos/copy_threads.md)
