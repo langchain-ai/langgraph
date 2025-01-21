@@ -121,7 +121,9 @@ Entrypoints typically include a **checkpointer** to persist workflow state, enab
 
 ### Definition
 
-An **entrypoint** is defined by decorating a function with the `@entrypoint` decorator. **The function must accept a single positional argument, which serves as the workflow input.** If you need to pass multiple pieces of data, use a dictionary as the input type for the first argument.
+An **entrypoint** is defined by decorating a function with the `@entrypoint` decorator. 
+
+The function **must accept a single positional argument**, which serves as the workflow input. If you need to pass multiple pieces of data, use a dictionary as the input type for the first argument.
 
 Decorating a function with an `entrypoint` produces an instance of [EntrypointPregel][langgraph.func.EntrypointPregel] which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
 
