@@ -13,6 +13,10 @@ New to LangGraph or LLM app development? Read this material to get up and runnin
 - [LangGraph Template Quickstart](../concepts/template_applications.md): Start building with LangGraph Platform using a template application.
 - [Deploy with LangGraph Cloud Quickstart](../cloud/quick_start.md): Deploy a LangGraph app using LangGraph Cloud.
 
+Looking to implement common workflows and agent architectures using LangGraph [Functional API](../concepts/functional_api.md)? Check out the guide below:
+
+- [LangGraph Cheatsheet For Common Workflows (Functional API)](workflows-functional.ipynb): Overview of the most common workflows and agent architectures in LangGraph.
+
 ## Use cases 🛠️ {#use-cases}
 
 

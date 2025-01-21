@@ -160,7 +160,7 @@ Using the [`@entrypoint`](#entrypoint) yields a [EntrypointPregel][langgraph.fun
 === "Async Stream"
 
     ```python
-    async for chunk in my_workflow.stream(some_input):
+    async for chunk in my_workflow.astream(some_input):
         print(chunk)
     ```
 
@@ -198,7 +198,7 @@ Execution can be **resumed** using the [Command][langgraph.types.Command] primit
     ```python
     from langgraph.types import Command
 
-    async for chunk in my_workflow.stream(Command(resume=some_resume_value)):
+    async for chunk in my_workflow.astream(Command(resume=some_resume_value)):
         print(chunk)
     ```
 
