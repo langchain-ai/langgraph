@@ -127,7 +127,7 @@ See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for i
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
 - [How to add node retries](node-retries.ipynb)
-- [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
+- [How to force tool-calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 - [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 - [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
@@ -144,6 +144,7 @@ These guides show how to use the prebuilt ReAct agent:
 - [How to add thread-level memory to a ReAct Agent](create-react-agent-memory.ipynb)
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
+- [How to return structured output from a ReAct agent](create-react-agent-structured-output.ipynb)
 - [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
 
 Interested in further customizing the ReAct agent? This guide provides an
