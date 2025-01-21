@@ -636,7 +636,7 @@ def create_react_agent(
         if (
             (
                 "remaining_steps" not in state
-                and state["is_last_step"]
+                and state.get("is_last_step", False)
                 and has_tool_calls
             )
             or (
@@ -673,7 +673,7 @@ def create_react_agent(
         if (
             (
                 "remaining_steps" not in state
-                and state["is_last_step"]
+                and state.get("is_last_step", False)
                 and has_tool_calls
             )
             or (
