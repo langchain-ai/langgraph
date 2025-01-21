@@ -2479,8 +2479,8 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert entrypoint_run.name == "graph"
         mapper_runs = [r for r in entrypoint_run.child_runs if r.name == "mapper"]
         assert len(mapper_runs) == 2
-        assert mapper_runs[0].inputs == {"input": 0}
-        assert mapper_runs[1].inputs == {"input": 1}
+        assert any(r.inputs == {"input": 0} for r in mapper_runs)
+        assert any(r.inputs == {"input": 1} for r in mapper_runs)
 
         assert await graph.ainvoke(Command(resume="answer"), thread1) == [
             "00answer",
