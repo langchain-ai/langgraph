@@ -1,17 +1,11 @@
 import importlib
 import inspect
 import logging
-import os
 import re
-from typing import List, Literal, Optional
-from typing_extensions import TypedDict
-
-
 from functools import lru_cache
+from typing import List, Literal, Optional
 
-import nbformat
-from nbconvert.preprocessors import Preprocessor
-
+from typing_extensions import TypedDict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,6 +46,8 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.constants"], "langgraph.types", "Interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "Command", "types"),
+    (["langgraph.func"], "langgraph.func", "entrypoint", "func"),
+    (["langgraph.func"], "langgraph.func", "task", "func"),
     ([], "langgraph.types", "RetryPolicy", "types"),
     ([], "langgraph.checkpoint.base", "Checkpoint", "checkpoints"),
     ([], "langgraph.checkpoint.base", "CheckpointMetadata", "checkpoints"),
@@ -88,8 +84,6 @@ _IMPORT_LANGCHAIN_RE = _make_regular_expression("langchain")
 _IMPORT_LANGGRAPH_RE = _make_regular_expression("langgraph")
 
 
-
-
 @lru_cache(maxsize=10_000)
 def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
     """Get full module name using inspect, with LRU cache to memoize results."""
@@ -108,6 +102,7 @@ def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
     except ImportError as e:
         logger.warning(f"API Reference: Failed to load for class {class_name}, {e}")
         return None
+
 
 def _get_doc_title(data: str, file_name: str) -> str:
     try:
@@ -255,7 +250,8 @@ def update_markdown_with_imports(markdown: str) -> str:
         This function will append an API reference link to the `TextGenerator` class from the `langchain.nlp` module if it's recognized.
     """
     code_block_pattern = re.compile(
-        r'(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```', re.DOTALL
+        r"(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```",
+        re.DOTALL,
     )
 
     def replace_code_block(match: re.Match) -> str:
@@ -267,9 +263,9 @@ def update_markdown_with_imports(markdown: str) -> str:
         Returns:
             str: The modified code block with API reference links appended if applicable.
         """
-        indent = match.group('indent')
-        code_block = match.group('code')
-        language = match.group('language')  # Preserve the language from the regex match
+        indent = match.group("indent")
+        code_block = match.group("code")
+        language = match.group("language")  # Preserve the language from the regex match
         # Retrieve import information from the code block
         imports = get_imports(code_block, "__unused__")
 
@@ -279,11 +275,11 @@ def update_markdown_with_imports(markdown: str) -> str:
             return original_code_block
 
         # Generate API reference links for each import
-        api_links = ' | '.join(
+        api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
         # Return the code block with appended API reference links
-        return f'{original_code_block}\n\n{indent}API Reference: {api_links}'
+        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)

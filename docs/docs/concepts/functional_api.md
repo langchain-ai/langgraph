@@ -249,11 +249,17 @@ For more details, refer to the [API reference](#task-api).
 
 ## Serialization
 
+The inputs and outputs of `@task` and `@entrypoint` must be JSON-serializable to enable checkpointing and workflow resumption. Supported data types include dictionaries, lists, strings, numbers, and booleans.
+
+Serialization ensures that workflow state, such as task results and intermediate values, can be reliably saved and restored. This is critical for enabling human-in-the-loop interactions, fault tolerance, and parallel execution.
+
+Providing non-serializable inputs or outputs will result in a runtime error when a workflow is configured with a checkpointer.
+
 ## Determinism
 
 To leverage features like human-in-the-loop and failure recovery, workflows must encapsulate randomness within tasks. This guarantees that upon resumption, the workflow follows the same sequence of steps, even if task results are non-deterministic.
 
-LangGraph accomplishes this by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved without re-execution.
+LangGraph accomplishes this by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved without re-execution (and without error).
 
 ### Importance of Capturing Randomness
 
