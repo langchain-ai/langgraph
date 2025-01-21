@@ -38,7 +38,7 @@ def workflow(topic: str) -> dict:
     }
 ```
 
-??? example "Full Code"
+??? example "Detailed Explanation"
 
     This workflow will write an essay about the topic "cat" and then pause to get a review from a human. The workflow can be interrupted for an indefinite amount of time until a review is provided.
 
