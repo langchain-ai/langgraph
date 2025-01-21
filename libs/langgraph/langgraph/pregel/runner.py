@@ -407,8 +407,7 @@ class PregelRunner:
             # return a chained future to ensure commit() callback is called
             # before the returned future is resolved, to ensure stream order etc
             try:
-                asyncio.current_task()
-                in_async = True
+                in_async = asyncio.current_task() is not None
             except RuntimeError:
                 in_async = False
             # if in async context return an async future
