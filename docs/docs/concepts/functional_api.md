@@ -1,6 +1,6 @@
 # Functional API
 
-!!! warning "Experimental"
+!!! warning "Beta"
     The Functional API is currently in **beta** and is subject to change.
 
 ## Overview
@@ -114,7 +114,7 @@ The **Functional API** provides two building blocks for building workflows:
 
 ## Entrypoint
 
-An **entrypoint** is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt)
+The `@entrypoint` decorator can be used to create a LangGraph workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt)
 
 Entrypoints typically include a **checkpointer** to persist workflow state, enabling *resumption* from where it was *paused*.
 
@@ -133,7 +133,9 @@ def my_workflow(input: int) -> int:
 
 ### Executing
 
-The [`@entrypoint`](#entrypoint) yields a [Runnable](https://python.langchain.com/docs/concepts/runnables/) object that can be executed using the standard `invoke`, `ainvoke`, `stream`, and `astream` methods.
+Using the [`@entrypoint`](#entrypoint) yields a [EntrypointPregel][]
+
+[Runnable](https://python.langchain.com/docs/concepts/runnables/) object that can be executed using the standard `invoke`, `ainvoke`, `stream`, and `astream` methods.
 
 === "Invoke"
 
@@ -163,7 +165,7 @@ The [`@entrypoint`](#entrypoint) yields a [Runnable](https://python.langchain.co
 
 ### Resuming
 
-When an entrypoint is interrupted, it can be resumed by providing the appropriate command.
+Execution can be **resumed** using the [Command][langgraph.types.Command] primitive.
 
 === "Invoke"
 
@@ -220,7 +222,7 @@ def slow_computation(input_value):
 
 !!! important "Serialization"
 
-    The inputs and outputs of tasks must be JSON-serializable to support checkpointing.
+    The outputs of tasks must be JSON-serializable to support checkpointing.
 
 ### Invoking a Task
 
@@ -249,11 +251,11 @@ Tasks can only be called from within an entrypoint, another task, or a state gra
 2. **Checkpointing:** Results are saved to the persistence layer.
 3. **Interruption Handling:** Workflows can be paused and resumed without re-executing completed tasks.
 
-### When to Use a Task
+### When to Use a **Task**
 
-Use tasks when:
+Use **tasks** when:
 
-- To encapsulate any source of non-determinism, such as API calls, database queries, or random number generation. This ensures that the workflow can be **resumed** after being interrupted, which is critical for **human-in-the-loop** interactions.
+- Graph execution may need to be **resumed** after being **interrupted** (e.g., for **human-in-the-loop**). Use **tasks** to encapsulate any source of non-determinism, such as API calls, database queries, or random number generation.
 - Work needs to be retried to handle failures or inconsistencies.
 - Parallel execution is beneficial for I/O-bound tasks, allowing multiple operations to run concurrently without blocking (e.g., calling multiple APIs).
 
@@ -267,20 +269,20 @@ Providing non-serializable inputs or outputs will result in a runtime error when
 
 ## Determinism
 
-To utilize features like **human-in-the-loop**, any randomness should be encapsulated inside of tasks. This guarantees that when a workflow is halted (e.g., for human in the loop) and then resumed, it will follow the same **sequence of steps**, even if task results are non-deterministic.
+To utilize features like **human-in-the-loop**, any randomness should be encapsulated inside of **tasks**. This guarantees that when execution is halted (e.g., for human in the loop) and then resumed, it will follow the same *sequence of steps*, even if **task** results are non-deterministic.
 
-LangGraph achieves this behavior by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running tasks or tasks with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentially the same 
+LangGraph achieves this behavior by persisting **task** and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the *same sequence of steps*, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running **tasks** or **tasks** with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentially the same 
 
-While different runs of a workflow can produce different results, resuming a **specific** run should always follow the same sequence of recorded steps. This allows LangGraph to efficiently look up task and sub-graph results that were executed prior to the graph being interrupted and avoid recomputing them.
+While different runs of a workflow can produce different results, resuming a **specific** run should always follow the same sequence of recorded steps. This allows LangGraph to efficiently look up **task** and sub-graph results that were executed prior to the graph being interrupted and avoid recomputing them.
 
 ## Idempotency
 
 Idempotency ensures that running the same operation multiple times produces the same
 result. This helps prevent duplicate API calls and redundant processing if a step is
-rerun due to a failure. Always place API calls inside `@task` functions for
+rerun due to a failure. Always place API calls inside **tasks** functions for
 checkpointing, and design them to be idempotent in case of re-execution. Re-execution
-can occur if a task starts, but does not complete successfully. Then, if the workflow
-is resumed, the task will run again. Use idempotency keys or verify existing results to
+can occur if a **task** starts, but does not complete successfully. Then, if the workflow
+is resumed, the **task** will run again. Use idempotency keys or verify existing results to
 avoid duplication.
 
 ## Common Pitfalls
