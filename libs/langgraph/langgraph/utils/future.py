@@ -153,7 +153,7 @@ def _ensure_future(
         else:
             raise TypeError(
                 "An asyncio.Future, a coroutine or an awaitable is required."
-                f" Got {type(future).__name__} instead."
+                f" Got {type(coro_or_future).__name__} instead."
             )
 
     try:
