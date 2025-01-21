@@ -1,7 +1,7 @@
 # Functional API
 
 !!! warning "Beta"
-    The Functional API is currently in **beta** and is subject to change.
+    The Functional API is currently in **beta** and is subject to change. Please [report any issues](https://github.com/langchain-ai/langgraph/issues) or feedback to the LangGraph team. Use the label `#functional-api` when creating issues in Github.
 
 ## Overview
 
@@ -108,8 +108,8 @@ def workflow(topic: str) -> dict:
 
 The **Functional API** provides two primitives for building workflows:
 
-- **[Entrypoint](#entrypoint)**: A decorator that can be used to create a LangGraph workflow from a function. 
-- **[Task](#task)**: Represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously. Invoking a task returns a future-like object, which can be awaited to obtain the result or resolved synchronously.
+- **[Entrypoint](#entrypoint)**: An **entrypoint** is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](human_in_the_loop.md).
+- **[Task](#task)**: Represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously from within an **entrypoint**. Invoking a **task** returns a future-like object, which can be awaited to obtain the result or resolved synchronously.
 
 ## Entrypoint
 
@@ -287,8 +287,6 @@ def graph(numbers: list[int]) -> list[str]:
     return [f.result() for f in futures]
 ```
 
-Tasks can be executed in parallel by invoking them concurrently and waiting for the results. This can improve performance by leveraging multiple cores or distributed resources.
-
 ### Calling subgraphs
 
 The **Functional API** and the [**Graph API**](./low_level.md) can be used together in the same application as they share the same underlying runtime.
@@ -315,7 +313,13 @@ def some_workflow(some_input: dict) -> int:
 
 ## Serialization
 
-The inputs and outputs of `@task` and `@entrypoint` must be JSON-serializable to enable checkpointing and workflow resumption. Supported data types include dictionaries, lists, strings, numbers, and booleans.
+There are two key aspects to serialization in LangGraph:
+
+1. `@entrypoint` inputs and outputs must be JSON-serializable.
+2. `@task` outputs must be JSON-serializable.
+
+These requirements are necessary for enabling checkpointing and workflow resumption. Use python primitives
+like dictionaries, lists, strings, numbers, and booleans to ensure that your inputs and outputs are serializable.
 
 Serialization ensures that workflow state, such as task results and intermediate values, can be reliably saved and restored. This is critical for enabling human-in-the-loop interactions, fault tolerance, and parallel execution.
 
