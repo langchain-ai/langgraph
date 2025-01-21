@@ -4826,6 +4826,13 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             "source": "loop",
             "writes": {
                 "alice": {
+                    "messages": [
+                        _AnyIdHumanMessage(
+                            content="get user name",
+                            additional_kwargs={},
+                            response_metadata={},
+                        ),
+                    ],
                     "user_name": "Meow",
                 }
             },
