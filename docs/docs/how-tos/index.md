@@ -152,6 +152,11 @@ overview of its underlying implementation to help you customize for your own nee
 
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 
+See the below guides for how-to build ReAct agents with the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to create a ReAct agent from scratch (Functional API)](react-agent-from-scratch-functional.ipynb)
+
 ## LangGraph Platform
 
 This section includes how-to guides for LangGraph Platform.
