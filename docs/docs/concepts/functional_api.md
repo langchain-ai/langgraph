@@ -3,16 +3,6 @@
 !!! warning "Experimental"
     The Functional API is currently in **beta** and is subject to change. Please report any issues or feedback to the LangGraph team.
 
-Things that need to be clarified
-
-1. Thread id and persistence
-2. thread id vs. run!
-3. serialization
-4. determinism
-5. idempotency & side-effects
-6. parallelization
-
-
 ## Overview
 
 A **workflow** is a sequence of logic that defines the flow of an application. In LangGraph, workflows can be built using the Functional API or the Graph API.
@@ -23,8 +13,11 @@ The Functional API runs on the same LangGraph runtime as the Graph API, providin
 
 The Functional and Graph APIs can be used together in the same application, allowing you to intermix the two paradigms if needed.
 
+## Example
 
 ```python
+from langgraph.func import entrypoint, task
+
 @task
 def write_essay(topic: str) -> str:
     """Write an essay about the given topic."""
@@ -362,7 +355,7 @@ keys or verify existing results to avoid duplication.
 
 ### Side-effects not in Tasks
 
-=== "Incorrect Example"
+=== "Incorrect"
 
     In this example, a side effect (writing to a file) is directly included in the workflow, making resumption inconsistent.
 
@@ -379,7 +372,7 @@ keys or verify existing results to avoid duplication.
         return value
     ```
 
-=== "Correct Example"
+=== "Correct"
 
     In this example, the side effect is encapsulated in a task, ensuring consistent execution upon resumption.
 
@@ -418,8 +411,6 @@ def graph(input: list[int]) -> list[str]:
     return [m + answer for m in mapped]
 ```
 
-### Running tasks in parallel
-
 Tasks can be executed in parallel by invoking them concurrently and waiting for the results. This can improve performance by leveraging multiple cores or distributed resources.
 
 ```python
@@ -440,7 +431,7 @@ def parallel_workflow(x: int) -> int:
 ```
 
 
-### Calling Subgraphs
+### Calling subgraphs
 
 The functional API and the graph API can be used together in the same application as they share the same underlying runtime.
 
@@ -449,8 +440,9 @@ from langgraph.func import entrypoint
 
 @entrypoint()
 def some_workflow(x: int) -> int:
-    result_1 = graph.invoke(...)
-    # Another graph call
+    # Call a graph defined using the graph API
+    result_1 = some_graph.invoke(...)
+    # Call another graph defined using the graph API
     result_2 = some_other_graph.invoke(...)
     return {
         "result_1": result_1,
