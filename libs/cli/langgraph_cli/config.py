@@ -469,10 +469,11 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         except OSError:
             return False
 
-    npm, yarn, pnpm = [
+    npm, yarn, pnpm, bun = [
         test_file("package-lock.json"),
         test_file("yarn.lock"),
         test_file("pnpm-lock.yaml"),
+        test_file("bun.lockb"),
     ]
 
     if yarn:
@@ -481,6 +482,8 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "pnpm i --frozen-lockfile"
     elif npm:
         install_cmd = "npm ci"
+    elif bun:
+        install_cmd = "bun i"
     else:
         install_cmd = "npm i"
     store_config = config.get("store")
