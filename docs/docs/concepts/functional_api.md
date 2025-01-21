@@ -115,19 +115,17 @@ def workflow(topic: str) -> dict:
 
 ## Building Blocks
 
-The Functional API provides two building blocks for defining workflows:
+The Functional API provides two building blocks for building workflows:
 
-- **[Entrypoint](#entrypoint)**: Define a workflow which can include calls to tasks, other entrypoints, or state graph nodes. Entrypoints configured with a checkpointer enable workflow interruption and resumption, allowing human-in-the-loop interactions.
+- **[Entrypoint](#entrypoint)**: Defines a workflow that can include calls to tasks, other entrypoints, or state graph nodes. Entrypoints configured with a **checkpointer** enable workflow interruption and *resumption*, allowing human-in-the-loop interactions.
 
 - **[Task](#task)**: Represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously. Invoking a task returns a future-like object, which can be awaited to obtain the result or resolved synchronously.
 
-These building blocks provide flexibility to structure workflows while ensuring modularity, reusability, and persistence support.
-
 ## Entrypoint
 
-An entrypoint is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling long-running tasks and interruptions.
+An **entrypoint** is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and **interrupts**.
 
-Entrypoints typically include a checkpointer to persist workflow state, enabling resumption from where it was paused.
+Entrypoints typically include a **checkpointer** to persist workflow state, enabling *resumption* from where it was *paused*.
 
 ### Defining an Entrypoint 
 
@@ -142,54 +140,79 @@ def my_workflow(input: int) -> int:
     return result
 ```
 
-For more information please see the API reference for the [entrypoint][langgraph.func.entrypoint] decorator.
-
-
 ### Executing
 
-The `@entrypoint` yields a Pregel Runnable object.
+The [`@entrypoint`](#entrypoint) yields a [Runnable](https://python.langchain.com/docs/concepts/runnables/) object that can be executed using the 
+standard `invoke`, `ainvoke`, `stream`, and `astream` methods.
 
 === "Invoke"
 
     ```python
-    my_workflow.invoke(42).result()  # Wait for the result synchronously
+    my_workflow.invoke(some_input)  # Wait for the result synchronously
     ```
 
 === "Async Invoke"
 
     ```python
-    await my_workflow.invoke(42)  # Await result asynchronously
+    await my_workflow.ainvoke(some_input)  # Await result asynchronously
     ```
 
 === "Stream"
     
     ```python
-    for item in my_workflow.stream(42):
-        print(item)
+    for chunk in my_workflow.stream(some_input):
+        print(chunk)
     ```
 
 === "Async Stream"
 
     ```python
-    async for item in my_workflow.stream(42):
-        print(item)
+    async for chunk in my_workflow.stream(some_input):
+        print(chunk)
     ```
 
 ### Resuming
 
 When an entrypoint is interrupted, it can be resumed by providing the appropriate command.
 
-=== "Resume"
+=== "Invoke"
 
     ```python
-
     from langgraph.types import Command
+    
+    my_workflow.invoke(Command(resume=some_resume_value))
+    ```
+
+=== "Async Invoke"
+
+    ```python
+    from langgraph.types import Command
+    
+    await my_workflow.ainvoke(Command(resume=some_resume_value))
+    ```
+
+=== "Stream"
+
+    ```python
+    from langgraph.types import Command
+    
+    for chunk in my_workflow.stream(Command(resume=some_resume_value)):
+        print(chunk)
+    ```
+
+=== "Async Stream"
+
+    ```python
+    from langgraph.types import Command
+
+    async for chunk in my_workflow.stream(Command(resume=some_resume_value)):
+        print(chunk)
     ```
 
 
 ## Task
 
-A task is a distinct unit of work in a workflow, such as making an API call, processing data, or performing computations. Tasks support persistence with checkpointing, allowing workflow execution to resume without recomputing results. They can also run asynchronously, enabling parallel execution for better performance.
+A **task** represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously. Invoking a task returns a future, which can be waited on to obtain the result.
 
 ### Defining a Task
 
@@ -238,14 +261,11 @@ Tasks can only be called from within an entrypoint, another task, or a state gra
 
 ### When to Use a Task
 
-
 Use tasks when:
 
+- To encapsulate any source of non-determinism, such as API calls, database queries, or random number generation. This ensures that the workflow can be **resumed** after being interrupted, which is critical for **human-in-the-loop** interactions.
 - Work needs to be retried to handle failures or inconsistencies.
-- Parallel execution is beneficial for I/O-bound tasks, allowing multiple operations to run concurrently without blocking, but it does not improve performance for CPU-bound tasks.
-- Results must be persisted to resume workflows without repeating computations or API calls.
-
-For more details, refer to the [API reference](#task-api).
+- Parallel execution is beneficial for I/O-bound tasks, allowing multiple operations to run concurrently without blocking (e.g., calling multiple APIs).
 
 ## Serialization
 
@@ -257,28 +277,21 @@ Providing non-serializable inputs or outputs will result in a runtime error when
 
 ## Determinism
 
-To leverage features like human-in-the-loop and failure recovery, workflows must encapsulate randomness within tasks. This guarantees that upon resumption, the workflow follows the same sequence of steps, even if task results are non-deterministic.
+To utilize features like **human-in-the-loop**, any randomness should be encapsulated inside of tasks. This guarantees that when a workflow is halted (e.g., for human in the loop) and then resumed, it will follow the same **sequence of steps**, even if task results are non-deterministic.
 
-LangGraph accomplishes this by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved without re-execution (and without error).
+LangGraph achieves this behavior by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running tasks or tasks with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentialy the same 
 
-### Importance of Capturing Randomness
+While different runs of a workflow can produce different results, resuming a **specific** run should always follow the same sequence of recorded steps. This allows LangGraph to efficiently look up task and sub-graph results that were executed prior to the graph being interrupted and avoid recomputing them.
 
-Ensuring proper state capture is crucial for:
+## Idempotency
 
-* Correct Resumption: After an interruption, the workflow should pick up exactly where it left off without re-executing tasks unnecessarily.
-
-* Reliable Checkpointing: Persisted results should align with the workflow's logical flow, ensuring data integrity.
-
-* Predictable Resumption: Even if workflows include randomness, resuming execution should always follow the same recorded sequence of events.
-
-### Key Takeaways
-
-Place operations involving randomness inside tasks to ensure results are saved and reused when resuming.
-
-Avoid using dynamic values like timestamps or random numbers directly in workflow logic unless they are captured within tasks.
-
-While different runs of a workflow can produce different results, resuming a specific run should always follow the same sequence of recorded steps.
-
+Idempotency ensures that running the same operation multiple times produces the same
+result. This helps prevent duplicate API calls and redundant processing if a step is
+rerun due to a failure. Always place API calls inside `@task` functions for
+checkpointing, and design them to be idempotent in case of re-execution. Re-execution
+can occur if a task completes but its successful execution is not persisted due to a
+failure, causing the task to run again when the workflow is resumed. Use idempotency
+keys or verify existing results to avoid duplication.
 
 ## Common Pitfalls
 
@@ -405,7 +418,6 @@ def graph(input: list[int]) -> list[str]:
     return [m + answer for m in mapped]
 ```
 
-
 ### Running tasks in parallel
 
 Tasks can be executed in parallel by invoking them concurrently and waiting for the results. This can improve performance by leveraging multiple cores or distributed resources.
@@ -459,10 +471,3 @@ These APIs can be thought of as two different paradigms for defining workflows, 
 - **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others.
 * **Functional API**: Utilizes an *imperative* programming model for constructing **workflows**. The control flow leverages standard Python primitives, such as conditionals (if/else), loops (for/while), and function calls. This approach allows for a more traditional, step-by-step execution of tasks.
 * **Graph API**: Offers a *declarative* programming model for specifying control flow within a **workflow** through the use of a state machine (graph). This approach defines the workflow as a series of nodes and edges, where each node represents a task or, and edges define the flow of execution between them.
-
-
-
-## What happens when one yields from an entrypoint?
-
-Yielding from an entrypoint streams intermediate results to the consumer. This can be useful for long-running workflows or providing partial results in real-time.
-
