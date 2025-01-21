@@ -1158,7 +1158,7 @@ async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     with pytest.raises(asyncio.TimeoutError):
         async for chunk in graph.astream(1, stream_mode="updates"):
             assert chunk == {"alittlewhile": {"alittlewhile": "1"}}
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(stream_hang_s)
 
     assert inner_task_cancelled
 
@@ -2491,6 +2491,71 @@ async def test_imp_task(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_imp_nested(checkpointer_name: str) -> None:
+    async def mynode(input: list[str]) -> list[str]:
+        return [it + "a" for it in input]
+
+    builder = StateGraph(list[str])
+    builder.add_node(mynode)
+    builder.add_edge(START, "mynode")
+    add_a = builder.compile()
+
+    @task
+    def submapper(input: int) -> str:
+        return str(input)
+
+    @task
+    async def mapper(input: int) -> str:
+        await asyncio.sleep(input / 100)
+        return await submapper(input) * 2
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(input: list[int]) -> list[str]:
+            futures = [mapper(i) for i in input]
+            mapped = await asyncio.gather(*futures)
+            answer = interrupt("question")
+            final = [m + answer for m in mapped]
+            return await add_a.ainvoke(final)
+
+        assert graph.get_input_jsonschema() == {
+            "type": "array",
+            "items": {"type": "integer"},
+            "title": "LangGraphInput",
+        }
+        assert graph.get_output_jsonschema() == {
+            "type": "array",
+            "items": {"type": "string"},
+            "title": "LangGraphOutput",
+        }
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert [c async for c in graph.astream([0, 1], thread1)] == [
+            {"submapper": "0"},
+            {"mapper": "00"},
+            {"submapper": "1"},
+            {"mapper": "11"},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="question",
+                        resumable=True,
+                        ns=[AnyStr("graph:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+
+        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+            "00answera",
+            "11answera",
+        ]
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task_cancel(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         mapper_calls = 0
@@ -2540,7 +2605,6 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
         assert mapper_cancels == 2
 
 
-@pytest.mark.skip("TODO: re-enable")
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_sync_from_async(checkpointer_name: str) -> None:
