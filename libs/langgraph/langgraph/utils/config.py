@@ -23,9 +23,11 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_STORE,
     NS_END,
     NS_SEP,
 )
+from langgraph.store.base import BaseStore
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -332,4 +334,9 @@ def get_config() -> RunnableConfig:
     if var_config := var_child_runnable_config.get():
         return var_config
     else:
-        raise RuntimeError("Called get_configurable outside of a runnable context")
+        raise RuntimeError("Called get_config outside of a runnable context")
+
+
+def get_store() -> BaseStore:
+    config = get_config()
+    return config[CONF][CONFIG_KEY_STORE]
