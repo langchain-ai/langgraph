@@ -121,22 +121,88 @@ Entrypoints typically include a **checkpointer** to persist workflow state, enab
 
 ### Definition
 
-An **entrypoint** is defined by decorating a function with the `@entrypoint` decorator. The function should accept a **single** input argument. If you need to pass multiple arguments, you can use a dictionary.
+An **entrypoint** is defined by decorating a function with the `@entrypoint` decorator. **The function must accept a single positional argument, which serves as the workflow input.** If you need to pass multiple pieces of data, use a dictionary as the input type for the first argument.
 
 Decorating a function with an `entrypoint` produces an instance of [EntrypointPregel][langgraph.func.EntrypointPregel] which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
 
 You will usually want to pass a **checkpointer** to the `@entrypoint` decorator to enable persistence and use features like **human-in-the-loop**.
 
-```python
-from langgraph.func import entrypoint
+=== "Sync"
 
-@entrypoint(checkpointer=checkpointer)
-def my_workflow(some_input: dict) -> int:
-    # some logic that may involve long-running tasks like API calls,
-    # and may be interrupted for human-in-the-loop.
-    ...
-    return result
-```
+    ```python
+    from langgraph.func import entrypoint
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(some_input: dict) -> int:
+        # some logic that may involve long-running tasks like API calls,
+        # and may be interrupted for human-in-the-loop.
+        ...
+        return result
+    ```
+
+=== "Async"
+
+    ```python
+    from langgraph.func import entrypoint
+
+    @entrypoint(checkpointer=checkpointer)
+    async def my_workflow(some_input: dict) -> int:
+        # some logic that may involve long-running tasks like API calls,
+        # and may be interrupted for human-in-the-loop
+        ...
+        return result 
+    ```
+
+=== "StreamWriter"
+
+    ```python
+    from langchain.func import entrypoint
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(some_input: dict, writer: StreamWriter) -> int:
+        # some logic that may involve long-running tasks like API calls,
+        # and may be interrupted for human-in-the-loop
+        ...
+        writer("some data")  # Write custom data to the `custom` stream
+        ...
+        writer("more data")  # Write more custom data to the `custom` stream
+        return result
+    ```
+
+    See the [streaming custom data](#streaming-custom-data) section for more details.
+
+=== "Long-term memory"
+
+    The store is particularly useful for implementing [long-term memory](./memory.md#long-term-memory) in your workflows.
+
+    ```python
+    from langgraph.checkpoint.base import BaseStore
+    from langgraph.func import entrypoint
+    from langgraph.store.memory import InMemoryStore
+
+    in_memory_store = InMemoryStore(...)
+
+    @entrypoint(checkpointer=checkpointer, store=in_memory_store)
+    def my_workflow(some_input: dict, store: BaseStore) -> int:
+        # some logic that may involve long-running tasks like API calls,
+        # and may be interrupted for human-in-the-loop
+    ```
+
+=== "RunnableConfig"
+
+    You can also request a [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) object to access the configuration passed to the entrypoint.
+
+    ```python
+    from langchain_core.runnables import RunnableConfig
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(some_input: dict, config: RunnableConfig) -> int:
+        # some logic that may involve long-running tasks like API calls,
+        # and may be interrupted for human-in-the-loop
+        print(config) # Access the configuration
+        ...
+    ```
+
 
 !!! important "Serialization"
 
