@@ -1,17 +1,15 @@
 # Functional API
 
 !!! warning "Experimental"
-    The Functional API is currently in **beta** and is subject to change. Please report any issues or feedback to the LangGraph team.
+    The Functional API is currently in **beta** and is subject to change.
 
 ## Overview
 
-A **workflow** is a sequence of logic that defines the flow of an application. In LangGraph, workflows can be built using the Functional API or the Graph API.
+LangGraph's **Functional API** allows using standard control flow constructs (e.g., loops, conditionals) to define complex workflows without having to define a graph.
 
-LangGraph's **Functional API** allows using standard control flow constructs (e.g., loops, conditionals) to define complex [workflows](#workflow) without having to define a graph.
+The **Functional API** runs on the same LangGraph runtime as the [**Graph API**](./low_level.md), providing access to features like [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md), and [streaming](streaming.md).
 
-The Functional API runs on the same LangGraph runtime as the Graph API, providing access to features like [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md), and [streaming](streaming.md).
-
-The Functional and Graph APIs can be used together in the same application, allowing you to intermix the two paradigms if needed.
+The **Functional API** and the **Graph API** can be used together in the same application, allowing you to intermix the two paradigms if needed.
 
 ## Example
 
@@ -108,7 +106,7 @@ def workflow(topic: str) -> dict:
 
 ## Building Blocks
 
-The Functional API provides two building blocks for building workflows:
+The **Functional API** provides two building blocks for building workflows:
 
 - **[Entrypoint](#entrypoint)**: Defines a workflow that can include calls to tasks, other entrypoints, or state graph nodes. Entrypoints configured with a **checkpointer** enable workflow interruption and *resumption*, allowing human-in-the-loop interactions.
 
@@ -116,7 +114,7 @@ The Functional API provides two building blocks for building workflows:
 
 ## Entrypoint
 
-An **entrypoint** is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and **interrupts**.
+An **entrypoint** is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt)
 
 Entrypoints typically include a **checkpointer** to persist workflow state, enabling *resumption* from where it was *paused*.
 
@@ -135,8 +133,7 @@ def my_workflow(input: int) -> int:
 
 ### Executing
 
-The [`@entrypoint`](#entrypoint) yields a [Runnable](https://python.langchain.com/docs/concepts/runnables/) object that can be executed using the 
-standard `invoke`, `ainvoke`, `stream`, and `astream` methods.
+The [`@entrypoint`](#entrypoint) yields a [Runnable](https://python.langchain.com/docs/concepts/runnables/) object that can be executed using the standard `invoke`, `ainvoke`, `stream`, and `astream` methods.
 
 === "Invoke"
 
@@ -272,7 +269,7 @@ Providing non-serializable inputs or outputs will result in a runtime error when
 
 To utilize features like **human-in-the-loop**, any randomness should be encapsulated inside of tasks. This guarantees that when a workflow is halted (e.g., for human in the loop) and then resumed, it will follow the same **sequence of steps**, even if task results are non-deterministic.
 
-LangGraph achieves this behavior by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running tasks or tasks with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentialy the same 
+LangGraph achieves this behavior by persisting task and sub-graph results as they execute. A well-designed workflow ensures that resuming execution follows the same sequence of steps, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running tasks or tasks with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentially the same 
 
 While different runs of a workflow can produce different results, resuming a **specific** run should always follow the same sequence of recorded steps. This allows LangGraph to efficiently look up task and sub-graph results that were executed prior to the graph being interrupted and avoid recomputing them.
 
@@ -282,9 +279,9 @@ Idempotency ensures that running the same operation multiple times produces the 
 result. This helps prevent duplicate API calls and redundant processing if a step is
 rerun due to a failure. Always place API calls inside `@task` functions for
 checkpointing, and design them to be idempotent in case of re-execution. Re-execution
-can occur if a task completes but its successful execution is not persisted due to a
-failure, causing the task to run again when the workflow is resumed. Use idempotency
-keys or verify existing results to avoid duplication.
+can occur if a task starts, but does not complete successfully. Then, if the workflow
+is resumed, the task will run again. Use idempotency keys or verify existing results to
+avoid duplication.
 
 ## Common Pitfalls
 
