@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
+from dataclasses import replace
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -67,6 +68,7 @@ from langgraph.errors import (
     EmptyInputError,
     GraphDelegate,
     GraphInterrupt,
+    ParentCommand,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -729,6 +731,16 @@ class PregelLoop(LoopProtocol):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # add current state to parent command
+        if isinstance(exc_value, ParentCommand):
+            cmd = exc_value.args[0]
+            state = (
+                [(self.output_keys, read_channels(self.channels, self.output_keys))]
+                if isinstance(self.output_keys, str)
+                else list(read_channels(self.channels, self.output_keys).items())
+            )
+            exc_value.args = (replace(cmd, update=[*state, *cmd._update_as_tuples()]),)
+        # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:
             # emit one last "values" event, with pending writes applied
