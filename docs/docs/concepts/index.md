@@ -1,6 +1,4 @@
 ---
-hide:
-  - navigation
 title: Concepts
 description: Conceptual Guide for LangGraph
 ---
@@ -15,11 +13,11 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 
 ## LangGraph
 
-**High Level**
+### High Level
 
 - [Why LangGraph?](high_level.md): A high-level overview of LangGraph and its goals.
 
-**Concepts**
+### Concepts
 
 - [LangGraph Glossary](low_level.md): LangGraph workflows are designed as graphs, with nodes representing different components and edges representing the flow of information between them. This guide provides an overview of the key concepts associated with LangGraph graph primitives.
 - [Common Agentic Patterns](agentic_concepts.md): An agent uses an LLM to pick its own control flow to solve more complex problems! Agents are a key building block in many LLM applications. This guide explains the different types of agent architectures and how they can be used to control the flow of an application.
@@ -68,6 +66,7 @@ The LangGraph Platform comprises several components that work together to suppor
 - [Web-hooks](./langgraph_server.md#webhooks): Webhooks allow your running LangGraph application to send data to external services on specific events.
 - [Cron Jobs](./langgraph_server.md#cron-jobs): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.
 - [Double Texting](./double_texting.md): Double texting is a common issue in LLM applications where users may send multiple messages before the graph has finished running. This guide explains how to handle double texting with LangGraph Deploy.
+- [Authentication & Access Control](./auth.md): Learn about options for authentication and access control when deploying the LangGraph Platform.
 
 ### Deployment Options
 

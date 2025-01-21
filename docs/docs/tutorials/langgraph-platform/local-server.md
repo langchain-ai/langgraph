@@ -1,4 +1,4 @@
-# QuickStart: Launch Local LangGraph Server
+# Quickstart: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
 
@@ -86,9 +86,18 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 ## LangGraph Studio Web UI
 
-Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
+LangGraph Studio Web is a specialized UI that you can connect to LangGraph API server to enable visualization, interaction, and debugging of your application locally. Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
 
 >    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+
+!!! info "Connecting to a server with a custom host/port"
+
+    If you are running the LangGraph API server with a custom host / port, you can point the Studio Web UI at it by changing the `baseUrl` URL param. For example, if you are running your server on port 8000, you can change the above URL to the following:
+
+    ```
+    https://smith.langchain.com/studio/baseUrl=http://127.0.0.1:8000
+    ```
+
 
 !!! warning "Safari Compatibility"
     
@@ -171,7 +180,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```js
     const { Client } = await import("@langchain/langgraph-sdk");
 
-    // only set the apiUrl if you changed the default port when calling langgraph up
+    // only set the apiUrl if you changed the default port when calling langgraph dev
     const client = new Client({ apiUrl: "http://localhost:2024"});
 
     const streamResponse = client.runs.stream(
@@ -241,4 +250,4 @@ Access detailed documentation for development and API usage:
 
 - **[LangGraph Server API Reference](../../cloud/reference/api/api_ref.html)**: Explore the LangGraph Server API documentation.  
 - **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md)**: Explore the Python SDK API Reference.
-- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the Python SDK API Reference.
+- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the JS/TS SDK API Reference.

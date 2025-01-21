@@ -25,25 +25,28 @@ The key features of LangGraph Studio are:
 
 ## Types
 
-### Desktop app
+### Development server with web UI
 
-LangGraph Studio is available as a [desktop app](https://studio.langchain.com/) for MacOS users.
+You can [run a local in-memory development server](../tutorials/langgraph-platform/local-server.md) that can be used to connect a local LangGraph app with a web version of the studio.
+For example, if you start the local server with `langgraph dev` (running at `http://127.0.0.1:2024` by default), you can connect to the studio by navigating to:
 
-While in Beta, LangGraph Studio is available for free to all [LangSmith](https://smith.langchain.com/) users on any plan tier.
+```
+https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+```
+
+See [instructions here](../cloud/reference/cli.md#dev) for more information.
+
+The web UI version of the studio will connect to your locally running server — your agent is still running locally and never leaves your device.
 
 ### Cloud studio
 
 If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that
 
-### Development server
+### Desktop app
 
-LangGraph CLI also contains a command for running an in-memory development server that can be used to connect a local LangGraph app with the studio.
-See [instructions here](../cloud/reference/cli.md#dev) for more information.
+LangGraph Studio is available as a [desktop app](https://studio.langchain.com/) for MacOS users.
 
-The way this works is that it runs inside your local environment.
-It will spin up an in-memory, development server to deploy the graph.
-You can then connect to the studio via the Cloud hosted version of LangGraph Platform.
-To be clear, the web studio will connect to your locally running server - your agent is still running locally and never leaves your device.
+While in Beta, LangGraph Studio is available for free to all [LangSmith](https://smith.langchain.com/) users on any plan tier.
 
 ## Studio FAQs
 
@@ -57,7 +60,18 @@ LangGraph Studio (desktop) requires Docker Desktop version 4.24 or higher. Pleas
 
 #### Configuration or environment issues
 
-Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables. 
+Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables.
+
+!!! Important "Note (desktop only)"
+
+    LangGraph Studio Desktop automatically populates `LANGCHAIN_*` environment variables for license verification and tracing, regardless of the contents of the `.env` file. All other environment variables defined in `.env` will be read as normal.
+
+#### Incorrect data region (desktop only)
+
+If you receive a license verification error when attempting to start the LangGraph Server, you may be logged into the incorrect LangSmith data region. Ensure that you're logged into the correct LangSmith data region and ensure that the LangSmith account has access to LangGraph platform.
+
+1. In the top right-hand corner, click the user icon and select `Logout`.
+1. At the login screen, click the `Data Region` dropdown menu and select the appropriate data region. Then click `Login to LangSmith`.
 
 ### How does interrupt work?
 

@@ -13,7 +13,6 @@ from typing import (
     Optional,
     Sequence,
     Type,
-    TypedDict,
     TypeVar,
     Union,
     cast,
@@ -22,13 +21,9 @@ from typing import (
 from pydantic import BaseModel
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self
+from typing_extensions import Self, TypedDict
 
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    CheckpointMetadata,
-    PendingWrite,
-)
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 if TYPE_CHECKING:
     from langgraph.store.base import BaseStore
@@ -45,9 +40,11 @@ except ImportError:
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, Literal[False], BaseCheckpointSaver]
-"""Type of the checkpointer to use for a subgraph. False disables checkpointing,
-even if the parent graph has a checkpointer. None inherits checkpointer."""
+Checkpointer = Union[None, bool, BaseCheckpointSaver]
+"""Type of the checkpointer to use for a subgraph.
+- True enables persistent checkpointing for this subgraph.
+- False disables checkpointing, even if the parent graph has a checkpointer.
+- None inherits checkpointer from the parent graph."""
 
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
@@ -346,10 +343,15 @@ class LoopProtocol:
         self.stop = stop
 
 
-class PregelScratchpad(TypedDict, total=False):
+class PregelScratchpad(TypedDict):
+    # call
+    call_counter: int
+    # interrupt
     interrupt_counter: int
-    used_null_resume: bool
     resume: list[Any]
+    null_resume: Any
+    # subgraph
+    subgraph_counter: int
 
 
 def interrupt(value: Any) -> Any:
@@ -377,7 +379,8 @@ def interrupt(value: Any) -> Any:
     Example:
         ```python
         import uuid
-        from typing import TypedDict, Optional
+        from typing import Optional
+        from typing_extensions import TypedDict
 
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.constants import START
@@ -450,41 +453,30 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        CONFIG_KEY_TASK_ID,
-        CONFIG_KEY_WRITES,
+        MISSING,
         NS_SEP,
-        NULL_TASK_ID,
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_configurable
+    from langgraph.utils.config import get_config
 
-    conf = get_configurable()
+    conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    if "interrupt_counter" not in scratchpad:
-        scratchpad["interrupt_counter"] = 0
-    else:
-        scratchpad["interrupt_counter"] += 1
+    scratchpad["interrupt_counter"] += 1
     idx = scratchpad["interrupt_counter"]
     # find previous resume values
-    task_id = conf[CONFIG_KEY_TASK_ID]
-    writes: list[PendingWrite] = conf[CONFIG_KEY_WRITES]
-    scratchpad.setdefault(
-        "resume", next((w[2] for w in writes if w[0] == task_id and w[1] == RESUME), [])
-    )
     if scratchpad["resume"]:
         if idx < len(scratchpad["resume"]):
             return scratchpad["resume"][idx]
     # find current resume value
-    if not scratchpad.get("used_null_resume"):
-        scratchpad["used_null_resume"] = True
-        for tid, c, v in sorted(writes, key=lambda x: x[0], reverse=True):
-            if tid == NULL_TASK_ID and c == RESUME:
-                assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
-                scratchpad["resume"].append(v)
-                conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
-                return v
+    if scratchpad["null_resume"] is not MISSING:
+        assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
+        v = scratchpad["null_resume"]
+        scratchpad["null_resume"] = MISSING
+        scratchpad["resume"].append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
+        return v
     # no resume value found
     raise GraphInterrupt(
         (

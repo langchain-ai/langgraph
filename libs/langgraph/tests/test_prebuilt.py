@@ -1,4 +1,5 @@
 import dataclasses
+import inspect
 import json
 from functools import partial
 from typing import (
@@ -31,7 +32,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
 from typing_extensions import TypedDict
@@ -46,7 +47,11 @@ from langgraph.prebuilt import (
     create_react_agent,
     tools_condition,
 )
-from langgraph.prebuilt.chat_agent_executor import AgentState, _validate_chat_history
+from langgraph.prebuilt.chat_agent_executor import (
+    AgentState,
+    StructuredResponse,
+    _validate_chat_history,
+)
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
@@ -70,6 +75,7 @@ pytestmark = pytest.mark.anyio
 
 class FakeToolCallingModel(BaseChatModel):
     tool_calls: Optional[list[list[ToolCall]]] = None
+    structured_response: Optional[StructuredResponse] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
@@ -96,6 +102,14 @@ class FakeToolCallingModel(BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "fake-tool-call-model"
+
+    def with_structured_output(
+        self, schema: Type[BaseModel]
+    ) -> Runnable[LanguageModelInput, StructuredResponse]:
+        if self.structured_response is None:
+            raise ValueError("Structured response is not set")
+
+        return RunnableLambda(lambda x: self.structured_response)
 
     def bind_tools(
         self,
@@ -508,6 +522,34 @@ def test__infer_handled_types() -> None:
             return ""
 
         _infer_handled_types(handler)
+
+
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
+)
+def test_react_agent_with_structured_response() -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}], []]
+
+    def get_weather():
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    expected_structured_response = WeatherResponse(temperature=75)
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls, structured_response=expected_structured_response
+    )
+    for response_format in (WeatherResponse, ("Meow", WeatherResponse)):
+        agent = create_react_agent(
+            model, [get_weather], response_format=response_format
+        )
+        response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+        assert response["structured_response"] == expected_structured_response
+        assert len(response["messages"]) == 4
+        assert response["messages"][-2].content == "The weather is sunny and 75°F."
 
 
 # tools for testing Too
@@ -2040,3 +2082,88 @@ def test__get_state_args() -> None:
         return 0.0
 
     assert _get_state_args(foo) == {"a": None, "b": "bar"}
+
+
+def test_inspect_react() -> None:
+    model = FakeToolCallingModel(tool_calls=[])
+    agent = create_react_agent(model, [])
+    inspect.getclosurevars(agent.nodes["agent"].bound.func)
+
+
+def test_react_with_subgraph_tools() -> None:
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define the subgraphs
+    def add(state):
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+    )
+
+    def multiply(state):
+        return {"result": state["a"] * state["b"]}
+
+    multiply_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(multiply)
+        .add_edge(START, "multiply")
+        .compile()
+    )
+
+    multiply_subgraph.invoke({"a": 2, "b": 3})
+
+    # Add subgraphs as tools
+
+    def addition(a: int, b: int):
+        """Add two numbers"""
+        return add_subgraph.invoke({"a": a, "b": b})["result"]
+
+    def multiplication(a: int, b: int):
+        """Multiply two numbers"""
+        return multiply_subgraph.invoke({"a": a, "b": b})["result"]
+
+    model = FakeToolCallingModel(
+        tool_calls=[
+            [
+                {"args": {"a": 2, "b": 3}, "id": "1", "name": "addition"},
+                {"args": {"a": 2, "b": 3}, "id": "2", "name": "multiplication"},
+            ],
+            [],
+        ]
+    )
+    checkpointer = MemorySaver()
+    tool_node = ToolNode([addition, multiplication], handle_tool_errors=False)
+    agent = create_react_agent(model, tool_node, checkpointer=checkpointer)
+    result = agent.invoke(
+        {"messages": [HumanMessage(content="What's 2 + 3 and 2 * 3?")]},
+        config={"configurable": {"thread_id": "1"}},
+    )
+    assert result["messages"] == [
+        _AnyIdHumanMessage(content="What's 2 + 3 and 2 * 3?"),
+        AIMessage(
+            content="What's 2 + 3 and 2 * 3?",
+            id="0",
+            tool_calls=[
+                ToolCall(name="addition", args={"a": 2, "b": 3}, id="1"),
+                ToolCall(name="multiplication", args={"a": 2, "b": 3}, id="2"),
+            ],
+        ),
+        ToolMessage(
+            content="5", name="addition", tool_call_id="1", id=result["messages"][2].id
+        ),
+        ToolMessage(
+            content="6",
+            name="multiplication",
+            tool_call_id="2",
+            id=result["messages"][3].id,
+        ),
+        AIMessage(
+            content="What's 2 + 3 and 2 * 3?-What's 2 + 3 and 2 * 3?-5-6", id="1"
+        ),
+    ]

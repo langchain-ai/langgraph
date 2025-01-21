@@ -1,5 +1,6 @@
 # type: ignore
 
+import re
 from contextlib import contextmanager
 from typing import Any
 from uuid import uuid4
@@ -16,7 +17,7 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -92,9 +93,35 @@ def _base_saver():
 
 
 @contextmanager
+def _shallow_saver():
+    """Fixture for regular connection mode testing with a shallow checkpointer."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with Connection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            checkpointer = ShallowPostgresSaver(conn)
+            checkpointer.setup()
+            yield checkpointer
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@contextmanager
 def _saver(name: str):
     if name == "base":
         with _base_saver() as saver:
+            yield saver
+    elif name == "shallow":
+        with _shallow_saver() as saver:
             yield saver
     elif name == "pool":
         with _pool_saver() as saver:
@@ -155,7 +182,7 @@ def test_data():
     }
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 def test_search(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         configs = test_data["configs"]
@@ -198,7 +225,7 @@ def test_search(saver_name: str, test_data) -> None:
         } == {"", "inner"}
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 def test_null_chars(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         config = saver.put(
@@ -212,3 +239,10 @@ def test_null_chars(saver_name: str, test_data) -> None:
             list(saver.list(None, filter={"my_key": "abc"}))[0].metadata["my_key"]
             == "abc"
         )
+
+
+def test_nonnull_migrations() -> None:
+    _leading_comment_remover = re.compile(r"^/\*.*?\*/")
+    for migration in PostgresSaver.MIGRATIONS:
+        statement = _leading_comment_remover.sub("", migration).split()[0]
+        assert statement.strip()

@@ -62,6 +62,9 @@ The server includes all API endpoints for your graph's runs, threads, assistants
 
 The `langgraph dockerfile` command generates a [Dockerfile](https://docs.docker.com/reference/dockerfile/) that can be used to build images for and deploy instances of the [LangGraph API server](./langgraph_server.md). This is useful if you want to further customize the dockerfile or deploy in a more custom way.
 
+??? note "Updating your langgraph.json file"
+    The `langgraph dockerfile` command translates all the configuration in your `langgraph.json` file into Dockerfile commands. When using this command, you will have to re-run it whenever you update your `langgraph.json` file. Otherwise, your changes will not be reflected when you build or run the dockerfile.
+
 ## Related
 
 - [LangGraph CLI API Reference](../cloud/reference/cli.md)

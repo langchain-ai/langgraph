@@ -5,7 +5,7 @@ request handling in LangGraph. It includes user protocols, authentication contex
 and typed dictionaries for various API operations.
 
 Note:
-    All typing.TypedDict classes use total=False to make all fields optional by default.
+    All typing.TypedDict classes use total=False to make all fields typing.Optional by default.
 """
 
 import functools
@@ -61,23 +61,32 @@ FilterType = typing.Union[
     ],
     typing.Dict[str, str],
 ]
-"""Type for filtering queries.
+"""Response type for authorization handlers.
 
 Supports exact matches and operators:
-    - Simple match: {"field": "value"}
-    - Equals: {"field": {"$eq": "value"}}
+    - Exact match shorthand: {"field": "value"}
+    - Exact match: {"field": {"$eq": "value"}}
     - Contains: {"field": {"$contains": "value"}}
 
 ???+ example "Examples"
+    Simple exact match filter for the resource owner:
     ```python
-    # Simple match
-    filter = {"status": "pending"}
+    filter = {"owner": "user-abcd123"}
+    ```
     
-    # Equals operator
-    filter = {"status": {"$eq": "success"}}
+    Explicit version of the exact match filter:
+    ```python
+    filter = {"owner": {"$eq": "user-abcd123"}}
+    ```
     
-    # Contains operator
-    filter = {"metadata.tags": {"$contains": "important"}}
+    Containment:
+    ```python
+    filter = {"participants": {"$contains": "user-abcd123"}}
+    ```
+
+    Combining filters (treated as a logical `AND`):
+    ```python
+    filter = {"owner": "user-abcd123", "participants": {"$contains": "user-efgh456"}}
     ```
 """
 
@@ -109,9 +118,9 @@ Keys must be strings, values can be any JSON-serializable type.
 
 HandlerResult = typing.Union[None, bool, FilterType]
 """The result of a handler can be:
-- None | True: accept the request.
-- False: reject the request with a 403 error
-- FilterType: filter to apply
+    * None | True: accept the request.
+    * False: reject the request with a 403 error
+    * FilterType: filter to apply
 """
 
 Handler = Callable[..., Awaitable[HandlerResult]]
@@ -143,12 +152,20 @@ class MinimalUser(typing.Protocol):
 
 
 class MinimalUserDict(typing.TypedDict, total=False):
-    """The minimal user dictionary."""
+    """The dictionary representation of a user."""
 
     identity: typing_extensions.Required[str]
+    """The required unique identifier for the user."""
     display_name: str
+    """The typing.Optional display name for the user."""
     is_authenticated: bool
+    """Whether the user is authenticated. Defaults to True."""
     permissions: Sequence[str]
+    """A list of permissions associated with the user.
+    
+    You can use these in your `@auth.on` authorization logic to determine
+    access permissions to different resources.
+    """
 
 
 @typing.runtime_checkable
@@ -174,6 +191,57 @@ class BaseUser(typing.Protocol):
     def permissions(self) -> Sequence[str]:
         """The permissions associated with the user."""
         ...
+
+
+class StudioUser:
+    """A user object that's populated from authenticated requests from the LangGraph studio.
+
+    Note: Studio auth can be disabled in your `langgraph.json` config.
+
+    ```json
+    {
+      "auth": {
+        "disable_studio_auth": true
+      }
+    }
+    ```
+
+    You can use `isinstance` checks in your authorization handlers (`@auth.on`) to control access specifically
+    for developers accessing the instance from the LangGraph Studio UI.
+
+    ???+ example "Examples"
+        ```python
+        @auth.on
+        async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
+            if isinstance(ctx.user, Auth.types.StudioUser):
+                return None
+            ...
+            return False
+        ```
+    """
+
+    __slots__ = ("username", "_is_authenticated", "_permissions")
+
+    def __init__(self, username: str, is_authenticated: bool = False) -> None:
+        self.username = username
+        self._is_authenticated = is_authenticated
+        self._permissions = ["authenticated"] if is_authenticated else []
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._is_authenticated
+
+    @property
+    def display_name(self) -> str:
+        return self.username
+
+    @property
+    def identity(self) -> str:
+        return self.username
+
+    @property
+    def permissions(self) -> Sequence[str]:
+        return self._permissions
 
 
 Authenticator = Callable[
@@ -290,11 +358,34 @@ class AuthContext(BaseAuthContext):
     allowing for fine-grained access control decisions.
     """
 
-    resource: typing.Literal["runs", "threads", "crons", "assistants"]
+    resource: typing.Literal["runs", "threads", "crons", "assistants", "store"]
     """The resource being accessed."""
 
-    action: typing.Literal["create", "read", "update", "delete", "search", "create_run"]
-    """The action being performed on the resource."""
+    action: typing.Literal[
+        "create",
+        "read",
+        "update",
+        "delete",
+        "search",
+        "create_run",
+        "put",
+        "get",
+        "list_namespaces",
+    ]
+    """The action being performed on the resource.
+    
+    Most resources support the following actions:
+    - create: Create a new resource
+    - read: Read information about a resource
+    - update: Update an existing resource
+    - delete: Delete a resource
+    - search: Search for resources
+
+    The store supports the following actions:
+    - put: Add or update a document in the store
+    - get: Get a document from the store
+    - list_namespaces: List the namespaces in the store
+    """
 
 
 class ThreadsCreate(typing.TypedDict, total=False):
@@ -691,6 +782,84 @@ class CronsSearch(typing.TypedDict, total=False):
     """Offset for pagination."""
 
 
+class StoreGet(typing.TypedDict):
+    """Operation to retrieve a specific item by its namespace and key."""
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that uniquely identifies the item's location."""
+
+    key: str
+    """Unique identifier for the item within its specific namespace."""
+
+
+class StoreSearch(typing.TypedDict):
+    """Operation to search for items within a specified namespace hierarchy."""
+
+    namespace: tuple[str, ...]
+    """Prefix filter for defining the search scope."""
+
+    filter: typing.Optional[dict[str, typing.Any]]
+    """Key-value pairs for filtering results based on exact matches or comparison operators."""
+
+    limit: int
+    """Maximum number of items to return in the search results."""
+
+    offset: int
+    """Number of matching items to skip for pagination."""
+
+    query: typing.Optional[str]
+    """Naturalj language search query for semantic search capabilities."""
+
+
+class StoreListNamespaces(typing.TypedDict):
+    """Operation to list and filter namespaces in the store."""
+
+    namespace: typing.Optional[tuple[str, ...]]
+    """Prefix filter namespaces."""
+
+    suffix: typing.Optional[tuple[str, ...]]
+    """Optional conditions for filtering namespaces."""
+
+    max_depth: typing.Optional[int]
+    """Maximum depth of namespace hierarchy to return.
+
+    Note:
+        Namespaces deeper than this level will be truncated.
+    """
+
+    limit: int
+    """Maximum number of namespaces to return."""
+
+    offset: int
+    """Number of namespaces to skip for pagination."""
+
+
+class StorePut(typing.TypedDict):
+    """Operation to store, update, or delete an item in the store."""
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that identifies the location of the item."""
+
+    key: str
+    """Unique identifier for the item within its namespace."""
+
+    value: typing.Optional[dict[str, typing.Any]]
+    """The data to store, or None to mark the item for deletion."""
+
+    index: typing.Optional[typing.Union[typing.Literal[False], list[str]]]
+    """Optional index configuration for full-text search."""
+
+
+class StoreDelete(typing.TypedDict):
+    """Operation to delete an item from the store."""
+
+    namespace: tuple[str, ...]
+    """Hierarchical path that uniquely identifies the item's location."""
+
+    key: str
+    """Unique identifier for the item within its specific namespace."""
+
+
 class on:
     """Namespace for type definitions of different API operations.
 
@@ -826,6 +995,38 @@ class on:
 
             value = CronsSearch
 
+    class store:
+        """Types for store-related operations."""
+
+        value = typing.Union[
+            StoreGet, StoreSearch, StoreListNamespaces, StorePut, StoreDelete
+        ]
+
+        class put:
+            """Type for store put parameters."""
+
+            value = StorePut
+
+        class get:
+            """Type for store get parameters."""
+
+            value = StoreGet
+
+        class search:
+            """Type for store search parameters."""
+
+            value = StoreSearch
+
+        class delete:
+            """Type for store delete parameters."""
+
+            value = StoreDelete
+
+        class list_namespaces:
+            """Type for store list namespaces parameters."""
+
+            value = StoreListNamespaces
+
 
 __all__ = [
     "on",
@@ -841,4 +1042,9 @@ __all__ = [
     "AssistantsUpdate",
     "AssistantsDelete",
     "AssistantsSearch",
+    "StoreGet",
+    "StoreSearch",
+    "StoreListNamespaces",
+    "StorePut",
+    "StoreDelete",
 ]

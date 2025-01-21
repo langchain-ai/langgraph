@@ -21,7 +21,6 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    TypedDict,
     Union,
     get_type_hints,
 )
@@ -36,6 +35,7 @@ from langchain_core.runnables import (
 from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
+from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -50,14 +50,8 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import (
-    CONFIG_KEY_NODE_FINISHED,
-    ERROR,
-    FF_SEND_V2,
-    PULL,
-    START,
-)
-from langgraph.errors import InvalidUpdateError, MultipleSubgraphsError
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
+from langgraph.errors import InvalidUpdateError
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
@@ -78,6 +72,7 @@ from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
     ALL_STORES_SYNC,
+    REGULAR_CHECKPOINTERS_SYNC,
     SHOULD_CHECK_SNAPSHOTS,
 )
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
@@ -624,7 +619,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_run_from_checkpoint_id_retains_previous_writes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -1157,6 +1152,10 @@ def test_pending_writes_resume(
     # both the pending write and the new write were applied, 1 + 2 + 3 = 6
     assert graph.invoke(None, thread1) == {"value": 6}
 
+    if "shallow" in checkpointer_name:
+        assert len(list(checkpointer.list(thread1))) == 1
+        return
+
     # check all final checkpoints
     checkpoints = [c for c in checkpointer.list(thread1)]
     # we should have 3
@@ -1370,31 +1369,17 @@ def test_concurrent_emit_sends() -> None:
     builder.add_conditional_edges("1.1", send_for_profit)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert graph.invoke(["0"]) == (
-        [
-            "0",
-            "1",
-            "1.1",
-            "2|1",
-            "2|2",
-            "2|3",
-            "2|4",
-            "3",
-            "3.1",
-        ]
-        if FF_SEND_V2
-        else [
-            "0",
-            "1",
-            "1.1",
-            "3.1",
-            "2|1",
-            "2|2",
-            "2|3",
-            "2|4",
-            "3",
-        ]
-    )
+    assert graph.invoke(["0"]) == [
+        "0",
+        "1",
+        "1.1",
+        "3.1",
+        "2|1",
+        "2|2",
+        "2|3",
+        "2|4",
+        "3",
+    ]
 
 
 def test_send_sequences() -> None:
@@ -1433,37 +1418,26 @@ def test_send_sequences() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert (
-        graph.invoke(["0"])
-        == [
-            "0",
-            "1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "2|3",
-            "2|4",
-            "3",
-            "3.1",
-        ]
-        if FF_SEND_V2
-        else [
-            "0",
-            "1",
-            "3.1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='2', arg=4))",
-            "3",
-            "2|3",
-            "2|4",
-            "3",
-        ]
-    )
+    assert graph.invoke(["0"]) == [
+        "0",
+        "1",
+        "3.1",
+        "2|Command(goto=Send(node='2', arg=3))",
+        "2|Command(goto=Send(node='2', arg=4))",
+        "3",
+        "2|3",
+        "2|4",
+        "3",
+    ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     mapper_calls = 0
+
+    class Config:
+        model: str
 
     @task()
     def mapper(input: int) -> str:
@@ -1472,12 +1446,56 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         time.sleep(input / 100)
         return str(input) * 2
 
-    @entrypoint(checkpointer=checkpointer)
+    @entrypoint(checkpointer=checkpointer, config_schema=Config)
     def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
         answer = interrupt("question")
         return [m + answer for m in mapped]
+
+    assert graph.get_input_jsonschema() == {
+        "type": "array",
+        "items": {"type": "integer"},
+        "title": "LangGraphInput",
+    }
+    assert graph.get_output_jsonschema() == {
+        "type": "array",
+        "items": {"type": "string"},
+        "title": "LangGraphOutput",
+    }
+    assert graph.get_config_jsonschema() == {
+        "$defs": {
+            "Configurable": {
+                "properties": {
+                    "model": {"default": None, "title": "Model", "type": "string"},
+                    "checkpoint_id": {
+                        "anyOf": [{"type": "string"}, {"type": "null"}],
+                        "default": None,
+                        "description": "Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
+                        "title": "Checkpoint ID",
+                    },
+                    "checkpoint_ns": {
+                        "default": "",
+                        "description": 'Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
+                        "title": "Checkpoint NS",
+                        "type": "string",
+                    },
+                    "thread_id": {
+                        "default": "",
+                        "title": "Thread ID",
+                        "type": "string",
+                    },
+                },
+                "title": "Configurable",
+                "type": "object",
+            }
+        },
+        "properties": {
+            "configurable": {"$ref": "#/$defs/Configurable", "default": None}
+        },
+        "title": "LangGraphConfig",
+        "type": "object",
+    }
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [*graph.stream([0, 1], thread1)] == [
@@ -1504,33 +1522,108 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_imp_nested(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    def mynode(input: list[str]) -> list[str]:
+        return [it + "a" for it in input]
+
+    builder = StateGraph(list[str])
+    builder.add_node(mynode)
+    builder.add_edge(START, "mynode")
+    add_a = builder.compile()
+
+    @task
+    def submapper(input: int) -> str:
+        return str(input)
+
+    @task()
+    def mapper(input: int) -> str:
+        time.sleep(input / 100)
+        return submapper(input).result() * 2
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(input: list[int]) -> list[str]:
+        futures = [mapper(i) for i in input]
+        mapped = [f.result() for f in futures]
+        answer = interrupt("question")
+        final = [m + answer for m in mapped]
+        return add_a.invoke(final)
+
+    assert graph.get_input_jsonschema() == {
+        "type": "array",
+        "items": {"type": "integer"},
+        "title": "LangGraphInput",
+    }
+    assert graph.get_output_jsonschema() == {
+        "type": "array",
+        "items": {"type": "string"},
+        "title": "LangGraphOutput",
+    }
+
+    assert graph.get_graph().draw_mermaid() == snapshot
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert [*graph.stream([0, 1], thread1)] == [
+        {"submapper": "0"},
+        {"mapper": "00"},
+        {"submapper": "1"},
+        {"mapper": "11"},
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="question",
+                    resumable=True,
+                    ns=[AnyStr("graph:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+
+    assert graph.invoke(Command(resume="answer"), thread1) == [
+        "00answera",
+        "11answera",
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_imp_stream_order(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     @task()
-    def foo(state: dict) -> dict:
-        return {"a": state["a"] + "foo", "b": "bar"}
+    def foo(state: dict) -> tuple:
+        return state["a"] + "foo", "bar"
 
-    @task()
-    def bar(state: dict) -> dict:
-        return {"a": state["a"] + state["b"], "c": "bark"}
+    @task
+    def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+        return {"a": a + b, "c": (c or "") + "bark"}
 
-    @task()
+    @task
     def baz(state: dict) -> dict:
         return {"a": state["a"] + "baz", "c": "something else"}
 
     @entrypoint(checkpointer=checkpointer)
     def graph(state: dict) -> dict:
         fut_foo = foo(state)
-        fut_bar = bar(fut_foo.result())
+        fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
 
+    assert graph.get_graph().draw_mermaid() == snapshot
+
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
-        {"foo": {"a": "0foo", "b": "bar"}},
+        {
+            "foo": (
+                "0foo",
+                "bar",
+            )
+        },
         {"bar": {"a": "0foobar", "c": "bark"}},
         {"baz": {"a": "0foobarbaz", "c": "something else"}},
         {"graph": {"a": "0foobarbaz", "c": "something else"}},
@@ -1617,6 +1710,9 @@ def test_invoke_checkpoint_three(
     assert state is not None
     assert state.values.get("total") == 5
     assert state.next == ()
+
+    if "shallow" in checkpointer_name:
+        return
 
     assert len(list(app.get_state_history(thread_1, limit=1))) == 1
     # list all checkpoints for thread 1
@@ -1766,9 +1862,8 @@ def test_invoke_join_then_call_other_pregel(
 
     # add checkpointer
     app.checkpointer = checkpointer
-    # subgraph is called twice in the same node, through .map(), so raises
-    with pytest.raises(MultipleSubgraphsError):
-        app.invoke([2, 3], {"configurable": {"thread_id": "1"}})
+    # subgraph is called twice in the same node, but that works
+    assert app.invoke([2, 3], {"configurable": {"thread_id": "1"}}) == 27
 
     # set inner graph checkpointer NeverCheckpoint
     inner_app.checkpointer = False
@@ -2188,10 +2283,10 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
     @workflow.add_node
     def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -2270,6 +2365,11 @@ def test_in_one_fan_out_state_graph_waiting_edge(
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
+    expected_parent_config = (
+        None
+        if "shallow" in checkpointer_name
+        else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+    )
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "query": "analyzed: query: what is weather in sf",
@@ -2277,8 +2377,14 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         },
         tasks=(PregelTask(AnyStr(), "qa", (PULL, "qa")),),
         next=("qa",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
         metadata={
             "parents": {},
             "source": "update",
@@ -2286,7 +2392,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "writes": {"retriever_one": {"docs": ["doc5"]}},
             "thread_id": "2",
         },
-        parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
+        parent_config=expected_parent_config,
     )
 
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
@@ -2317,10 +2423,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         docs: Annotated[list[str], sorted_add]
 
     def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -2750,11 +2856,11 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         docs: Annotated[list[str], sorted_add]
 
     def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def analyzer_one(data: State) -> State:
         time.sleep(0.1)
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -2840,10 +2946,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         docs: Annotated[list[str], sorted_add]
 
     def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -2913,10 +3019,10 @@ def test_callable_in_conditional_edges_with_no_path_map() -> None:
         query: str
 
     def rewrite(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def analyze(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     class ChooseAnalyzer:
         def __call__(self, data: State) -> str:
@@ -2939,10 +3045,10 @@ def test_function_in_conditional_edges_with_no_path_map() -> None:
         query: str
 
     def rewrite(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def analyze(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     def choose_analyzer(data: State) -> str:
         return "analyzer"
@@ -2975,13 +3081,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
         docs: Annotated[list[str], sorted_add]
 
     def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     def retriever_picker(data: State) -> list[str]:
         return ["analyzer_one", "retriever_two"]
 
     def analyzer_one(data: State) -> State:
-        return {"query": f'analyzed: {data["query"]}'}
+        return {"query": f"analyzed: {data['query']}"}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
@@ -3196,6 +3302,66 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert [*chain.stream({"my_key": "my value", "never_called": never_called})] == [
         {"inner": {"my_key": "my value there"}},
         {"side": {"my_key": "my value there and back again"}},
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_subgraph_checkpoint_true(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    def inner_1(state: InnerState):
+        return {"my_key": " got here", "my_other_key": state["my_key"]}
+
+    def inner_2(state: InnerState):
+        return {"my_key": " and there"}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile(checkpointer=True))
+    graph.add_edge(START, "inner")
+    graph.add_conditional_edges(
+        "inner", lambda s: "inner" if s["my_key"].count("there") < 2 else END
+    )
+    app = graph.compile(checkpointer=checkpointer)
+
+    config = {"configurable": {"thread_id": "2"}}
+    assert [c for c in app.stream({"my_key": ""}, config, subgraphs=True)] == [
+        (("inner",), {"inner_1": {"my_key": " got here", "my_other_key": ""}}),
+        (("inner",), {"inner_2": {"my_key": " and there"}}),
+        ((), {"inner": {"my_key": " got here and there"}}),
+        (
+            ("inner",),
+            {
+                "inner_1": {
+                    "my_key": " got here",
+                    "my_other_key": " got here and there got here and there",
+                }
+            },
+        ),
+        (("inner",), {"inner_2": {"my_key": " and there"}}),
+        (
+            (),
+            {
+                "inner": {
+                    "my_key": " got here and there got here and there got here and there"
+                }
+            },
+        ),
     ]
 
 
@@ -4149,10 +4315,12 @@ def test_store_injected(
         def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):
             assert isinstance(store, BaseStore)
             store.put(
-                namespace
-                if self.i is not None
-                and config["configurable"]["thread_id"] in (thread_1, thread_2)
-                else (f"foo_{self.i}", "bar"),
+                (
+                    namespace
+                    if self.i is not None
+                    and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                    else (f"foo_{self.i}", "bar")
+                ),
                 doc_id,
                 {
                     **doc,
@@ -4167,12 +4335,6 @@ def test_store_injected(
     builder.add_edge("__start__", "node")
     N = 500
     M = 1
-    if "duckdb" in store_name:
-        logger.warning(
-            "DuckDB store implementation has a known issue that does not"
-            " support concurrent writes, so we're reducing the test scope"
-        )
-        N = M = 1
 
     for i in range(N):
         builder.add_node(f"node_{i}", Node(i))
@@ -4670,13 +4832,17 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             "parents": {},
         },
         created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
+        parent_config=(
+            None
+            if "shallow" in checkpointer_name
+            else {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             }
-        },
+        ),
         tasks=(),
     )
 
@@ -4851,6 +5017,73 @@ def test_interrupt_loop(request: pytest.FixtureRequest, checkpointer_name: str):
     assert [event for event in graph.stream(Command(resume="19"), thread1)] == [
         {"node": {"age": 19}},
     ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_interrupt_functional(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
+
+    @task
+    def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo"}
+
+    @task
+    def bar(state: dict) -> dict:
+        return {"a": state["a"] + "bar", "b": state["b"]}
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(inputs: dict) -> dict:
+        fut_foo = foo(inputs)
+        value = interrupt("Provide value for bar:")
+        bar_input = {**fut_foo.result(), "b": value}
+        fut_bar = bar(bar_input)
+        return fut_bar.result()
+
+    assert graph.get_graph().draw_mermaid() == snapshot
+
+    config = {"configurable": {"thread_id": "1"}}
+    # First run, interrupted at bar
+    graph.invoke({"a": ""}, config)
+    # Resume with an answer
+    res = graph.invoke(Command(resume="bar"), config)
+    assert res == {"a": "foobar", "b": "bar"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_interrupt_task_functional(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
+
+    @task
+    def foo(state: dict) -> dict:
+        return {"a": state["a"] + "foo"}
+
+    @task
+    def bar(state: dict) -> dict:
+        value = interrupt("Provide value for bar:")
+        return {"a": state["a"] + value}
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(inputs: dict) -> dict:
+        fut_foo = foo(inputs)
+        fut_bar = bar(fut_foo.result())
+        return fut_bar.result()
+
+    assert graph.get_graph().draw_mermaid() == snapshot
+
+    config = {"configurable": {"thread_id": "1"}}
+    # First run, interrupted at bar
+    graph.invoke({"a": ""}, config)
+    # Resume with an answer
+    res = graph.invoke(Command(resume="bar"), config)
+    assert res == {"a": "foobar"}
 
 
 def test_root_mixed_return() -> None:
@@ -5203,10 +5436,14 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     assert state is not None
     assert state.values == {"steps": ["start"], "attempt": 1}  # input state saved
     assert state.next == ("node1",)  # Should retry failed node
+    assert "RuntimeError('Simulated failure')" in state.tasks[0].error
 
     # Retry with updated attempt count
     result = graph.invoke({"steps": [], "attempt": 2}, config)
     assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
+
+    if "shallow" in checkpointer_name:
+        return
 
     # Verify checkpoint history shows both attempts
     history = list(graph.get_state_history(config))
@@ -5215,3 +5452,689 @@ def test_checkpoint_recovery(request: pytest.FixtureRequest, checkpointer_name: 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
     assert "RuntimeError('Simulated failure')" in failed_checkpoint.tasks[0].error
+
+
+def test_multiple_updates_root() -> None:
+    def node_a(state):
+        return [Command(update="a1"), Command(update="a2")]
+
+    def node_b(state):
+        return "b"
+
+    graph = (
+        StateGraph(Annotated[str, operator.add])
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert graph.invoke("") == "a1a2b"
+
+    # only streams the last update from node_a
+    assert [c for c in graph.stream("", stream_mode="updates")] == [
+        {"node_a": ["a1", "a2"]},
+        {"node_b": "b"},
+    ]
+
+
+def test_multiple_updates() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def node_a(state):
+        return [Command(update={"foo": "a1"}), Command(update={"foo": "a2"})]
+
+    def node_b(state):
+        return {"foo": "b"}
+
+    graph = (
+        StateGraph(State)
+        .add_sequence([node_a, node_b])
+        .add_edge(START, "node_a")
+        .compile()
+    )
+
+    assert graph.invoke({"foo": ""}) == {
+        "foo": "a1a2b",
+    }
+
+    # only streams the last update from node_a
+    assert [c for c in graph.stream({"foo": ""}, stream_mode="updates")] == [
+        {"node_a": [{"foo": "a1"}, {"foo": "a2"}]},
+        {"node_b": {"foo": "b"}},
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_falsy_return_from_task(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+):
+    """Test with a falsy return from a task."""
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    @task
+    def falsy_task() -> bool:
+        return False
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(state: dict) -> dict:
+        """React tool."""
+        falsy_task().result()
+        interrupt("test")
+
+    assert graph.get_graph().draw_mermaid() == snapshot
+
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    graph.invoke({"a": 5}, configurable)
+    graph.invoke(Command(resume="123"), configurable)
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_interrupts_imperative(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+):
+    """Test multiple interrupts with an imperative API."""
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    counter = 0
+
+    @task
+    def double(x: int) -> int:
+        """Increment the counter."""
+        nonlocal counter
+        counter += 1
+        return 2 * x
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(state: dict) -> dict:
+        """React tool."""
+
+        values = []
+
+        for idx in [1, 2, 3]:
+            values.extend([double(idx).result(), interrupt({"a": "boo"})])
+
+        return {"values": values}
+
+    assert graph.get_graph().draw_mermaid() == snapshot
+
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    graph.invoke({}, configurable)
+    graph.invoke(Command(resume="a"), configurable)
+    graph.invoke(Command(resume="b"), configurable)
+    result = graph.invoke(Command(resume="c"), configurable)
+    # `double` value should be cached appropriately when used w/ `interrupt`
+    assert result == {
+        "values": [2, "a", 4, "b", 6, "c"],
+    }
+    assert counter == 3
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_double_interrupt_subgraph(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class AgentState(TypedDict):
+        input: str
+
+    def node_1(state: AgentState):
+        result = interrupt("interrupt node 1")
+        return {"input": result}
+
+    def node_2(state: AgentState):
+        result = interrupt("interrupt node 2")
+        return {"input": result}
+
+    subgraph_builder = (
+        StateGraph(AgentState)
+        .add_node("node_1", node_1)
+        .add_node("node_2", node_2)
+        .add_edge(START, "node_1")
+        .add_edge("node_1", "node_2")
+        .add_edge("node_2", END)
+    )
+
+    # invoke the sub graph
+    subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+    thread = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    assert [c for c in subgraph.stream({"input": "test"}, thread)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 1",
+                    resumable=True,
+                    ns=[AnyStr("node_1:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+    # resume from the first interrupt
+    assert [c for c in subgraph.stream(Command(resume="123"), thread)] == [
+        {
+            "node_1": {"input": "123"},
+        },
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 2",
+                    resumable=True,
+                    ns=[AnyStr("node_2:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+    # resume from the second interrupt
+    assert [c for c in subgraph.stream(Command(resume="123"), thread)] == [
+        {
+            "node_2": {"input": "123"},
+        },
+    ]
+
+    subgraph = subgraph_builder.compile()
+
+    def invoke_sub_agent(state: AgentState):
+        return subgraph.invoke(state)
+
+    parent_agent = (
+        StateGraph(AgentState)
+        .add_node("invoke_sub_agent", invoke_sub_agent)
+        .add_edge(START, "invoke_sub_agent")
+        .add_edge("invoke_sub_agent", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+    assert [c for c in parent_agent.stream({"input": "test"}, thread)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 1",
+                    resumable=True,
+                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+
+    # resume from the first interrupt
+    assert [c for c in parent_agent.stream(Command(resume=True), thread)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="interrupt node 2",
+                    resumable=True,
+                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
+                    when="during",
+                ),
+            )
+        }
+    ]
+
+    # resume from 2nd interrupt
+    assert [c for c in parent_agent.stream(Command(resume=True), thread)] == [
+        {
+            "invoke_sub_agent": {"input": True},
+        },
+    ]
+
+
+def test_sync_streaming_with_functional_api() -> None:
+    """Test streaming with functional API.
+
+    This test verifies that we're able to stream results as they're being generated
+    rather than have all the results arrive at once after the graph has completed.
+
+    The time of arrival between the two updates corresponding to the two `slow` tasks
+    should be greater than the time delay between the two tasks.
+    """
+
+    time_delay = 0.01
+
+    @task()
+    def slow() -> dict:
+        time.sleep(time_delay)  # Simulate a delay of 10 ms
+        return {"tic": time.time()}
+
+    @entrypoint()
+    def graph(inputs: dict) -> list:
+        first = slow().result()
+        second = slow().result()
+        return [first, second]
+
+    arrival_times = []
+
+    for chunk in graph.stream({}):
+        if "slow" not in chunk:  # We'll just look at the updates from `slow`
+            continue
+        arrival_times.append(time.time())
+
+    assert len(arrival_times) == 2
+    delta = arrival_times[1] - arrival_times[0]
+    # Delta cannot be less than 10 ms if it is streaming as results are generated.
+    assert delta > time_delay
+
+
+def test_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert foo.invoke({"a": "1"}, config) == {"a": "1"}
+
+    @entrypoint()
+    def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+
+
+async def test_async_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    async def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
+
+    @entrypoint()
+    async def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+
+
+def test_entrypoint_stateful() -> None:
+    """Test stateful entrypoint invoke."""
+
+    # Test invoke
+    states = []
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "2"}, config) == {
+        "current": {"a": "2"},
+        "previous": {"current": {"a": "1"}, "previous": None},
+    }
+    assert foo.invoke({"a": "3"}, config) == {
+        "current": {"a": "3"},
+        "previous": {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": None},
+        },
+    }
+    assert states == [
+        None,
+        {"current": {"a": "1"}, "previous": None},
+        {"current": {"a": "2"}, "previous": {"current": {"a": "1"}, "previous": None}},
+    ]
+
+    # Test stream
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+    items = [item for item in foo.stream({"a": "1"}, config)]
+    assert items == [{"foo": {"current": {"a": "1"}, "previous": None}}]
+
+
+def test_entrypoint_from_sync_generator() -> None:
+    """@entrypoint does not support sync generators."""
+    previous_return_values = []
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert foo.invoke({"a": "1"}, config) == ["a", "b"]
+    assert previous_return_values == [None]
+    assert foo.invoke({"a": "2"}, config) == ["a", "b"]
+    assert previous_return_values == [None, ["a", "b"]]
+
+
+def test_entrypoint_request_stream_writer() -> None:
+    """Test using a stream writer with an entrypoint."""
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, writer: StreamWriter) -> Any:
+        writer("a")
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Different invocations
+    # Are any of these confusing or unexpected?
+    assert list(foo.invoke({}, config)) == ["b"]
+    assert list(foo.stream({}, config)) == ["a", "b"]
+
+    # Stream modes
+    assert list(foo.stream({}, config, stream_mode=["updates"])) == [
+        ("updates", {"foo": ["b"]})
+    ]
+    assert list(foo.stream({}, config, stream_mode=["values"])) == [("values", ["b"])]
+    assert list(foo.stream({}, config, stream_mode=["custom"])) == [
+        (
+            "custom",
+            "a",
+        ),
+        (
+            "custom",
+            "b",
+        ),
+    ]
+
+
+async def test_entrypoint_from_async_generator() -> None:
+    """@entrypoint does not support sync generators."""
+    # Test invoke
+    previous_return_values = []
+
+    # In this version reducers do not work
+    @entrypoint(checkpointer=MemorySaver())
+    async def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
+    assert previous_return_values == [None]
+    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
+    assert previous_return_values == [None, ["a", "b"]]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define the subgraphs
+    def add(state):
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+    )
+
+    def multiply(state):
+        return {"result": state["a"] * state["b"]}
+
+    multiply_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(multiply)
+        .add_edge(START, "multiply")
+        .compile()
+    )
+
+    # Test calling the same subgraph multiple times
+    def call_same_subgraph(state):
+        result = add_subgraph.invoke(state)
+        another_result = add_subgraph.invoke({"a": result["result"], "b": 10})
+        return another_result
+
+    parent_call_same_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(call_same_subgraph)
+        .add_edge(START, "call_same_subgraph")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_call_same_subgraph.invoke({"a": 2, "b": 3}, config) == {"result": 15}
+
+    # Test calling multiple subgraphs
+    class Output(TypedDict):
+        add_result: int
+        multiply_result: int
+
+    def call_multiple_subgraphs(state):
+        add_result = add_subgraph.invoke(state)
+        multiply_result = multiply_subgraph.invoke(state)
+        return {
+            "add_result": add_result["result"],
+            "multiply_result": multiply_result["result"],
+        }
+
+    parent_call_multiple_subgraphs = (
+        StateGraph(State, output=Output)
+        .add_node(call_multiple_subgraphs)
+        .add_edge(START, "call_multiple_subgraphs")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    assert parent_call_multiple_subgraphs.invoke({"a": 2, "b": 3}, config) == {
+        "add_result": 5,
+        "multiply_result": 6,
+    }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs_functional(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    # Define addition subgraph
+    @entrypoint()
+    def add(inputs):
+        a, b = inputs
+        return a + b
+
+    # Define multiplication subgraph using tasks
+    @task
+    def multiply_task(a, b):
+        return a * b
+
+    @entrypoint()
+    def multiply(inputs):
+        return multiply_task(*inputs).result()
+
+    # Test calling the same subgraph multiple times
+    @task
+    def call_same_subgraph(a, b):
+        result = add.invoke([a, b])
+        another_result = add.invoke([result, 10])
+        return another_result
+
+    @entrypoint(checkpointer=checkpointer)
+    def parent_call_same_subgraph(inputs):
+        return call_same_subgraph(*inputs).result()
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_call_same_subgraph.invoke([2, 3], config) == 15
+
+    # Test calling multiple subgraphs
+    @task
+    def call_multiple_subgraphs(a, b):
+        add_result = add.invoke([a, b])
+        multiply_result = multiply.invoke([a, b])
+        return [add_result, multiply_result]
+
+    @entrypoint(checkpointer=checkpointer)
+    def parent_call_multiple_subgraphs(inputs):
+        return call_multiple_subgraphs(*inputs).result()
+
+    config = {"configurable": {"thread_id": "2"}}
+    assert parent_call_multiple_subgraphs.invoke([2, 3], config) == [5, 6]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs_mixed(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define the subgraphs
+    def add(state):
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+    )
+
+    def multiply(state):
+        return {"result": state["a"] * state["b"]}
+
+    multiply_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(multiply)
+        .add_edge(START, "multiply")
+        .compile()
+    )
+
+    # Test calling the same subgraph multiple times
+    @task
+    def call_same_subgraph(a, b):
+        result = add_subgraph.invoke({"a": a, "b": b})["result"]
+        another_result = add_subgraph.invoke({"a": result, "b": 10})["result"]
+        return another_result
+
+    @entrypoint(checkpointer=checkpointer)
+    def parent_call_same_subgraph(inputs):
+        return call_same_subgraph(*inputs).result()
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_call_same_subgraph.invoke([2, 3], config) == 15
+
+    # Test calling multiple subgraphs
+    @task
+    def call_multiple_subgraphs(a, b):
+        add_result = add_subgraph.invoke({"a": a, "b": b})["result"]
+        multiply_result = multiply_subgraph.invoke({"a": a, "b": b})["result"]
+        return [add_result, multiply_result]
+
+    @entrypoint(checkpointer=checkpointer)
+    def parent_call_multiple_subgraphs(inputs):
+        return call_multiple_subgraphs(*inputs).result()
+
+    config = {"configurable": {"thread_id": "2"}}
+    assert parent_call_multiple_subgraphs.invoke([2, 3], config) == [5, 6]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs_mixed_checkpointer(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class SubgraphState(TypedDict):
+        sub_counter: Annotated[int, operator.add]
+
+    def subgraph_node(state):
+        return {"sub_counter": 2}
+
+    sub_graph_1 = (
+        StateGraph(SubgraphState)
+        .add_node(subgraph_node)
+        .add_edge(START, "subgraph_node")
+        .compile(checkpointer=True)
+    )
+
+    class OtherSubgraphState(TypedDict):
+        other_sub_counter: Annotated[int, operator.add]
+
+    def other_subgraph_node(state):
+        return {"other_sub_counter": 3}
+
+    sub_graph_2 = (
+        StateGraph(OtherSubgraphState)
+        .add_node(other_subgraph_node)
+        .add_edge(START, "other_subgraph_node")
+        .compile()
+    )
+
+    class ParentState(TypedDict):
+        parent_counter: int
+
+    def parent_node(state):
+        result = sub_graph_1.invoke({"sub_counter": state["parent_counter"]})
+        other_result = sub_graph_2.invoke({"other_sub_counter": result["sub_counter"]})
+        return {"parent_counter": other_result["other_sub_counter"]}
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node(parent_node)
+        .add_edge(START, "parent_node")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_graph.invoke({"parent_counter": 0}, config) == {"parent_counter": 5}
+    assert parent_graph.invoke({"parent_counter": 0}, config) == {"parent_counter": 7}
+    config = {"configurable": {"thread_id": "2"}}
+    assert [
+        c
+        for c in parent_graph.stream(
+            {"parent_counter": 0}, config, subgraphs=True, stream_mode="updates"
+        )
+    ] == [
+        (("parent_node",), {"subgraph_node": {"sub_counter": 2}}),
+        (
+            (AnyStr("parent_node:"), "1"),
+            {"other_subgraph_node": {"other_sub_counter": 3}},
+        ),
+        ((), {"parent_node": {"parent_counter": 5}}),
+    ]
+    assert [
+        c
+        for c in parent_graph.stream(
+            {"parent_counter": 0}, config, subgraphs=True, stream_mode="updates"
+        )
+    ] == [
+        (("parent_node",), {"subgraph_node": {"sub_counter": 2}}),
+        (
+            (AnyStr("parent_node:"), "1"),
+            {"other_subgraph_node": {"other_sub_counter": 3}},
+        ),
+        ((), {"parent_node": {"parent_counter": 7}}),
+    ]

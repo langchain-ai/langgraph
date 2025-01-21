@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
 from uuid import UUID
 
@@ -8,10 +9,9 @@ from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
-    FF_SEND_V2,
     INTERRUPT,
+    MISSING,
     NULL_TASK_ID,
-    PUSH,
     RESUME,
     RETURN,
     SELF,
@@ -82,7 +82,7 @@ def map_command(
             sends = [cmd.goto]
         for send in sends:
             if isinstance(send, Send):
-                yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+                yield (NULL_TASK_ID, TASKS, send)
             elif isinstance(send, str):
                 yield (NULL_TASK_ID, f"branch:{START}:{SELF}:{send}", START)
             else:
@@ -174,19 +174,35 @@ def map_output_updates(
         return
     updated: list[tuple[str, Any]] = []
     for task, writes in output_tasks:
-        if rtn := next((value for chan, value in writes if chan == RETURN), None):
+        rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
+        if rtn is not MISSING:
             updated.append((task.name, rtn))
         elif isinstance(output_channels, str):
             updated.extend(
                 (task.name, value) for chan, value in writes if chan == output_channels
             )
         elif any(chan in output_channels for chan, _ in writes):
-            updated.append(
-                (
-                    task.name,
-                    {chan: value for chan, value in writes if chan in output_channels},
+            counts = Counter(chan for chan, _ in writes)
+            if any(counts[chan] > 1 for chan in output_channels):
+                updated.extend(
+                    (
+                        task.name,
+                        {chan: value},
+                    )
+                    for chan, value in writes
+                    if chan in output_channels
                 )
-            )
+            else:
+                updated.append(
+                    (
+                        task.name,
+                        {
+                            chan: value
+                            for chan, value in writes
+                            if chan in output_channels
+                        },
+                    )
+                )
     grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)
