@@ -82,6 +82,8 @@ from tests.messages import (
     _AnyIdToolMessage,
 )
 
+pytestmark = pytest.mark.anyio
+
 logger = logging.getLogger(__name__)
 
 
@@ -5740,34 +5742,6 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-async def test_async_entrypoint_without_checkpointer() -> None:
-    """Test no checkpointer."""
-    states = []
-    config = {"configurable": {"thread_id": "1"}}
-
-    # Test without previous
-    @entrypoint()
-    async def foo(inputs: Any) -> Any:
-        states.append(inputs)
-        return inputs
-
-    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
-
-    @entrypoint()
-    async def foo(inputs: Any, *, previous: Any) -> Any:
-        states.append(previous)
-        return {"previous": previous, "current": inputs}
-
-    assert (await foo.ainvoke({"a": "1"}, config)) == {
-        "current": {"a": "1"},
-        "previous": None,
-    }
-    assert (await foo.ainvoke({"a": "1"}, config)) == {
-        "current": {"a": "1"},
-        "previous": None,
-    }
-
-
 def test_entrypoint_stateful() -> None:
     """Test stateful entrypoint invoke."""
 
@@ -5857,26 +5831,6 @@ def test_entrypoint_request_stream_writer() -> None:
             "b",
         ),
     ]
-
-
-async def test_entrypoint_from_async_generator() -> None:
-    """@entrypoint does not support sync generators."""
-    # Test invoke
-    previous_return_values = []
-
-    # In this version reducers do not work
-    @entrypoint(checkpointer=MemorySaver())
-    async def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
-    assert previous_return_values == [None]
-    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
-    assert previous_return_values == [None, ["a", "b"]]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

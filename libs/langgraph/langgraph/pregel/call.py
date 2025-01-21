@@ -1,12 +1,25 @@
 """Utility to convert a user provided function into a Runnable with a ChannelWrite."""
 
+import asyncio
+import concurrent.futures
+import functools
+import inspect
 import sys
 import types
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TypeVar, Union
 
-from langgraph.constants import RETURN
+from typing_extensions import ParamSpec
+
+from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN, TAG_HIDDEN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.utils.runnable import RunnableSeq, coerce_to_runnable
+from langgraph.types import RetryPolicy
+from langgraph.utils.config import get_config
+from langgraph.utils.runnable import (
+    RunnableCallable,
+    RunnableSeq,
+    is_async_callable,
+    run_in_executor,
+)
 
 ##
 # Utilities borrowed from cloudpickle.
@@ -107,18 +120,96 @@ def _lookup_module_and_qualname(
     return module, name
 
 
-def get_runnable_for_func(func: Callable[..., Any]) -> RunnableSeq:
-    if func in CACHE:
-        return CACHE[func]
+def _explode_args_trace_inputs(
+    sig: inspect.Signature, input: tuple[tuple[Any, ...], dict[str, Any]]
+) -> dict[str, Any]:
+    args, kwargs = input
+    bound = sig.bind_partial(*args, **kwargs)
+    bound.apply_defaults()
+    arguments = dict(bound.arguments)
+    arguments.pop("self", None)
+    arguments.pop("cls", None)
+    for param_name, param in sig.parameters.items():
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            # Update with the **kwargs, and remove the original entry
+            # This is to help flatten out keyword arguments
+            if param_name in arguments:
+                arguments.update(arguments.pop(param_name))
+    return arguments
+
+
+def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
+    key = (func, False)
+    if key in CACHE:
+        return CACHE[key]
     else:
+        if is_async_callable(func):
+            run = RunnableCallable(None, func, name=func.__name__, trace=False)
+        else:
+            afunc = functools.update_wrapper(
+                functools.partial(run_in_executor, None, func), func
+            )
+            run = RunnableCallable(
+                func,
+                afunc,
+                name=func.__name__,
+                trace=False,
+            )
         seq = RunnableSeq(
-            coerce_to_runnable(func, name=None, trace=False),
-            ChannelWrite([ChannelWriteEntry(RETURN)]),
+            run,
+            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
             name=func.__name__,
         )
         if not _lookup_module_and_qualname(func):
             return seq
-        return CACHE.setdefault(func, seq)
+        return CACHE.setdefault(key, seq)
 
 
-CACHE: dict[Callable[..., Any], RunnableSeq] = {}
+def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
+    key = (func, True)
+    if key in CACHE:
+        return CACHE[key]
+    else:
+        if is_async_callable(func):
+            run = RunnableCallable(
+                None, func, explode_args=True, name=func.__name__, trace=False
+            )
+        else:
+            run = RunnableCallable(
+                func,
+                functools.wraps(func)(functools.partial(run_in_executor, None, func)),
+                explode_args=True,
+                name=func.__name__,
+                trace=False,
+            )
+        seq = RunnableSeq(
+            run,
+            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
+            name=func.__name__,
+            trace_inputs=functools.partial(
+                _explode_args_trace_inputs, inspect.signature(func)
+            ),
+        )
+        if not _lookup_module_and_qualname(func):
+            return seq
+        return CACHE.setdefault(key, seq)
+
+
+CACHE: dict[tuple[Callable[..., Any], bool], RunnableSeq] = {}
+
+
+P = ParamSpec("P")
+P1 = TypeVar("P1")
+T = TypeVar("T")
+
+
+def call(
+    func: Callable[P, T],
+    *args: Any,
+    retry: Optional[RetryPolicy] = None,
+    **kwargs: Any,
+) -> Union[concurrent.futures.Future[T], asyncio.Future[T]]:
+    config = get_config()
+    impl = config[CONF][CONFIG_KEY_CALL]
+    fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
+    return fut
