@@ -13,6 +13,7 @@ The **Functional API** and the **Graph API** can be used together in the same ap
 
 ## Example
 
+Below we demonstrate a simple application that writes an essay and [interrupts](human_in_the_loop.md) to request human review.
 ```python
 from langgraph.func import entrypoint, task
 
@@ -115,7 +116,7 @@ The **Functional API** provides two primitives for building workflows:
 
 The `@entrypoint` decorator can be used to create a LangGraph workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt)
 
-Entrypoints typically include a **checkpointer** to persist workflow state, enabling *resumption* from where it was *paused*.
+Entrypoints typically include a **checkpointer** to persist workflow state, enabling *resumption* from where it was *interrupted*.
 
 ### Definition
 
