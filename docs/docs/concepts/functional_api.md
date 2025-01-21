@@ -384,12 +384,12 @@ for chunk in main.stream({"number": 1}, stream_mode=["custom", "updates"], confi
     parameter name appears in the function signature with that *exact* name.
 
 
-### Retry Policy
+### Retry policy
 
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.func import entrypoint, task
-from langgraph.types import StreamWriter, RetryPolicy
+from langgraph.types import RetryPolicy
 
 attempts = 0
 
