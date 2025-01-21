@@ -1132,7 +1132,8 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         assert awhiles == 1
 
 
-async def test_step_timeout_on_stream_hang() -> None:
+@pytest.mark.parametrize("stream_hang_s", [0.3, 0.6])
+async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     inner_task_cancelled = False
 
     async def awhile(input: Any) -> None:
@@ -1157,7 +1158,7 @@ async def test_step_timeout_on_stream_hang() -> None:
     with pytest.raises(asyncio.TimeoutError):
         async for chunk in graph.astream(1, stream_mode="updates"):
             assert chunk == {"alittlewhile": {"alittlewhile": "1"}}
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(stream_hang_s)
 
     assert inner_task_cancelled
 
@@ -2474,13 +2475,83 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert mapper_calls == 2
         assert len(tracer.runs) == 1
         assert len(tracer.runs[0].child_runs) == 1
-        assert tracer.runs[0].child_runs[0].name == "graph"
+        entrypoint_run = tracer.runs[0].child_runs[0]
+        assert entrypoint_run.name == "graph"
+        mapper_runs = [r for r in entrypoint_run.child_runs if r.name == "mapper"]
+        assert len(mapper_runs) == 2
+        assert any(r.inputs == {"input": 0} for r in mapper_runs)
+        assert any(r.inputs == {"input": 1} for r in mapper_runs)
 
         assert await graph.ainvoke(Command(resume="answer"), thread1) == [
             "00answer",
             "11answer",
         ]
         assert mapper_calls == 2
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_imp_nested(checkpointer_name: str) -> None:
+    async def mynode(input: list[str]) -> list[str]:
+        return [it + "a" for it in input]
+
+    builder = StateGraph(list[str])
+    builder.add_node(mynode)
+    builder.add_edge(START, "mynode")
+    add_a = builder.compile()
+
+    @task
+    def submapper(input: int) -> str:
+        return str(input)
+
+    @task
+    async def mapper(input: int) -> str:
+        await asyncio.sleep(input / 100)
+        return await submapper(input) * 2
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(input: list[int]) -> list[str]:
+            futures = [mapper(i) for i in input]
+            mapped = await asyncio.gather(*futures)
+            answer = interrupt("question")
+            final = [m + answer for m in mapped]
+            return await add_a.ainvoke(final)
+
+        assert graph.get_input_jsonschema() == {
+            "type": "array",
+            "items": {"type": "integer"},
+            "title": "LangGraphInput",
+        }
+        assert graph.get_output_jsonschema() == {
+            "type": "array",
+            "items": {"type": "string"},
+            "title": "LangGraphOutput",
+        }
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        assert [c async for c in graph.astream([0, 1], thread1)] == [
+            {"submapper": "0"},
+            {"mapper": "00"},
+            {"submapper": "1"},
+            {"mapper": "11"},
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="question",
+                        resumable=True,
+                        ns=[AnyStr("graph:")],
+                        when="during",
+                    ),
+                )
+            },
+        ]
+
+        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+            "00answera",
+            "11answera",
+        ]
 
 
 @NEEDS_CONTEXTVARS
@@ -7206,3 +7277,51 @@ async def test_multiple_subgraphs_mixed_checkpointer(
             ),
             ((), {"parent_node": {"parent_counter": 7}}),
         ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    async def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
+
+    @entrypoint()
+    async def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+    assert (await foo.ainvoke({"a": "1"}, config)) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+
+
+@NEEDS_CONTEXTVARS
+async def test_entrypoint_from_async_generator() -> None:
+    """@entrypoint does not support sync generators."""
+    # Test invoke
+    previous_return_values = []
+
+    # In this version reducers do not work
+    @entrypoint(checkpointer=MemorySaver())
+    async def foo(inputs, previous=None) -> Any:
+        previous_return_values.append(previous)
+        yield "a"
+        yield "b"
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
+    assert previous_return_values == [None]

@@ -3,3 +3,4 @@
       members:
         - task
         - entrypoint
+        - EntrypointPregel

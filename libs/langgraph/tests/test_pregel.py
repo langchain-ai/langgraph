@@ -82,6 +82,8 @@ from tests.messages import (
     _AnyIdToolMessage,
 )
 
+pytestmark = pytest.mark.anyio
+
 logger = logging.getLogger(__name__)
 
 
@@ -1522,8 +1524,76 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_imp_nested(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    def mynode(input: list[str]) -> list[str]:
+        return [it + "a" for it in input]
+
+    builder = StateGraph(list[str])
+    builder.add_node(mynode)
+    builder.add_edge(START, "mynode")
+    add_a = builder.compile()
+
+    @task
+    def submapper(input: int) -> str:
+        return str(input)
+
+    @task()
+    def mapper(input: int) -> str:
+        time.sleep(input / 100)
+        return submapper(input).result() * 2
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(input: list[int]) -> list[str]:
+        futures = [mapper(i) for i in input]
+        mapped = [f.result() for f in futures]
+        answer = interrupt("question")
+        final = [m + answer for m in mapped]
+        return add_a.invoke(final)
+
+    assert graph.get_input_jsonschema() == {
+        "type": "array",
+        "items": {"type": "integer"},
+        "title": "LangGraphInput",
+    }
+    assert graph.get_output_jsonschema() == {
+        "type": "array",
+        "items": {"type": "string"},
+        "title": "LangGraphOutput",
+    }
+
+    assert graph.get_graph().draw_mermaid() == snapshot
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert [*graph.stream([0, 1], thread1)] == [
+        {"submapper": "0"},
+        {"mapper": "00"},
+        {"submapper": "1"},
+        {"mapper": "11"},
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="question",
+                    resumable=True,
+                    ns=[AnyStr("graph:")],
+                    when="during",
+                ),
+            )
+        },
+    ]
+
+    assert graph.invoke(Command(resume="answer"), thread1) == [
+        "00answera",
+        "11answera",
+    ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_imp_stream_order(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -1545,6 +1615,8 @@ def test_imp_stream_order(
         fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
+
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
@@ -4951,7 +5023,7 @@ def test_interrupt_loop(request: pytest.FixtureRequest, checkpointer_name: str):
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_interrupt_functional(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
@@ -4973,6 +5045,8 @@ def test_interrupt_functional(
         fut_bar = bar(bar_input)
         return fut_bar.result()
 
+    assert graph.get_graph().draw_mermaid() == snapshot
+
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
     graph.invoke({"a": ""}, config)
@@ -4983,7 +5057,7 @@ def test_interrupt_functional(
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_interrupt_task_functional(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
@@ -5003,6 +5077,8 @@ def test_interrupt_task_functional(
         fut_foo = foo(inputs)
         fut_bar = bar(fut_foo.result())
         return fut_bar.result()
+
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
@@ -5432,7 +5508,9 @@ def test_multiple_updates() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_name: str):
+def test_falsy_return_from_task(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+):
     """Test with a falsy return from a task."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -5446,6 +5524,8 @@ def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_nam
         falsy_task().result()
         interrupt("test")
 
+    assert graph.get_graph().draw_mermaid() == snapshot
+
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({"a": 5}, configurable)
     graph.invoke(Command(resume="123"), configurable)
@@ -5453,7 +5533,7 @@ def test_falsy_return_from_task(request: pytest.FixtureRequest, checkpointer_nam
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_multiple_interrupts_imperative(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
     """Test multiple interrupts with an imperative API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
@@ -5477,6 +5557,8 @@ def test_multiple_interrupts_imperative(
             values.extend([double(idx).result(), interrupt({"a": "boo"})])
 
         return {"values": values}
+
+    assert graph.get_graph().draw_mermaid() == snapshot
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({}, configurable)
@@ -5660,34 +5742,6 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-async def test_async_entrypoint_without_checkpointer() -> None:
-    """Test no checkpointer."""
-    states = []
-    config = {"configurable": {"thread_id": "1"}}
-
-    # Test without previous
-    @entrypoint()
-    async def foo(inputs: Any) -> Any:
-        states.append(inputs)
-        return inputs
-
-    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
-
-    @entrypoint()
-    async def foo(inputs: Any, *, previous: Any) -> Any:
-        states.append(previous)
-        return {"previous": previous, "current": inputs}
-
-    assert (await foo.ainvoke({"a": "1"}, config)) == {
-        "current": {"a": "1"},
-        "previous": None,
-    }
-    assert (await foo.ainvoke({"a": "1"}, config)) == {
-        "current": {"a": "1"},
-        "previous": None,
-    }
-
-
 def test_entrypoint_stateful() -> None:
     """Test stateful entrypoint invoke."""
 
@@ -5777,26 +5831,6 @@ def test_entrypoint_request_stream_writer() -> None:
             "b",
         ),
     ]
-
-
-async def test_entrypoint_from_async_generator() -> None:
-    """@entrypoint does not support sync generators."""
-    # Test invoke
-    previous_return_values = []
-
-    # In this version reducers do not work
-    @entrypoint(checkpointer=MemorySaver())
-    async def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
-    assert previous_return_values == [None]
-    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
-    assert previous_return_values == [None, ["a", "b"]]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
