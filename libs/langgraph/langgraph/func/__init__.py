@@ -20,7 +20,7 @@ from langchain_core.runnables.graph import Graph, Node
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN
+from langgraph.constants import END, START, TAG_HIDDEN, PREVIOUS
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import P, T, call, get_runnable_for_entrypoint
 from langgraph.pregel.protocol import PregelProtocol
@@ -28,6 +28,14 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import RetryPolicy, StreamMode, StreamWriter
+
+from dataclasses import dataclass
+
+
+@dataclass
+class ReturnAndSave:
+    return_: Any = None
+    save: Any = None
 
 
 @overload
@@ -382,18 +390,39 @@ def entrypoint(
             else Any
         )
 
+        def _return_mapper(value):
+            if isinstance(value, ReturnAndSave):
+                return value.return_
+            else:
+                raise TypeError(f"Expected ReturnAndSave, got {type(value).__name__}")
+
+        def _save_mapper(value):
+            if isinstance(value, ReturnAndSave):
+                return value.save
+            else:
+                raise TypeError(f"Expected ReturnAndSave, got {type(value).__name__}")
+
         return EntrypointPregel(
             nodes={
                 func.__name__: PregelNode(
                     bound=bound,
                     triggers=[START],
                     channels=[START],
-                    writers=[ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])],
+                    writers=[
+                        ChannelWrite(
+                            [
+                                ChannelWriteEntry(END, mapper=_return_mapper),
+                                ChannelWriteEntry(PREVIOUS, mapper=_save_mapper),
+                            ],
+                            tags=[TAG_HIDDEN],
+                        )
+                    ],
                 )
             },
             channels={
                 START: EphemeralValue(input_type),
                 END: LastValue(output_type, END),
+                PREVIOUS: LastValue(output_type, PREVIOUS),
             },
             input_channels=START,
             output_channels=END,

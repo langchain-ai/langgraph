@@ -5742,6 +5742,26 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
+def test_entrypoint_with_return_and_save() -> None:
+    """Test entrypoint with return and save."""
+    states = []
+    from langgraph.func import ReturnAndSave
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(inputs, *, previous: Any) -> Any:
+        states.append(previous)
+        return ReturnAndSave(
+            return_="foo",
+            save={"current": inputs, "previous": previous},
+        )
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert foo.invoke({"a": "1"}, config) == "foo"
+    assert states == [None]
+    assert foo.invoke({"a": "1"}, config) == "foo"
+    assert states == [None, {"current": {"a": "1"}, "previous": None}]
+
+
 def test_entrypoint_stateful() -> None:
     """Test stateful entrypoint invoke."""
 

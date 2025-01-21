@@ -37,12 +37,13 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
-    CONFIG_KEY_END,
+    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_READ,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
+    PREVIOUS,
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
@@ -508,8 +509,8 @@ def prepare_single_task(
                             pending_writes,
                             task_id,
                         ),
-                        CONFIG_KEY_END: checkpoint["channel_values"].get(
-                            "__end__", None
+                        CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                            PREVIOUS, None
                         ),
                     },
                 ),
@@ -620,8 +621,8 @@ def prepare_single_task(
                                 pending_writes,
                                 task_id,
                             ),
-                            CONFIG_KEY_END: checkpoint["channel_values"].get(
-                                "__end__", None
+                            CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                                PREVIOUS, None
                             ),
                         },
                     ),
@@ -744,8 +745,8 @@ def prepare_single_task(
                                     pending_writes,
                                     task_id,
                                 ),
-                                CONFIG_KEY_END: checkpoint["channel_values"].get(
-                                    "__end__", None
+                                CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                                    PREVIOUS, None
                                 ),
                             },
                         ),
