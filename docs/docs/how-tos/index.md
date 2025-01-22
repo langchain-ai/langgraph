@@ -59,6 +59,12 @@ Other methods:
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb): Edit graph state using `graph.update_state` method. Use this if implementing a **human-in-the-loop** workflow via **static breakpoints**.
 - [How to add dynamic breakpoints with `NodeInterrupt`](human_in_the_loop/dynamic_breakpoints.ipynb): **Not recommended**: Use the [`interrupt` function](../concepts/human_in_the_loop.md) instead.
 
+See the below guides for how-to implement human-in-the-loop workflows with the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to wait for user input (Functional API)](wait-user-input-functional.ipynb)
+- [How to review tool calls (Functional API)](review-tool-calls-functional.ipynb)
+
 ### Time Travel
 
 [Time travel](../concepts/time-travel.md) allows you to replay past actions in your LangGraph application to explore alternative paths and debug issues. These how-to guides show how to use time travel in your graph.
@@ -152,11 +158,10 @@ overview of its underlying implementation to help you customize for your own nee
 
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 
-See the below guides for how-to build ReAct agents with the (beta)
+See the below guide for how-to build ReAct agents with the (beta)
 [Functional API](../concepts/functional_api.md):
 
 - [How to create a ReAct agent from scratch (Functional API)](react-agent-from-scratch-functional.ipynb)
-- [How to add human-in-the-loop processes to a ReAct agent (Functional API)](react-agent-hitl-functional.ipynb)
 
 ## LangGraph Platform
 

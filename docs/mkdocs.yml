@@ -132,6 +132,8 @@ nav:
               - how-tos/human_in_the_loop/wait-user-input.ipynb
               - how-tos/human_in_the_loop/time-travel.ipynb
               - how-tos/human_in_the_loop/review-tool-calls.ipynb
+              - how-tos/wait-user-input-functional.ipynb
+              - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
               - how-tos/stream-values.ipynb
@@ -186,7 +188,6 @@ nav:
               - how-tos/create-react-agent-structured-output.ipynb
               - how-tos/react-agent-from-scratch.ipynb
               - how-tos/react-agent-from-scratch-functional.ipynb
-              - how-tos/react-agent-hitl-functional.ipynb
         - LangGraph Platform:
             - LangGraph Platform: how-tos#langgraph-platform
             - Application Structure:
