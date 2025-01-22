@@ -26,7 +26,13 @@ If you would like to deploy LangGraph Cloud on Kubernetes, you can use this [Hel
 You will eventually need to pass in the following environment variables to the LangGraph Deploy server:
 
 - `REDIS_URI`: Connection details to a Redis instance. Redis will be used as a pub-sub broker to enable streaming real time output from background runs.
-- `DATABASE_URI`: Postgres connection details. Postgres will be used to store assistants, threads, runs, persist thread state and long term memory, and to manage the state of the background task queue with 'exactly once' semantics.
+- `DATABASE_URI`: Postgres connection details. Postgres will be used to store assistants, threads, runs, persist thread state and long term memory, and to manage the state of the background task queue with 'exactly once' semantics. The value of `DATABASE_URI` must be a valid [Postgres connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
+
+    !!! Note "Shared Postgres Instance"
+        Multiple self-hosted deployments can share the same Postgres instance. For example, for `Deployment A`, `DATABASE_URI` can be set to `postgres://<user>:<password>@/<database_name_1>?host=<hostname_1>` and for `Deployment B`, `DATABASE_URI` can be set to `postgres://<user>:<password>@/<database_name_2>?host=<hostname_1>`.
+
+        `<database_name_1>` and `database_name_2` are different, but `<hostname_1>` is shared.
+
 - `LANGSMITH_API_KEY`: (If using [Self-Hosted Lite](../concepts/deployment_options.md#self-hosted-lite)) LangSmith API key. This will be used to authenticate ONCE at server start up.
 - `LANGGRAPH_CLOUD_LICENSE_KEY`: (If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise)) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
 - `LANGCHAIN_ENDPOINT`: To send traces to a [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) instance, set `LANGCHAIN_ENDPOINT` to the hostname of the self-hosted LangSmith instance.
