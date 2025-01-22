@@ -6101,7 +6101,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
     # Un-parameterized ReturnAndSave is interpreted as ReturnAndSave[Any, Any]
     @entrypoint()
     def foo2(inputs, *, previous: Any) -> ReturnAndSave:
-        return ReturnAndSave(return_="foo", save=1)
+        return ReturnAndSave("foo", 1)
 
     assert foo2.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6109,7 +6109,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
 
     @entrypoint()
     def foo(inputs, *, previous: Any) -> ReturnAndSave[str, int]:
-        return ReturnAndSave(return_="foo", save=1)
+        return ReturnAndSave("foo", 1)
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6122,7 +6122,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
         # a bit of help if it's not done correctly.
         @entrypoint()
         def foo(inputs, *, previous: Any) -> ReturnAndSave[int]:
-            return ReturnAndSave(return_=1, save=1)  # type: ignore
+            return ReturnAndSave(1, 1)  # type: ignore
 
     @entrypoint()
     def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
@@ -6146,7 +6146,7 @@ def test_entrypoint_with_return_and_save() -> None:
         nonlocal previous_
         previous_ = previous
         previous = previous or []
-        return ReturnAndSave(return_=len(previous), save=previous + [msg])
+        return ReturnAndSave(len(previous), previous + [msg])
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6173,7 +6173,7 @@ def test_entrypoint_generator_with_return_and_save() -> None:
 
         yield "hello"
         yield "world"
-        yield ReturnAndSave(return_="!", save="saved value")
+        yield ReturnAndSave("!", "saved value")
 
     assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
         "hello",
@@ -6210,7 +6210,7 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
 
         yield "hello"
         yield "world"
-        yield ReturnAndSave(return_="!", save="saved value")
+        yield ReturnAndSave("!", "saved value")
 
     assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == [
         "hello",

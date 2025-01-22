@@ -302,11 +302,11 @@ R = TypeVar("R")
 S = TypeVar("S")
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclasses.dataclass(frozen=True)
 class ReturnAndSave(Generic[R, S]):
     """Return a value and save the state associated with the entrypoint."""
 
-    return_: R
+    value: R
     """Value to return. A value will always be returned even if it is None."""
     save: S
     """The value for the state for the next checkpoint. 

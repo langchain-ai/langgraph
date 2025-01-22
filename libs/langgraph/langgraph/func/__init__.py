@@ -299,7 +299,7 @@ def entrypoint(
                                 )
                             else:
                                 return_and_save = chunk
-                                output_chunk = chunk.return_
+                                output_chunk = chunk.value
                         else:
                             if return_and_save is not None:
                                 raise RuntimeError(
@@ -310,7 +310,7 @@ def entrypoint(
                         writer(chunk)
                         chunks.append(output_chunk)
                     if return_and_save:
-                        return ReturnAndSave(return_=chunks, save=return_and_save.save)
+                        return ReturnAndSave(chunks, return_and_save.save)
                     else:
                         return chunks
             else:
@@ -330,7 +330,7 @@ def entrypoint(
                                 )
                             else:
                                 return_and_save = chunk
-                                output_chunk = chunk.return_
+                                output_chunk = chunk.value
                         else:
                             if return_and_save is not None:
                                 raise RuntimeError(
@@ -341,7 +341,7 @@ def entrypoint(
                         writer(output_chunk)
                         chunks.append(output_chunk)
                     if return_and_save:
-                        return ReturnAndSave(return_=chunks, save=return_and_save.save)
+                        return ReturnAndSave(chunks, return_and_save.save)
                     else:
                         return chunks
 
@@ -381,7 +381,7 @@ def entrypoint(
                                 )
                             else:
                                 return_and_save = chunk
-                                output_chunk = chunk.return_
+                                output_chunk = chunk.value
                         else:
                             if return_and_save is not None:
                                 raise RuntimeError(
@@ -393,7 +393,7 @@ def entrypoint(
                         chunks.append(output_chunk)
 
                     if return_and_save:
-                        return ReturnAndSave(return_=chunks, save=return_and_save.save)
+                        return ReturnAndSave(chunks, return_and_save.save)
                     else:
                         return chunks
             else:
@@ -412,7 +412,7 @@ def entrypoint(
                                 )
                             else:
                                 return_and_save = chunk
-                                output_chunk = chunk.return_
+                                output_chunk = chunk.value
                         else:
                             if return_and_save is not None:
                                 raise RuntimeError(
@@ -424,7 +424,7 @@ def entrypoint(
                         chunks.append(output_chunk)
 
                     if return_and_save:
-                        return ReturnAndSave(return_=chunks, save=return_and_save.save)
+                        return ReturnAndSave(chunks, return_and_save.save)
                     else:
                         return chunks
 
@@ -461,7 +461,7 @@ def entrypoint(
 
         def _pluck_return_value(value: Any) -> Any:
             """Extract the return_ value the ReturnAndSave object or pass through."""
-            return value.return_ if isinstance(value, ReturnAndSave) else value
+            return value.value if isinstance(value, ReturnAndSave) else value
 
         def _pluck_save_value(value: Any) -> Any:
             """Extract the save value from the ReturnAndSave object or pass through."""
