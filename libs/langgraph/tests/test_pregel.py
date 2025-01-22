@@ -5082,7 +5082,7 @@ def test_interrupt_task_functional(
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert not graph.invoke({"a": ""}, config)
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar"}
@@ -5098,11 +5098,10 @@ def test_interrupt_task_functional(
         return baz_result
 
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert not graph.invoke({"a": ""}, config)
     # Provide resumes
-    graph.invoke(Command(resume="bar"), config)
-    res_2 = graph.invoke(Command(resume="baz"), config)
-    assert res_2 == {"a": "foobarbaz"}  # Errors, produces "foobarbar" instead
+    assert not graph.invoke(Command(resume="bar"), config)
+    assert graph.invoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
 
 
 def test_root_mixed_return() -> None:
