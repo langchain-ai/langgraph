@@ -15,7 +15,7 @@ When building agents and workflows, LangGraph [offers a number of benefits](http
 
 LLM have [augmentations](https://www.anthropic.com/research/building-effective-agents) that support building workflows and agents. These include [structured outputs](https://python.langchain.com/docs/concepts/structured_outputs/) and [tool calling](https://python.langchain.com/docs/concepts/tool_calling/), as shown in this image from the Anthropic [blog](https://www.anthropic.com/research/building-effective-agents):
 
-![augmented_llm.jpg](./img/augmented_llm.jpg)
+![augmented_llm.png](./img/augmented_llm.png)
 
 For this tutorial, you can use [any chat model](https://python.langchain.com/docs/integrations/chat/) that supports structured outputs and tool calling. Below, we show the process of installing the packages, setting API keys, and testing structured outputs / tool calling for both OpenAI and Anthropic. 
 
