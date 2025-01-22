@@ -298,8 +298,8 @@ class Command(Generic[N], ToolOutputMixin):
 
 
 # Parameterize the return type.
-R = TypeVar("R", bound=Any)
-S = TypeVar("S", bound=Any)
+R = TypeVar("R")
+S = TypeVar("S")
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
