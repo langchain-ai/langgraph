@@ -158,14 +158,9 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
                 trace=False,
                 recurse=False,
             )
-        seq = RunnableSeq(
-            run,
-            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
-            name=func.__name__,
-        )
         if not _lookup_module_and_qualname(func):
-            return seq
-        return CACHE.setdefault(key, seq)
+            return run
+        return CACHE.setdefault(key, run)
 
 
 def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
