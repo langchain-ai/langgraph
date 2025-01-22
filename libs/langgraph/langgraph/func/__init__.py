@@ -10,6 +10,8 @@ from typing import (
     Callable,
     Optional,
     Union,
+    get_args,
+    get_origin,
     overload,
 )
 
@@ -20,22 +22,14 @@ from langchain_core.runnables.graph import Graph, Node
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN, PREVIOUS
+from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import P, T, call, get_runnable_for_entrypoint
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, StreamMode, StreamWriter
-
-from dataclasses import dataclass
-
-
-@dataclass
-class ReturnAndSave:
-    return_: Any = None
-    save: Any = None
+from langgraph.types import RetryPolicy, ReturnAndSave, StreamMode, StreamWriter
 
 
 @overload
@@ -294,11 +288,28 @@ def entrypoint(
 
                 @functools.wraps(func)
                 def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
+                    return_and_save_: Optional[ReturnAndSave] = None
                     chunks = []
                     for chunk in func(*args, writer=writer, **kwargs):
-                        writer(chunk)
-                        chunks.append(chunk)
-                    return chunks
+                        if isinstance(chunk, ReturnAndSave):
+                            if return_and_save_ is not None:
+                                raise RuntimeError(
+                                    "Yielding multiple ReturnAndSave "
+                                    "objects is not allowed."
+                                )
+                            else:
+                                return_and_save_ = chunk
+                                writer(chunk.return_)
+                        else:
+                            if return_and_save_ is not None:
+                                raise RuntimeError(
+                                    "Yielding a value after a ReturnAndSave "
+                                    "object is not allowed."
+                                )
+                            writer(chunk)
+                            chunks.append(chunk)
+
+                    return return_and_save_ if return_and_save_ is not None else chunks
             else:
 
                 @functools.wraps(func)
@@ -384,23 +395,34 @@ def entrypoint(
             is not inspect.Signature.empty
             else Any
         )
-        output_type = (
-            sig.return_annotation
-            if sig.return_annotation is not inspect.Signature.empty
-            else Any
-        )
 
-        def _return_mapper(value):
-            if isinstance(value, ReturnAndSave):
-                return value.return_
-            else:
-                raise TypeError(f"Expected ReturnAndSave, got {type(value).__name__}")
+        def _pluck_return_value(value: Any) -> Any:
+            """Extract the return_ value the ReturnAndSave object or pass through."""
+            return value.return_ if isinstance(value, ReturnAndSave) else value
 
-        def _save_mapper(value):
-            if isinstance(value, ReturnAndSave):
-                return value.save
+        def _pluck_save_value(value: Any) -> Any:
+            """Extract the save value from the ReturnAndSave object or pass through."""
+            return value.save if isinstance(value, ReturnAndSave) else value
+
+        output_type, save_type = Any, Any
+        if sig.return_annotation is not inspect.Signature.empty:
+            # User does not parameterize ReturnAndSave properly
+            if sig.return_annotation is ReturnAndSave:  # Un-parameterized ReturnAndSave
+                output_type = save_type = Any
             else:
-                raise TypeError(f"Expected ReturnAndSave, got {type(value).__name__}")
+                origin = get_origin(sig.return_annotation)
+                if origin is ReturnAndSave:
+                    type_annotations = get_args(sig.return_annotation)
+                    if len(type_annotations) != 2:
+                        raise TypeError(
+                            "Please an annotation for both the return_ and "
+                            "the save values."
+                            "For example, `-> ReturnAndSave[int, str]` would assign a "
+                            "return_ a type of `int` and save the type `str`."
+                        )
+                    output_type, save_type = get_args(sig.return_annotation)
+                else:
+                    output_type = save_type = sig.return_annotation
 
         return EntrypointPregel(
             nodes={
@@ -411,8 +433,8 @@ def entrypoint(
                     writers=[
                         ChannelWrite(
                             [
-                                ChannelWriteEntry(END, mapper=_return_mapper),
-                                ChannelWriteEntry(PREVIOUS, mapper=_save_mapper),
+                                ChannelWriteEntry(END, mapper=_pluck_return_value),
+                                ChannelWriteEntry(PREVIOUS, mapper=_pluck_save_value),
                             ],
                             tags=[TAG_HIDDEN],
                         )
@@ -422,7 +444,7 @@ def entrypoint(
             channels={
                 START: EphemeralValue(input_type),
                 END: LastValue(output_type, END),
-                PREVIOUS: LastValue(output_type, PREVIOUS),
+                PREVIOUS: LastValue(save_type, PREVIOUS),
             },
             input_channels=START,
             output_channels=END,

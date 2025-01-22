@@ -63,6 +63,7 @@ from langgraph.types import (
     Command,
     Interrupt,
     PregelTask,
+    ReturnAndSave,
     Send,
     StreamWriter,
     interrupt,
@@ -5742,26 +5743,6 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-def test_entrypoint_with_return_and_save() -> None:
-    """Test entrypoint with return and save."""
-    states = []
-    from langgraph.func import ReturnAndSave
-
-    @entrypoint(checkpointer=MemorySaver())
-    def foo(inputs, *, previous: Any) -> Any:
-        states.append(previous)
-        return ReturnAndSave(
-            return_="foo",
-            save={"current": inputs, "previous": previous},
-        )
-
-    config = {"configurable": {"thread_id": "1"}}
-    assert foo.invoke({"a": "1"}, config) == "foo"
-    assert states == [None]
-    assert foo.invoke({"a": "1"}, config) == "foo"
-    assert states == [None, {"current": {"a": "1"}, "previous": None}]
-
-
 def test_entrypoint_stateful() -> None:
     """Test stateful entrypoint invoke."""
 
@@ -6112,3 +6093,70 @@ def test_multiple_subgraphs_mixed_checkpointer(
         ),
         ((), {"parent_node": {"parent_counter": 7}}),
     ]
+
+
+def test_entrypoint_output_schema_with_return_and_save() -> None:
+    """Test output schema inference with ReturnAndSave."""
+
+    # Un-parameterized ReturnAndSave is interpreted as ReturnAndSave[Any, Any]
+    @entrypoint()
+    def foo2(inputs, *, previous: Any) -> ReturnAndSave:
+        return ReturnAndSave(return_="foo", save=1)
+
+    assert foo2.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+    }
+
+    @entrypoint()
+    def foo(inputs, *, previous: Any) -> ReturnAndSave[str, int]:
+        return ReturnAndSave(return_="foo", save=1)
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "string",
+    }
+
+    with pytest.raises(TypeError):
+        # Raise an exception on an improperly parameterized ReturnAndSave
+        # User is attempting to parameterize in this case, so we'll offer
+        # a bit of help if it's not done correctly.
+        @entrypoint()
+        def foo(inputs, *, previous: Any) -> ReturnAndSave[int]:
+            return ReturnAndSave(return_=1, save=1)  # type: ignore
+
+    @entrypoint()
+    def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
+        yield 1
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "items": {
+            "type": "integer",
+        },
+        "title": "LangGraphOutput",
+        "type": "array",
+    }
+
+
+def test_entrypoint_with_return_and_save() -> None:
+    """Test entrypoint with return and save."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(msg: str, *, previous: Any) -> ReturnAndSave[int, list[str]]:
+        nonlocal previous_
+        previous_ = previous
+        previous = previous or []
+        return ReturnAndSave(return_=len(previous), save=previous + [msg])
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "integer",
+    }
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert foo.invoke("hello", config) == 0
+    assert previous_ is None
+    assert foo.invoke("goodbye", config) == 1
+    assert previous_ == ["hello"]
+    assert foo.invoke("definitely", config) == 2
+    assert previous_ == ["hello", "goodbye"]
