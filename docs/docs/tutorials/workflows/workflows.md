@@ -1122,7 +1122,7 @@ llm_with_tools = llm.bind_tools(tools)
 
     **LangSmith Trace**
 
-    https://smith.langchain.com/public/abab6a44-29f6-4b97-8164-af77413e494d/r
+    https://smith.langchain.com/public/051f0391-6761-4f8c-a53b-22231b016690/r
 
     **Resources:**
 
@@ -1191,6 +1191,34 @@ llm_with_tools = llm.bind_tools(tools)
         print(chunk)
         print("\n")
     ```
+
+#### Pre-built
+
+LangGraph also provides a **pre-built method** for creating an agent as defined above (using the [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] function):
+
+https://langchain-ai.github.io/langgraph/how-tos/create-react-agent/
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+# Pass in:
+# (1) the augmented LLM with tools
+# (2) the tools list (which is used to create the tool node)
+pre_built_agent = create_react_agent(llm_with_tools, tools=tools)
+
+# Show the agent
+display(Image(pre_built_agent.get_graph().draw_mermaid_png()))
+
+# Invoke
+messages = [HumanMessage(content="Add 3 and 4.")]
+messages = pre_built_agent.invoke({"messages": messages})
+for m in messages["messages"]:
+    m.pretty_print()
+```
+
+**LangSmith Trace**
+
+https://smith.langchain.com/public/abab6a44-29f6-4b97-8164-af77413e494d/r
 
 ## What LangGraph provides
 
