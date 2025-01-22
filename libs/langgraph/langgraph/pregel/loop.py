@@ -1096,6 +1096,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             return await exit_task
         except asyncio.CancelledError as e:
             # Bubble up the exit task upon cancellation to permit the API
-            # consumer to await it before e.g., re-using the DB connection.
+            # consumer to await it before e.g., reusing the DB connection.
             e.args = (*e.args, exit_task)
             raise
