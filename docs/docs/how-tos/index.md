@@ -30,6 +30,10 @@ These how-to guides show how to achieve that controllability.
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+
+See the below guides for how-to add persistence to your workflow using the (beta)
+[Functional API](../concepts/functional_api.md):
+
 - [How to add thread-level persistence to your workflow (functional API)](persistence-functional.ipynb)
 - [How to add cross-thread persistence to your workflow (functional API)](cross-thread-persistence-functional.ipynb)
 
