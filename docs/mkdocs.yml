@@ -186,6 +186,7 @@ nav:
               - how-tos/create-react-agent-structured-output.ipynb
               - how-tos/react-agent-from-scratch.ipynb
               - how-tos/react-agent-from-scratch-functional.ipynb
+              - how-tos/react-agent-hitl-functional.ipynb
         - LangGraph Platform:
             - LangGraph Platform: how-tos#langgraph-platform
             - Application Structure:
