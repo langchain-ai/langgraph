@@ -31,7 +31,7 @@ You will eventually need to pass in the following environment variables to the L
     !!! Note "Shared Postgres Instance"
         Multiple self-hosted deployments can share the same Postgres instance. For example, for `Deployment A`, `DATABASE_URI` can be set to `postgres://<user>:<password>@/<database_name_1>?host=<hostname_1>` and for `Deployment B`, `DATABASE_URI` can be set to `postgres://<user>:<password>@/<database_name_2>?host=<hostname_1>`.
 
-        `<database_name_1>` and `database_name_2` are different, but `<hostname_1>` is shared.
+        `<database_name_1>` and `database_name_2` are different databases within the same instance, but `<hostname_1>` is shared. **The same database cannot be used for separate deployments**.
 
 - `LANGSMITH_API_KEY`: (If using [Self-Hosted Lite](../concepts/deployment_options.md#self-hosted-lite)) LangSmith API key. This will be used to authenticate ONCE at server start up.
 - `LANGGRAPH_CLOUD_LICENSE_KEY`: (If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise)) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
