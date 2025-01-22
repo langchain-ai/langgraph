@@ -9,14 +9,10 @@ New to LangGraph or LLM app development? Read this material to get up and runnin
 ## Get Started 🚀 {#quick-start}
 
 - [LangGraph Quickstart](introduction.ipynb): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
-- [LangGraph Cheatsheet For Common Workflows](workflows.ipynb): Overview of the most common workflows and agent architectures in LangGraph.
+- [LangGraph Cheatsheet For Common Workflows](workflows/workflows.md): Overview of the most common workflows and agent architectures in LangGraph.
 - [LangGraph Server Quickstart](langgraph-platform/local-server.md): Launch a LangGraph server locally and interact with it using REST API and LangGraph Studio Web UI.
 - [LangGraph Template Quickstart](../concepts/template_applications.md): Start building with LangGraph Platform using a template application.
 - [Deploy with LangGraph Cloud Quickstart](../cloud/quick_start.md): Deploy a LangGraph app using LangGraph Cloud.
-
-Looking to implement common workflows and agent architectures using LangGraph [Functional API](../concepts/functional_api.md)? Check out the guide below:
-
-- [LangGraph Cheatsheet For Common Workflows (Functional API)](workflows-functional.ipynb): Overview of the most common workflows and agent architectures in LangGraph.
 
 ## Use cases 🛠️ {#use-cases}
 
