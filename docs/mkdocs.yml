@@ -167,6 +167,7 @@ nav:
               - how-tos/agent-handoffs.ipynb
               - how-tos/multi-agent-network.ipynb
               - how-tos/multi-agent-multi-turn-convo.ipynb
+              - how-tos/multi-agent-network-functional.ipynb
           - State Management:
               - State Management: how-tos#state-management
               - how-tos/state-model.ipynb

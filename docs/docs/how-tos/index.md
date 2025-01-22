@@ -127,6 +127,11 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
+See the below guides for how-to implement multi-agent workflows with the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to build a multi-agent network (functional API)](multi-agent-network-functional.ipynb)
+
 ### State Management
 
 - [How to use Pydantic model as graph state](state-model.ipynb)
