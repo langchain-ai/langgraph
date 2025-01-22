@@ -62,7 +62,7 @@ from langgraph.constants import (
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.call import get_runnable_for_func
+from langgraph.pregel.call import get_runnable_for_task
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
@@ -439,7 +439,7 @@ def prepare_single_task(
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
         task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
         call = task_path_t[-1]
-        proc_ = get_runnable_for_func(call.func)
+        proc_ = get_runnable_for_task(call.func)
         name = proc_.name
         if name is None:
             raise ValueError("`call` functions must have a `__name__` attribute")

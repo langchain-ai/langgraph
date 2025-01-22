@@ -1,6 +1,5 @@
 import asyncio
 import concurrent.futures
-import sys
 import time
 from contextlib import ExitStack
 from contextvars import copy_context
@@ -22,6 +21,7 @@ from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
 from langgraph.errors import GraphBubbleUp
+from langgraph.utils.future import CONTEXT_NOT_SUPPORTED, run_coroutine_threadsafe
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -132,8 +132,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
       ignoring CancelledError"""
 
     def __init__(self, config: RunnableConfig) -> None:
-        self.context_not_supported = sys.version_info < (3, 11)
-        self.tasks: dict[asyncio.Task, tuple[bool, bool]] = {}
+        self.tasks: dict[asyncio.Future, tuple[bool, bool]] = {}
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
         if max_concurrency := config.get("max_concurrency"):
@@ -150,23 +149,23 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
-        __next_tick__: bool = False,
+        __next_tick__: bool = False,  # noop in async (always True)
         **kwargs: P.kwargs,
-    ) -> asyncio.Task[T]:
+    ) -> asyncio.Future[T]:
         coro = cast(Coroutine[None, None, T], fn(*args, **kwargs))
         if self.semaphore:
             coro = gated(self.semaphore, coro)
-        if __next_tick__:
-            coro = anext_tick(coro)
-        if self.context_not_supported:
-            task = self.loop.create_task(coro, name=__name__)
+        if CONTEXT_NOT_SUPPORTED:
+            task = run_coroutine_threadsafe(coro, self.loop, name=__name__)
         else:
-            task = self.loop.create_task(coro, name=__name__, context=copy_context())
+            task = run_coroutine_threadsafe(
+                coro, self.loop, name=__name__, context=copy_context()
+            )
         self.tasks[task] = (__cancel_on_exit__, __reraise_on_exit__)
         task.add_done_callback(self.done)
         return task
 
-    def done(self, task: asyncio.Task) -> None:
+    def done(self, task: asyncio.Future) -> None:
         try:
             if exc := task.exception():
                 # This exception is an interruption signal, not an error
@@ -219,9 +218,3 @@ def next_tick(fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """A function that yields control to other threads before running another function."""
     time.sleep(0)
     return fn(*args, **kwargs)
-
-
-async def anext_tick(coro: Coroutine[None, None, T]) -> T:
-    """A coroutine that yields control to event loop before running another coroutine."""
-    await asyncio.sleep(0)
-    return await coro
