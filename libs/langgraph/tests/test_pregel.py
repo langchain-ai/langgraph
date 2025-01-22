@@ -6160,3 +6160,40 @@ def test_entrypoint_with_return_and_save() -> None:
     assert previous_ == ["hello"]
     assert foo.invoke("definitely", config) == 2
     assert previous_ == ["hello", "goodbye"]
+
+
+def test_entrypoint_generator_with_return_and_save() -> None:
+    """Verify that generators produce expected results."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    def workflow(inputs: dict, *, previous: Any):
+        nonlocal previous_
+        previous_ = previous
+
+        yield "hello"
+        yield "world"
+        yield ReturnAndSave(return_="!", save="saved value")
+
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
+        "hello",
+        "world",
+        "!",
+    ]
+    assert previous_ is None
+
+    # 2nd time around previous is set
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
+        "hello",
+        "world",
+        "!",
+    ]
+    assert previous_ == "saved value"
+
+    # Test with another thread
+    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == [
+        "hello",
+        "world",
+        "!",
+    ]
+    assert previous_ is None
