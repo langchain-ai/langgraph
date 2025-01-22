@@ -359,6 +359,25 @@ Use `Command` when you need to **both** update the graph state **and** route to 
 
 Use [conditional edges](#conditional-edges) to route between nodes conditionally without updating the state.
 
+### Navigating to a node in a parent graph
+
+If you are using [subgraphs](#subgraphs), you might want to navigate from a node a subgraph to a different subgraph (i.e. a different node in the parent graph). To do so, you can specify `graph=Command.PARENT` in `Command`:
+
+```python
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(
+        update={"foo": "bar"},
+        goto="other_subgraph",  # where `other_subgraph` is a node in the parent graph
+        graph=Command.PARENT
+    )
+```
+
+!!! note
+
+    Setting `graph` to `Command.PARENT` will navigate to the closest parent graph.
+
+This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
+
 ### Using inside tools
 
 A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
