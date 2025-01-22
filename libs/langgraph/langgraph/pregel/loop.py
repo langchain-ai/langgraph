@@ -567,7 +567,10 @@ class PregelLoop(LoopProtocol):
         if scratchpad := cast(
             Optional[PregelScratchpad], configurable.get(CONFIG_KEY_SCRATCHPAD)
         ):
-            if scratchpad.null_resume is not None:
+            if (
+                isinstance(scratchpad, PregelScratchpad)
+                and scratchpad.null_resume is not None
+            ):
                 self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad.null_resume)])
         # map command to writes
         if isinstance(self.input, Command):
