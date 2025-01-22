@@ -31,7 +31,7 @@ def request(self, method, url, body=None, headers=None):
         The result of calling the parent request method.
     """
     # Update the inner socket's timeout value to send the request.
-    # This only triggers if the connection is re-used.
+    # This only triggers if the connection is reused.
     if getattr(self, "sock", None) is not None:
         self.sock.settimeout(self.timeout)
 
