@@ -8,6 +8,7 @@ import sys
 import types
 from typing import Any, Callable, Optional, TypeVar, Union
 
+from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
 from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN, TAG_HIDDEN
@@ -199,7 +200,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE.setdefault(key, seq)
 
 
-CACHE: dict[tuple[Callable[..., Any], bool], RunnableSeq] = {}
+CACHE: dict[tuple[Callable[..., Any], bool], Runnable] = {}
 
 
 P = ParamSpec("P")
