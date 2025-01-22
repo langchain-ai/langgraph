@@ -79,7 +79,7 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
 
 > When to use this workflow: This workflow is ideal for situations where the task can be easily and cleanly decomposed into fixed subtasks. The main goal is to trade off latency for higher accuracy, by making each LLM call an easier task.
 
-![prompt_chain.jpg](./img/prompt_chain.jpg)
+![prompt_chain.png](./img/prompt_chain.png)
 
 === "StateGraph"
 
@@ -236,7 +236,7 @@ With parallelization, LLMs work simultaneously on a task:
 
 > When to use this workflow: Parallelization is effective when the divided subtasks can be parallelized for speed, or when multiple perspectives or attempts are needed for higher confidence results. For complex tasks with multiple considerations, LLMs generally perform better when each consideration is handled by a separate LLM call, allowing focused attention on each specific aspect.
 
-![parallelization.jpg](./img/parallelization.jpg)
+![parallelization.png](./img/parallelization.png)
 
 === "StateGraph"
 
@@ -382,7 +382,7 @@ Routing classifies an input and directs it to a followup task. As noted in the [
 
 > When to use this workflow: Routing works well for complex tasks where there are distinct categories that are better handled separately, and where classification can be handled accurately, either by an LLM or a more traditional classification model/algorithm.
 
-![routing.jpg](./img/routing.jpg)
+![routing.png](./img/routing.png)
 
 
 === "StateGraph"
@@ -589,7 +589,7 @@ With orchestrator-worker, an orchestrator breaks down a task and delegates each 
 
 > When to use this workflow: This workflow is well-suited for complex tasks where you can’t predict the subtasks needed (in coding, for example, the number of files that need to be changed and the nature of the change in each file likely depend on the task). Whereas it’s topographically similar, the key difference from parallelization is its flexibility—subtasks aren't pre-defined, but determined by the orchestrator based on the specific input.
 
-![worker.jpg](./img/worker.jpg)
+![worker.png](./img/worker.png)
 
 
 === "StateGraph"
@@ -829,7 +829,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
 > When to use this workflow: This workflow is particularly effective when we have clear evaluation criteria, and when iterative refinement provides measurable value. The two signs of good fit are, first, that LLM responses can be demonstrably improved when a human articulates their feedback; and second, that the LLM can provide such feedback. This is analogous to the iterative writing process a human writer might go through when producing a polished document.
 
-![evaluator_optimizer.jpg](./img/evaluator_optimizer.jpg)
+![evaluator_optimizer.png](./img/evaluator_optimizer.png)
 
 === "StateGraph"
 
@@ -991,7 +991,7 @@ Agents are typically implemented as an LLM performing actions (via tool-calling)
 
 > When to use agents: Agents can be used for open-ended problems where it’s difficult or impossible to predict the required number of steps, and where you can’t hardcode a fixed path. The LLM will potentially operate for many turns, and you must have some level of trust in its decision-making. Agents' autonomy makes them ideal for scaling tasks in trusted environments.
 
-![agent.jpg](./img/agent.jpg)
+![agent.png](./img/agent.png)
 
 
 ```python
