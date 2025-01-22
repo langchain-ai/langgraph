@@ -156,6 +156,7 @@ See the below guides for how-to build ReAct agents with the (beta)
 [Functional API](../concepts/functional_api.md):
 
 - [How to create a ReAct agent from scratch (Functional API)](react-agent-from-scratch-functional.ipynb)
+- [How to add human-in-the-loop processes to a ReAct agent (Functional API)](react-agent-hitl-functional.ipynb)
 
 ## LangGraph Platform
 
