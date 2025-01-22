@@ -288,42 +288,62 @@ def entrypoint(
 
                 @functools.wraps(func)
                 def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
-                    return_and_save_: Optional[ReturnAndSave] = None
+                    return_and_save: Optional[ReturnAndSave] = None
                     chunks = []
                     for chunk in func(*args, writer=writer, **kwargs):
                         if isinstance(chunk, ReturnAndSave):
-                            if return_and_save_ is not None:
+                            if return_and_save is not None:
                                 raise RuntimeError(
                                     "Yielding multiple ReturnAndSave "
                                     "objects is not allowed."
                                 )
                             else:
-                                return_and_save_ = chunk
-                                written_chunk = chunk.return_
+                                return_and_save = chunk
+                                output_chunk = chunk.return_
                         else:
-                            if return_and_save_ is not None:
+                            if return_and_save is not None:
                                 raise RuntimeError(
                                     "Yielding a value after a ReturnAndSave "
                                     "object is not allowed."
                                 )
-                            written_chunk = chunk
+                            output_chunk = chunk
                         writer(chunk)
-                        chunks.append(written_chunk)
-                    if return_and_save_:
-                        return ReturnAndSave(return_=chunks, save=return_and_save_.save)
+                        chunks.append(output_chunk)
+                    if return_and_save:
+                        return ReturnAndSave(return_=chunks, save=return_and_save.save)
                     else:
                         return chunks
             else:
 
                 @functools.wraps(func)
                 def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
+                    return_and_save: Optional[ReturnAndSave] = None
                     chunks = []
                     # Do not pass the writer argument to the wrapped function
                     # as it does not have a matching parameter
                     for chunk in func(*args, **kwargs):
-                        writer(chunk)
-                        chunks.append(chunk)
-                    return chunks
+                        if isinstance(chunk, ReturnAndSave):
+                            if return_and_save is not None:
+                                raise RuntimeError(
+                                    "Yielding multiple ReturnAndSave "
+                                    "objects is not allowed."
+                                )
+                            else:
+                                return_and_save = chunk
+                                output_chunk = chunk.return_
+                        else:
+                            if return_and_save is not None:
+                                raise RuntimeError(
+                                    "Yielding a value after a ReturnAndSave "
+                                    "object is not allowed."
+                                )
+                            output_chunk = chunk
+                        writer(output_chunk)
+                        chunks.append(output_chunk)
+                    if return_and_save:
+                        return ReturnAndSave(return_=chunks, save=return_and_save.save)
+                    else:
+                        return chunks
 
                 # Create a new parameter for the writer argument
                 extra_param = inspect.Parameter(
