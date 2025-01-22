@@ -299,17 +299,20 @@ def entrypoint(
                                 )
                             else:
                                 return_and_save_ = chunk
-                                writer(chunk.return_)
+                                written_chunk = chunk.return_
                         else:
                             if return_and_save_ is not None:
                                 raise RuntimeError(
                                     "Yielding a value after a ReturnAndSave "
                                     "object is not allowed."
                                 )
-                            writer(chunk)
-                            chunks.append(chunk)
-
-                    return return_and_save_ if return_and_save_ is not None else chunks
+                            written_chunk = chunk
+                        writer(chunk)
+                        chunks.append(written_chunk)
+                    if return_and_save_:
+                        return ReturnAndSave(return_=chunks, save=return_and_save_.save)
+                    else:
+                        return chunks
             else:
 
                 @functools.wraps(func)
