@@ -15,7 +15,7 @@ from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from tests.any import AnyDict, AnyInt
+from tests.any import AnyDict
 from tests.drain import drain_topics_async
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
@@ -199,9 +199,9 @@ async def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
                             "__pregel_scratchpad": {
-                                "subgraph_counter": AnyInt(),
-                                "call_counter": 0,
-                                "interrupt_counter": -1,
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
                                 "null_resume": None,
                                 "resume": [],
                             },
@@ -272,9 +272,9 @@ async def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
                             "__pregel_scratchpad": {
-                                "subgraph_counter": AnyInt(),
-                                "call_counter": 0,
-                                "interrupt_counter": -1,
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
                                 "null_resume": None,
                                 "resume": [],
                             },
@@ -375,9 +375,9 @@ async def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
                             "__pregel_scratchpad": {
-                                "subgraph_counter": AnyInt(),
-                                "call_counter": 0,
-                                "interrupt_counter": -1,
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
                                 "null_resume": None,
                                 "resume": [],
                             },
@@ -488,9 +488,9 @@ async def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
                             "__pregel_scratchpad": {
-                                "subgraph_counter": AnyInt(),
-                                "call_counter": 0,
-                                "interrupt_counter": -1,
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
                                 "null_resume": None,
                                 "resume": [],
                             },
@@ -556,9 +556,9 @@ async def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
                             "__pregel_scratchpad": {
-                                "subgraph_counter": AnyInt(),
-                                "call_counter": 0,
-                                "interrupt_counter": -1,
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
                                 "null_resume": None,
                                 "resume": [],
                             },
@@ -680,9 +680,9 @@ async def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
                             "__pregel_scratchpad": {
-                                "subgraph_counter": AnyInt(),
-                                "call_counter": 0,
-                                "interrupt_counter": -1,
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
                                 "null_resume": None,
                                 "resume": [],
                             },

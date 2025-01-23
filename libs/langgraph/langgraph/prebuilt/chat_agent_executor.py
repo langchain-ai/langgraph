@@ -1,3 +1,4 @@
+import inspect
 from typing import (
     Any,
     Callable,
@@ -88,6 +89,12 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     elif isinstance(prompt, SystemMessage):
         prompt_runnable = RunnableCallable(
             lambda state: [prompt] + state["messages"],
+            name=PROMPT_RUNNABLE_NAME,
+        )
+    elif inspect.iscoroutinefunction(prompt):
+        prompt_runnable = RunnableCallable(
+            None,
+            prompt,
             name=PROMPT_RUNNABLE_NAME,
         )
     elif callable(prompt):
