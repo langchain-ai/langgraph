@@ -236,6 +236,10 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
         print("\n")
     ```
 
+    **LangSmith Trace**
+
+    https://smith.langchain.com/public/332fa4fc-b6ca-416e-baa3-161625e69163/r
+
 ## Parallelization 
 
 With parallelization, LLMs work simultaneously on a task:
@@ -381,6 +385,10 @@ With parallelization, LLMs work simultaneously on a task:
         print(step)
         print("\n")
     ```
+
+    **LangSmith Trace**
+
+    https://smith.langchain.com/public/623d033f-e814-41e9-80b1-75e6abb67801/r
 
 ## Routing
 
@@ -588,6 +596,10 @@ Routing classifies an input and directs it to a followup task. As noted in the [
         print(step)
         print("\n")
     ```
+
+    **LangSmith Trace**
+
+    https://smith.langchain.com/public/5e2eb979-82dd-402c-b1a0-a8cceaf2a28a/r
 
 ## Orchestrator-Worker
 
@@ -829,6 +841,10 @@ With orchestrator-worker, an orchestrator breaks down a task and delegates each 
     Markdown(report)
     ```
 
+    **LangSmith Trace**
+
+    https://smith.langchain.com/public/75a636d0-6179-4a12-9836-e0aa571e87c5/r
+
 ## Evaluator-optimizer
 
 In the evaluator-optimizer workflow, one LLM call generates a response while another provides evaluation and feedback in a loop:
@@ -990,6 +1006,9 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
         print("\n")
     ```
 
+    **LangSmith Trace**
+
+    https://smith.langchain.com/public/f66830be-4339-4a6b-8a93-389ce5ae27b4/r
 
 ## Agent
 
@@ -1199,6 +1218,10 @@ llm_with_tools = llm.bind_tools(tools)
         print(chunk)
         print("\n")
     ```
+
+    **LangSmith Trace**
+
+    https://smith.langchain.com/public/42ae8bf9-3935-4504-a081-8ddbcbfc8b2e/r
 
 #### Pre-built
 
