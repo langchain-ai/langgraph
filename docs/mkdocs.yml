@@ -271,6 +271,7 @@ nav:
           - concepts/persistence.md
           - concepts/memory.md
           - concepts/streaming.md
+          - concepts/functional_api.md
         - LangGraph Platform:
           - LangGraph Platform: concepts#langgraph-platform
           - High Level:
