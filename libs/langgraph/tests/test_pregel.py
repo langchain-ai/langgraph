@@ -63,7 +63,6 @@ from langgraph.types import (
     Command,
     Interrupt,
     PregelTask,
-    ReturnAndSave,
     Send,
     StreamWriter,
     interrupt,
@@ -6096,20 +6095,20 @@ def test_multiple_subgraphs_mixed_checkpointer(
 
 
 def test_entrypoint_output_schema_with_return_and_save() -> None:
-    """Test output schema inference with ReturnAndSave."""
+    """Test output schema inference with entrypoint.final."""
 
-    # Un-parameterized ReturnAndSave is interpreted as ReturnAndSave[Any, Any]
+    # Un-parameterized entrypoint.final is interpreted as entrypoint.final[Any, Any]
     @entrypoint()
-    def foo2(inputs, *, previous: Any) -> ReturnAndSave:
-        return ReturnAndSave("foo", 1)
+    def foo2(inputs, *, previous: Any) -> entrypoint.final:
+        return entrypoint.final("foo", 1)
 
     assert foo2.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
     }
 
     @entrypoint()
-    def foo(inputs, *, previous: Any) -> ReturnAndSave[str, int]:
-        return ReturnAndSave("foo", 1)
+    def foo(inputs, *, previous: Any) -> entrypoint.final[str, int]:
+        return entrypoint.final("foo", 1)
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6117,12 +6116,12 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
     }
 
     with pytest.raises(TypeError):
-        # Raise an exception on an improperly parameterized ReturnAndSave
+        # Raise an exception on an improperly parameterized entrypoint.final
         # User is attempting to parameterize in this case, so we'll offer
         # a bit of help if it's not done correctly.
         @entrypoint()
-        def foo(inputs, *, previous: Any) -> ReturnAndSave[int]:
-            return ReturnAndSave(1, 1)  # type: ignore
+        def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
+            return entrypoint.final(1, 1)  # type: ignore
 
     @entrypoint()
     def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
@@ -6142,11 +6141,11 @@ def test_entrypoint_with_return_and_save() -> None:
     previous_ = None
 
     @entrypoint(checkpointer=MemorySaver())
-    def foo(msg: str, *, previous: Any) -> ReturnAndSave[int, list[str]]:
+    def foo(msg: str, *, previous: Any) -> entrypoint.final[int, list[str]]:
         nonlocal previous_
         previous_ = previous
         previous = previous or []
-        return ReturnAndSave(len(previous), previous + [msg])
+        return entrypoint.final(len(previous), previous + [msg])
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6173,7 +6172,7 @@ def test_entrypoint_generator_with_return_and_save() -> None:
 
         yield "hello"
         yield "world"
-        yield ReturnAndSave("!", "saved value")
+        yield entrypoint.final("!", "saved value")
 
     assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
         "hello",
@@ -6210,7 +6209,7 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
 
         yield "hello"
         yield "world"
-        yield ReturnAndSave("!", "saved value")
+        yield entrypoint.final("!", "saved value")
 
     assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == [
         "hello",

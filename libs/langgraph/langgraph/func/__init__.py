@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import dataclasses
 import functools
 import inspect
 import types
@@ -8,7 +9,9 @@ from typing import (
     Any,
     Awaitable,
     Callable,
+    Generic,
     Optional,
+    TypeVar,
     Union,
     get_args,
     get_origin,
@@ -29,7 +32,7 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, ReturnAndSave, StreamMode, StreamWriter
+from langgraph.types import RetryPolicy, StreamMode, StreamWriter
 
 
 @overload
@@ -142,12 +145,15 @@ def task(
     return decorator
 
 
-def entrypoint(
-    *,
-    checkpointer: Optional[BaseCheckpointSaver] = None,
-    store: Optional[BaseStore] = None,
-    config_schema: Optional[type[Any]] = None,
-) -> Callable[[types.FunctionType], Pregel]:
+R = TypeVar("R")
+S = TypeVar("S")
+
+
+# The decorator was wrapped in a class to support the `final` attribute.
+# In this form, the `final` attribute should play nicely with IDE autocompletion,
+# and type checking tools.
+# In addition, we'll be able to surface this information in the API Reference.
+class entrypoint:
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
     !!! warning "Experimental"
@@ -179,6 +185,11 @@ def entrypoint(
             semantic search capabilities through an optional `index` configuration.
         config_schema: Specifies the schema for the configuration object that will be
             passed to the workflow.
+
+    Attributes:
+        final: A special attribute that can be used to return a value and save a value
+            to the checkpointer. This is useful when you want to return a value from
+            the function and save a value to the check
 
     Returns:
         A decorator that converts a function into a Pregel graph.
@@ -268,7 +279,30 @@ def entrypoint(
         ```
     """
 
-    def _imp(func: types.FunctionType) -> Pregel:
+    def __init__(
+        self,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        store: Optional[BaseStore] = None,
+        config_schema: Optional[type[Any]] = None,
+    ) -> None:
+        """Initialize the entrypoint decorator."""
+        self.checkpointer = checkpointer
+        self.store = store
+        self.config_schema = config_schema
+
+    @dataclasses.dataclass(frozen=True)
+    class final(Generic[R, S]):
+        """Return a value and save the state associated with the entrypoint."""
+
+        value: R
+        """Value to return. A value will always be returned even if it is None."""
+        save: S
+        """The value for the state for the next checkpoint. 
+
+        A value will always be saved even if it is None.
+        """
+
+    def __call__(self, func: types.FunctionType) -> Pregel:
         """Convert a function into a Pregel graph.
 
         Args:
@@ -288,60 +322,60 @@ def entrypoint(
 
                 @functools.wraps(func)
                 def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
-                    return_and_save: Optional[ReturnAndSave] = None
+                    final_: Optional[entrypoint.final] = None
                     chunks = []
                     for chunk in func(*args, writer=writer, **kwargs):
-                        if isinstance(chunk, ReturnAndSave):
-                            if return_and_save is not None:
+                        if isinstance(chunk, entrypoint.final):
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding multiple ReturnAndSave "
+                                    "Yielding multiple entrypoint.final "
                                     "objects is not allowed."
                                 )
                             else:
-                                return_and_save = chunk
+                                final_ = chunk
                                 output_chunk = chunk.value
                         else:
-                            if return_and_save is not None:
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding a value after a ReturnAndSave "
+                                    "Yielding a value after a entrypoint.final "
                                     "object is not allowed."
                                 )
                             output_chunk = chunk
                         writer(chunk)
                         chunks.append(output_chunk)
-                    if return_and_save:
-                        return ReturnAndSave(chunks, return_and_save.save)
+                    if final_:
+                        return entrypoint.final(chunks, final_.save)
                     else:
                         return chunks
             else:
 
                 @functools.wraps(func)
                 def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
-                    return_and_save: Optional[ReturnAndSave] = None
+                    final_: Optional[entrypoint.final] = None
                     chunks = []
                     # Do not pass the writer argument to the wrapped function
                     # as it does not have a matching parameter
                     for chunk in func(*args, **kwargs):
-                        if isinstance(chunk, ReturnAndSave):
-                            if return_and_save is not None:
+                        if isinstance(chunk, entrypoint.final):
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding multiple ReturnAndSave "
+                                    "Yielding multiple entrypoint.final "
                                     "objects is not allowed."
                                 )
                             else:
-                                return_and_save = chunk
+                                final_ = chunk
                                 output_chunk = chunk.value
                         else:
-                            if return_and_save is not None:
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding a value after a ReturnAndSave "
+                                    "Yielding a value after a entrypoint.final "
                                     "object is not allowed."
                                 )
                             output_chunk = chunk
                         writer(output_chunk)
                         chunks.append(output_chunk)
-                    if return_and_save:
-                        return ReturnAndSave(chunks, return_and_save.save)
+                    if final_:
+                        return entrypoint.final(chunks, final_.save)
                     else:
                         return chunks
 
@@ -371,29 +405,29 @@ def entrypoint(
                 async def agen_wrapper(
                     *args: Any, writer: StreamWriter, **kwargs: Any
                 ) -> Any:
-                    return_and_save: Optional[ReturnAndSave] = None
+                    final_: Optional[entrypoint.final] = None
                     chunks = []
                     async for chunk in func(*args, writer=writer, **kwargs):
-                        if isinstance(chunk, ReturnAndSave):
-                            if return_and_save is not None:
+                        if isinstance(chunk, entrypoint.final):
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding multiple ReturnAndSave objects is not allowed."
+                                    "Yielding multiple entrypoint.final objects is not allowed."
                                 )
                             else:
-                                return_and_save = chunk
+                                final_ = chunk
                                 output_chunk = chunk.value
                         else:
-                            if return_and_save is not None:
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding a value after a ReturnAndSave object is not allowed."
+                                    "Yielding a value after a entrypoint.final object is not allowed."
                                 )
                             output_chunk = chunk
 
                         writer(output_chunk)
                         chunks.append(output_chunk)
 
-                    if return_and_save:
-                        return ReturnAndSave(chunks, return_and_save.save)
+                    if final_:
+                        return entrypoint.final(chunks, final_.save)
                     else:
                         return chunks
             else:
@@ -402,29 +436,29 @@ def entrypoint(
                 async def agen_wrapper(
                     *args: Any, writer: StreamWriter, **kwargs: Any
                 ) -> Any:
-                    return_and_save: Optional[ReturnAndSave] = None
+                    final_: Optional[entrypoint.final] = None
                     chunks = []
                     async for chunk in func(*args, **kwargs):
-                        if isinstance(chunk, ReturnAndSave):
-                            if return_and_save is not None:
+                        if isinstance(chunk, entrypoint.final):
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding multiple ReturnAndSave objects is not allowed."
+                                    "Yielding multiple entrypoint.final objects is not allowed."
                                 )
                             else:
-                                return_and_save = chunk
+                                final_ = chunk
                                 output_chunk = chunk.value
                         else:
-                            if return_and_save is not None:
+                            if final_ is not None:
                                 raise RuntimeError(
-                                    "Yielding a value after a ReturnAndSave object is not allowed."
+                                    "Yielding a value after a entrypoint.final object is not allowed."
                                 )
                             output_chunk = chunk
 
                         writer(output_chunk)
                         chunks.append(output_chunk)
 
-                    if return_and_save:
-                        return ReturnAndSave(chunks, return_and_save.save)
+                    if final_:
+                        return entrypoint.final(chunks, final_.save)
                     else:
                         return chunks
 
@@ -460,27 +494,29 @@ def entrypoint(
         )
 
         def _pluck_return_value(value: Any) -> Any:
-            """Extract the return_ value the ReturnAndSave object or pass through."""
-            return value.value if isinstance(value, ReturnAndSave) else value
+            """Extract the return_ value the entrypoint.final object or pass through."""
+            return value.value if isinstance(value, entrypoint.final) else value
 
         def _pluck_save_value(value: Any) -> Any:
-            """Extract the save value from the ReturnAndSave object or pass through."""
-            return value.save if isinstance(value, ReturnAndSave) else value
+            """Extract the save value from the entrypoint.final object or pass through."""
+            return value.save if isinstance(value, entrypoint.final) else value
 
         output_type, save_type = Any, Any
         if sig.return_annotation is not inspect.Signature.empty:
-            # User does not parameterize ReturnAndSave properly
-            if sig.return_annotation is ReturnAndSave:  # Un-parameterized ReturnAndSave
+            # User does not parameterize entrypoint.final properly
+            if (
+                sig.return_annotation is entrypoint.final
+            ):  # Un-parameterized entrypoint.final
                 output_type = save_type = Any
             else:
                 origin = get_origin(sig.return_annotation)
-                if origin is ReturnAndSave:
+                if origin is entrypoint.final:
                     type_annotations = get_args(sig.return_annotation)
                     if len(type_annotations) != 2:
                         raise TypeError(
                             "Please an annotation for both the return_ and "
                             "the save values."
-                            "For example, `-> ReturnAndSave[int, str]` would assign a "
+                            "For example, `-> entrypoint.final[int, str]` would assign a "
                             "return_ a type of `int` and save the type `str`."
                         )
                     output_type, save_type = get_args(sig.return_annotation)
@@ -514,12 +550,10 @@ def entrypoint(
             stream_channels=END,
             stream_mode=stream_mode,
             stream_eager=True,
-            checkpointer=checkpointer,
-            store=store,
-            config_type=config_schema,
+            checkpointer=self.checkpointer,
+            store=self.store,
+            config_type=self.config_schema,
         )
-
-    return _imp
 
 
 class EntrypointPregel(Pregel):
