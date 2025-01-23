@@ -5,7 +5,7 @@
 
 ## Overview
 
-The Functional API is an alternative to [State Graph](low_level.md#stategraph) for development in LangGraph. 
+The Functional API is an alternative to [Graph API (StateGraph)](low_level.md#stategraph) for development in LangGraph. 
 
 It allows you to take advantage of LangGraph's key features for [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md) workflows, and [streaming](streaming.md) without explicitly specifying state, or control flow in terms of nodes and edges.  
 
