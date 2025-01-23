@@ -240,7 +240,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    **deprecated_kwargs: dict[str, Any],
+    **deprecated_kwargs: Any,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
