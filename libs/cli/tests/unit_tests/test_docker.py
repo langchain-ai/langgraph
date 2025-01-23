@@ -115,13 +115,17 @@ services:
             timeout: 1s
             retries: 5
     langgraph-postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         ports:
             - "5433:5432"
         environment:
             POSTGRES_DB: postgres
             POSTGRES_USER: postgres
             POSTGRES_PASSWORD: postgres
+        command:
+            - postgres
+            - -c
+            - shared_preload_libraries=vector
         volumes:
             - langgraph-data:/var/lib/postgresql/data
         healthcheck:
