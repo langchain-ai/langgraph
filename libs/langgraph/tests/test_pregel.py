@@ -6099,3 +6099,87 @@ def test_multiple_subgraphs_mixed_checkpointer(
         ),
         ((), {"parent_node": {"parent_counter": 7}}),
     ]
+
+
+def test_merging_updates_command_parent():
+    # simple reducer
+    def append_unique(left, right):
+        combined = list(left)
+        for item in right:
+            if item in combined:
+                continue
+            else:
+                combined.append(item)
+        return combined
+
+    class State(TypedDict):
+        foo: str
+        bar: Annotated[list[str], append_unique]
+
+    # Define subgraph
+    def subgraph_node_1(state: State):
+        return Command(
+            goto="subgraph_node_2",
+            update={
+                "foo": "foo",
+                "bar": ["subgraph_node_1"],
+            },
+        )
+
+    def subgraph_node_2(state: State):
+        return Command(
+            goto="node_3",
+            update={"bar": ["subgraph_node_2"]},
+            graph=Command.PARENT,
+        )
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.add_node(subgraph_node_2)
+    subgraph_builder.add_edge(START, "subgraph_node_1")
+
+    # Define main graph
+    def node_1(state: State):
+        return Command(
+            goto="node_2",
+            update={"bar": ["node_1"]},
+        )
+
+    def node_3(state: State, store):
+        return Command(
+            update={"bar": ["node_3"]},
+        )
+
+    main_builder = StateGraph(State)
+    main_builder.add_node("node_1", node_1)
+    main_builder.add_node("node_2", subgraph_builder.compile())
+    main_builder.add_node("node_3", node_3)
+    main_builder.add_edge(START, "node_1")
+    main_builder.add_edge("node_2", "node_3")
+    main_graph = main_builder.compile()
+
+    assert main_graph.invoke({"foo": ""}) == {
+        "foo": "foo",
+        "bar": ["node_1", "subgraph_node_1", "subgraph_node_2", "node_3"],
+    }
+
+    assert list(
+        main_graph.stream({"foo": ""}, stream_mode="updates", subgraphs=True)
+    ) == [
+        ((), {"node_1": {"bar": ["node_1"]}}),
+        (
+            (AnyStr("node_2:"),),
+            {"subgraph_node_1": {"foo": "foo", "bar": ["subgraph_node_1"]}},
+        ),
+        (
+            (),
+            {
+                "node_2": [
+                    {"foo": "foo"},
+                    {"bar": ["node_1", "subgraph_node_1"]},
+                    {"bar": ["subgraph_node_2"]},
+                ]
+            },
+        ),
+        ((), {"node_3": {"bar": ["node_3"]}}),
+    ]
