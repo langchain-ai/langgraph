@@ -131,6 +131,7 @@ See the below guides for how-to implement multi-agent workflows with the (beta)
 [Functional API](../concepts/functional_api.md):
 
 - [How to build a multi-agent network (functional API)](multi-agent-network-functional.ipynb)
+- [How to add multi-turn conversation in a multi-agent application (functional API)](multi-agent-multi-turn-convo-functional.ipynb)
 
 ### State Management
 
