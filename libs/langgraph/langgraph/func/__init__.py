@@ -338,16 +338,14 @@ class entrypoint:
                                 )
                             else:
                                 final_ = chunk
-                                output_chunk = chunk.value
                         else:
                             if final_ is not None:
                                 raise RuntimeError(
                                     "Yielding a value after a entrypoint.final "
                                     "object is not allowed."
                                 )
-                            output_chunk = chunk
-                        writer(chunk)
-                        chunks.append(output_chunk)
+                            writer(chunk)
+                            chunks.append(chunk)
 
                     return final_ if final_ else chunks
             else:
@@ -367,16 +365,14 @@ class entrypoint:
                                 )
                             else:
                                 final_ = chunk
-                                output_chunk = chunk.value
                         else:
                             if final_ is not None:
                                 raise RuntimeError(
                                     "Yielding a value after a entrypoint.final "
                                     "object is not allowed."
                                 )
-                            output_chunk = chunk
-                        writer(output_chunk)
-                        chunks.append(output_chunk)
+                            writer(chunk)
+                            chunks.append(chunk)
                     return final_ if final_ else chunks
 
                 # Create a new parameter for the writer argument
@@ -415,16 +411,13 @@ class entrypoint:
                                 )
                             else:
                                 final_ = chunk
-                                output_chunk = chunk.value
                         else:
                             if final_ is not None:
                                 raise RuntimeError(
                                     "Yielding a value after a entrypoint.final object is not allowed."
                                 )
-                            output_chunk = chunk
-
-                        writer(output_chunk)
-                        chunks.append(output_chunk)
+                            writer(chunk)
+                            chunks.append(chunk)
 
                     return final_ if final_ else chunks
             else:
@@ -443,16 +436,13 @@ class entrypoint:
                                 )
                             else:
                                 final_ = chunk
-                                output_chunk = chunk.value
                         else:
                             if final_ is not None:
                                 raise RuntimeError(
                                     "Yielding a value after a entrypoint.final object is not allowed."
                                 )
-                            output_chunk = chunk
-
-                        writer(output_chunk)
-                        chunks.append(output_chunk)
+                            writer(chunk)
+                            chunks.append(chunk)
 
                     return final_ if final_ else chunks
 

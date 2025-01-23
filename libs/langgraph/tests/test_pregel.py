@@ -6177,7 +6177,6 @@ def test_entrypoint_generator_with_return_and_save() -> None:
     assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
         "hello",
         "world",
-        "!",
     ]
     assert list(
         workflow.stream({}, {"configurable": {"thread_id": "0"}}, stream_mode="updates")
@@ -6211,6 +6210,13 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
         yield "hello"
         yield "world"
         yield entrypoint.final("!", "saved value")
+
+    assert [
+        c async for c in workflow.astream({}, {"configurable": {"thread_id": "0"}})
+    ] == [
+        "hello",
+        "world",
+    ]
 
     assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
 
