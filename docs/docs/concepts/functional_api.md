@@ -22,7 +22,7 @@ from langgraph.types import interrupt
 @task
 def write_essay(topic: str) -> str:
     """Write an essay about the given topic."""
-    time.sleep(1) # This is a placeholder for a long-running task.
+    time.sleep(1) # A placeholder for a long-running task.
     return f"An essay about topic: {topic}"
 
 @entrypoint(checkpointer=MemorySaver())
