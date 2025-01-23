@@ -31,7 +31,8 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, StreamMode, StreamWriter
+from langgraph.types import RetryPolicy, StreamMode, StreamWriter, _DC_KWARGS
+from dataclasses import dataclass
 
 
 @overload
@@ -185,11 +186,6 @@ class entrypoint:
         config_schema: Specifies the schema for the configuration object that will be
             passed to the workflow.
 
-    Attributes:
-        final: A special attribute that can be used to return a value and save a value
-            to the checkpointer. This is useful when you want to return a value from
-            the function and save a value to the check
-
     Returns:
         A decorator that converts a function into a Pregel graph.
 
@@ -289,10 +285,13 @@ class entrypoint:
         self.store = store
         self.config_schema = config_schema
 
+    @dataclass(_DC_KWARGS)
     class final(Generic[R, S]):
-        """Return a value and save the state associated with the entrypoint."""
+        """A primitive that can be returned from an entrypoint.
 
-        __slots__ = ("value", "save")
+        This primitive allows to save a value to the checkpointer distinct from the
+        return value from the entrypoint.
+        """
 
         value: R
         """Value to return. A value will always be returned even if it is None."""
@@ -301,10 +300,6 @@ class entrypoint:
 
         A value will always be saved even if it is None.
         """
-
-        def __init__(self, value: R, save: S) -> None:
-            self.value = value
-            self.save = save
 
     def __call__(self, func: types.FunctionType) -> Pregel:
         """Convert a function into a Pregel graph.
