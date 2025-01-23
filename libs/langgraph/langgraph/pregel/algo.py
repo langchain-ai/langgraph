@@ -509,9 +509,6 @@ def prepare_single_task(
                             pending_writes,
                             task_id,
                         ),
-                        CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
-                            PREVIOUS, None
-                        ),
                     },
                 ),
                 triggers,
