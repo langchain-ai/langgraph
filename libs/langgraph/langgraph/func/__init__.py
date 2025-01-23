@@ -4,6 +4,7 @@ import functools
 import inspect
 import types
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import (
     Any,
     Awaitable,
@@ -31,8 +32,7 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import RetryPolicy, StreamMode, StreamWriter, _DC_KWARGS
-from dataclasses import dataclass
+from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode, StreamWriter
 
 
 @overload
