@@ -147,7 +147,7 @@ class FakeToolCallingModel(BaseChatModel):
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+def test_no_prompt(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         "checkpointer_" + checkpointer_name
     )
@@ -181,7 +181,7 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_no_modifier_async(checkpointer_name: str) -> None:
+async def test_no_prompt_async(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         model = FakeToolCallingModel()
 
@@ -217,16 +217,17 @@ def test_passing_two_modifiers():
     with pytest.raises(ValueError):
         create_react_agent(model, [], messages_modifier="Foo", state_modifier="Bar")
 
+    with pytest.raises(ValueError):
+        create_react_agent(model, [], messages_modifier="Foo", prompt="Bar")
 
-def test_system_message_modifier():
-    messages_modifier = SystemMessage(content="Foo")
-    agent_1 = create_react_agent(
-        FakeToolCallingModel(), [], messages_modifier=messages_modifier
-    )
-    agent_2 = create_react_agent(
-        FakeToolCallingModel(), [], state_modifier=messages_modifier
-    )
-    for agent in [agent_1, agent_2]:
+
+def test_system_message_prompt():
+    prompt = SystemMessage(content="Foo")
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], messages_modifier=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+    ):
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
@@ -235,15 +236,13 @@ def test_system_message_modifier():
         assert response == expected_response
 
 
-def test_system_message_string_modifier():
-    messages_modifier = "Foo"
-    agent_1 = create_react_agent(
-        FakeToolCallingModel(), [], messages_modifier=messages_modifier
-    )
-    agent_2 = create_react_agent(
-        FakeToolCallingModel(), [], state_modifier=messages_modifier
-    )
-    for agent in [agent_1, agent_2]:
+def test_string_prompt():
+    prompt = "Foo"
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], messages_modifier=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+    ):
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
@@ -252,60 +251,51 @@ def test_system_message_string_modifier():
         assert response == expected_response
 
 
-def test_callable_messages_modifier():
-    model = FakeToolCallingModel()
-
+def test_callable_prompt():
     def messages_modifier(messages):
         modified_message = f"Bar {messages[-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
-    assert response == expected_response
-
-
-def test_callable_state_modifier():
-    model = FakeToolCallingModel()
-
-    def state_modifier(state):
+    def prompt(state):
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    agent = create_react_agent(model, [], state_modifier=state_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
-    assert response == expected_response
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+        create_react_agent(
+            FakeToolCallingModel(), [], messages_modifier=messages_modifier
+        ),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
+        }
+        assert response == expected_response
 
 
-def test_runnable_messages_modifier():
-    model = FakeToolCallingModel()
-
+def test_runnable_prompt():
     messages_modifier = RunnableLambda(
         lambda messages: [HumanMessage(content=f"Baz {messages[-1].content}")]
     )
-
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
-    assert response == expected_response
-
-
-def test_runnable_state_modifier():
-    model = FakeToolCallingModel()
-
-    state_modifier = RunnableLambda(
+    prompt = RunnableLambda(
         lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
     )
 
-    agent = create_react_agent(model, [], state_modifier=state_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
-    assert response == expected_response
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+        create_react_agent(
+            FakeToolCallingModel(), [], messages_modifier=messages_modifier
+        ),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Baz hi?", id="0")]
+        }
+        assert response == expected_response
 
 
 def test_state_modifier_with_store():
@@ -1619,7 +1609,7 @@ def test_react_agent_update_state():
             }
         )
 
-    def state_modifier(state: State):
+    def prompt(state: State):
         user_name = state.get("user_name")
         if user_name is None:
             return state["messages"]
@@ -1634,7 +1624,7 @@ def test_react_agent_update_state():
         model,
         [get_user_name],
         state_schema=State,
-        state_modifier=state_modifier,
+        prompt=prompt,
         checkpointer=checkpointer,
     )
     config = {"configurable": {"thread_id": "1"}}
