@@ -240,7 +240,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    **kwargs: dict[str, Any],
+    **deprecated_kwargs: dict[str, Any],
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -600,8 +600,8 @@ def create_react_agent(
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
     preprocessor = _get_model_preprocessing_runnable(
-        cast(Optional[Prompt], prompt or kwargs.get("state_modifier")),
-        cast(Optional[MessagesModifier], kwargs.get("messages_modifier")),
+        cast(Optional[Prompt], prompt or deprecated_kwargs.get("state_modifier")),
+        cast(Optional[MessagesModifier], deprecated_kwargs.get("messages_modifier")),
     )
     model_runnable = preprocessor | model
 
