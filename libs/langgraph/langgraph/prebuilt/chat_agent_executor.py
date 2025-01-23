@@ -1,3 +1,4 @@
+import inspect
 from typing import (
     Callable,
     Literal,
@@ -89,6 +90,12 @@ def _get_state_modifier_runnable(
     elif isinstance(state_modifier, SystemMessage):
         state_modifier_runnable = RunnableCallable(
             lambda state: [state_modifier] + state["messages"],
+            name=STATE_MODIFIER_RUNNABLE_NAME,
+        )
+    elif inspect.iscoroutinefunction(state_modifier):
+        state_modifier_runnable = RunnableCallable(
+            None,
+            state_modifier,
             name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif callable(state_modifier):
