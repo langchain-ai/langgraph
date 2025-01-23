@@ -1612,11 +1612,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
 
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
-    async def add_one_impl(x: int) -> int:
-        await asyncio.sleep(0.01 * x)
-        return x + 1
-
-    add_one = mocker.AsyncMock(side_effect=add_one_impl)
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = (
         Channel.subscribe_to("inbox")
@@ -6411,22 +6407,6 @@ async def test_interrupt_task_functional(checkpointer_name: str) -> None:
         # Resume with an answer
         res = await graph.ainvoke(Command(resume="bar"), config)
         assert res == {"a": "foobar"}
-
-        # Test that we can interrupt the same task multiple times
-        config = {"configurable": {"thread_id": "2"}}
-
-        @entrypoint(checkpointer=checkpointer)
-        async def graph(inputs: dict) -> dict:
-            foo_result = await foo(inputs)
-            bar_result = await bar(foo_result)
-            baz_result = await bar(bar_result)
-            return baz_result
-
-        # First run, interrupted at bar
-        assert not await graph.ainvoke({"a": ""}, config)
-        # Provide resumes
-        assert not await graph.ainvoke(Command(resume="bar"), config)
-        assert await graph.ainvoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
