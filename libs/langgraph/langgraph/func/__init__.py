@@ -535,6 +535,7 @@ class EntrypointPregel(Pregel):
     !!! warning "Beta"
         The Functional API is currently in beta and is subject to change.
     """
+
     def get_graph(
         self,
         config: Optional[RunnableConfig] = None,
