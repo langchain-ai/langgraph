@@ -20,7 +20,7 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self, TypedDict
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
@@ -342,15 +342,25 @@ class LoopProtocol:
         self.stop = stop
 
 
-class PregelScratchpad(TypedDict):
+@dataclasses.dataclass(**{**_DC_KWARGS, "frozen": False})
+class PregelScratchpad:
     # call
-    call_counter: int
+    call_counter: Callable[[], int]
     # interrupt
-    interrupt_counter: int
+    interrupt_counter: Callable[[], int]
     resume: list[Any]
-    null_resume: Any
+    null_resume: Optional[Any]
+    _consume_null_resume: Callable[[], None]
     # subgraph
-    subgraph_counter: int
+    subgraph_counter: Callable[[], int]
+
+    def consume_null_resume(self) -> Any:
+        if self.null_resume is not None:
+            value = self.null_resume
+            self._consume_null_resume()
+            self.null_resume = None
+            return value
+        raise ValueError("No null resume to consume")
 
 
 def interrupt(value: Any) -> Any:
@@ -452,7 +462,6 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        MISSING,
         NS_SEP,
         RESUME,
     )
@@ -462,19 +471,17 @@ def interrupt(value: Any) -> Any:
     conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    scratchpad["interrupt_counter"] += 1
-    idx = scratchpad["interrupt_counter"]
+    idx = scratchpad.interrupt_counter()
     # find previous resume values
-    if scratchpad["resume"]:
-        if idx < len(scratchpad["resume"]):
-            return scratchpad["resume"][idx]
+    if scratchpad.resume:
+        if idx < len(scratchpad.resume):
+            return scratchpad.resume[idx]
     # find current resume value
-    if scratchpad["null_resume"] is not MISSING:
-        assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
-        v = scratchpad["null_resume"]
-        scratchpad["null_resume"] = MISSING
-        scratchpad["resume"].append(v)
-        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
+    if scratchpad.null_resume is not None:
+        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        v = scratchpad.consume_null_resume()
+        scratchpad.resume.append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return v
     # no resume value found
     raise GraphInterrupt(

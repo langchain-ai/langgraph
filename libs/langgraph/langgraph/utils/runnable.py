@@ -36,7 +36,7 @@ from typing_extensions import TypeGuard
 
 from langgraph.constants import (
     CONF,
-    CONFIG_KEY_END,
+    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM_WRITER,
 )
@@ -85,7 +85,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         sys.intern("previous"),
         (ANY_TYPE,),
-        CONFIG_KEY_END,
+        CONFIG_KEY_PREVIOUS,
         inspect.Parameter.empty,
     ),
 )
@@ -120,6 +120,7 @@ class RunnableCallable(Runnable):
         tags: Optional[Sequence[str]] = None,
         trace: bool = True,
         recurse: bool = True,
+        explode_args: bool = False,
         **kwargs: Any,
     ) -> None:
         self.name = name
@@ -141,6 +142,7 @@ class RunnableCallable(Runnable):
         self.kwargs = kwargs
         self.trace = trace
         self.recurse = recurse
+        self.explode_args = explode_args
         # check signature
         if func is None and afunc is None:
             raise ValueError("At least one of func or afunc must be provided.")
@@ -176,7 +178,12 @@ class RunnableCallable(Runnable):
             )
         if config is None:
             config = ensure_config()
-        kwargs = {**self.kwargs, **kwargs}
+        if self.explode_args:
+            args, _kwargs = input
+            kwargs = {**self.kwargs, **_kwargs, **kwargs}
+        else:
+            args = (input,)
+            kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
@@ -208,7 +215,7 @@ class RunnableCallable(Runnable):
                 child_config = patch_config(config, callbacks=run_manager.get_child())
                 context = copy_context()
                 context.run(_set_config_context, child_config)
-                ret = context.run(self.func, input, **kwargs)
+                ret = context.run(self.func, *args, **kwargs)
             except BaseException as e:
                 run_manager.on_chain_error(e)
                 raise
@@ -216,7 +223,7 @@ class RunnableCallable(Runnable):
                 run_manager.on_chain_end(ret)
         else:
             context.run(_set_config_context, config)
-            ret = context.run(self.func, input, **kwargs)
+            ret = context.run(self.func, *args, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
         return ret
@@ -228,7 +235,12 @@ class RunnableCallable(Runnable):
             return self.invoke(input, config)
         if config is None:
             config = ensure_config()
-        kwargs = {**self.kwargs, **kwargs}
+        if self.explode_args:
+            args, _kwargs = input
+            kwargs = {**self.kwargs, **_kwargs, **kwargs}
+        else:
+            args = (input,)
+            kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
@@ -258,7 +270,7 @@ class RunnableCallable(Runnable):
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
                 context.run(_set_config_context, child_config)
-                coro = cast(Coroutine[None, None, Any], self.afunc(input, **kwargs))
+                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
                 if ASYNCIO_ACCEPTS_CONTEXT:
                     ret = await asyncio.create_task(coro, context=context)
                 else:
@@ -271,10 +283,10 @@ class RunnableCallable(Runnable):
         else:
             context.run(_set_config_context, config)
             if ASYNCIO_ACCEPTS_CONTEXT:
-                coro = cast(Coroutine[None, None, Any], self.afunc(input, **kwargs))
+                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
                 ret = await asyncio.create_task(coro, context=context)
             else:
-                ret = await self.afunc(input, **kwargs)
+                ret = await self.afunc(*args, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return await ret.ainvoke(input, config)
         return ret
@@ -347,6 +359,7 @@ class RunnableSeq(Runnable):
         self,
         *steps: RunnableLike,
         name: Optional[str] = None,
+        trace_inputs: Optional[Callable[[Any], Any]] = None,
     ) -> None:
         """Create a new RunnableSeq.
 
@@ -371,6 +384,7 @@ class RunnableSeq(Runnable):
             )
         self.steps = steps_flat
         self.name = name
+        self.trace_inputs = trace_inputs
 
     def __or__(
         self,
@@ -432,7 +446,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            input,
+            self.trace_inputs(input) if self.trace_inputs is not None else input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -442,7 +456,7 @@ class RunnableSeq(Runnable):
             for i, step in enumerate(self.steps):
                 # mark each step as a child run
                 config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i+1}")
+                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
                 )
                 if i == 0:
                     input = step.invoke(input, config, **kwargs)
@@ -469,7 +483,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            input,
+            self.trace_inputs(input) if self.trace_inputs is not None else input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -479,7 +493,7 @@ class RunnableSeq(Runnable):
             for i, step in enumerate(self.steps):
                 # mark each step as a child run
                 config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i+1}")
+                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
                 )
                 if i == 0:
                     input = await step.ainvoke(input, config, **kwargs)
@@ -506,7 +520,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            input,
+            self.trace_inputs(input) if self.trace_inputs is not None else input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -519,7 +533,7 @@ class RunnableSeq(Runnable):
             for idx, step in enumerate(self.steps):
                 config = patch_config(
                     config,
-                    callbacks=run_manager.get_child(f"seq:step:{idx+1}"),
+                    callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
                 )
                 if idx == 0:
                     iterator = step.stream(input, config, **kwargs)
@@ -569,7 +583,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            input,
+            self.trace_inputs(input) if self.trace_inputs is not None else input,
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -583,7 +597,7 @@ class RunnableSeq(Runnable):
                 for idx, step in enumerate(self.steps):
                     config = patch_config(
                         config,
-                        callbacks=run_manager.get_child(f"seq:step:{idx+1}"),
+                        callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
                     )
                     if idx == 0:
                         aiterator = step.astream(input, config, **kwargs)

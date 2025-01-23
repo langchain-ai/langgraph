@@ -89,7 +89,7 @@ def map_command(
                 raise TypeError(
                     f"In Command.goto, expected Send/str, got {type(send).__name__}"
                 )
-    if cmd.resume:
+    if cmd.resume is not None:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
                 existing: list[Any] = next(

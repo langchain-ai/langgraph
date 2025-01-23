@@ -1,3 +1,5 @@
+import functools
+import itertools
 import sys
 from collections import defaultdict, deque
 from functools import partial
@@ -37,7 +39,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
-    CONFIG_KEY_END,
+    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_READ,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
@@ -46,11 +48,11 @@ from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PREVIOUS,
     PULL,
     PUSH,
     RESERVED,
@@ -62,7 +64,7 @@ from langgraph.constants import (
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.call import get_runnable_for_func
+from langgraph.pregel.call import get_runnable_for_task
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
@@ -324,7 +326,7 @@ def apply_writes(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -341,7 +343,7 @@ def prepare_next_tasks(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -357,7 +359,7 @@ def prepare_next_tasks(
 
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -418,7 +420,7 @@ def prepare_single_task(
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -439,7 +441,7 @@ def prepare_single_task(
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
         task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
         call = task_path_t[-1]
-        proc_ = get_runnable_for_func(call.func)
+        proc_ = get_runnable_for_task(call.func)
         name = proc_.name
         if name is None:
             raise ValueError("`call` functions must have a `__name__` attribute")
@@ -507,9 +509,6 @@ def prepare_single_task(
                         CONFIG_KEY_SCRATCHPAD: _scratchpad(
                             pending_writes,
                             task_id,
-                        ),
-                        CONFIG_KEY_END: checkpoint["channel_values"].get(
-                            "__end__", None
                         ),
                     },
                 ),
@@ -620,8 +619,8 @@ def prepare_single_task(
                                 pending_writes,
                                 task_id,
                             ),
-                            CONFIG_KEY_END: checkpoint["channel_values"].get(
-                                "__end__", None
+                            CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                                PREVIOUS, None
                             ),
                         },
                     ),
@@ -744,8 +743,8 @@ def prepare_single_task(
                                     pending_writes,
                                     task_id,
                                 ),
-                                CONFIG_KEY_END: checkpoint["channel_values"].get(
-                                    "__end__", None
+                                CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                                    PREVIOUS, None
                                 ),
                             },
                         ),
@@ -761,23 +760,27 @@ def prepare_single_task(
 
 
 def _scratchpad(
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
+    null_resume_write = next(
+        (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
+    )
+    # using itertools.count as an atomic counter (+= 1 is not thread-safe)
     return PregelScratchpad(
         # call
-        call_counter=0,
+        call_counter=itertools.count(0).__next__,
         # interrupt
-        interrupt_counter=-1,
+        interrupt_counter=itertools.count(0).__next__,
         resume=next(
             (w[2] for w in pending_writes if w[0] == task_id and w[1] == RESUME), []
         ),
-        null_resume=next(
-            (w[2] for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME),
-            MISSING,
-        ),
+        null_resume=null_resume_write[2] if null_resume_write is not None else None,
+        _consume_null_resume=functools.partial(pending_writes.remove, null_resume_write)
+        if null_resume_write is not None
+        else lambda: None,
         # subgraph
-        subgraph_counter=0,
+        subgraph_counter=itertools.count(0).__next__,
     )
 
 
