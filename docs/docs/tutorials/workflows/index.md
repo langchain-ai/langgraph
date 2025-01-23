@@ -18,7 +18,7 @@ You can use [any chat model](https://python.langchain.com/docs/integrations/chat
 ??? "Install dependencies"
 
     ```bash
-    pip install langchain_core langchain-openai langchain-anthropic langgraph 
+    pip install langchain_core langchain-anthropic langgraph 
     ```
 
 Initialize an LLM
