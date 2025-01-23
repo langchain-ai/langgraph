@@ -39,7 +39,7 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel.algo import Call
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
-from langgraph.types import PregelExecutableTask, RetryPolicy
+from langgraph.types import PregelExecutableTask, PregelScratchpad, RetryPolicy
 from langgraph.utils.future import chain_future
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
@@ -135,8 +135,7 @@ class PregelRunner:
                 return task.config[CONF][CONFIG_KEY_SEND](writes)
 
             # schedule PUSH tasks, collect futures
-            scratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
-            scratchpad.setdefault("call_counter", 0)
+            scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
             rtn: dict[int, Optional[concurrent.futures.Future]] = {}
             for idx, w in enumerate(writes):
                 # bail if not a PUSH write
@@ -144,8 +143,8 @@ class PregelRunner:
                     continue
                 # schedule the next task, if the callback returns one
                 wcall = calls[idx] if calls else None
-                cnt = scratchpad["call_counter"]
-                scratchpad["call_counter"] += 1
+                cnt = scratchpad.call_counter
+                scratchpad.call_counter += 1
                 if next_task := self.schedule_task(task, cnt, wcall):
                     if fut := next(
                         (
@@ -324,8 +323,7 @@ class PregelRunner:
                 return task.config[CONF][CONFIG_KEY_SEND](writes)
 
             # schedule PUSH tasks, collect futures
-            scratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
-            scratchpad.setdefault("call_counter", 0)
+            scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
             rtn: dict[int, Optional[asyncio.Future]] = {}
             for idx, w in enumerate(writes):
                 # bail if not a PUSH write
@@ -333,8 +331,8 @@ class PregelRunner:
                     continue
                 # schedule the next task, if the callback returns one
                 wcall = calls[idx] if calls is not None else None
-                cnt = scratchpad["call_counter"]
-                scratchpad["call_counter"] += 1
+                cnt = scratchpad.call_counter
+                scratchpad.call_counter += 1
                 if next_task := self.schedule_task(task, cnt, wcall):
                     # if the parent task was retried,
                     # the next task might already be running

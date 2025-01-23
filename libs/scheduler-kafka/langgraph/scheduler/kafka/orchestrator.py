@@ -13,10 +13,8 @@ from typing_extensions import Self
 
 import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import (
-    CONF,
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_ENSURE_LATEST,
-    CONFIG_KEY_SCRATCHPAD,
     INTERRUPT,
     SCHEDULED,
 )
@@ -178,8 +176,6 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                             CONFIG_KEY_ENSURE_LATEST: True,
                         },
                     )
-                    if CONFIG_KEY_SCRATCHPAD in config[CONF]:
-                        config[CONF][CONFIG_KEY_SCRATCHPAD]["subgraph_counter"] = 0
                     # send messages to executor
                     futures = await asyncio.gather(
                         *(
@@ -366,8 +362,6 @@ class KafkaOrchestrator(AbstractContextManager):
                             CONFIG_KEY_ENSURE_LATEST: True,
                         },
                     )
-                    if CONFIG_KEY_SCRATCHPAD in config[CONF]:
-                        config[CONF][CONFIG_KEY_SCRATCHPAD]["subgraph_counter"] = 0
                     # send messages to executor
                     futures = [
                         self.producer.send(
