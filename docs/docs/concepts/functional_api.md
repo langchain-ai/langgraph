@@ -471,9 +471,157 @@ def slow_computation(input_value):
 - **Retryable Work**: When work needs to be retried to handle failures or inconsistencies, **tasks** provide a way to encapsulate and manage the retry logic.
 - **Parallel Execution**: For I/O-bound tasks, **tasks** enable parallel execution, allowing multiple operations to run concurrently without blocking (e.g., calling multiple APIs).
  
+## Serialization
+
+There are two key aspects to serialization in LangGraph:
+
+1. `@entrypoint` inputs and outputs must be JSON-serializable.
+2. `@task` outputs must be JSON-serializable.
+
+These requirements are necessary for enabling checkpointing and workflow resumption. Use python primitives
+like dictionaries, lists, strings, numbers, and booleans to ensure that your inputs and outputs are serializable.
+
+Serialization ensures that workflow state, such as task results and intermediate values, can be reliably saved and restored. This is critical for enabling human-in-the-loop interactions, fault tolerance, and parallel execution.
+
+Providing non-serializable inputs or outputs will result in a runtime error when a workflow is configured with a checkpointer.
+
+## Determinism
+
+To utilize features like **human-in-the-loop**, any randomness should be encapsulated inside of **tasks**. This guarantees that when execution is halted (e.g., for human in the loop) and then resumed, it will follow the same *sequence of steps*, even if **task** results are non-deterministic.
+
+LangGraph achieves this behavior by persisting **task** and [**subgraph**](./low_level.md#subgraphs) results as they execute. A well-designed workflow ensures that resuming execution follows the *same sequence of steps*, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running **tasks** or **tasks** with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentially the same 
+
+While different runs of a workflow can produce different results, resuming a **specific** run should always follow the same sequence of recorded steps. This allows LangGraph to efficiently look up **task** and **subgraph** results that were executed prior to the graph being interrupted and avoid recomputing them.
+
+## Idempotency
+
+Idempotency ensures that running the same operation multiple times produces the same result. This helps prevent duplicate API calls and redundant processing if a step is rerun due to a failure. Always place API calls inside **tasks** functions for checkpointing, and design them to be idempotent in case of re-execution. Re-execution can occur if a **task** starts, but does not complete successfully. Then, if the workflow is resumed, the **task** will run again. Use idempotency keys or verify existing results to avoid duplication.
+
+## Functional API vs. Graph API
+
+The **Functional API** and the **Graph APIs** provide two different paradigms to create workflows in LangGraph. Here are some key differences:
+
+- **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows.
+- **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
+- **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
+- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
+
+## Common Pitfalls
+
+### Handling side effects
+
+Side effects, such as writing to a file or sending an email, should be encapsulated in tasks to ensure consistent execution upon resumption.
+
+=== "Incorrect"
+
+    In this example, a side effect (writing to a file) is directly included in the workflow, making resumption inconsistent.
+
+    ```python
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(inputs: dict) -> int:
+        # This code will be executed a second time when resuming the workflow.
+        # Which is likely not what you want.
+        # highlight-next-line
+        with open("output.txt", "w") as f:
+            # highlight-next-line
+            f.write("Side effect executed")
+        value = interrupt("question")
+        return value
+    ```
+
+=== "Correct"
+
+    In this example, the side effect is encapsulated in a task, ensuring consistent execution upon resumption.
+
+    ```python
+    from langgraph.func import task
+
+    # highlight-next-line
+    @task
+    # highlight-next-line
+    def write_to_file():
+        with open("output.txt", "w") as f:
+            f.write("Side effect executed")
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(inputs: dict) -> int:
+        # The side effect is now encapsulated in a task.
+        write_to_file().result()
+        value = interrupt("question")
+        return value
+    ```
+
+### Non-deterministic control flow
+
+[Non-deterministic control flow](#determinism) can lead to inconsistent results when resuming a workflow. To ensure correct behavior, encapsulate non-deterministic operations (e.g., random number generation, time-based logic) inside **tasks**.
+
+=== "Incorrect"
+
+    In this example, the workflow uses the current time to determine which task to execute. This is non-deterministic because the result of the workflow depends on the time at which it is executed.
+
+    ```python
+    from langgraph.func import entrypoint
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(inputs: dict) -> int:
+        t0 = inputs["t0"]
+        # highlight-next-line
+        t1 = time.time()
+        
+        delta_t = t1 - t0
+        
+        if delta_t > 1:
+            result = slow_task(1).result()
+            value = interrupt("question")
+        else:
+            result = slow_task(2).result()
+            value = interrupt("question")
+            
+        return {
+            "result": result,
+            "value": value
+        }
+    ```
+
+=== "Correct"
+
+    In this example, the workflow uses the input `t0` to determine which task to execute. This is deterministic because the result of the workflow depends only on the input.
+
+    ```python
+    import time
+
+    from langgraph.func import task
+
+    # highlight-next-line
+    @task
+    # highlight-next-line
+    def get_time() -> float:
+        return time.time()
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(inputs: dict) -> int:
+        t0 = inputs["t0"]
+        # highlight-next-line
+        t1 = get_time().result()
+        
+        delta_t = t1 - t0
+        
+        if delta_t > 1:
+            result = slow_task(1).result()
+            value = interrupt("question")
+        else:
+            result = slow_task(2).result()
+            value = interrupt("question")
+            
+        return {
+            "result": result,
+            "value": value
+        }
+    ```
+
 ## Patterns
 
-Below are a few simple patterns that show examples of how to use the **Functional API**.
+Below are a few simple patterns that show examples of **how to** use the **Functional API**.
 
 When defining an `entrypoint`, input is restricted to the first argument of the function. To pass multiple inputs, you can use a dictionary.
 
@@ -717,7 +865,7 @@ The functional API supports [human-in-the-loop](human_in_the_loop.md) workflows 
 Please see the following examples for more details:
 
 * [How to wait for user input (Functional API)](../how-tos/wait-user-input-functional.ipynb): Shows how to implement a simple human-in-the-loop workflow using the functional API.
-* [How to review tool calls (Functional API)](../how-tos/review-tool-calls-functional.ipynb): Guide demonstrates how to implement human-in-the-loop workflows in a ReAct agent using the LangGraph Functional API. 
+* [How to review tool calls (Functional API)](../how-tos/review-tool-calls-functional.ipynb): Guide demonstrates how to implement human-in-the-loop workflows in a ReAct agent using the LangGraph Functional API.
 
 ### Short-term memory
 
@@ -743,153 +891,6 @@ Please see the following how-to guides for more details:
 ### Agents
 
 * [How to create a React agent from scratch (Functional API)](../how-tos/react-agent-from-scratch-functional.ipynb): Shows how to create a simple React agent from scratch using the functional API.
-* [How to build a multi-agent network](../how-tos/multi-agent-network-functional.ipynb): Shows how to build a multi-agent network using the functional API. 
+* [How to build a multi-agent network](../how-tos/multi-agent-network-functional.ipynb): Shows how to build a multi-agent network using the functional API.
 * [How to add multi-turn conversation in a multi-agent application (functional API)](../how-tos/multi-agent-multi-turn-convo-functional.ipynb): allow an end-user to engage in a multi-turn conversation with one or more agents.  
 
-## Serialization
-
-There are two key aspects to serialization in LangGraph:
-
-1. `@entrypoint` inputs and outputs must be JSON-serializable.
-2. `@task` outputs must be JSON-serializable.
-
-These requirements are necessary for enabling checkpointing and workflow resumption. Use python primitives
-like dictionaries, lists, strings, numbers, and booleans to ensure that your inputs and outputs are serializable.
-
-Serialization ensures that workflow state, such as task results and intermediate values, can be reliably saved and restored. This is critical for enabling human-in-the-loop interactions, fault tolerance, and parallel execution.
-
-Providing non-serializable inputs or outputs will result in a runtime error when a workflow is configured with a checkpointer.
-
-## Determinism
-
-To utilize features like **human-in-the-loop**, any randomness should be encapsulated inside of **tasks**. This guarantees that when execution is halted (e.g., for human in the loop) and then resumed, it will follow the same *sequence of steps*, even if **task** results are non-deterministic.
-
-LangGraph achieves this behavior by persisting **task** and [**subgraph**](./low_level.md#subgraphs) results as they execute. A well-designed workflow ensures that resuming execution follows the *same sequence of steps*, allowing previously computed results to be retrieved correctly without having to re-execute them. This is particularly useful for long-running **tasks** or **tasks** with non-deterministic results, as it avoids repeating previously done work and allows resuming from essentially the same 
-
-While different runs of a workflow can produce different results, resuming a **specific** run should always follow the same sequence of recorded steps. This allows LangGraph to efficiently look up **task** and **subgraph** results that were executed prior to the graph being interrupted and avoid recomputing them.
-
-## Idempotency
-
-Idempotency ensures that running the same operation multiple times produces the same result. This helps prevent duplicate API calls and redundant processing if a step is rerun due to a failure. Always place API calls inside **tasks** functions for checkpointing, and design them to be idempotent in case of re-execution. Re-execution can occur if a **task** starts, but does not complete successfully. Then, if the workflow is resumed, the **task** will run again. Use idempotency keys or verify existing results to avoid duplication.
-
-## Functional API vs. Graph API
-
-The **Functional API** and the **Graph APIs** provide two different paradigms to create workflows in LangGraph. Here are some key differences:
-
-- **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows.
-- **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
-- **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
-- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
-
-## Common Pitfalls
-
-### Handling side effects
-
-Side effects, such as writing to a file or sending an email, should be encapsulated in tasks to ensure consistent execution upon resumption.
-
-=== "Incorrect"
-
-    In this example, a side effect (writing to a file) is directly included in the workflow, making resumption inconsistent.
-
-    ```python
-    @entrypoint(checkpointer=checkpointer)
-    def my_workflow(inputs: dict) -> int:
-        # This code will be executed a second time when resuming the workflow.
-        # Which is likely not what you want.
-        # highlight-next-line
-        with open("output.txt", "w") as f:
-            # highlight-next-line
-            f.write("Side effect executed")
-        value = interrupt("question")
-        return value
-    ```
-
-=== "Correct"
-
-    In this example, the side effect is encapsulated in a task, ensuring consistent execution upon resumption.
-
-    ```python
-    from langgraph.func import task
-
-    # highlight-next-line
-    @task
-    # highlight-next-line
-    def write_to_file():
-        with open("output.txt", "w") as f:
-            f.write("Side effect executed")
-
-    @entrypoint(checkpointer=checkpointer)
-    def my_workflow(inputs: dict) -> int:
-        # The side effect is now encapsulated in a task.
-        write_to_file().result()
-        value = interrupt("question")
-        return value
-    ```
-
-### Non-deterministic control flow
-
-[Non-deterministic control flow](#determinism) can lead to inconsistent results when resuming a workflow. To ensure correct behavior, encapsulate non-deterministic operations (e.g., random number generation, time-based logic) inside **tasks**.
-
-=== "Incorrect"
-
-    In this example, the workflow uses the current time to determine which task to execute. This is non-deterministic because the result of the workflow depends on the time at which it is executed.
-
-    ```python
-    from langgraph.func import entrypoint
-
-    @entrypoint(checkpointer=checkpointer)
-    def my_workflow(inputs: dict) -> int:
-        t0 = inputs["t0"]
-        # highlight-next-line
-        t1 = time.time()
-        
-        delta_t = t1 - t0
-        
-        if delta_t > 1:
-            result = slow_task(1).result()
-            value = interrupt("question")
-        else:
-            result = slow_task(2).result()
-            value = interrupt("question")
-            
-        return {
-            "result": result,
-            "value": value
-        }
-    ```
-
-=== "Correct"
-
-    In this example, the workflow uses the input `t0` to determine which task to execute. This is deterministic because the result of the workflow depends only on the input.
-
-    ```python
-    import time
-
-    from langgraph.func import task
-
-    # highlight-next-line
-    @task
-    # highlight-next-line
-    def get_time() -> float:
-        return time.time()
-
-    @entrypoint(checkpointer=checkpointer)
-    def my_workflow(inputs: dict) -> int:
-        t0 = inputs["t0"]
-        # highlight-next-line
-        t1 = get_time().result()
-        
-        delta_t = t1 - t0
-        
-        if delta_t > 1:
-            result = slow_task(1).result()
-            value = interrupt("question")
-        else:
-            result = slow_task(2).result()
-            value = interrupt("question")
-            
-        return {
-            "result": result,
-            "value": value
-        }
-    ```
