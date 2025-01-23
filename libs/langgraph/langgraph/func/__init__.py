@@ -164,8 +164,10 @@ class entrypoint:
     to the function. This input parameter can be of any type. Use a dictionary
     to pass multiple parameters to the function.
 
-    The decorated function also has access to these optional parameters:
+    The decorated function can request access to additional parameters
+    that will be injected automatically at run time. These parameters include:
 
+    - `store`: An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.
     - `writer`: A `StreamWriter` instance for writing data to a stream.
     - `config`: A configuration object for accessing workflow settings.
     - `previous`: The previous return value for the given thread (available only when
@@ -255,7 +257,7 @@ class entrypoint:
 
         ```python
         from langgraph.checkpoint.memory import MemorySaver
-        from langgraph.func import entrypoint, task
+        from langgraph.func import entrypoint
 
         @entrypoint(checkpointer=MemorySaver())
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
@@ -288,6 +290,29 @@ class entrypoint:
 
         This primitive allows to save a value to the checkpointer distinct from the
         return value from the entrypoint.
+
+        Example: Decoupling the return value and the save value
+            ```python
+            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.func import entrypoint
+
+            @entrypoint(checkpointer=MemorySaver())
+            def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+                previous = previous or 0
+                # This will return the previous value to the caller, saving
+                # 2 * number to the checkpoint, which will be used in the next invocation
+                # for the `previous` parameter.
+                return entrypoint.final(value=previous, save=2 * number)
+
+            config = {
+                "configurable": {
+                    "thread_id": "1"
+                }
+            }
+
+            my_workflow.invoke(3, config)  # 0 (previous was None)
+            my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
+            ```
         """
 
         value: R
