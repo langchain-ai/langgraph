@@ -1,6 +1,5 @@
 import asyncio
 import concurrent.futures
-import dataclasses
 import functools
 import inspect
 import types
