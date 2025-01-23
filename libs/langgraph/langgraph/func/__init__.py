@@ -13,6 +13,9 @@ from typing import (
     get_args,
     get_origin,
     overload,
+    Type,
+    Protocol,
+    cast,
 )
 
 from langchain_core.runnables.base import Runnable
@@ -142,6 +145,20 @@ def task(
     return decorator
 
 
+class Entrypoint(Protocol):
+    @staticmethod
+    def __call__(
+        *,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        store: Optional[BaseStore] = None,
+        config_schema: Optional[type[Any]] = None,
+    ) -> Callable[[types.FunctionType], Pregel]:
+        pass
+
+    final: Type[ReturnAndSave]
+    """A special attribute that can be used to return a value and save a value to the checkpointer."""
+
+
 def entrypoint(
     *,
     checkpointer: Optional[BaseCheckpointSaver] = None,
@@ -179,6 +196,11 @@ def entrypoint(
             semantic search capabilities through an optional `index` configuration.
         config_schema: Specifies the schema for the configuration object that will be
             passed to the workflow.
+
+    Attributes:
+        final: A special attribute that can be used to return a value and save a value
+            to the checkpointer. This is useful when you want to return a value from
+            the function and save a value to the check
 
     Returns:
         A decorator that converts a function into a Pregel graph.
@@ -520,6 +542,9 @@ def entrypoint(
         )
 
     return _imp
+
+entrypoint.final = ReturnAndSave
+entrypoint = cast(Entrypoint, entrypoint)
 
 
 class EntrypointPregel(Pregel):

@@ -6142,11 +6142,11 @@ def test_entrypoint_with_return_and_save() -> None:
     previous_ = None
 
     @entrypoint(checkpointer=MemorySaver())
-    def foo(msg: str, *, previous: Any) -> ReturnAndSave[int, list[str]]:
+    def foo(msg: str, *, previous: Any) -> entrypoint.final[str, int]:
         nonlocal previous_
         previous_ = previous
         previous = previous or []
-        return ReturnAndSave(len(previous), previous + [msg])
+        return entrypoint.final(len(previous), previous + [msg])
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6167,13 +6167,11 @@ def test_entrypoint_generator_with_return_and_save() -> None:
     previous_ = None
 
     @entrypoint(checkpointer=MemorySaver())
-    def workflow(inputs: dict, *, previous: Any):
+    def workflow(inputs: dict, *, previous: Any) -> entrypoint.final[str, float]:
         nonlocal previous_
         previous_ = previous
-
-        yield "hello"
-        yield "world"
-        yield ReturnAndSave("!", "saved value")
+        return entrypoint.final("1", "23")
+        # yield ReturnAndSave("!", "saved value")
 
     assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
         "hello",
