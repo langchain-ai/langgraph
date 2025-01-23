@@ -16,10 +16,10 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from pydantic import BaseModel
 from typing_extensions import Self, TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
@@ -285,13 +285,13 @@ class Command(Generic[N], ToolOutputMixin):
     def _update_as_tuples(self) -> Sequence[tuple[str, Any]]:
         if isinstance(self.update, dict):
             return list(self.update.items())
-        elif isinstance(self.update, BaseModel):
-            return list(self.update.model_dump().items())
         elif isinstance(self.update, (list, tuple)) and all(
             isinstance(t, tuple) and len(t) == 2 and isinstance(t[0], str)
             for t in self.update
         ):
             return self.update
+        elif hints := get_type_hints(type(self.update)):
+            return [(k, getattr(self.update, k)) for k in hints]
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
