@@ -324,7 +324,7 @@ def apply_writes(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
