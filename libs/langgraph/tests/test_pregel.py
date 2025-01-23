@@ -1539,12 +1539,14 @@ def test_imp_nested(
 
     @task
     def submapper(input: int) -> str:
+        time.sleep(input / 100)
         return str(input)
 
     @task()
     def mapper(input: int) -> str:
+        sub = submapper(input)
         time.sleep(input / 100)
-        return submapper(input).result() * 2
+        return sub.result() * 2
 
     @entrypoint(checkpointer=checkpointer)
     def graph(input: list[int]) -> list[str]:

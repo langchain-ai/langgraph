@@ -143,9 +143,9 @@ class PregelRunner:
                     continue
                 # schedule the next task, if the callback returns one
                 wcall = calls[idx] if calls else None
-                cnt = scratchpad.call_counter
-                scratchpad.call_counter += 1
-                if next_task := self.schedule_task(task, cnt, wcall):
+                if next_task := self.schedule_task(
+                    task, scratchpad.call_counter(), wcall
+                ):
                     if fut := next(
                         (
                             f
@@ -331,9 +331,9 @@ class PregelRunner:
                     continue
                 # schedule the next task, if the callback returns one
                 wcall = calls[idx] if calls is not None else None
-                cnt = scratchpad.call_counter
-                scratchpad.call_counter += 1
-                if next_task := self.schedule_task(task, cnt, wcall):
+                if next_task := self.schedule_task(
+                    task, scratchpad.call_counter(), wcall
+                ):
                     # if the parent task was retried,
                     # the next task might already be running
                     if fut := next(

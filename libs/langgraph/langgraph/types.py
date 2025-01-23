@@ -342,14 +342,14 @@ class LoopProtocol:
 @dataclasses.dataclass(**{**_DC_KWARGS, "frozen": False})
 class PregelScratchpad:
     # call
-    call_counter: int
+    call_counter: Callable[[], int]
     # interrupt
-    interrupt_counter: int
+    interrupt_counter: Callable[[], int]
     resume: list[Any]
     null_resume: Optional[Any]
     _consume_null_resume: Callable[[], None]
     # subgraph
-    subgraph_counter: int
+    subgraph_counter: Callable[[], int]
 
     def consume_null_resume(self) -> Any:
         if self.null_resume is not None:
@@ -468,8 +468,7 @@ def interrupt(value: Any) -> Any:
     conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    scratchpad.interrupt_counter += 1
-    idx = scratchpad.interrupt_counter
+    idx = scratchpad.interrupt_counter()
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):

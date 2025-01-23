@@ -231,19 +231,20 @@ class PregelLoop(LoopProtocol):
         if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and isinstance(
             scratchpad, PregelScratchpad
         ):
-            if scratchpad.subgraph_counter:
+            # if count is > 0, append to checkpoint_ns
+            # if count is 0, leave as is
+            if cnt := scratchpad.subgraph_counter():
                 self.config = patch_configurable(
                     self.config,
                     {
                         CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
                             (
                                 config[CONF][CONFIG_KEY_CHECKPOINT_NS],
-                                str(scratchpad.subgraph_counter),
+                                str(cnt),
                             )
                         )
                     },
                 )
-            scratchpad.subgraph_counter += 1
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(
                 self.config,
