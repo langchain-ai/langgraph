@@ -6142,11 +6142,12 @@ def test_entrypoint_with_return_and_save() -> None:
     previous_ = None
 
     @entrypoint(checkpointer=MemorySaver())
-    def foo(msg: str, *, previous: Any) -> entrypoint.final[str, int]:
+    def foo(msg: str, *, previous: Any) -> entrypoint.final[int, list[str]]:
         nonlocal previous_
         previous_ = previous
         previous = previous or []
-        return entrypoint.final(len(previous), previous + [msg])
+        return entrypoint.final('hqwe', 2)
+        # return entrypoint.final(len(previous), previous + [msg])
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
