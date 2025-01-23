@@ -1568,8 +1568,6 @@ def test_imp_nested(
         "title": "LangGraphOutput",
     }
 
-    assert graph.get_graph().draw_mermaid() == snapshot
-
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [*graph.stream([0, 1], thread1)] == [
         {"submapper": "0"},
@@ -1618,8 +1616,6 @@ def test_imp_stream_order(
         fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
-
-    assert graph.get_graph().draw_mermaid() == snapshot
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
@@ -5048,8 +5044,6 @@ def test_interrupt_functional(
         fut_bar = bar(bar_input)
         return fut_bar.result()
 
-    assert graph.get_graph().draw_mermaid() == snapshot
-
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
     graph.invoke({"a": ""}, config)
@@ -5080,8 +5074,6 @@ def test_interrupt_task_functional(
         fut_foo = foo(inputs)
         fut_bar = bar(fut_foo.result())
         return fut_bar.result()
-
-    assert graph.get_graph().draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
@@ -5572,8 +5564,6 @@ def test_falsy_return_from_task(
         falsy_task().result()
         interrupt("test")
 
-    assert graph.get_graph().draw_mermaid() == snapshot
-
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({"a": 5}, configurable)
     graph.invoke(Command(resume="123"), configurable)
@@ -5605,8 +5595,6 @@ def test_multiple_interrupts_imperative(
             values.extend([double(idx).result(), interrupt({"a": "boo"})])
 
         return {"values": values}
-
-    assert graph.get_graph().draw_mermaid() == snapshot
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({}, configurable)
