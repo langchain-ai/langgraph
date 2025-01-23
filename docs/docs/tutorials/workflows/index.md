@@ -11,34 +11,42 @@ Here is a simple way to visualize these differences:
 
 When building agents and workflows, LangGraph [offers a number of benefits](https://langchain-ai.github.io/langgraph/concepts/high_level/) including persistence, streaming, and support for debugging as well as deployment.
 
-## Building Blocks: The Augmented LLM 
+## Set up
 
-LLM have [augmentations](https://www.anthropic.com/research/building-effective-agents) that support building workflows and agents. These include [structured outputs](https://python.langchain.com/docs/concepts/structured_outputs/) and [tool calling](https://python.langchain.com/docs/concepts/tool_calling/), as shown in this image from the Anthropic [blog](https://www.anthropic.com/research/building-effective-agents):
+You can use [any chat model](https://python.langchain.com/docs/integrations/chat/) that supports structured outputs and tool calling. Below, we show the process of installing the packages, setting API keys, and testing structured outputs / tool calling for Anthropic.
 
-![augmented_llm.png](./img/augmented_llm.png)
+??? "Install dependencies"
 
-For this tutorial, you can use [any chat model](https://python.langchain.com/docs/integrations/chat/) that supports structured outputs and tool calling. Below, we show the process of installing the packages, setting API keys, and testing structured outputs / tool calling for both OpenAI and Anthropic. 
+    ```bash
+    pip install langchain_core langchain-anthropic langgraph 
+    ```
 
-```bash
-pip install langchain_core langchain-openai langchain-anthropic langgraph 
-```
+Initialize an LLM
 
 ```python
 import os
 import getpass
+
+from langchain_anthropic import ChatAnthropic
 
 def _set_env(var: str):
     if not os.environ.get(var):
         os.environ[var] = getpass.getpass(f"{var}: ")
 
 
-_set_env("OPENAI_API_KEY")
+_set_env("ANTHROPIC_API_KEY")
 
-# LLM
+llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
+```
 
-from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(model="gpt-4o")
+## Building Blocks: The Augmented LLM 
 
+LLM have [augmentations](https://www.anthropic.com/research/building-effective-agents) that support building workflows and agents. These include [structured outputs](https://python.langchain.com/docs/concepts/structured_outputs/) and [tool calling](https://python.langchain.com/docs/concepts/tool_calling/), as shown in this image from the Anthropic [blog](https://www.anthropic.com/research/building-effective-agents):
+
+![augmented_llm.png](./img/augmented_llm.png)
+
+
+```python
 # Schema for structured output
 from pydantic import BaseModel, Field
 
@@ -81,7 +89,7 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
 
 ![prompt_chain.png](./img/prompt_chain.png)
 
-=== "StateGraph"
+=== "Graph API"
 
     ```python
     from typing_extensions import TypedDict
@@ -176,7 +184,7 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
 
     See our lesson on Prompt Chaining [here](https://github.com/langchain-ai/langchain-academy/blob/main/module-1/chain.ipynb).
 
-=== "Functional API"
+=== "Functional API (beta)"
 
     ```python
     from langgraph.func import entrypoint, task
@@ -238,7 +246,7 @@ With parallelization, LLMs work simultaneously on a task:
 
 ![parallelization.png](./img/parallelization.png)
 
-=== "StateGraph"
+=== "Graph API"
 
     ```python
     # Graph state
@@ -323,7 +331,7 @@ With parallelization, LLMs work simultaneously on a task:
 
     See our lesson on parallelization [here](https://github.com/langchain-ai/langchain-academy/blob/main/module-1/simple-graph.ipynb).
 
-=== "Functional API"
+=== "Functional API (beta)"
 
     ```python
     @task
@@ -385,7 +393,7 @@ Routing classifies an input and directs it to a followup task. As noted in the [
 ![routing.png](./img/routing.png)
 
 
-=== "StateGraph"
+=== "Graph API"
 
     ```python
     from typing_extensions import Literal
@@ -508,7 +516,7 @@ Routing classifies an input and directs it to a followup task. As noted in the [
 
     [Here](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_adaptive_rag_local/) is RAG workflow that routes questions. See our video [here](https://www.youtube.com/watch?v=bq1Plo2RhYI).
 
-=== "Functional API"
+=== "Functional API (beta)"
 
     ```python
     from typing_extensions import Literal
@@ -592,7 +600,7 @@ With orchestrator-worker, an orchestrator breaks down a task and delegates each 
 ![worker.png](./img/worker.png)
 
 
-=== "StateGraph"
+=== "Graph API"
 
     ```python
     from typing import Annotated, List
@@ -741,7 +749,7 @@ With orchestrator-worker, an orchestrator breaks down a task and delegates each 
     [Here](https://github.com/langchain-ai/report-mAIstro) is a project that uses orchestrator-worker for report planning and writing. See our video [here](https://www.youtube.com/watch?v=wSxZ7yFbbas).
 
 
-=== "Functional API"
+=== "Functional API (beta)"
 
     ```python
     from typing import List
@@ -831,7 +839,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
 ![evaluator_optimizer.png](./img/evaluator_optimizer.png)
 
-=== "StateGraph"
+=== "Graph API"
 
     ```python
     # Graph state
@@ -928,7 +936,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
     [Here](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_adaptive_rag_local/) is a RAG workflow that grades answers for hallucinations or errors. See our video [here](https://www.youtube.com/watch?v=bq1Plo2RhYI).
 
-=== "Functional API"
+=== "Functional API (beta)"
 
     ```python
     # Schema for structured output to use in evaluation
@@ -1038,7 +1046,7 @@ tools_by_name = {tool.name: tool for tool in tools}
 llm_with_tools = llm.bind_tools(tools)
 ```
 
-=== "StateGraph"
+=== "Graph API"
 
     ```python
     from langgraph.graph import MessagesState
@@ -1134,7 +1142,7 @@ llm_with_tools = llm.bind_tools(tools)
 
     [Here](https://github.com/langchain-ai/memory-agent) is a project that uses a tool calling agent to create / store long-term memories.
 
-=== "Functional API"
+=== "Functional API (beta)"
 
     ```python
     from langgraph.graph import add_messages
