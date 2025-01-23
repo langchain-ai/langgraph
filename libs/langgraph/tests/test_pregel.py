@@ -6100,7 +6100,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
     # Un-parameterized entrypoint.final is interpreted as entrypoint.final[Any, Any]
     @entrypoint()
     def foo2(inputs, *, previous: Any) -> entrypoint.final:
-        return entrypoint.final("foo", 1)
+        return entrypoint.final(value="foo", save=1)
 
     assert foo2.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6108,7 +6108,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
 
     @entrypoint()
     def foo(inputs, *, previous: Any) -> entrypoint.final[str, int]:
-        return entrypoint.final("foo", 1)
+        return entrypoint.final(value="foo", save=1)
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6121,7 +6121,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
         # a bit of help if it's not done correctly.
         @entrypoint()
         def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
-            return entrypoint.final(1, 1)  # type: ignore
+            return entrypoint.final(value=1, save=1)  # type: ignore
 
     @entrypoint()
     def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
@@ -6145,7 +6145,7 @@ def test_entrypoint_with_return_and_save() -> None:
         nonlocal previous_
         previous_ = previous
         previous = previous or []
-        return entrypoint.final(len(previous), previous + [msg])
+        return entrypoint.final(value=len(previous), save=previous + [msg])
 
     assert foo.get_output_schema().model_json_schema() == {
         "title": "LangGraphOutput",
@@ -6172,7 +6172,7 @@ def test_entrypoint_generator_with_return_and_save() -> None:
 
         yield "hello"
         yield "world"
-        yield entrypoint.final("!", "saved value")
+        yield entrypoint.final(value="!", save="saved value")
 
     assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
         "hello",
@@ -6209,7 +6209,7 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
 
         yield "hello"
         yield "world"
-        yield entrypoint.final("!", "saved value")
+        yield entrypoint.final(value="!", save="saved value")
 
     assert [
         c async for c in workflow.astream({}, {"configurable": {"thread_id": "0"}})
