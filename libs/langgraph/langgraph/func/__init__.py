@@ -186,9 +186,6 @@ class entrypoint:
         config_schema: Specifies the schema for the configuration object that will be
             passed to the workflow.
 
-    Returns:
-        A decorator that converts a function into a Pregel graph.
-
     Example: Using entrypoint and tasks
         ```python
         import time
