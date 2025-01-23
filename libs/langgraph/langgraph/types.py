@@ -476,7 +476,6 @@ def interrupt(value: Any) -> Any:
     # find current resume value
     if scratchpad.null_resume is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        print("consume null resume", scratchpad.null_resume)
         v = scratchpad.consume_null_resume()
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
