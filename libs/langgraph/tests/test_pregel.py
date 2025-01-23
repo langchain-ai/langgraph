@@ -6174,6 +6174,7 @@ def test_entrypoint_generator_with_return_and_save() -> None:
         yield "world"
         yield entrypoint.final("!", "saved value")
 
+
     assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
         "hello",
         "world",

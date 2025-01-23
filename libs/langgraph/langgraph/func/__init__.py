@@ -290,9 +290,10 @@ class entrypoint:
         self.store = store
         self.config_schema = config_schema
 
-    @dataclasses.dataclass(frozen=True)
     class final(Generic[R, S]):
         """Return a value and save the state associated with the entrypoint."""
+
+        __slots__ = ("value", "save")
 
         value: R
         """Value to return. A value will always be returned even if it is None."""
@@ -301,6 +302,10 @@ class entrypoint:
 
         A value will always be saved even if it is None.
         """
+
+        def __init__(self, value: R, save: S) -> None:
+            self.value = value
+            self.save = save
 
     def __call__(self, func: types.FunctionType) -> Pregel:
         """Convert a function into a Pregel graph.
