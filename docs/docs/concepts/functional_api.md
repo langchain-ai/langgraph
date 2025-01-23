@@ -1,15 +1,15 @@
 # Functional API
 
 !!! warning "Beta"
-    The Functional API is currently in **beta** and is subject to change. Please [report any issues](https://github.com/langchain-ai/langgraph/issues) or feedback to the LangGraph team. Use the label `#functional-api` when creating issues in Github.
+    The Functional API is currently in **beta** and is subject to change. Please [report any issues](https://github.com/langchain-ai/langgraph/issues) or feedback to the LangGraph team.
 
 ## Overview
 
-LangGraph's **Functional API** allows using standard control flow constructs (e.g., loops, conditionals) to define complex workflows without having to define a graph.
+The Functional API is an alternative to [State Graph](low_level.md#stategraph) for development in LangGraph. 
 
-The **Functional API** runs on the same LangGraph runtime as the [**Graph API**](./low_level.md), providing access to features like [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md), and [streaming](streaming.md).
+It allows you to take advantage of LangGraph's key features for [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md) workflows, and [streaming](streaming.md) without explicitly specifying state, or control flow in terms of nodes and edges.  
 
-The **Functional API** and the **Graph API** can be used together in the same application, allowing you to intermix the two paradigms if needed.
+The **Functional API** and the **[Graph API](./low_level.md)** can be used together in the same application, allowing you to intermix the two paradigms if needed.
 
 ## Example
 
@@ -110,14 +110,12 @@ def workflow(topic: str) -> dict:
 
 The **Functional API** provides two primitives for building workflows:
 
-- **[Entrypoint](#entrypoint)**: An **entrypoint** is a decorator that designates a function as the starting point of a LangGraph workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](human_in_the_loop.md).
+- **[Entrypoint](#entrypoint)**: An **entrypoint** is a decorator that designates a function as the starting point of a workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](human_in_the_loop.md).
 - **[Task](#task)**: Represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously from within an **entrypoint**. Invoking a **task** returns a future-like object, which can be awaited to obtain the result or resolved synchronously.
 
 ## Entrypoint
 
-The `@entrypoint` decorator can be used to create a LangGraph workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt).
-
-Entrypoints typically include a **checkpointer** to persist workflow state, enabling *resumption* from where it was *interrupted*.
+The [`@entrypoint`][langgraph.func.entrypoint] decorator can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt).
 
 ### Definition
 
@@ -155,60 +153,50 @@ You will usually want to pass a **checkpointer** to the `@entrypoint` decorator 
         return result 
     ```
 
-=== "StreamWriter"
-
-    ```python
-    from langchain.func import entrypoint
-
-    @entrypoint(checkpointer=checkpointer)
-    def my_workflow(some_input: dict, writer: StreamWriter) -> int:
-        # some logic that may involve long-running tasks like API calls,
-        # and may be interrupted for human-in-the-loop
-        ...
-        writer("some data")  # Write custom data to the `custom` stream
-        ...
-        writer("more data")  # Write more custom data to the `custom` stream
-        return result
-    ```
-
-    See the [streaming custom data](#streaming-custom-data) section for more details.
-
-=== "Long-term memory"
-
-    The store is particularly useful for implementing [long-term memory](./memory.md#long-term-memory) in your workflows.
-
-    ```python
-    from langgraph.checkpoint.base import BaseStore
-    from langgraph.func import entrypoint
-    from langgraph.store.memory import InMemoryStore
-
-    in_memory_store = InMemoryStore(...)
-
-    @entrypoint(checkpointer=checkpointer, store=in_memory_store)
-    def my_workflow(some_input: dict, store: BaseStore) -> int:
-        # some logic that may involve long-running tasks like API calls,
-        # and may be interrupted for human-in-the-loop
-    ```
-
-=== "RunnableConfig"
-
-    You can also request a [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) object to access the configuration passed to the entrypoint.
-
-    ```python
-    from langchain_core.runnables import RunnableConfig
-
-    @entrypoint(checkpointer=checkpointer)
-    def my_workflow(some_input: dict, config: RunnableConfig) -> int:
-        # some logic that may involve long-running tasks like API calls,
-        # and may be interrupted for human-in-the-loop
-        print(config) # Access the configuration
-        ...
-    ```
-
-
 !!! important "Serialization"
 
     The **inputs** and **outputs** of entrypoints must be JSON-serializable to support checkpointing. Please see the [serialization](#serialization) section for more details.
+
+
+### Injectable Parameters
+
+When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time. These parameters include:
+
+
+| Parameter    | Description                                                                                                                                       |
+|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| **previous** | Access the the state associated with the previous `checkpoint` for the given thread. See [state management](#state-management).                   |
+| **store**    | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for [long-term memory](#long-term-memory).                                     |
+| **writer**   | For streaming custom data, to write custom data to the `custom` stream. Useful for [streaming custom data](#streaming-custom-data).               |
+| **config**   | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information. |
+
+!!! important
+
+    Declare the parameters with the appropriate name and type annotation.
+
+??? example "Requesting Injectable Parameters"
+
+    ```python
+    from langchain.func import entrypoint
+    from langgraph.store.base import BaseStore
+    from langgraph.store.memory import InMemoryStore
+    from langchain_core.runnables import RunnableConfig
+
+    in_memory_store = InMemoryStore(...)  # An instance of InMemoryStore for long-term memory
+
+    @entrypoint(
+        checkpointer=checkpointer,  # Specify the checkpointer
+        store=in_memory_store  # Specify the store
+    )  
+    def my_workflow(
+        some_input: dict,  # The input (e.g., passed via `invoke`)
+        *,
+        previous: Any = None, # For short-term memory
+        store: BaseStore,  # For long-term memory
+        writer: StreamWriter,  # For streaming custom data
+        config: RunnableConfig  # For accessing the configuration passed to the entrypoint
+    ) -> ...:
+    ```
 
 ### Executing
 
@@ -217,55 +205,95 @@ Using the [`@entrypoint`](#entrypoint) yields a [EntrypointPregel][langgraph.fun
 === "Invoke"
 
     ```python
-    my_workflow.invoke(some_input)  # Wait for the result synchronously
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+    my_workflow.invoke(some_input, config)  # Wait for the result synchronously
     ```
 
 === "Async Invoke"
 
     ```python
-    await my_workflow.ainvoke(some_input)  # Await result asynchronously
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+    await my_workflow.ainvoke(some_input, config)  # Await result asynchronously
     ```
 
 === "Stream"
     
     ```python
-    for chunk in my_workflow.stream(some_input):
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+
+    for chunk in my_workflow.stream(some_input, config):
         print(chunk)
     ```
 
 === "Async Stream"
 
     ```python
-    async for chunk in my_workflow.astream(some_input):
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+
+    async for chunk in my_workflow.astream(some_input, config):
         print(chunk)
     ```
 
 ### Resuming
 
-Execution can be **resumed** using the [Command][langgraph.types.Command] primitive.
+Resuming an execution after an [interrupt][langgraph.types.interrupt] can be done by passing a **resume** value to the [Command][langgraph.types.Command] primitive.
 
 === "Invoke"
 
     ```python
     from langgraph.types import Command
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
     
-    my_workflow.invoke(Command(resume=some_resume_value))
+    my_workflow.invoke(Command(resume=some_resume_value), config)
     ```
 
 === "Async Invoke"
 
     ```python
     from langgraph.types import Command
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
     
-    await my_workflow.ainvoke(Command(resume=some_resume_value))
+    await my_workflow.ainvoke(Command(resume=some_resume_value), config)
     ```
 
 === "Stream"
 
     ```python
     from langgraph.types import Command
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
     
-    for chunk in my_workflow.stream(Command(resume=some_resume_value)):
+    for chunk in my_workflow.stream(Command(resume=some_resume_value), config):
         print(chunk)
     ```
 
@@ -274,10 +302,123 @@ Execution can be **resumed** using the [Command][langgraph.types.Command] primit
     ```python
     from langgraph.types import Command
 
-    async for chunk in my_workflow.astream(Command(resume=some_resume_value)):
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+
+    async for chunk in my_workflow.astream(Command(resume=some_resume_value), config):
         print(chunk)
     ```
 
+**Resuming after an error**
+
+
+To resume after an error, run the `entrypoint` with a `None` and the same **thread id** (config).
+
+=== "Invoke"
+
+    ```python
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+    
+    my_workflow.invoke(None, config)
+    ```
+
+=== "Async Invoke"
+
+    ```python
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+    
+    await my_workflow.ainvoke(None, config)
+    ```
+
+=== "Stream"
+
+    ```python
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+    
+    for chunk in my_workflow.stream(None, config):
+        print(chunk)
+    ```
+
+=== "Async Stream"
+
+    ```python
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread_id"
+        }
+    }
+
+    async for chunk in my_workflow.astream(None, config):
+        print(chunk)
+    ```
+
+### State Management
+
+When an `entrypoint` is defined with a `checkpointer`, it stores information between successive invocations on the same **thread id** in [checkpoints](persistence.md#checkpoints). 
+
+This allows accessing the state from the previous invocation using the `previous` parameter.
+
+By default, the `previous` parameter is the return value of the previous invocation.
+
+```python
+@entrypoint(checkpointer=checkpointer)
+def my_workflow(number: int, *, previous: Any = None) -> int:
+    previous = previous or 0
+    return number + previous
+
+config = {
+    "configurable": {
+        "thread_id": "some_thread_id"
+    }
+}
+
+my_workflow.invoke(1, config)  # 1 (previous was None)
+my_workflow.invoke(2, config)  # 3 (previous was 1 from the previous invocation)
+```
+
+#### `entrypoint.final`
+
+[entrypoint.final][langgraph.func.entrypoint.final] is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
+
+The first value is the return value of the entrypoint, and the second value is the value that will be saved in the checkpoint. The type annotation is `entrypoint.final[return_type, save_type]`.
+
+```python
+@entrypoint(checkpointer=checkpointer)
+def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+    previous = previous or 0
+    # This will return the previous value to the caller, saving
+    # 2 * number to the checkpoint, which will be used in the next invocation 
+    # for the `previous` parameter.
+    return entrypoint.final(value=previous, save=2 * number)
+
+config = {
+    "configurable": {
+        "thread_id": "1"
+    }
+}
+
+my_workflow.invoke(3, config)  # 0 (previous was None)
+my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
+```
 
 ## Task
 
@@ -341,7 +482,7 @@ When defining an `entrypoint`, input is restricted to the first argument of the 
 def my_workflow(inputs: dict) -> int:
     value = inputs["value"]
     another_value = inputs["another_value"]
-    return value
+    ...
 
 my_workflow.invoke({"value": 1, "another_value": 2})  
 ```
@@ -499,7 +640,7 @@ main.invoke({'any_input': 'foobar'}, config=config)
 import time
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.func import entrypoint, task
-from langgraph.types import StreamWriter, RetryPolicy
+from langgraph.types import StreamWriter
 
 # Global variable to track the number of attempts
 attempts = 0
@@ -569,6 +710,42 @@ main.invoke(None, config=config)
 'Ran slow task.'
 ```
 
+### Human-in-the-loop
+
+The functional API supports [human-in-the-loop](human_in_the_loop.md) workflows using the `interrupt` function and the `Command` primitive.
+
+Please see the following examples for more details:
+
+* [How to wait for user input (Functional API)](../how-tos/wait-user-input-functional.ipynb): Shows how to implement a simple human-in-the-loop workflow using the functional API.
+* [How to review tool calls (Functional API)](../how-tos/review-tool-calls-functional.ipynb): Guide demonstrates how to implement human-in-the-loop workflows in a ReAct agent using the LangGraph Functional API. 
+
+### Short-term memory
+
+[State management](#state-management) using the **previous** parameter and optionally using the `entrypoint.final` primitive can be used to implement [short term memory](memory.md).
+
+Please see the following how-to guides for more details:
+
+*  [How to add thread-level persistence (functional API)](../how-tos/persistence-functional.ipynb): Shows how to add thread-level persistence to a functional API workflow and implements a simple chatbot.
+
+### Long-term memory
+
+[long-term memory](memory.md#long-term-memory) allows storing information across different **thread ids**. This could be useful for learning information
+about a given user in one conversation and using it in another.
+
+Please see the following how-to guides for more details:
+
+* [How to add cross-thread persistence (functional API)](../how-tos/cross-thread-persistence-functional.ipynb): Shows how to add cross-thread persistence to a functional API workflow and implements a simple chatbot.
+
+### Workflows
+
+* [Workflows and agent](../tutorials/workflows/workflows.md) guide for more examples of how to build workflows using the Functional API.
+
+### Agents
+
+* [How to create a React agent from scratch (Functional API)](../how-tos/react-agent-from-scratch-functional.ipynb): Shows how to create a simple React agent from scratch using the functional API.
+* [How to build a multi-agent network](../how-tos/multi-agent-network-functional.ipynb): Shows how to build a multi-agent network using the functional API. 
+* [How to add multi-turn conversation in a multi-agent application (functional API)](../how-tos/multi-agent-multi-turn-convo-functional.ipynb): allow an end-user to engage in a multi-turn conversation with one or more agents.  
+
 ## Serialization
 
 There are two key aspects to serialization in LangGraph:
@@ -602,7 +779,7 @@ The **Functional API** and the **Graph APIs** provide two different paradigms to
 - **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows.
 - **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
 - **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
-- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others.
+- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
 
 ## Common Pitfalls
 
@@ -687,6 +864,7 @@ Side effects, such as writing to a file or sending an email, should be encapsula
 
     ```python
     import time
+
     from langgraph.func import task
 
     # highlight-next-line
