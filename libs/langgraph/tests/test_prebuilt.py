@@ -275,6 +275,23 @@ def test_callable_prompt():
         assert response == expected_response
 
 
+async def test_callable_prompt_async():
+    async def prompt(state):
+        modified_message = f"Bar {state['messages'][-1].content}"
+        return [HumanMessage(content=modified_message)]
+
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = await agent.ainvoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
+        }
+        assert response == expected_response
+
+
 def test_runnable_prompt():
     messages_modifier = RunnableLambda(
         lambda messages: [HumanMessage(content=f"Baz {messages[-1].content}")]
