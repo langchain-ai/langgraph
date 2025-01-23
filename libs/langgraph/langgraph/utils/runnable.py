@@ -36,7 +36,7 @@ from typing_extensions import TypeGuard
 
 from langgraph.constants import (
     CONF,
-    CONFIG_KEY_END,
+    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM_WRITER,
 )
@@ -85,7 +85,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         sys.intern("previous"),
         (ANY_TYPE,),
-        CONFIG_KEY_END,
+        CONFIG_KEY_PREVIOUS,
         inspect.Parameter.empty,
     ),
 )

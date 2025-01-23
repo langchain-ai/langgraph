@@ -38,7 +38,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
-    CONFIG_KEY_END,
+    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_READ,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
@@ -51,6 +51,7 @@ from langgraph.constants import (
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PREVIOUS,
     PULL,
     PUSH,
     RESERVED,
@@ -508,9 +509,6 @@ def prepare_single_task(
                             pending_writes,
                             task_id,
                         ),
-                        CONFIG_KEY_END: checkpoint["channel_values"].get(
-                            "__end__", None
-                        ),
                     },
                 ),
                 triggers,
@@ -620,8 +618,8 @@ def prepare_single_task(
                                 pending_writes,
                                 task_id,
                             ),
-                            CONFIG_KEY_END: checkpoint["channel_values"].get(
-                                "__end__", None
+                            CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                                PREVIOUS, None
                             ),
                         },
                     ),
@@ -744,8 +742,8 @@ def prepare_single_task(
                                     pending_writes,
                                     task_id,
                                 ),
-                                CONFIG_KEY_END: checkpoint["channel_values"].get(
-                                    "__end__", None
+                                CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                                    PREVIOUS, None
                                 ),
                             },
                         ),

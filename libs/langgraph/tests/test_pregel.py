@@ -6108,3 +6108,140 @@ def test_multiple_subgraphs_mixed_checkpointer(
         ),
         ((), {"parent_node": {"parent_counter": 7}}),
     ]
+
+
+def test_entrypoint_output_schema_with_return_and_save() -> None:
+    """Test output schema inference with entrypoint.final."""
+
+    # Un-parameterized entrypoint.final is interpreted as entrypoint.final[Any, Any]
+    @entrypoint()
+    def foo2(inputs, *, previous: Any) -> entrypoint.final:
+        return entrypoint.final(value="foo", save=1)
+
+    assert foo2.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+    }
+
+    @entrypoint()
+    def foo(inputs, *, previous: Any) -> entrypoint.final[str, int]:
+        return entrypoint.final(value="foo", save=1)
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "string",
+    }
+
+    with pytest.raises(TypeError):
+        # Raise an exception on an improperly parameterized entrypoint.final
+        # User is attempting to parameterize in this case, so we'll offer
+        # a bit of help if it's not done correctly.
+        @entrypoint()
+        def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
+            return entrypoint.final(value=1, save=1)  # type: ignore
+
+    @entrypoint()
+    def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
+        yield 1
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "items": {
+            "type": "integer",
+        },
+        "title": "LangGraphOutput",
+        "type": "array",
+    }
+
+
+def test_entrypoint_with_return_and_save() -> None:
+    """Test entrypoint with return and save."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(msg: str, *, previous: Any) -> entrypoint.final[int, list[str]]:
+        nonlocal previous_
+        previous_ = previous
+        previous = previous or []
+        return entrypoint.final(value=len(previous), save=previous + [msg])
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "integer",
+    }
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert foo.invoke("hello", config) == 0
+    assert previous_ is None
+    assert foo.invoke("goodbye", config) == 1
+    assert previous_ == ["hello"]
+    assert foo.invoke("definitely", config) == 2
+    assert previous_ == ["hello", "goodbye"]
+
+
+def test_entrypoint_generator_with_return_and_save() -> None:
+    """Verify that generators produce expected results."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    def workflow(inputs: dict, *, previous: Any):
+        nonlocal previous_
+        previous_ = previous
+
+        yield "hello"
+        yield "world"
+        yield entrypoint.final(value="!", save="saved value")
+
+    assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
+        "hello",
+        "world",
+    ]
+    assert list(
+        workflow.stream({}, {"configurable": {"thread_id": "0"}}, stream_mode="updates")
+    ) == [
+        {
+            "workflow": "!",
+        }
+    ]
+
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+    assert previous_ is None
+
+    # 2nd time around previous is set
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+    assert previous_ == "saved value"
+
+    # Test with another thread
+    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == "!"
+    assert previous_ is None
+
+
+async def test_entrypoint_async_generator_with_return_and_save() -> None:
+    """Verify that generators produce expected results."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    async def workflow(inputs: dict, *, previous: Any):
+        nonlocal previous_
+        previous_ = previous
+
+        yield "hello"
+        yield "world"
+        yield entrypoint.final(value="!", save="saved value")
+
+    assert [
+        c async for c in workflow.astream({}, {"configurable": {"thread_id": "0"}})
+    ] == [
+        "hello",
+        "world",
+    ]
+
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+
+    assert previous_ is None
+
+    # 2nd time around previous is set
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+    assert previous_ == "saved value"
+
+    # Test with another thread
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
+    assert previous_ is None
