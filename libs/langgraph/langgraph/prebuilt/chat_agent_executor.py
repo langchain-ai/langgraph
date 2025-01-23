@@ -599,9 +599,9 @@ def create_react_agent(
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
-    prompt = prompt or kwargs.get("state_modifier")
     preprocessor = _get_model_preprocessing_runnable(
-        prompt, kwargs.get("messages_modifier")
+        cast(Optional[Prompt], prompt or kwargs.get("state_modifier")),
+        cast(Optional[MessagesModifier], kwargs.get("messages_modifier")),
     )
     model_runnable = preprocessor | model
 

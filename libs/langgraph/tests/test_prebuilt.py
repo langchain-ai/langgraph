@@ -298,7 +298,7 @@ def test_runnable_prompt():
         assert response == expected_response
 
 
-def test_state_modifier_with_store():
+def test_prompt_with_store():
     def add(a: int, b: int):
         """Adds a and b"""
         return a + b
@@ -307,20 +307,18 @@ def test_state_modifier_with_store():
     in_memory_store.put(("memories", "1"), "user_name", {"data": "User name is Alice"})
     in_memory_store.put(("memories", "2"), "user_name", {"data": "User name is Bob"})
 
-    def modify(state, config, *, store):
+    def prompt(state, config, *, store):
         user_id = config["configurable"]["user_id"]
         system_str = store.get(("memories", user_id), "user_name").value["data"]
         return [SystemMessage(system_str)] + state["messages"]
 
-    def modify_no_store(state, config):
+    def prompt_no_store(state, config):
         return SystemMessage("foo") + state["messages"]
 
     model = FakeToolCallingModel()
 
     # test state modifier that uses store works
-    agent = create_react_agent(
-        model, [add], state_modifier=modify, store=in_memory_store
-    )
+    agent = create_react_agent(model, [add], prompt=prompt, store=in_memory_store)
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
     )
@@ -328,7 +326,7 @@ def test_state_modifier_with_store():
 
     # test state modifier that doesn't use store works
     agent = create_react_agent(
-        model, [add], state_modifier=modify_no_store, store=in_memory_store
+        model, [add], prompt=prompt_no_store, store=in_memory_store
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
@@ -349,22 +347,20 @@ async def test_state_modifier_with_store_async():
         ("memories", "2"), "user_name", {"data": "User name is Bob"}
     )
 
-    async def modify(state, config, *, store):
+    async def prompt(state, config, *, store):
         user_id = config["configurable"]["user_id"]
         system_str = (await store.aget(("memories", user_id), "user_name")).value[
             "data"
         ]
         return [SystemMessage(system_str)] + state["messages"]
 
-    async def modify_no_store(state, config):
+    async def prompt_no_store(state, config):
         return SystemMessage("foo") + state["messages"]
 
     model = FakeToolCallingModel()
 
     # test state modifier that uses store works
-    agent = create_react_agent(
-        model, [add], state_modifier=modify, store=in_memory_store
-    )
+    agent = create_react_agent(model, [add], prompt=prompt, store=in_memory_store)
     response = await agent.ainvoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
     )
@@ -372,7 +368,7 @@ async def test_state_modifier_with_store_async():
 
     # test state modifier that doesn't use store works
     agent = create_react_agent(
-        model, [add], state_modifier=modify_no_store, store=in_memory_store
+        model, [add], prompt=prompt_no_store, store=in_memory_store
     )
     response = await agent.ainvoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
