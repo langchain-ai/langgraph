@@ -23,6 +23,7 @@ END = sys.intern("__end__")
 """The last (maybe virtual) node in graph-style Pregel."""
 SELF = sys.intern("__self__")
 """The implicit branch that handles each node's Control values."""
+PREVIOUS = sys.intern("__previous__")
 
 # --- Reserved write keys ---
 INPUT = sys.intern("__input__")
@@ -78,7 +79,7 @@ CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # holds a callback to be called when a node is finished
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
-CONFIG_KEY_END = sys.intern("__pregel_previous")
+CONFIG_KEY_PREVIOUS = sys.intern("__pregel_previous")
 # holds the previous return value from a stateful Pregel graph.
 
 # --- Other constants ---

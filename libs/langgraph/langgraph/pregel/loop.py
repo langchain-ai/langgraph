@@ -54,7 +54,6 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
-    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -229,20 +228,23 @@ class PregelLoop(LoopProtocol):
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: Optional[PregelScratchpad] = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
-        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and scratchpad is not None:
-            if scratchpad["subgraph_counter"]:
+        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and isinstance(
+            scratchpad, PregelScratchpad
+        ):
+            # if count is > 0, append to checkpoint_ns
+            # if count is 0, leave as is
+            if cnt := scratchpad.subgraph_counter():
                 self.config = patch_configurable(
                     self.config,
                     {
                         CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
                             (
                                 config[CONF][CONFIG_KEY_CHECKPOINT_NS],
-                                str(scratchpad["subgraph_counter"]),
+                                str(cnt),
                             )
                         )
                     },
                 )
-            scratchpad["subgraph_counter"] += 1
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(
                 self.config,
@@ -563,9 +565,14 @@ class PregelLoop(LoopProtocol):
         )
 
         # take resume value from parent
-        if scratchpad := configurable.get(CONFIG_KEY_SCRATCHPAD):
-            if scratchpad["null_resume"] is not MISSING:
-                self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad["null_resume"])])
+        if scratchpad := cast(
+            Optional[PregelScratchpad], configurable.get(CONFIG_KEY_SCRATCHPAD)
+        ):
+            if (
+                isinstance(scratchpad, PregelScratchpad)
+                and scratchpad.null_resume is not None
+            ):
+                self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad.null_resume)])
         # map command to writes
         if isinstance(self.input, Command):
             if self.input.resume is not None and not self.checkpointer:
