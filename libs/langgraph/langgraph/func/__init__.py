@@ -285,7 +285,7 @@ class entrypoint:
         self.store = store
         self.config_schema = config_schema
 
-    @dataclass(_DC_KWARGS)
+    @dataclass(**_DC_KWARGS)
     class final(Generic[R, S]):
         """A primitive that can be returned from an entrypoint.
 
