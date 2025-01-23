@@ -1,3 +1,4 @@
+import functools
 import sys
 from collections import defaultdict, deque
 from functools import partial
@@ -46,7 +47,6 @@ from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -324,7 +324,7 @@ def apply_writes(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -341,7 +341,7 @@ def prepare_next_tasks(
 @overload
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -357,7 +357,7 @@ def prepare_next_tasks(
 
 def prepare_next_tasks(
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -418,7 +418,7 @@ def prepare_single_task(
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
@@ -761,9 +761,13 @@ def prepare_single_task(
 
 
 def _scratchpad(
-    pending_writes: Sequence[PendingWrite],
+    pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
+    null_resume_write = next(
+        (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
+    )
+
     return PregelScratchpad(
         # call
         call_counter=0,
@@ -772,10 +776,10 @@ def _scratchpad(
         resume=next(
             (w[2] for w in pending_writes if w[0] == task_id and w[1] == RESUME), []
         ),
-        null_resume=next(
-            (w[2] for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME),
-            MISSING,
-        ),
+        null_resume=null_resume_write[2] if null_resume_write is not None else None,
+        _consume_null_resume=functools.partial(pending_writes.remove, null_resume_write)
+        if null_resume_write is not None
+        else lambda: None,
         # subgraph
         subgraph_counter=0,
     )

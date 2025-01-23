@@ -5082,10 +5082,26 @@ def test_interrupt_task_functional(
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert not graph.invoke({"a": ""}, config)
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar"}
+
+    # Test that we can interrupt the same task multiple times
+    config = {"configurable": {"thread_id": "2"}}
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(inputs: dict) -> dict:
+        foo_result = foo(inputs).result()
+        bar_result = bar(foo_result).result()
+        baz_result = bar(bar_result).result()
+        return baz_result
+
+    # First run, interrupted at bar
+    assert not graph.invoke({"a": ""}, config)
+    # Provide resumes
+    assert not graph.invoke(Command(resume="bar"), config)
+    assert graph.invoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
 
 
 def test_root_mixed_return() -> None:

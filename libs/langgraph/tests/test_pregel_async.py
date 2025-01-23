@@ -6408,6 +6408,22 @@ async def test_interrupt_task_functional(checkpointer_name: str) -> None:
         res = await graph.ainvoke(Command(resume="bar"), config)
         assert res == {"a": "foobar"}
 
+        # Test that we can interrupt the same task multiple times
+        config = {"configurable": {"thread_id": "2"}}
+
+        @entrypoint(checkpointer=checkpointer)
+        async def graph(inputs: dict) -> dict:
+            foo_result = await foo(inputs)
+            bar_result = await bar(foo_result)
+            baz_result = await bar(bar_result)
+            return baz_result
+
+        # First run, interrupted at bar
+        assert not await graph.ainvoke({"a": ""}, config)
+        # Provide resumes
+        assert not await graph.ainvoke(Command(resume="bar"), config)
+        assert await graph.ainvoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_command_with_static_breakpoints(checkpointer_name: str) -> None:
