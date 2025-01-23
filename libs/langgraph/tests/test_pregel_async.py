@@ -1616,7 +1616,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         await asyncio.sleep(0.01 * x)
         return x + 1
 
-    add_one = mocker.Mock(side_effect=add_one_impl)
+    add_one = mocker.AsyncMock(side_effect=add_one_impl)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = (
         Channel.subscribe_to("inbox")
