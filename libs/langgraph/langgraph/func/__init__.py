@@ -472,11 +472,11 @@ class entrypoint:
         )
 
         def _pluck_return_value(value: Any) -> Any:
-            """Extract the return_ value the entrypoint.final object or pass through."""
+            """Extract the return_ value the entrypoint.final object or passthrough."""
             return value.value if isinstance(value, entrypoint.final) else value
 
         def _pluck_save_value(value: Any) -> Any:
-            """Extract the save value from the entrypoint.final object or pass through."""
+            """Get save value from the entrypoint.final object or passthrough."""
             return value.save if isinstance(value, entrypoint.final) else value
 
         output_type, save_type = Any, Any
