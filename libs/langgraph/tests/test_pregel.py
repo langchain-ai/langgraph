@@ -6174,28 +6174,28 @@ def test_entrypoint_generator_with_return_and_save() -> None:
         yield "world"
         yield entrypoint.final("!", "saved value")
 
-
-    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
+    assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
         "hello",
         "world",
         "!",
     ]
+    assert list(
+        workflow.stream({}, {"configurable": {"thread_id": "0"}}, stream_mode="updates")
+    ) == [
+        {
+            "workflow": "!",
+        }
+    ]
+
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
     assert previous_ is None
 
     # 2nd time around previous is set
-    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == [
-        "hello",
-        "world",
-        "!",
-    ]
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
     assert previous_ == "saved value"
 
     # Test with another thread
-    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == [
-        "hello",
-        "world",
-        "!",
-    ]
+    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == "!"
     assert previous_ is None
 
 
@@ -6212,25 +6212,14 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
         yield "world"
         yield entrypoint.final("!", "saved value")
 
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == [
-        "hello",
-        "world",
-        "!",
-    ]
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+
     assert previous_ is None
 
     # 2nd time around previous is set
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == [
-        "hello",
-        "world",
-        "!",
-    ]
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
     assert previous_ == "saved value"
 
     # Test with another thread
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == [
-        "hello",
-        "world",
-        "!",
-    ]
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
     assert previous_ is None

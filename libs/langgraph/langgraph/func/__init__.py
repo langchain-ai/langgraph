@@ -348,10 +348,8 @@ class entrypoint:
                             output_chunk = chunk
                         writer(chunk)
                         chunks.append(output_chunk)
-                    if final_:
-                        return entrypoint.final(chunks, final_.save)
-                    else:
-                        return chunks
+
+                    return final_ if final_ else chunks
             else:
 
                 @functools.wraps(func)
@@ -379,10 +377,7 @@ class entrypoint:
                             output_chunk = chunk
                         writer(output_chunk)
                         chunks.append(output_chunk)
-                    if final_:
-                        return entrypoint.final(chunks, final_.save)
-                    else:
-                        return chunks
+                    return final_ if final_ else chunks
 
                 # Create a new parameter for the writer argument
                 extra_param = inspect.Parameter(
@@ -431,10 +426,7 @@ class entrypoint:
                         writer(output_chunk)
                         chunks.append(output_chunk)
 
-                    if final_:
-                        return entrypoint.final(chunks, final_.save)
-                    else:
-                        return chunks
+                    return final_ if final_ else chunks
             else:
 
                 @functools.wraps(func)
@@ -462,10 +454,7 @@ class entrypoint:
                         writer(output_chunk)
                         chunks.append(output_chunk)
 
-                    if final_:
-                        return entrypoint.final(chunks, final_.save)
-                    else:
-                        return chunks
+                    return final_ if final_ else chunks
 
                 # Create a new parameter for the writer argument
                 extra_param = inspect.Parameter(
