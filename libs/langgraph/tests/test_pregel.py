@@ -9,6 +9,7 @@ import warnings
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import dataclass
 from random import randrange
 from typing import (
     Annotated,
@@ -5132,6 +5133,35 @@ def test_dict_mixed_return() -> None:
     graph = graph.compile()
 
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
+
+
+def test_command_pydantic_dataclass() -> None:
+    from pydantic import BaseModel
+
+    class PydanticState(BaseModel):
+        foo: str
+
+    @dataclass
+    class DataclassState:
+        foo: str
+
+    for State in (PydanticState, DataclassState):
+
+        def node_a(state) -> Command[Literal["node_b"]]:
+            return Command(
+                update=State(foo="foo"),
+                goto="node_b",
+            )
+
+        def node_b(state):
+            return {"foo": state.foo + "bar"}
+
+        builder = StateGraph(State)
+        builder.add_edge(START, "node_a")
+        builder.add_node(node_a)
+        builder.add_node(node_b)
+        graph = builder.compile()
+        assert graph.invoke(State(foo="")) == {"foo": "foobar"}
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
