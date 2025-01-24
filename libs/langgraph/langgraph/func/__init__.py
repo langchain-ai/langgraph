@@ -22,7 +22,13 @@ from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
-from langgraph.pregel.call import P, T, call, get_runnable_for_entrypoint
+from langgraph.pregel.call import (
+    P,
+    SyncAsyncFuture,
+    T,
+    call,
+    get_runnable_for_entrypoint,
+)
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -31,43 +37,29 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode, StreamWriter
 
 @overload
 def task(
-    *, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]]: ...
-
-
-@overload
-def task(  # type: ignore[overload-cannot-match]
-    *, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]]: ...
+    *, name: Optional[str] = None, retry: Optional[RetryPolicy] = None
+) -> Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]]: ...
 
 
 @overload
 def task(
     __func_or_none__: Callable[P, T],
-) -> Callable[P, concurrent.futures.Future[T]]: ...
-
-
-@overload
-def task(
-    __func_or_none__: Callable[P, Awaitable[T]],
-) -> Callable[P, asyncio.Future[T]]: ...
+) -> Callable[P, SyncAsyncFuture[T]]: ...
 
 
 def task(
     __func_or_none__: Optional[Union[Callable[P, T], Callable[P, Awaitable[T]]]] = None,
     *,
+    name: Optional[str] = None,
     retry: Optional[RetryPolicy] = None,
 ) -> Union[
-    Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]],
-    Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
-    Callable[P, asyncio.Future[T]],
-    Callable[P, concurrent.futures.Future[T]],
+    Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]],
+    Callable[P, SyncAsyncFuture[T]],
 ]:
     """Define a LangGraph task using the `task` decorator.
 
-    !!! warning "Experimental"
-        This is an experimental API that is subject to change.
-        Do not use for production code.
+    !!! warning "Beta"
+        The Functional API is currently in beta and is subject to change.
 
     !!! important "Requires python 3.11 or higher for async functions"
         The `task` decorator supports both sync and async functions. To use async
@@ -129,6 +121,12 @@ def task(
     ) -> Union[
         Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
     ]:
+        if name is not None:
+            if hasattr(func, "__func__"):
+                func.__func__.__name__ = name
+            else:
+                func.__name__ = name
+
         call_func = functools.partial(call, func, retry=retry)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
@@ -150,29 +148,58 @@ S = TypeVar("S")
 class entrypoint:
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
-    !!! warning "Experimental"
-        This is an experimental API that is subject to change.
-        Do not use for production code.
+    !!! warning "Beta"
+        The Functional API is currently in beta and is subject to change.
 
-    The decorated function must accept a single parameter, which serves as the input
+
+    ### Function signature
+
+    The decorated function must accept a **single parameter**, which serves as the input
     to the function. This input parameter can be of any type. Use a dictionary
-    to pass multiple parameters to the function.
+    to pass **multiple parameters** to the function.
+
+    ### Injectable parameters
 
     The decorated function can request access to additional parameters
     that will be injected automatically at run time. These parameters include:
 
-    - `store`: An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.
-    - `writer`: A `StreamWriter` instance for writing data to a stream.
-    - `config`: A configuration object for accessing workflow settings.
-    - `previous`: The previous return value for the given thread (available only when
-        a checkpointer is provided).
+    | Parameter        | Description                                                                                        |
+    |------------------|----------------------------------------------------------------------------------------------------|
+    | **`store`**      | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.           |
+    | **`writer`**     | A [StreamWriter][langgraph.types.StreamWriter] instance for writing custom data to a stream.       |
+    | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
+    | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
 
     The entrypoint decorator can be applied to sync functions, async functions,
     generator functions, and async generator functions.
 
-    For generator functions, the `previous` parameter will represent a list of
-    the values previously yielded by the generator. During a run any values yielded
-    by the generator, will be written to the `custom` stream.
+    ### State management
+
+    The **`previous`** parameter can be used to access the return value of the previous
+    invocation of the entrypoint on the same thread id. This value is only available
+    when a checkpointer is provided.
+
+    If you want **`previous`** to be different from the return value, you can use the
+    `entrypoint.final` object to return a value while saving a different value to the
+    checkpoint.
+
+    ### Generator functions
+
+    In generator functions, `yield` is used as a shorthand for writing
+    to the `custom` channel using the `writer` parameter (i.e., `writer(chunk)`).
+
+    The value of `previous` will be the list of the values yielded during the previous
+    run for the given thread id, unless an `entrypoint.final` was yielded.
+
+    If an `entrypoint.final` object is yielded, the value of `previous` will be the
+    value the `save` attribute of the `entrypoint.final` object.
+
+    When executing an entrypoint created from a generator function, expect the following
+    behavior:
+    - stream_mode is set to 'custom' by default, and streaming will not stream the
+      return value
+    - add a `values` or `updates` stream_mode to stream the return value (if needed)
+    - using `invoke` will return the return value of the entrypoint
 
     Args:
         checkpointer: Specify a checkpointer to create a workflow that can persist
@@ -257,14 +284,70 @@ class entrypoint:
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
             return "world"
 
-        # highlight-next-line
         config = {
             "configurable": {
-                "thread_id":
+                "thread_id": "some_thread"
             }
         }
         my_workflow.invoke("hello")
         ```
+
+    Example: Using entrypoint.final to save a value
+        The `entrypoint.final` object allows you to return a value while saving
+        a different value to the checkpoint. This value will be accessible
+        in the next invocation of the entrypoint via the `previous` parameter, as
+        long as the same thread id is used.
+
+        ```python
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.func import entrypoint
+
+        @entrypoint(checkpointer=MemorySaver())
+        def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+            previous = previous or 0
+            # This will return the previous value to the caller, saving
+            # 2 * number to the checkpoint, which will be used in the next invocation
+            # for the `previous` parameter.
+            return entrypoint.final(value=previous, save=2 * number)
+
+        config = {
+            "configurable": {
+                "thread_id": "some_thread"
+            }
+        }
+
+        my_workflow.invoke(3, config)  # 0 (previous was None)
+        my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
+        ```
+
+    Example: Using a generator entrypoint
+        You can decorate a generator function with the `entrypoint` decorator.
+
+        ```python
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.func import entrypoint
+
+        @entrypoint(checkpointer=MemorySaver())
+        def workflow(inputs: dict):
+            yield "hello"
+            yield "world"
+
+        config = {
+            "configurable": {
+                "thread_id": "1"
+            }
+        }
+
+        for result in workflow.stream({}, config):
+            print(result)
+        ```
+
+        This will print:
+        ```pycon
+        hello
+        world
+        ```
+
     """
 
     def __init__(

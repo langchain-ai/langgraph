@@ -5570,10 +5570,10 @@ def test_falsy_return_from_task(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_interrupts_imperative(
+def test_multiple_interrupts_functional(
     request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
-    """Test multiple interrupts with an imperative API."""
+    """Test multiple interrupts with functional API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     counter = 0
@@ -6286,20 +6286,26 @@ def test_overriding_injectable_args_with_tasks() -> None:
     assert main.invoke({}) == "OK"
 
 
-async def test_overriding_injectable_args_with_async_task() -> None:
-    """Test overriding injectable args in tasks."""
-    from langgraph.store.memory import InMemoryStore
+def test_named_tasks_functional() -> None:
+    class Foo:
+        def foo(self, state: dict) -> dict:
+            return "foo"
 
-    @task
-    async def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
-        assert store is value
-        assert writer is value
+    f = Foo()
+    foo = task(f.foo, name="custom_foo")
 
-    @entrypoint(store=InMemoryStore())
-    async def main(inputs, store: BaseStore) -> str:
-        assert store is not None
-        await foo(store=None, writer=None, value=None)
-        await foo(store="hello", writer="hello", value="hello")
-        return "OK"
+    @task(name="custom_bar")
+    def bar(state: dict) -> dict:
+        return "bar"
 
-    assert await main.ainvoke({}) == "OK"
+    @entrypoint()
+    def workflow(inputs: dict) -> dict:
+        fut_foo = foo(inputs)
+        fut_bar = bar(fut_foo.result())
+        return fut_bar.result()
+
+    assert list(workflow.stream({}, stream_mode="updates")) == [
+        {"custom_foo": "foo"},
+        {"custom_bar": "bar"},
+        {"workflow": "bar"},
+    ]

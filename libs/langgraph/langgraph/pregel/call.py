@@ -1,12 +1,11 @@
 """Utility to convert a user provided function into a Runnable with a ChannelWrite."""
 
-import asyncio
 import concurrent.futures
 import functools
 import inspect
 import sys
 import types
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Generator, Generic, Optional, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
@@ -208,12 +207,17 @@ P1 = TypeVar("P1")
 T = TypeVar("T")
 
 
+class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
+    def __await__(self) -> Generator[T, None, T]:
+        yield cast(T, ...)
+
+
 def call(
     func: Callable[P, T],
     *args: Any,
     retry: Optional[RetryPolicy] = None,
     **kwargs: Any,
-) -> Union[concurrent.futures.Future[T], asyncio.Future[T]]:
+) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
     fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
