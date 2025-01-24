@@ -2,7 +2,6 @@ import asyncio
 import concurrent.futures
 import functools
 import inspect
-import types
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -402,7 +401,7 @@ class entrypoint:
         A value will always be saved even if it is None.
         """
 
-    def __call__(self, func: types.FunctionType) -> Pregel:
+    def __call__(self, func: Callable[..., Any]) -> Pregel:
         """Convert a function into a Pregel graph.
 
         Args:
