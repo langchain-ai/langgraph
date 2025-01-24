@@ -12,6 +12,7 @@ from typing import (
     NamedTuple,
     Optional,
     Sequence,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -216,7 +217,7 @@ class Send:
         {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
     """
 
-    __slots__ = ("node", "arg")
+    __slots__: Tuple[str, ...] = ("node", "arg")
 
     node: str
     arg: Any
@@ -304,7 +305,7 @@ StreamChunk = tuple[tuple[str, ...], str, Any]
 
 
 class StreamProtocol:
-    __slots__ = ("modes", "__call__")
+    __slots__: Tuple[str, ...] = ("modes", "__call__")
 
     modes: set[StreamMode]
 

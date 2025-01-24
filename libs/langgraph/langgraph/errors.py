@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from langgraph.types import Command, Interrupt
@@ -8,11 +8,11 @@ from langgraph.types import Command, Interrupt
 
 
 class ErrorCode(Enum):
-    GRAPH_RECURSION_LIMIT = "GRAPH_RECURSION_LIMIT"
-    INVALID_CONCURRENT_GRAPH_UPDATE = "INVALID_CONCURRENT_GRAPH_UPDATE"
-    INVALID_GRAPH_NODE_RETURN_VALUE = "INVALID_GRAPH_NODE_RETURN_VALUE"
-    MULTIPLE_SUBGRAPHS = "MULTIPLE_SUBGRAPHS"
-    INVALID_CHAT_HISTORY = "INVALID_CHAT_HISTORY"
+    GRAPH_RECURSION_LIMIT: Literal["GRAPH_RECURSION_LIMIT"] = "GRAPH_RECURSION_LIMIT"
+    INVALID_CONCURRENT_GRAPH_UPDATE: Literal["INVALID_CONCURRENT_GRAPH_UPDATE"] = "INVALID_CONCURRENT_GRAPH_UPDATE"
+    INVALID_GRAPH_NODE_RETURN_VALUE: Literal["INVALID_GRAPH_NODE_RETURN_VALUE"] = "INVALID_GRAPH_NODE_RETURN_VALUE"
+    MULTIPLE_SUBGRAPHS: Literal["MULTIPLE_SUBGRAPHS"] = "MULTIPLE_SUBGRAPHS"
+    INVALID_CHAT_HISTORY: Literal["INVALID_CHAT_HISTORY"] = "INVALID_CHAT_HISTORY"
 
 
 def create_error_message(*, message: str, error_code: ErrorCode) -> str:
