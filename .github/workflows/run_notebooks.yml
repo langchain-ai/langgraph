@@ -16,9 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        lib-version:
-          - "development"
-          - "latest"
+        lib-version: ${{ (github.event_name == 'pull_request') && fromJSON('["development"]') || fromJSON('["development", "latest"]') }}
 
     steps:
       - uses: actions/checkout@v4
