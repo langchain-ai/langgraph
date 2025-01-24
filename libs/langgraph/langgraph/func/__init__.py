@@ -22,7 +22,13 @@ from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
-from langgraph.pregel.call import P, T, call, get_runnable_for_entrypoint
+from langgraph.pregel.call import (
+    P,
+    SyncAsyncFuture,
+    T,
+    call,
+    get_runnable_for_entrypoint,
+)
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -32,25 +38,13 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode, StreamWriter
 @overload
 def task(
     *, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]]: ...
-
-
-@overload
-def task(  # type: ignore[overload-cannot-match]
-    *, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]]: ...
+) -> Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]]: ...
 
 
 @overload
 def task(
     __func_or_none__: Callable[P, T],
-) -> Callable[P, concurrent.futures.Future[T]]: ...
-
-
-@overload
-def task(
-    __func_or_none__: Callable[P, Awaitable[T]],
-) -> Callable[P, asyncio.Future[T]]: ...
+) -> Callable[P, SyncAsyncFuture[T]]: ...
 
 
 def task(
@@ -58,10 +52,8 @@ def task(
     *,
     retry: Optional[RetryPolicy] = None,
 ) -> Union[
-    Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]],
-    Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
-    Callable[P, asyncio.Future[T]],
-    Callable[P, concurrent.futures.Future[T]],
+    Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]],
+    Callable[P, SyncAsyncFuture[T]],
 ]:
     """Define a LangGraph task using the `task` decorator.
 
