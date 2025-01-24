@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        lib-version: ${{ fromJSON(github.event_name == 'workflow_call' && '["development"]' || '["development", "latest"]') }}
+        lib-version: ${{ (github.event_name == 'workflow_call') && fromJSON('["development"]') || fromJSON('["development", "latest"]') }}
 
     steps:
       - uses: actions/checkout@v4
