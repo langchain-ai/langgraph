@@ -238,20 +238,6 @@ class ToolNode(RunnableCallable):
                 )
         return combined_outputs
 
-    def invoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if "store" not in kwargs:
-            kwargs["store"] = None
-        return super().invoke(input, config, **kwargs)
-
-    async def ainvoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if "store" not in kwargs:
-            kwargs["store"] = None
-        return await super().ainvoke(input, config, **kwargs)
-
     async def _afunc(
         self,
         input: Union[
