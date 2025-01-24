@@ -5570,10 +5570,10 @@ def test_falsy_return_from_task(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_interrupts_imperative(
+def test_multiple_interrupts_functional(
     request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
-    """Test multiple interrupts with an imperative API."""
+    """Test multiple interrupts with functional API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     counter = 0
@@ -6265,3 +6265,29 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
     # Test with another thread
     assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
     assert previous_ is None
+
+
+def test_named_tasks_functional() -> None:
+
+    class Foo:
+        def foo(self, state: dict) -> dict:
+            return "foo"
+
+    f = Foo()
+    foo = task(f.foo, name="custom_foo")
+
+    @task(name="custom_bar")
+    def bar(state: dict) -> dict:
+        return "bar"
+
+    @entrypoint()
+    def workflow(inputs: dict) -> dict:
+        fut_foo = foo(inputs)
+        fut_bar = bar(fut_foo.result())
+        return fut_bar.result()
+
+    assert list(workflow.stream({}, stream_mode="updates")) == [
+        {"custom_foo": "foo"},
+        {"custom_bar": "bar"},
+        {"workflow": "bar"},
+    ]

@@ -37,7 +37,7 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode, StreamWriter
 
 @overload
 def task(
-    *, retry: Optional[RetryPolicy] = None
+    *, name: Optional[str] = None, retry: Optional[RetryPolicy] = None
 ) -> Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]]: ...
 
 
@@ -50,6 +50,7 @@ def task(
 def task(
     __func_or_none__: Optional[Union[Callable[P, T], Callable[P, Awaitable[T]]]] = None,
     *,
+    name: Optional[str] = None,
     retry: Optional[RetryPolicy] = None,
 ) -> Union[
     Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]],
@@ -120,6 +121,12 @@ def task(
     ) -> Union[
         Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
     ]:
+        if name is not None:
+            if hasattr(func, "__func__"):
+                func.__func__.__name__ = name
+            else:
+                func.__name__ = name
+
         call_func = functools.partial(call, func, retry=retry)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
