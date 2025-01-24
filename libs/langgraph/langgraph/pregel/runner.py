@@ -200,7 +200,6 @@ class PregelRunner:
             func: Callable[[Any], Union[Awaitable[Any], Any]],
             input: Any,
             *,
-            name: Optional[str] = None,
             retry: Optional[RetryPolicy] = None,
             callbacks: Callbacks = None,
         ) -> concurrent.futures.Future[Any]:
@@ -209,7 +208,7 @@ class PregelRunner:
             (fut,) = writer(
                 task,
                 [(PUSH, None)],
-                calls=[Call(func, input, name=name, retry=retry, callbacks=callbacks)],
+                calls=[Call(func, input, retry=retry, callbacks=callbacks)],
             )
             assert fut is not None, "writer did not return a future for call"
             # return a chained future to ensure commit() callback is called
@@ -397,14 +396,13 @@ class PregelRunner:
             func: Callable[[Any], Union[Awaitable[Any], Any]],
             input: Any,
             *,
-            name: Optional[str] = None,
             retry: Optional[RetryPolicy] = None,
             callbacks: Callbacks = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
             (fut,) = writer(
                 task,
                 [(PUSH, None)],
-                calls=[Call(func, input, name=name, retry=retry, callbacks=callbacks)],
+                calls=[Call(func, input, retry=retry, callbacks=callbacks)],
             )
             assert fut is not None, "writer did not return a future for call"
             # return a chained future to ensure commit() callback is called

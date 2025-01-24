@@ -112,11 +112,10 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input", "name", "retry", "callbacks")
+    __slots__ = ("func", "input", "retry", "callbacks")
 
     func: Callable
     input: Any
-    name: Optional[str]
     retry: Optional[RetryPolicy]
     callbacks: Callbacks
 
@@ -125,13 +124,11 @@ class Call:
         func: Callable,
         input: Any,
         *,
-        name: Optional[str] = None,
         retry: Optional[RetryPolicy],
         callbacks: Callbacks,
     ) -> None:
         self.func = func
         self.input = input
-        self.name = name
         self.retry = retry
         self.callbacks = callbacks
 
@@ -444,7 +441,7 @@ def prepare_single_task(
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
         task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
         call = task_path_t[-1]
-        proc_ = get_runnable_for_task(call.func, name=call.name)
+        proc_ = get_runnable_for_task(call.func)
         name = proc_.name
         if name is None:
             raise ValueError("`call` functions must have a `__name__` attribute")

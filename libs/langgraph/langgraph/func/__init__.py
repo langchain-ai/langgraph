@@ -74,7 +74,6 @@ def task(
     - Calling the function produces a future. This makes it easy to parallelize tasks.
 
     Args:
-        name: An optional name for the task. If not provided, the function name will be used.
         retry: An optional retry policy to use for the task in case of a failure.
 
     Returns:
@@ -122,7 +121,10 @@ def task(
     ) -> Union[
         Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
     ]:
-        call_func = functools.partial(call, func, name=name, retry=retry)
+        if name is not None:
+            func.__name__ = name
+
+        call_func = functools.partial(call, func, retry=retry)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
 
