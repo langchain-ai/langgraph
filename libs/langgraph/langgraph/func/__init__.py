@@ -3,7 +3,6 @@ import concurrent.futures
 import functools
 import inspect
 import types
-from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -18,17 +17,12 @@ from typing import (
     overload,
 )
 
-from langchain_core.runnables.base import Runnable
-from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.graph import Graph, Node
-
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import P, T, call, get_runnable_for_entrypoint
-from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -164,8 +158,10 @@ class entrypoint:
     to the function. This input parameter can be of any type. Use a dictionary
     to pass multiple parameters to the function.
 
-    The decorated function also has access to these optional parameters:
+    The decorated function can request access to additional parameters
+    that will be injected automatically at run time. These parameters include:
 
+    - `store`: An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.
     - `writer`: A `StreamWriter` instance for writing data to a stream.
     - `config`: A configuration object for accessing workflow settings.
     - `previous`: The previous return value for the given thread (available only when
@@ -255,7 +251,7 @@ class entrypoint:
 
         ```python
         from langgraph.checkpoint.memory import MemorySaver
-        from langgraph.func import entrypoint, task
+        from langgraph.func import entrypoint
 
         @entrypoint(checkpointer=MemorySaver())
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
@@ -288,6 +284,29 @@ class entrypoint:
 
         This primitive allows to save a value to the checkpointer distinct from the
         return value from the entrypoint.
+
+        Example: Decoupling the return value and the save value
+            ```python
+            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.func import entrypoint
+
+            @entrypoint(checkpointer=MemorySaver())
+            def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+                previous = previous or 0
+                # This will return the previous value to the caller, saving
+                # 2 * number to the checkpoint, which will be used in the next invocation
+                # for the `previous` parameter.
+                return entrypoint.final(value=previous, save=2 * number)
+
+            config = {
+                "configurable": {
+                    "thread_id": "1"
+                }
+            }
+
+            my_workflow.invoke(3, config)  # 0 (previous was None)
+            my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
+            ```
         """
 
         value: R
@@ -498,7 +517,7 @@ class entrypoint:
                 else:
                     output_type = save_type = sig.return_annotation
 
-        return EntrypointPregel(
+        return Pregel(
             nodes={
                 func.__name__: PregelNode(
                     bound=bound,
@@ -529,97 +548,3 @@ class entrypoint:
             store=self.store,
             config_type=self.config_schema,
         )
-
-
-class EntrypointPregel(Pregel):
-    def get_graph(
-        self,
-        config: Optional[RunnableConfig] = None,
-        *,
-        xray: Union[int, bool] = False,
-    ) -> Graph:
-        name, entrypoint = next(iter(self.nodes.items()))
-        graph = Graph()
-        node = Node(f"__{name}", name, entrypoint.bound, None)
-        graph.nodes[node.id] = node
-        candidates: list[tuple[Node, Union[Callable, PregelProtocol]]] = [
-            *_find_children(entrypoint.bound, node)
-        ]
-        seen: set[Union[Callable, PregelProtocol]] = set()
-        for parent, child in candidates:
-            if child in seen:
-                continue
-            else:
-                seen.add(child)
-            if callable(child):
-                node = Node(f"__{child.__name__}", child.__name__, child, None)  # type: ignore[arg-type]
-                graph.nodes[node.id] = node
-                graph.add_edge(parent, node, conditional=True)
-                graph.add_edge(node, parent)
-                candidates.extend(_find_children(child, node))
-            elif isinstance(child, Runnable):
-                if xray > 0:
-                    graph = child.get_graph(config, xray=xray - 1 if xray else 0)
-                    graph.trim_first_node()
-                    graph.trim_last_node()
-                    s, e = graph.extend(graph, prefix=child.name or "")
-                    if s is None:
-                        raise ValueError(
-                            f"Could not extend subgraph '{child.name}' due to missing entrypoint"
-                        )
-                    else:
-                        graph.add_edge(parent, s, conditional=True)
-                    if e is not None:
-                        graph.add_edge(e, parent)
-                else:
-                    node = graph.add_node(child, child.name)
-                    graph.add_edge(parent, node, conditional=True)
-                    graph.add_edge(node, parent)
-        return graph
-
-
-def _find_children(
-    candidate: Union[Callable, Runnable], parent: Node
-) -> Iterator[tuple[Node, Union[Callable, PregelProtocol]]]:
-    from langchain_core.runnables.utils import get_function_nonlocals
-
-    from langgraph.utils.runnable import (
-        RunnableCallable,
-        RunnableLambda,
-        RunnableSeq,
-        RunnableSequence,
-    )
-
-    candidates: list[Union[Callable, Runnable]] = []
-    if callable(candidate) and getattr(candidate, "_is_pregel_task", False) is True:
-        candidates.extend(
-            nl.__self__ if hasattr(nl, "__self__") else nl
-            for nl in get_function_nonlocals(
-                candidate.__wrapped__
-                if hasattr(candidate, "__wrapped__") and callable(candidate.__wrapped__)
-                else candidate
-            )
-        )
-    else:
-        candidates.append(candidate)
-
-    for c in candidates:
-        if callable(c) and getattr(c, "_is_pregel_task", False) is True:
-            yield (parent, c)
-        elif isinstance(c, PregelProtocol):
-            yield (parent, c)
-        elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
-            candidates.extend(c.steps)
-        elif isinstance(c, RunnableLambda):
-            candidates.extend(c.deps)
-        elif isinstance(c, RunnableCallable):
-            if c.func is not None:
-                candidates.extend(
-                    nl.__self__ if hasattr(nl, "__self__") else nl
-                    for nl in get_function_nonlocals(c.func)
-                )
-            elif c.afunc is not None:
-                candidates.extend(
-                    nl.__self__ if hasattr(nl, "__self__") else nl
-                    for nl in get_function_nonlocals(c.afunc)
-                )
