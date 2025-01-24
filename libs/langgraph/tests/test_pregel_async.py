@@ -6813,7 +6813,7 @@ async def test_falsy_return_from_task(checkpointer_name: str) -> None:
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
-    """Test multiple interrupts with an functional API."""
+    """Test multiple interrupts with functional API."""
     from langgraph.func import entrypoint, task
 
     counter = 0
@@ -7327,12 +7327,17 @@ async def test_entrypoint_from_async_generator() -> None:
     assert previous_return_values == [None]
 
 
+@NEEDS_CONTEXTVARS
 async def test_named_tasks_functional() -> None:
-    @task(name="custom_name")
-    async def foo(state: dict) -> dict:
-        return "foo"
 
-    @task
+    class Foo:
+        async def foo(self, state: dict) -> dict:
+            return "foo"
+
+    f = Foo()
+    foo = task(f.foo, name="custom_foo")
+
+    @task(name="custom_bar")
     async def bar(state: dict) -> dict:
         return "bar"
 
@@ -7343,7 +7348,7 @@ async def test_named_tasks_functional() -> None:
         return bar_result
 
     assert [c async for c in workflow.astream({}, stream_mode="updates")] == [
-        {"custom_name": "foo"},
-        {"bar": "bar"},
+        {"custom_foo": "foo"},
+        {"custom_bar": "bar"},
         {"workflow": "bar"},
     ]

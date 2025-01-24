@@ -122,7 +122,10 @@ def task(
         Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
     ]:
         if name is not None:
-            func.__name__ = name
+            if hasattr(func, "__func__"):
+                func.__func__.__name__ = name
+            else:
+                func.__name__ = name
 
         call_func = functools.partial(call, func, retry=retry)
         object.__setattr__(call_func, "_is_pregel_task", True)

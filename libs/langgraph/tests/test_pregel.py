@@ -5573,7 +5573,7 @@ def test_falsy_return_from_task(
 def test_multiple_interrupts_functional(
     request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
-    """Test multiple interrupts with an functional API."""
+    """Test multiple interrupts with functional API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     counter = 0
@@ -6268,11 +6268,15 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
 
 
 def test_named_tasks_functional() -> None:
-    @task(name="custom_name")
-    def foo(state: dict) -> dict:
-        return "foo"
 
-    @task
+    class Foo:
+        def foo(self, state: dict) -> dict:
+            return "foo"
+
+    f = Foo()
+    foo = task(f.foo, name="custom_foo")
+
+    @task(name="custom_bar")
     def bar(state: dict) -> dict:
         return "bar"
 
@@ -6283,7 +6287,7 @@ def test_named_tasks_functional() -> None:
         return fut_bar.result()
 
     assert list(workflow.stream({}, stream_mode="updates")) == [
-        {"custom_name": "foo"},
-        {"bar": "bar"},
+        {"custom_foo": "foo"},
+        {"custom_bar": "bar"},
         {"workflow": "bar"},
     ]
