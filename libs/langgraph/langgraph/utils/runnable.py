@@ -188,6 +188,8 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
+            if kw in kwargs:
+                continue
             if not self.func_accepts[kw]:
                 continue
 
@@ -245,6 +247,8 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
+            if kw in kwargs:
+                continue
             if not self.func_accepts[kw]:
                 continue
 
