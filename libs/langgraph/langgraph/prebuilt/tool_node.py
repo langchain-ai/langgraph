@@ -256,6 +256,14 @@ class ToolNode(RunnableCallable):
     async def ainvoke(
         self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Any:
+        # When ToolNode is added to a StateGraph as a node, the function signature
+        # does not include the Store argument.
+        # The code adds `store` to the kwargs if it is not already present with a
+        # special sentinel value.
+        # Adding `store` to the kwargs allows the underlying tool to request `store`
+        # as a run time parameter.
+        # The sentinel value is used to allow users to pass a custom value to `store`
+        # including a None.
         if "store" not in kwargs:
             kwargs["store"] = INJECT_SENTINEL
         return await super().ainvoke(input, config, **kwargs)
