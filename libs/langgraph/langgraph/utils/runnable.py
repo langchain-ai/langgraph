@@ -66,7 +66,7 @@ class StrEnum(str, enum.Enum):
 # Special type to denote any type is accepted
 ANY_TYPE = object()
 # Sentinel value for a named argument used to specify that a value should be injected.
-INJECT_SENTINEL = object()
+INJECTION_PLACEHOLDER = object()
 
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
@@ -190,7 +190,9 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            if kw in kwargs and kwargs[kw] is not INJECT_SENTINEL:
+            # Check that the kwarg is not already set and that the function accepts it
+            # If it's set check that it was set by the user and isn't a placeholder
+            if kw in kwargs and kwargs[kw] is not INJECTION_PLACEHOLDER:
                 continue
             if not self.func_accepts[kw]:
                 continue
@@ -203,8 +205,7 @@ class RunnableCallable(Runnable):
                 raise ValueError(
                     f"Missing required config key '{config_key}' for '{self.name}'."
                 )
-            elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(config_key, default_value)
+            kwargs[kw] = _conf.get(config_key, default_value)
 
         context = copy_context()
         if self.trace:
@@ -249,7 +250,9 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            if kw in kwargs and kwargs[kw] is not INJECT_SENTINEL:
+            # Check that the kwarg is not already set and that the function accepts it
+            # If it's set check that it was set by the user and isn't a placeholder
+            if kw in kwargs and kwargs[kw] is not INJECTION_PLACEHOLDER:
                 continue
             if not self.func_accepts[kw]:
                 continue
@@ -262,8 +265,7 @@ class RunnableCallable(Runnable):
                 raise ValueError(
                     f"Missing required config key '{config_key}' for '{self.name}'."
                 )
-            elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(config_key, default_value)
+            kwargs[kw] = _conf.get(config_key, default_value)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)

@@ -37,7 +37,7 @@ from typing_extensions import Annotated, get_args, get_origin
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
-from langgraph.utils.runnable import INJECT_SENTINEL, RunnableCallable
+from langgraph.utils.runnable import INJECTION_PLACEHOLDER, RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -250,7 +250,7 @@ class ToolNode(RunnableCallable):
         # The sentinel value is used to allow users to pass a custom value to `store`
         # including a None.
         if "store" not in kwargs:
-            kwargs["store"] = INJECT_SENTINEL
+            kwargs["store"] = INJECTION_PLACEHOLDER
         return super().invoke(input, config, **kwargs)
 
     async def ainvoke(
@@ -265,7 +265,7 @@ class ToolNode(RunnableCallable):
         # The sentinel value is used to allow users to pass a custom value to `store`
         # including a None.
         if "store" not in kwargs:
-            kwargs["store"] = INJECT_SENTINEL
+            kwargs["store"] = INJECTION_PLACEHOLDER
         return await super().ainvoke(input, config, **kwargs)
 
     async def _afunc(
