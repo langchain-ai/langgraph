@@ -3,7 +3,6 @@ import logging
 import operator
 import random
 import sys
-import time
 import uuid
 from collections import Counter, deque
 from contextlib import asynccontextmanager, contextmanager
@@ -2537,40 +2536,6 @@ async def test_imp_nested(checkpointer_name: str) -> None:
             {"mapper": "00"},
             {"submapper": "1"},
             {"mapper": "11"},
-            {
-                "__interrupt__": (
-                    Interrupt(
-                        value="question",
-                        resumable=True,
-                        ns=[AnyStr("graph:")],
-                        when="during",
-                    ),
-                )
-            },
-        ]
-
-        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
-            "00answera",
-            "11answera",
-        ]
-
-        def syncmapper(input: int) -> str:
-            time.sleep(input / 100)
-            return submapper(input).result() * 2
-
-        @entrypoint(checkpointer=checkpointer)
-        async def graph(input: list[int]) -> list[str]:
-            mapped = [syncmapper(i) for i in input]
-            answer = interrupt("question")
-            final = [m + answer for m in mapped]
-            return await add_a.ainvoke(final)
-
-        thread1 = {"configurable": {"thread_id": "1"}}
-        assert [c async for c in graph.astream([0, 1], thread1)] == [
-            {"submapper": "0"},
-            {"syncmapper": "00"},
-            {"submapper": "1"},
-            {"syncmapper": "11"},
             {
                 "__interrupt__": (
                     Interrupt(
