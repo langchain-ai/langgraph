@@ -309,7 +309,7 @@ class entrypoint:
         A value will always be saved even if it is None.
         """
 
-    def __call__(self, func: types.FunctionType) -> Pregel:
+    def __call__(self, func: Callable[..., Any]) -> Pregel:
         """Convert a function into a Pregel graph.
 
         Args:
