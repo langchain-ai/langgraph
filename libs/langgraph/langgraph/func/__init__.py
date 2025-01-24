@@ -123,8 +123,10 @@ def task(
     ]:
         if name is not None:
             if hasattr(func, "__func__"):
+                # handle class methods
                 func.__func__.__name__ = name
             else:
+                # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
 
         call_func = functools.partial(call, func, retry=retry)

@@ -1,4 +1,5 @@
 import enum
+import functools
 import json
 import logging
 import operator
@@ -6268,26 +6269,48 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
 
 
 def test_named_tasks_functional() -> None:
-
     class Foo:
-        def foo(self, state: dict) -> dict:
-            return "foo"
+        def foo(self, value: str) -> dict:
+            return value + "foo"
 
     f = Foo()
+
+    # class method task
     foo = task(f.foo, name="custom_foo")
 
+    # regular function task
     @task(name="custom_bar")
-    def bar(state: dict) -> dict:
-        return "bar"
+    def bar(value: str) -> dict:
+        return value + "|bar"
+
+    def baz(update: str, value: str) -> dict:
+        return value + f"|{update}"
+
+    # partial function task (unnamed)
+    baz_task = task(functools.partial(baz, "baz"))
+    # partial function task (named_)
+    custom_baz_task = task(functools.partial(baz, "custom_baz"), name="custom_baz")
+
+    class Qux:
+        def __call__(self, value: str) -> dict:
+            return value + "|qux"
+
+    qux_task = task(Qux(), name="qux")
 
     @entrypoint()
     def workflow(inputs: dict) -> dict:
         fut_foo = foo(inputs)
         fut_bar = bar(fut_foo.result())
-        return fut_bar.result()
+        fut_baz = baz_task(fut_bar.result())
+        fut_custom_baz = custom_baz_task(fut_baz.result())
+        fut_qux = qux_task(fut_custom_baz.result())
+        return fut_qux.result()
 
-    assert list(workflow.stream({}, stream_mode="updates")) == [
+    assert list(workflow.stream("", stream_mode="updates")) == [
         {"custom_foo": "foo"},
-        {"custom_bar": "bar"},
-        {"workflow": "bar"},
+        {"custom_bar": "foo|bar"},
+        {"baz": "foo|bar|baz"},
+        {"custom_baz": "foo|bar|baz|custom_baz"},
+        {"qux": "foo|bar|baz|custom_baz|qux"},
+        {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
