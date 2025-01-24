@@ -17,10 +17,10 @@ jobs:
     strategy:
       matrix:
         lib-version: ['development', 'latest']
-        is_workflow_call:
-          - ${{ github.event_name == 'workflow_call' }}
+        is_pull_request:
+          - ${{ github.event_name == 'pull_request' }}
         exclude:
-          - is_workflow_call: true
+          - is_pull_request: true
             lib-version: latest
 
     steps:
