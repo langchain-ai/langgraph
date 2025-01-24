@@ -65,8 +65,8 @@ class StrEnum(str, enum.Enum):
 
 # Special type to denote any type is accepted
 ANY_TYPE = object()
-# Sentinel value for a named argument used to specify that a value should be injected.
-INJECTION_PLACEHOLDER = object()
+# Special type to denote that a corresponding named argument should be injected.
+PLACEHOLDER_FOR_INJECTABLE = object()
 
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
@@ -192,7 +192,7 @@ class RunnableCallable(Runnable):
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
             # Check that the kwarg is not already set and that the function accepts it
             # If it's set check that it was set by the user and isn't a placeholder
-            if kw in kwargs and kwargs[kw] is not INJECTION_PLACEHOLDER:
+            if kw in kwargs and kwargs[kw] is not PLACEHOLDER_FOR_INJECTABLE:
                 continue
             if not self.func_accepts[kw]:
                 continue
@@ -252,7 +252,7 @@ class RunnableCallable(Runnable):
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
             # Check that the kwarg is not already set and that the function accepts it
             # If it's set check that it was set by the user and isn't a placeholder
-            if kw in kwargs and kwargs[kw] is not INJECTION_PLACEHOLDER:
+            if kw in kwargs and kwargs[kw] is not PLACEHOLDER_FOR_INJECTABLE:
                 continue
             if not self.func_accepts[kw]:
                 continue
