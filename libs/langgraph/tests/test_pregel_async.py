@@ -6813,7 +6813,7 @@ async def test_falsy_return_from_task(checkpointer_name: str) -> None:
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
-    """Test multiple interrupts with an functional API."""
+    """Test multiple interrupts with functional API."""
     from langgraph.func import entrypoint, task
 
     counter = 0

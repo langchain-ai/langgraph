@@ -5573,7 +5573,7 @@ def test_falsy_return_from_task(
 def test_multiple_interrupts_functional(
     request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
-    """Test multiple interrupts with an functional API."""
+    """Test multiple interrupts with functional API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     counter = 0
