@@ -161,23 +161,21 @@ class entrypoint:
 
     ### Function signature
 
-    The decorated function must accept a single parameter, which serves as the input
+    The decorated function must accept a **single parameter**, which serves as the input
     to the function. This input parameter can be of any type. Use a dictionary
-    to pass multiple parameters to the function.
+    to pass **multiple parameters** to the function.
 
     ### Injectable parameters
 
     The decorated function can request access to additional parameters
     that will be injected automatically at run time. These parameters include:
 
-    - **`store`**: An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful
-      for long-term memory.
-    - **`writer`**: A [StreamWriter][langgraph.types.StreamWriter] instance for writing
-      custom data to a stream.
-    - **`config`**: A configuration object (aka RunnableConfig) that holds run time
-      configuration values.
-    - **`previous`**: The previous return value for the given thread (available only
-      when a checkpointer is provided).
+    | Parameter        | Description                                                                                        |
+    |------------------|----------------------------------------------------------------------------------------------------|
+    | **`store`**      | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.           |
+    | **`writer`**     | A [StreamWriter][langgraph.types.StreamWriter] instance for writing custom data to a stream.       |
+    | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
+    | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
 
     The entrypoint decorator can be applied to sync functions, async functions,
     generator functions, and async generator functions.
@@ -202,6 +200,13 @@ class entrypoint:
 
     If an `entrypoint.final` object is yielded, the value of `previous` will be the
     value the `save` attribute of the `entrypoint.final` object.
+
+    When executing an entrypoint created from a generator function, expect the following
+    behavior:
+    - stream_mode is set to 'custom' by default, and streaming will not stream the
+      return value
+    - add a `values` or `updates` stream_mode to stream the return value (if needed)
+    - using `invoke` will return the return value of the entrypoint
 
     Args:
         checkpointer: Specify a checkpointer to create a workflow that can persist
