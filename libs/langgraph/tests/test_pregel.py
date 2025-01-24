@@ -6265,3 +6265,41 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
     # Test with another thread
     assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
     assert previous_ is None
+
+
+def test_overriding_injectable_args_with_tasks() -> None:
+    """Test overriding injectable args in tasks."""
+    from langgraph.store.memory import InMemoryStore
+
+    @task
+    def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
+        assert store is value
+        assert writer is value
+
+    @entrypoint(store=InMemoryStore())
+    def main(inputs, store: BaseStore) -> str:
+        assert store is not None
+        foo(store=None, writer=None, value=None).result()
+        foo(store="hello", writer="hello", value="hello").result()
+        return "OK"
+
+    assert main.invoke({}) == "OK"
+
+
+async def test_overriding_injectable_args_with_async_task() -> None:
+    """Test overriding injectable args in tasks."""
+    from langgraph.store.memory import InMemoryStore
+
+    @task
+    async def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
+        assert store is value
+        assert writer is value
+
+    @entrypoint(store=InMemoryStore())
+    async def main(inputs, store: BaseStore) -> str:
+        assert store is not None
+        await foo(store=None, writer=None, value=None)
+        await foo(store="hello", writer="hello", value="hello")
+        return "OK"
+
+    assert await main.ainvoke({}) == "OK"
