@@ -163,17 +163,20 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE.setdefault(key, run)
 
 
-def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
+def get_runnable_for_task(
+    func: Callable[..., Any], name: Optional[str] = None
+) -> RunnableSeq:
     key = (func, True)
     if key in CACHE:
         return CACHE[key]
     else:
+        name = name or func.__name__
         if is_async_callable(func):
             run = RunnableCallable(
                 None,
                 func,
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
                 recurse=False,
             )
@@ -182,14 +185,14 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
                 func,
                 functools.wraps(func)(functools.partial(run_in_executor, None, func)),
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
                 recurse=False,
             )
         seq = RunnableSeq(
             run,
             ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
-            name=func.__name__,
+            name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)
             ),
@@ -215,10 +218,13 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
 def call(
     func: Callable[P, T],
     *args: Any,
+    name: Optional[str] = None,
     retry: Optional[RetryPolicy] = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
-    fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
+    fut = impl(
+        func, (args, kwargs), name=name, retry=retry, callbacks=config["callbacks"]
+    )
     return fut
