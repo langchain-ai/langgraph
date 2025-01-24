@@ -65,6 +65,8 @@ class StrEnum(str, enum.Enum):
 
 # Special type to denote any type is accepted
 ANY_TYPE = object()
+# Sentinel value for a named argument used to specify that a value should be injected.
+INJECT_SENTINEL = object()
 
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
@@ -188,7 +190,7 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            if kw in kwargs:
+            if kw in kwargs and kwargs[kw] is not INJECT_SENTINEL:
                 continue
             if not self.func_accepts[kw]:
                 continue
@@ -247,7 +249,7 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            if kw in kwargs:
+            if kw in kwargs and kwargs[kw] is not INJECT_SENTINEL:
                 continue
             if not self.func_accepts[kw]:
                 continue
