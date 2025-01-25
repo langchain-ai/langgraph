@@ -65,9 +65,6 @@ class StrEnum(str, enum.Enum):
 
 # Special type to denote any type is accepted
 ANY_TYPE = object()
-# Special type to denote that a corresponding named argument should be injected.
-PLACEHOLDER_FOR_INJECTABLE = object()
-
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
@@ -190,10 +187,11 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            # Check that the kwarg is not already set and that the function accepts it
-            # If it's set check that it was set by the user and isn't a placeholder
-            if kw in kwargs and kwargs[kw] is not PLACEHOLDER_FOR_INJECTABLE:
+            # If the kwarg is already set, use the set value
+            if kw in kwargs:
                 continue
+
+            # If the function does not request the kwarg, don't do anything
             if not self.func_accepts[kw]:
                 continue
 
@@ -205,6 +203,7 @@ class RunnableCallable(Runnable):
                 raise ValueError(
                     f"Missing required config key '{config_key}' for '{self.name}'."
                 )
+
             kwargs[kw] = _conf.get(config_key, default_value)
 
         context = copy_context()
@@ -250,13 +249,16 @@ class RunnableCallable(Runnable):
             kwargs["config"] = config
         _conf = config[CONF]
         for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            # Check that the kwarg is not already set and that the function accepts it
-            # If it's set check that it was set by the user and isn't a placeholder
-            if kw in kwargs and kwargs[kw] is not PLACEHOLDER_FOR_INJECTABLE:
+            # If the kwarg has already been set, use the set value
+            if kw in kwargs:
                 continue
+
+            # If the function does not request the kwarg, don't do anything
             if not self.func_accepts[kw]:
                 continue
 
+            # If the kwarg is requested, but isn't in the config AND has not
+            # default value, raise an error
             if (
                 default_value is inspect.Parameter.empty
                 and kw not in kwargs

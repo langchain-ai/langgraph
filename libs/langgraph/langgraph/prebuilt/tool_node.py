@@ -27,7 +27,6 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
-from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import get_all_basemodel_annotations
@@ -37,7 +36,7 @@ from typing_extensions import Annotated, get_args, get_origin
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
-from langgraph.utils.runnable import PLACEHOLDER_FOR_INJECTABLE, RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -237,36 +236,6 @@ class ToolNode(RunnableCallable):
                     [output] if input_type == "list" else {self.messages_key: [output]}
                 )
         return combined_outputs
-
-    def invoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        # When ToolNode is added to a StateGraph as a node, the function signature
-        # does not include the Store argument.
-        # The code adds `store` to the kwargs if it is not already present with a
-        # special sentinel value.
-        # Adding `store` to the kwargs allows the underlying tool to request `store`
-        # as a run time parameter.
-        # The sentinel value is used to allow users to pass a custom value to `store`
-        # including a None.
-        if "store" not in kwargs:
-            kwargs["store"] = PLACEHOLDER_FOR_INJECTABLE
-        return super().invoke(input, config, **kwargs)
-
-    async def ainvoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        # When ToolNode is added to a StateGraph as a node, the function signature
-        # does not include the Store argument.
-        # The code adds `store` to the kwargs if it is not already present with a
-        # special sentinel value.
-        # Adding `store` to the kwargs allows the underlying tool to request `store`
-        # as a run time parameter.
-        # The sentinel value is used to allow users to pass a custom value to `store`
-        # including a None.
-        if "store" not in kwargs:
-            kwargs["store"] = PLACEHOLDER_FOR_INJECTABLE
-        return await super().ainvoke(input, config, **kwargs)
 
     async def _afunc(
         self,
