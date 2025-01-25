@@ -77,9 +77,19 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     ),
     (
         sys.intern("store"),
-        (BaseStore, "BaseStore", inspect.Parameter.empty),
+        (
+            BaseStore,
+            "BaseStore",
+            Optional[BaseStore],
+            # Best effort to catch some forward references.
+            # This will not work for cases like `"Union[None, BaseStore]"`,
+            # we'll need to re-write logic to use get_type_hints()
+            # to resolve forward references.
+            "Optional[BaseStore]",
+            inspect.Parameter.empty,
+        ),
         CONFIG_KEY_STORE,
-        inspect.Parameter.empty,
+        None,
     ),
     (
         sys.intern("previous"),

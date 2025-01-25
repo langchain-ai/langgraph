@@ -209,7 +209,7 @@ class ToolNode(RunnableCallable):
         ],
         config: RunnableConfig,
         *,
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
@@ -219,12 +219,14 @@ class ToolNode(RunnableCallable):
                 *executor.map(self._run_one, tool_calls, input_types, config_list)
             ]
 
-        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        # preserve existing behavior for non-command tool outputs for backwards
+        # compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
             return outputs if input_type == "list" else {self.messages_key: outputs}
 
-        # LangGraph will automatically handle list of Command and non-command node updates
+        # LangGraph will automatically handle list of Command and non-command node
+        # updates
         combined_outputs: list[
             Command | list[ToolMessage] | dict[str, list[ToolMessage]]
         ] = []
@@ -246,7 +248,7 @@ class ToolNode(RunnableCallable):
         ],
         config: RunnableConfig,
         *,
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
@@ -389,7 +391,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
             input_type = "list"
@@ -469,7 +471,9 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_store(self, tool_call: ToolCall, store: BaseStore) -> ToolCall:
+    def _inject_store(
+        self, tool_call: ToolCall, store: Optional[BaseStore]
+    ) -> ToolCall:
         store_arg = self.tool_to_store_arg[tool_call["name"]]
         if not store_arg:
             return tool_call
@@ -494,7 +498,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> ToolCall:
         if tool_call["name"] not in self.tools_by_name:
             return tool_call
