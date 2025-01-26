@@ -268,8 +268,7 @@ def create_react_agent(
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
 
             !!! Note
-                Prior to `v0.2.68`, this functionality was available through `state_modifier` / `messages_modifier` parameters.
-                The `prompt` parameter is now the recommended parameter.
+                Prior to `v0.2.68`, the prompt was set using `state_modifier` / `messages_modifier` parameters.
         response_format: An optional schema for the final agent output.
 
             If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
