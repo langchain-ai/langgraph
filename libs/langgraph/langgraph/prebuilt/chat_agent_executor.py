@@ -23,7 +23,6 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
-from langgraph._api.deprecation import deprecated_parameter
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
@@ -234,7 +233,6 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-@deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 @_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
