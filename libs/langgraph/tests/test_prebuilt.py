@@ -351,7 +351,7 @@ def test_prompt_with_store():
     assert response["messages"][-1].content == "foo-hi"
 
 
-async def test_state_modifier_with_store_async():
+async def test_prompt_with_store_async():
     async def add(a: int, b: int):
         """Adds a and b"""
         return a + b
