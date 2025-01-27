@@ -6268,7 +6268,6 @@ async def test_entrypoint_async_generator_with_return_and_save() -> None:
 
 
 def test_named_tasks_functional() -> None:
-
     class Foo:
         def foo(self, state: dict) -> dict:
             return "foo"
@@ -6291,3 +6290,38 @@ def test_named_tasks_functional() -> None:
         {"custom_bar": "bar"},
         {"workflow": "bar"},
     ]
+
+
+def test_foo_bar() -> None:
+    checkpoint = MemorySaver()
+
+    @entrypoint()
+    def bar(inputs):
+        yield "a"
+        yield "b"
+        yield entrypoint.final(value="c", save="d")
+
+    @entrypoint(checkpointer=checkpoint)
+    def main(inputs):
+        value1 = list(bar.stream({}))
+        interrupt(value1)
+        return {
+            "value1": value1,
+        }
+
+    config = {
+        "configurable": {
+            "thread_id": "1",
+        }
+    }
+
+    chunks = [chunk for chunk in main.stream({}, config)]
+
+    # Why is the value a double list?
+    # What is the format of __interrupt__?
+    assert chunks[0]["__interrupt__"][0].value == [["a", "b"]]
+
+    assert main.invoke(Command(resume="a"), config) == {
+        # Actually evaluates to 'c'
+        "value1": [["a", "b"]],
+    }
