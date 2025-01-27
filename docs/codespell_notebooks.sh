@@ -1,5 +1,5 @@
 ERROR_FOUND=0
-for file in $(find $1 -name "*.ipynb"); do
+for file in $(find $1 -name "*.ipynb" | grep -v ".ipynb_checkpoints"); do
     OUTPUT=$(cat "$file" | jupytext --from ipynb --to py:percent | codespell -)
     if [ -n "$OUTPUT" ]; then
         echo "Errors found in $file"

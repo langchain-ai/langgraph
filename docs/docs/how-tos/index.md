@@ -31,6 +31,12 @@ These how-to guides show how to achieve that controllability.
 - [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
 
+See the below guides for how-to add persistence to your workflow using the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to add thread-level persistence (functional API)](persistence-functional.ipynb)
+- [How to add cross-thread persistence (functional API)](cross-thread-persistence-functional.ipynb)
+
 ### Memory
 
 LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) in your graph. These how-to guides show how to implement different strategies for that.
@@ -58,6 +64,12 @@ Other methods:
 - [How to add static breakpoints](human_in_the_loop/breakpoints.ipynb): Use for debugging purposes. For [**human-in-the-loop**](../concepts/human_in_the_loop.md) workflows, we recommend the [`interrupt` function][langgraph.types.interrupt] instead.
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb): Edit graph state using `graph.update_state` method. Use this if implementing a **human-in-the-loop** workflow via **static breakpoints**.
 - [How to add dynamic breakpoints with `NodeInterrupt`](human_in_the_loop/dynamic_breakpoints.ipynb): **Not recommended**: Use the [`interrupt` function](../concepts/human_in_the_loop.md) instead.
+
+See the below guides for how-to implement human-in-the-loop workflows with the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to wait for user input (Functional API)](wait-user-input-functional.ipynb)
+- [How to review tool calls (Functional API)](review-tool-calls-functional.ipynb)
 
 ### Time Travel
 
@@ -115,6 +127,12 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
+See the below guides for how-to implement multi-agent workflows with the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to build a multi-agent network (functional API)](multi-agent-network-functional.ipynb)
+- [How to add multi-turn conversation in a multi-agent application (functional API)](multi-agent-multi-turn-convo-functional.ipynb)
+
 ### State Management
 
 - [How to use Pydantic model as graph state](state-model.ipynb)
@@ -151,6 +169,11 @@ Interested in further customizing the ReAct agent? This guide provides an
 overview of its underlying implementation to help you customize for your own needs:
 
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
+
+See the below guide for how-to build ReAct agents with the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to create a ReAct agent from scratch (Functional API)](react-agent-from-scratch-functional.ipynb)
 
 ## LangGraph Platform
 
