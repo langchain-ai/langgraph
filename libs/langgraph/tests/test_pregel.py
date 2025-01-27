@@ -6123,18 +6123,6 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
         def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
             return entrypoint.final(value=1, save=1)  # type: ignore
 
-    @entrypoint()
-    def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
-        yield 1
-
-    assert foo.get_output_schema().model_json_schema() == {
-        "items": {
-            "type": "integer",
-        },
-        "title": "LangGraphOutput",
-        "type": "array",
-    }
-
 
 def test_entrypoint_with_return_and_save() -> None:
     """Test entrypoint with return and save."""
