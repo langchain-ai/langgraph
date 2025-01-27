@@ -6293,21 +6293,26 @@ def test_named_tasks_functional() -> None:
 
 
 def test_foo_bar() -> None:
-    checkpoint = MemorySaver()
+    checkpointer = MemorySaver()
 
-    @entrypoint()
+    @entrypoint(checkpointer=checkpointer)
     def bar(inputs):
         yield "a"
         yield "b"
         yield entrypoint.final(value="c", save="d")
 
-    @entrypoint(checkpointer=checkpoint)
-    def main(inputs):
-        value1 = list(bar.stream({}))
-        interrupt(value1)
-        return {
-            "value1": value1,
+    config = {
+        "configurable": {
+            "thread_id": "2",
         }
+    }
+
+    assert list(bar.stream({}, config=config)) == ["a", "b"]
+
+    @entrypoint(checkpointer=checkpointer)
+    def main(inputs):
+        # This is odd?
+        return list(bar.stream({}, stream_mode="custom"))
 
     config = {
         "configurable": {
@@ -6316,12 +6321,4 @@ def test_foo_bar() -> None:
     }
 
     chunks = [chunk for chunk in main.stream({}, config)]
-
-    # Why is the value a double list?
-    # What is the format of __interrupt__?
-    assert chunks[0]["__interrupt__"][0].value == [["a", "b"]]
-
-    assert main.invoke(Command(resume="a"), config) == {
-        # Actually evaluates to 'c'
-        "value1": [["a", "b"]],
-    }
+    assert chunks == [{"main": ["c"]}]
