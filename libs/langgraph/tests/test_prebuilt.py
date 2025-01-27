@@ -346,6 +346,50 @@ def test_state_modifier_with_store():
     assert response["messages"][-1].content == "foo-hi"
 
 
+async def test_state_modifier_with_store_async():
+    async def add(a: int, b: int):
+        """Adds a and b"""
+        return a + b
+
+    in_memory_store = InMemoryStore()
+    await in_memory_store.aput(
+        ("memories", "1"), "user_name", {"data": "User name is Alice"}
+    )
+    await in_memory_store.aput(
+        ("memories", "2"), "user_name", {"data": "User name is Bob"}
+    )
+
+    async def modify(state, config, *, store):
+        user_id = config["configurable"]["user_id"]
+        system_str = (await store.aget(("memories", user_id), "user_name")).value[
+            "data"
+        ]
+        return [SystemMessage(system_str)] + state["messages"]
+
+    async def modify_no_store(state, config):
+        return SystemMessage("foo") + state["messages"]
+
+    model = FakeToolCallingModel()
+
+    # test state modifier that uses store works
+    agent = create_react_agent(
+        model, [add], state_modifier=modify, store=in_memory_store
+    )
+    response = await agent.ainvoke(
+        {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
+    )
+    assert response["messages"][-1].content == "User name is Alice-hi"
+
+    # test state modifier that doesn't use store works
+    agent = create_react_agent(
+        model, [add], state_modifier=modify_no_store, store=in_memory_store
+    )
+    response = await agent.ainvoke(
+        {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
+    )
+    assert response["messages"][-1].content == "foo-hi"
+
+
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
 def test_model_with_tools(tool_style: str):
     model = FakeToolCallingModel(tool_style=tool_style)

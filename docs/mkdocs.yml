@@ -183,6 +183,7 @@ nav:
               - how-tos/create-react-agent-memory.ipynb
               - how-tos/create-react-agent-system-prompt.ipynb
               - how-tos/create-react-agent-hitl.ipynb
+              - how-tos/create-react-agent-structured-output.ipynb
               - how-tos/react-agent-from-scratch.ipynb
         - LangGraph Platform:
             - LangGraph Platform: how-tos#langgraph-platform
@@ -295,6 +296,7 @@ nav:
         - Quick Start:
           - Quick Start: tutorials#quick-start
           - tutorials/introduction.ipynb
+          - tutorials/workflows.ipynb
           - tutorials/langgraph-platform/local-server.md
           - cloud/quick_start.md
         - Chatbots:

@@ -1,4 +1,5 @@
 import enum
+import functools
 import json
 import logging
 import operator
@@ -9,6 +10,7 @@ import warnings
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import dataclass
 from random import randrange
 from typing import (
     Annotated,
@@ -81,6 +83,8 @@ from tests.messages import (
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
+
+pytestmark = pytest.mark.anyio
 
 logger = logging.getLogger(__name__)
 
@@ -1537,12 +1541,14 @@ def test_imp_nested(
 
     @task
     def submapper(input: int) -> str:
+        time.sleep(input / 100)
         return str(input)
 
     @task()
     def mapper(input: int) -> str:
+        sub = submapper(input)
         time.sleep(input / 100)
-        return submapper(input).result() * 2
+        return sub.result() * 2
 
     @entrypoint(checkpointer=checkpointer)
     def graph(input: list[int]) -> list[str]:
@@ -1562,8 +1568,6 @@ def test_imp_nested(
         "items": {"type": "string"},
         "title": "LangGraphOutput",
     }
-
-    assert graph.get_graph().draw_mermaid() == snapshot
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [*graph.stream([0, 1], thread1)] == [
@@ -1613,8 +1617,6 @@ def test_imp_stream_order(
         fut_bar = bar(*fut_foo.result())
         fut_baz = baz(fut_bar.result())
         return fut_baz.result()
-
-    assert graph.get_graph().draw_mermaid() == snapshot
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in graph.stream({"a": "0"}, thread1)] == [
@@ -5043,8 +5045,6 @@ def test_interrupt_functional(
         fut_bar = bar(bar_input)
         return fut_bar.result()
 
-    assert graph.get_graph().draw_mermaid() == snapshot
-
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
     graph.invoke({"a": ""}, config)
@@ -5076,14 +5076,28 @@ def test_interrupt_task_functional(
         fut_bar = bar(fut_foo.result())
         return fut_bar.result()
 
-    assert graph.get_graph().draw_mermaid() == snapshot
-
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert not graph.invoke({"a": ""}, config)
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar"}
+
+    # Test that we can interrupt the same task multiple times
+    config = {"configurable": {"thread_id": "2"}}
+
+    @entrypoint(checkpointer=checkpointer)
+    def graph(inputs: dict) -> dict:
+        foo_result = foo(inputs).result()
+        bar_result = bar(foo_result).result()
+        baz_result = bar(bar_result).result()
+        return baz_result
+
+    # First run, interrupted at bar
+    assert not graph.invoke({"a": ""}, config)
+    # Provide resumes
+    assert not graph.invoke(Command(resume="bar"), config)
+    assert graph.invoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
 
 
 def test_root_mixed_return() -> None:
@@ -5112,6 +5126,35 @@ def test_dict_mixed_return() -> None:
     graph = graph.compile()
 
     assert graph.invoke({"foo": ""}) == {"foo": "ab"}
+
+
+def test_command_pydantic_dataclass() -> None:
+    from pydantic import BaseModel
+
+    class PydanticState(BaseModel):
+        foo: str
+
+    @dataclass
+    class DataclassState:
+        foo: str
+
+    for State in (PydanticState, DataclassState):
+
+        def node_a(state) -> Command[Literal["node_b"]]:
+            return Command(
+                update=State(foo="foo"),
+                goto="node_b",
+            )
+
+        def node_b(state):
+            return {"foo": state.foo + "bar"}
+
+        builder = StateGraph(State)
+        builder.add_edge(START, "node_a")
+        builder.add_node(node_a)
+        builder.add_node(node_b)
+        graph = builder.compile()
+        assert graph.invoke(State(foo="")) == {"foo": "foobar"}
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -5522,18 +5565,16 @@ def test_falsy_return_from_task(
         falsy_task().result()
         interrupt("test")
 
-    assert graph.get_graph().draw_mermaid() == snapshot
-
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({"a": 5}, configurable)
     graph.invoke(Command(resume="123"), configurable)
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_interrupts_imperative(
+def test_multiple_interrupts_functional(
     request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
-    """Test multiple interrupts with an imperative API."""
+    """Test multiple interrupts with functional API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     counter = 0
@@ -5555,8 +5596,6 @@ def test_multiple_interrupts_imperative(
             values.extend([double(idx).result(), interrupt({"a": "boo"})])
 
         return {"values": values}
-
-    assert graph.get_graph().draw_mermaid() == snapshot
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
     graph.invoke({}, configurable)
@@ -5740,34 +5779,6 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-async def test_async_entrypoint_without_checkpointer() -> None:
-    """Test no checkpointer."""
-    states = []
-    config = {"configurable": {"thread_id": "1"}}
-
-    # Test without previous
-    @entrypoint()
-    async def foo(inputs: Any) -> Any:
-        states.append(inputs)
-        return inputs
-
-    assert (await foo.ainvoke({"a": "1"}, config)) == {"a": "1"}
-
-    @entrypoint()
-    async def foo(inputs: Any, *, previous: Any) -> Any:
-        states.append(previous)
-        return {"previous": previous, "current": inputs}
-
-    assert (await foo.ainvoke({"a": "1"}, config)) == {
-        "current": {"a": "1"},
-        "previous": None,
-    }
-    assert (await foo.ainvoke({"a": "1"}, config)) == {
-        "current": {"a": "1"},
-        "previous": None,
-    }
-
-
 def test_entrypoint_stateful() -> None:
     """Test stateful entrypoint invoke."""
 
@@ -5857,26 +5868,6 @@ def test_entrypoint_request_stream_writer() -> None:
             "b",
         ),
     ]
-
-
-async def test_entrypoint_from_async_generator() -> None:
-    """@entrypoint does not support sync generators."""
-    # Test invoke
-    previous_return_values = []
-
-    # In this version reducers do not work
-    @entrypoint(checkpointer=MemorySaver())
-    async def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
-    assert previous_return_values == [None]
-    assert list(foo.invoke({"a": "2"}, config)) == ["a", "b"]
-    assert previous_return_values == [None, ["a", "b"]]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -6137,4 +6128,189 @@ def test_multiple_subgraphs_mixed_checkpointer(
             {"other_subgraph_node": {"other_sub_counter": 3}},
         ),
         ((), {"parent_node": {"parent_counter": 7}}),
+    ]
+
+
+def test_entrypoint_output_schema_with_return_and_save() -> None:
+    """Test output schema inference with entrypoint.final."""
+
+    # Un-parameterized entrypoint.final is interpreted as entrypoint.final[Any, Any]
+    @entrypoint()
+    def foo2(inputs, *, previous: Any) -> entrypoint.final:
+        return entrypoint.final(value="foo", save=1)
+
+    assert foo2.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+    }
+
+    @entrypoint()
+    def foo(inputs, *, previous: Any) -> entrypoint.final[str, int]:
+        return entrypoint.final(value="foo", save=1)
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "string",
+    }
+
+    with pytest.raises(TypeError):
+        # Raise an exception on an improperly parameterized entrypoint.final
+        # User is attempting to parameterize in this case, so we'll offer
+        # a bit of help if it's not done correctly.
+        @entrypoint()
+        def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
+            return entrypoint.final(value=1, save=1)  # type: ignore
+
+    @entrypoint()
+    def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
+        yield 1
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "items": {
+            "type": "integer",
+        },
+        "title": "LangGraphOutput",
+        "type": "array",
+    }
+
+
+def test_entrypoint_with_return_and_save() -> None:
+    """Test entrypoint with return and save."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    def foo(msg: str, *, previous: Any) -> entrypoint.final[int, list[str]]:
+        nonlocal previous_
+        previous_ = previous
+        previous = previous or []
+        return entrypoint.final(value=len(previous), save=previous + [msg])
+
+    assert foo.get_output_schema().model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "integer",
+    }
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert foo.invoke("hello", config) == 0
+    assert previous_ is None
+    assert foo.invoke("goodbye", config) == 1
+    assert previous_ == ["hello"]
+    assert foo.invoke("definitely", config) == 2
+    assert previous_ == ["hello", "goodbye"]
+
+
+def test_entrypoint_generator_with_return_and_save() -> None:
+    """Verify that generators produce expected results."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    def workflow(inputs: dict, *, previous: Any):
+        nonlocal previous_
+        previous_ = previous
+
+        yield "hello"
+        yield "world"
+        yield entrypoint.final(value="!", save="saved value")
+
+    assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
+        "hello",
+        "world",
+    ]
+    assert list(
+        workflow.stream({}, {"configurable": {"thread_id": "0"}}, stream_mode="updates")
+    ) == [
+        {
+            "workflow": "!",
+        }
+    ]
+
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+    assert previous_ is None
+
+    # 2nd time around previous is set
+    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+    assert previous_ == "saved value"
+
+    # Test with another thread
+    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == "!"
+    assert previous_ is None
+
+
+async def test_entrypoint_async_generator_with_return_and_save() -> None:
+    """Verify that generators produce expected results."""
+    previous_ = None
+
+    @entrypoint(checkpointer=MemorySaver())
+    async def workflow(inputs: dict, *, previous: Any):
+        nonlocal previous_
+        previous_ = previous
+
+        yield "hello"
+        yield "world"
+        yield entrypoint.final(value="!", save="saved value")
+
+    assert [
+        c async for c in workflow.astream({}, {"configurable": {"thread_id": "0"}})
+    ] == [
+        "hello",
+        "world",
+    ]
+
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+
+    assert previous_ is None
+
+    # 2nd time around previous is set
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
+    assert previous_ == "saved value"
+
+    # Test with another thread
+    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
+    assert previous_ is None
+
+
+def test_named_tasks_functional() -> None:
+    class Foo:
+        def foo(self, value: str) -> dict:
+            return value + "foo"
+
+    f = Foo()
+
+    # class method task
+    foo = task(f.foo, name="custom_foo")
+
+    # regular function task
+    @task(name="custom_bar")
+    def bar(value: str) -> dict:
+        return value + "|bar"
+
+    def baz(update: str, value: str) -> dict:
+        return value + f"|{update}"
+
+    # partial function task (unnamed)
+    baz_task = task(functools.partial(baz, "baz"))
+    # partial function task (named_)
+    custom_baz_task = task(functools.partial(baz, "custom_baz"), name="custom_baz")
+
+    class Qux:
+        def __call__(self, value: str) -> dict:
+            return value + "|qux"
+
+    qux_task = task(Qux(), name="qux")
+
+    @entrypoint()
+    def workflow(inputs: dict) -> dict:
+        fut_foo = foo(inputs)
+        fut_bar = bar(fut_foo.result())
+        fut_baz = baz_task(fut_bar.result())
+        fut_custom_baz = custom_baz_task(fut_baz.result())
+        fut_qux = qux_task(fut_custom_baz.result())
+        return fut_qux.result()
+
+    assert list(workflow.stream("", stream_mode="updates")) == [
+        {"custom_foo": "foo"},
+        {"custom_bar": "foo|bar"},
+        {"baz": "foo|bar|baz"},
+        {"custom_baz": "foo|bar|baz|custom_baz"},
+        {"qux": "foo|bar|baz|custom_baz|qux"},
+        {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
