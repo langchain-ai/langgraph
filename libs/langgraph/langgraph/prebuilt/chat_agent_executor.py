@@ -30,7 +30,7 @@ from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, Send
 from langgraph.utils.runnable import RunnableCallable
 
 StructuredResponse = Union[dict, BaseModel]
@@ -244,6 +244,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    version: str = "v1",
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -582,6 +583,10 @@ def create_react_agent(
         TimeoutError: Timed out at step 2
         ```
     """
+    if version not in ("v1", "v2"):
+        raise ValueError(
+            f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
+        )
 
     if state_schema is not None:
         required_keys = {"messages", "remaining_steps"}
@@ -769,7 +774,12 @@ def create_react_agent(
             return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
-            return "tools"
+            if version == "v1":
+                return "tools"
+            elif version == "v2":
+                return [
+                    Send("tools", [tool_call]) for tool_call in last_message.tool_calls
+                ]
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState)

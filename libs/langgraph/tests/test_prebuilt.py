@@ -61,7 +61,7 @@ from langgraph.prebuilt.tool_node import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Command, Interrupt, interrupt
+from langgraph.types import Command, Interrupt, Send, interrupt
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
@@ -71,6 +71,8 @@ from tests.conftest import (
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 
 pytestmark = pytest.mark.anyio
+
+REACT_AGENT_VERSIONS = ["v1", "v2"]
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -147,13 +149,16 @@ class FakeToolCallingModel(BaseChatModel):
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+@pytest.mark.parametrize("version", REACT_AGENT_VERSIONS)
+def test_no_modifier(
+    request: pytest.FixtureRequest, checkpointer_name: str, version: str
+) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         "checkpointer_" + checkpointer_name
     )
     model = FakeToolCallingModel()
 
-    agent = create_react_agent(model, [], checkpointer=checkpointer)
+    agent = create_react_agent(model, [], checkpointer=checkpointer, version=version)
     inputs = [HumanMessage("hi?")]
     thread = {"configurable": {"thread_id": "123"}}
     response = agent.invoke({"messages": inputs}, thread, debug=True)
@@ -391,7 +396,8 @@ async def test_state_modifier_with_store_async():
 
 
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
-def test_model_with_tools(tool_style: str):
+@pytest.mark.parametrize("version", REACT_AGENT_VERSIONS)
+def test_model_with_tools(tool_style: str, version: str):
     model = FakeToolCallingModel(tool_style=tool_style)
 
     @dec_tool
@@ -405,7 +411,9 @@ def test_model_with_tools(tool_style: str):
         return f"Tool 2: {some_val}"
 
     # check valid agent constructor
-    agent = create_react_agent(model.bind_tools([tool1, tool2]), [tool1, tool2])
+    agent = create_react_agent(
+        model.bind_tools([tool1, tool2]), [tool1, tool2], version=version
+    )
     result = agent.nodes["tools"].invoke(
         {
             "messages": [
@@ -572,7 +580,8 @@ def test__infer_handled_types() -> None:
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
 )
-def test_react_agent_with_structured_response() -> None:
+@pytest.mark.parametrize("version", REACT_AGENT_VERSIONS)
+def test_react_agent_with_structured_response(version: str) -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
 
@@ -588,7 +597,7 @@ def test_react_agent_with_structured_response() -> None:
     )
     for response_format in (WeatherResponse, ("Meow", WeatherResponse)):
         agent = create_react_agent(
-            model, [get_weather], response_format=response_format
+            model, [get_weather], response_format=response_format, version=version
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
         assert response["structured_response"] == expected_structured_response
@@ -596,7 +605,7 @@ def test_react_agent_with_structured_response() -> None:
         assert response["messages"][-2].content == "The weather is sunny and 75°F."
 
 
-# tools for testing Too
+# tools for testing ToolNode
 def tool1(some_val: int, some_other_val: str) -> str:
     """Tool 1 docstring."""
     if some_val == 0:
@@ -1036,7 +1045,8 @@ def test_tool_node_incorrect_tool_name():
     assert tool_message.tool_call_id == "some 0"
 
 
-def test_tool_node_node_interrupt():
+@pytest.mark.parametrize("version", REACT_AGENT_VERSIONS)
+def test_tool_node_node_interrupt(version: str):
     def tool_normal(some_val: int) -> str:
         """Tool docstring."""
         return "normal"
@@ -1082,13 +1092,11 @@ def test_tool_node_node_interrupt():
     checkpointer = MemorySaver()
     config = {"configurable": {"thread_id": "1"}}
     agent = create_react_agent(
-        model, [tool_interrupt, tool_normal], checkpointer=checkpointer
+        model, [tool_interrupt, tool_normal], checkpointer=checkpointer, version=version
     )
     result = agent.invoke({"messages": [HumanMessage("hi?")]}, config)
-    assert result["messages"] == [
-        _AnyIdHumanMessage(
-            content="hi?",
-        ),
+    expected_messages = [
+        _AnyIdHumanMessage(content="hi?"),
         AIMessage(
             content="hi?",
             id="0",
@@ -1107,7 +1115,14 @@ def test_tool_node_node_interrupt():
                 },
             ],
         ),
+        _AnyIdToolMessage(content="normal", name="tool_normal", tool_call_id="2"),
     ]
+    if version == "v1":
+        # Interrupt blocks second tool result
+        assert result["messages"] == expected_messages[:2]
+    elif version == "v2":
+        assert result["messages"] == expected_messages
+
     state = agent.get_state(config)
     assert state.next == ("tools",)
     task = state.tasks[0]
@@ -1683,7 +1698,8 @@ async def test_tool_node_command_list_input():
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-def test_react_agent_update_state():
+@pytest.mark.parametrize("version", REACT_AGENT_VERSIONS)
+def test_react_agent_update_state(version: str):
     from langchain_core.tools.base import InjectedToolCallId
 
     class State(AgentState):
@@ -1721,6 +1737,7 @@ def test_react_agent_update_state():
         state_schema=State,
         state_modifier=state_modifier,
         checkpointer=checkpointer,
+        version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
     # run until interrpupted
@@ -2175,7 +2192,8 @@ def test_inspect_react() -> None:
     inspect.getclosurevars(agent.nodes["agent"].bound.func)
 
 
-def test_react_with_subgraph_tools() -> None:
+@pytest.mark.parametrize("version", REACT_AGENT_VERSIONS)
+def test_react_with_subgraph_tools(version: str) -> None:
     class State(TypedDict):
         a: int
         b: int
@@ -2224,7 +2242,9 @@ def test_react_with_subgraph_tools() -> None:
     )
     checkpointer = MemorySaver()
     tool_node = ToolNode([addition, multiplication], handle_tool_errors=False)
-    agent = create_react_agent(model, tool_node, checkpointer=checkpointer)
+    agent = create_react_agent(
+        model, tool_node, checkpointer=checkpointer, version=version
+    )
     result = agent.invoke(
         {"messages": [HumanMessage(content="What's 2 + 3 and 2 * 3?")]},
         config={"configurable": {"thread_id": "1"}},
