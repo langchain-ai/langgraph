@@ -1156,7 +1156,8 @@ def test_tool_node_node_interrupt(tool_call_parallelism: str):
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-async def test_tool_node_command():
+@pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
+async def test_tool_node_command(input_type: str):
     from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
@@ -1233,19 +1234,15 @@ async def test_tool_node_command():
         """Add two numbers"""
         return a + b
 
-    result = ToolNode([add, transfer_to_bob]).invoke(
-        {
-            "messages": [
-                AIMessage(
-                    "",
-                    tool_calls=[
-                        {"args": {"a": 1, "b": 2}, "id": "1", "name": "add"},
-                        {"args": {}, "id": "2", "name": "transfer_to_bob"},
-                    ],
-                )
-            ]
-        }
-    )
+    tool_calls = [
+        {"args": {"a": 1, "b": 2}, "id": "1", "name": "add", "type": "tool_call"},
+        {"args": {}, "id": "2", "name": "transfer_to_bob", "type": "tool_call"},
+    ]
+    if input_type == "dict":
+        input_ = {"messages": [AIMessage("", tool_calls=tool_calls)]}
+    elif input_type == "tool_calls":
+        input_ = tool_calls
+    result = ToolNode([add, transfer_to_bob]).invoke(input_)
 
     assert result == [
         {
@@ -2048,7 +2045,8 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-def test_tool_node_inject_store() -> None:
+@pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
+def test_tool_node_inject_store(input_type: str) -> None:
     store = InMemoryStore()
     namespace = ("test",)
 
@@ -2090,7 +2088,11 @@ def test_tool_node_inject_store() -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        node_result = node.invoke({"messages": [msg]}, store=store)
+        if input_type == "dict":
+            node_input = {"messages": [msg]}
+        elif input_type == "tool_calls":
+            node_input = [tool_call]
+        node_result = node.invoke(node_input, store=store)
         graph_result = graph.invoke({"messages": [msg]})
         for result in (node_result, graph_result):
             result["messages"][-1]
