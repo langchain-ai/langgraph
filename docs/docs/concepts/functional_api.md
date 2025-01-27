@@ -900,7 +900,7 @@ Please see the following how-to guides for more details:
 
 ### Workflows
 
-* [Workflows and agent](../tutorials/workflows/workflows.md) guide for more examples of how to build workflows using the Functional API.
+* [Workflows and agent](../tutorials/workflows/index.md) guide for more examples of how to build workflows using the Functional API.
 
 ### Agents
 
