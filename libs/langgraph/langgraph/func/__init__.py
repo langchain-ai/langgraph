@@ -125,8 +125,8 @@ def task(
                 # handle class methods
                 # NOTE: we're modifying the instance method to avoid modifying
                 # the original class method in case it's shared across multiple tasks
-                instance_method = functools.partial(func.__func__, func.__self__)
-                instance_method.__name__ = name
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
+                instance_method.__name__ = name  # type: ignore [attr-defined]
                 func = instance_method
             else:
                 # handle regular functions / partials / callable classes, etc.
