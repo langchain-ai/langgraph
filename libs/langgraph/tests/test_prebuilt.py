@@ -318,7 +318,8 @@ def test_runnable_state_modifier():
     assert response == expected_response
 
 
-def test_state_modifier_with_store():
+@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
+def test_state_modifier_with_store(tool_call_parallelism: str):
     def add(a: int, b: int):
         """Adds a and b"""
         return a + b
@@ -339,7 +340,11 @@ def test_state_modifier_with_store():
 
     # test state modifier that uses store works
     agent = create_react_agent(
-        model, [add], state_modifier=modify, store=in_memory_store
+        model,
+        [add],
+        state_modifier=modify,
+        store=in_memory_store,
+        tool_call_parallelism=tool_call_parallelism,
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
@@ -348,7 +353,11 @@ def test_state_modifier_with_store():
 
     # test state modifier that doesn't use store works
     agent = create_react_agent(
-        model, [add], state_modifier=modify_no_store, store=in_memory_store
+        model,
+        [add],
+        state_modifier=modify_no_store,
+        store=in_memory_store,
+        tool_call_parallelism=tool_call_parallelism,
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
@@ -1764,6 +1773,87 @@ def test_react_agent_update_state(tool_call_parallelism: str):
     assert tool_message.content == "Successfully retrieved user name"
     assert tool_message.tool_call_id == "1"
     assert tool_message.name == "get_user_name"
+
+
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Langchain core 0.3.0 or greater is required",
+)
+@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
+def test_react_agent_parallel_tool_calls(tool_call_parallelism: str):
+    human_assistance_execution_count = 0
+
+    @dec_tool
+    def human_assistance(query: str) -> str:
+        """Request assistance from a human."""
+        nonlocal human_assistance_execution_count
+        human_response = interrupt({"query": query})
+        human_assistance_execution_count += 1
+        return human_response["data"]
+
+    get_weather_execution_count = 0
+
+    @dec_tool
+    def get_weather(location: str) -> str:
+        """Use this tool to get the weather."""
+        nonlocal get_weather_execution_count
+        get_weather_execution_count += 1
+        return "It's sunny!"
+
+    checkpointer = MemorySaver()
+    tool_calls = [
+        [
+            {"args": {"location": "sf"}, "id": "1", "name": "get_weather"},
+            {"args": {"query": "request help"}, "id": "2", "name": "human_assistance"},
+        ],
+        [],
+    ]
+    model = FakeToolCallingModel(tool_calls=tool_calls)
+    agent = create_react_agent(
+        model,
+        [human_assistance, get_weather],
+        checkpointer=checkpointer,
+        tool_call_parallelism=tool_call_parallelism,
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    query = "Get user assistance and also check the weather"
+    message_types = []
+    for event in agent.stream(
+        {"messages": [("user", query)]}, config, stream_mode="values"
+    ):
+        message_types.append([message.type for message in event["messages"]])
+
+    if tool_call_parallelism == "single_tool_node":
+        assert message_types == [
+            ["human"],
+            ["human", "ai"],
+        ]
+    elif tool_call_parallelism == "parallel_tool_nodes":
+        assert message_types == [
+            ["human"],
+            ["human", "ai"],
+            ["human", "ai", "tool"],
+        ]
+
+    # Resume
+    message_types = []
+    for event in agent.stream(
+        Command(resume={"data": "Hello"}), config, stream_mode="values"
+    ):
+        message_types.append([message.type for message in event["messages"]])
+
+    assert message_types == [
+        ["human", "ai"],
+        ["human", "ai", "tool", "tool"],
+        ["human", "ai", "tool", "tool", "ai"],
+    ]
+
+    if tool_call_parallelism == "single_tool_node":
+        assert human_assistance_execution_count == 1
+        assert get_weather_execution_count == 2
+    elif tool_call_parallelism == "parallel_tool_nodes":
+        assert human_assistance_execution_count == 1
+        assert get_weather_execution_count == 1
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
