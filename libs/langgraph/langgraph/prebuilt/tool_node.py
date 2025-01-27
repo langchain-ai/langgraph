@@ -525,7 +525,10 @@ class ToolNode(RunnableCallable):
         return tool_call_with_store
 
     def _validate_tool_command(
-        self, command: Command, call: ToolCall, input_type: Literal["list", "dict", "tool_calls"]
+        self,
+        command: Command,
+        call: ToolCall,
+        input_type: Literal["list", "dict", "tool_calls"],
     ) -> Command:
         if isinstance(command.update, dict):
             # input type is dict when ToolNode is invoked with a dict input (e.g. {"messages": [AIMessage(..., tool_calls=[...])]})
