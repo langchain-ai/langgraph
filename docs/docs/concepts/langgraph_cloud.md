@@ -62,8 +62,8 @@ Deployments are automatically deleted after 28 consecutive days of non-use (it i
 - An email notification is sent after 7 consecutive days of non-use.
 - A deployment is deleted after 28 consecutive days of non-use.
 
-**After a deployment is deleted, the data (i.e. [persistence](#persistence)) from the deployment cannot be recovered.**
-
+!!! danger "Data Cannot Be Recovered"
+    After a deployment is deleted, the data (i.e. [persistence](#persistence)) from the deployment cannot be recovered.
 
 ## Architecture
 
