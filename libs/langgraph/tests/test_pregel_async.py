@@ -7309,23 +7309,14 @@ async def test_async_entrypoint_without_checkpointer() -> None:
     }
 
 
-@NEEDS_CONTEXTVARS
 async def test_entrypoint_from_async_generator() -> None:
     """@entrypoint does not support sync generators."""
-    # Test invoke
-    previous_return_values = []
+    with pytest.raises(NotImplementedError):
 
-    # In this version reducers do not work
-    @entrypoint(checkpointer=MemorySaver())
-    async def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
-    assert previous_return_values == [None]
+        @entrypoint(checkpointer=MemorySaver())
+        async def foo(inputs) -> Any:
+            yield "a"
+            yield "b"
 
 
 @NEEDS_CONTEXTVARS
