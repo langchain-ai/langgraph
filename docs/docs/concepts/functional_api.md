@@ -191,10 +191,10 @@ When declaring an `entrypoint`, you can request access to additional parameters 
 ??? example "Requesting Injectable Parameters"
 
     ```python
-    from langchain.func import entrypoint
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.func import entrypoint
     from langgraph.store.base import BaseStore
     from langgraph.store.memory import InMemoryStore
-    from langchain_core.runnables import RunnableConfig
 
     in_memory_store = InMemoryStore(...)  # An instance of InMemoryStore for long-term memory
 
