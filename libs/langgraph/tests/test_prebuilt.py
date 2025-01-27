@@ -61,7 +61,7 @@ from langgraph.prebuilt.tool_node import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Command, Interrupt, Send, interrupt
+from langgraph.types import Command, Interrupt, interrupt
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
