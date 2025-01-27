@@ -6303,7 +6303,7 @@ def test_foo_bar() -> None:
 
     config = {
         "configurable": {
-            "thread_id": "2",
+            "thread_id": "1",
         }
     }
 
@@ -6316,7 +6316,7 @@ def test_foo_bar() -> None:
 
     config = {
         "configurable": {
-            "thread_id": "1",
+            "thread_id": "2",
         }
     }
 
