@@ -727,6 +727,47 @@ async def test_tool_node():
     assert tool_message.tool_call_id == "some 3"
 
 
+async def test_tool_node_tool_call_input():
+    # Single tool call
+    tool_call_1 = {
+        "name": "tool1",
+        "args": {"some_val": 1, "some_other_val": "foo"},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    result = ToolNode([tool1]).invoke([tool_call_1])
+    assert result["messages"] == [
+        ToolMessage(content="1 - foo", tool_call_id="some 0", name="tool1"),
+    ]
+
+    # Multiple tool calls
+    tool_call_2 = {
+        "name": "tool1",
+        "args": {"some_val": 2, "some_other_val": "bar"},
+        "id": "some 1",
+        "type": "tool_call",
+    }
+    result = ToolNode([tool1]).invoke([tool_call_1, tool_call_2])
+    assert result["messages"] == [
+        ToolMessage(content="1 - foo", tool_call_id="some 0", name="tool1"),
+        ToolMessage(content="2 - bar", tool_call_id="some 1", name="tool1"),
+    ]
+
+    # Test raises with unknown tool
+    tool_call_3 = tool_call_1.copy()
+    tool_call_3["name"] = "tool2"
+    result = ToolNode([tool1]).invoke([tool_call_1, tool_call_3])
+    assert result["messages"] == [
+        ToolMessage(content="1 - foo", tool_call_id="some 0", name="tool1"),
+        ToolMessage(
+            content="Error: tool2 is not a valid tool, try one of [tool1].",
+            name="tool2",
+            tool_call_id="some 0",
+            status="error",
+        ),
+    ]
+
+
 async def test_tool_node_error_handling():
     def handle_all(e: Union[ValueError, ToolException, ValidationError]):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
