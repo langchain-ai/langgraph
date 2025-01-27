@@ -150,7 +150,7 @@ class FakeToolCallingModel(BaseChatModel):
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 @pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_no_modifier(
+def test_no_prompt(
     request: pytest.FixtureRequest, checkpointer_name: str, tool_call_parallelism: str
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
@@ -191,7 +191,7 @@ def test_no_modifier(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_no_modifier_async(checkpointer_name: str) -> None:
+async def test_no_prompt_async(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         model = FakeToolCallingModel()
 
@@ -227,16 +227,17 @@ def test_passing_two_modifiers():
     with pytest.raises(ValueError):
         create_react_agent(model, [], messages_modifier="Foo", state_modifier="Bar")
 
+    with pytest.raises(ValueError):
+        create_react_agent(model, [], messages_modifier="Foo", prompt="Bar")
 
-def test_system_message_modifier():
-    messages_modifier = SystemMessage(content="Foo")
-    agent_1 = create_react_agent(
-        FakeToolCallingModel(), [], messages_modifier=messages_modifier
-    )
-    agent_2 = create_react_agent(
-        FakeToolCallingModel(), [], state_modifier=messages_modifier
-    )
-    for agent in [agent_1, agent_2]:
+
+def test_system_message_prompt():
+    prompt = SystemMessage(content="Foo")
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], messages_modifier=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+    ):
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
@@ -245,15 +246,13 @@ def test_system_message_modifier():
         assert response == expected_response
 
 
-def test_system_message_string_modifier():
-    messages_modifier = "Foo"
-    agent_1 = create_react_agent(
-        FakeToolCallingModel(), [], messages_modifier=messages_modifier
-    )
-    agent_2 = create_react_agent(
-        FakeToolCallingModel(), [], state_modifier=messages_modifier
-    )
-    for agent in [agent_1, agent_2]:
+def test_string_prompt():
+    prompt = "Foo"
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], messages_modifier=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+    ):
         inputs = [HumanMessage("hi?")]
         response = agent.invoke({"messages": inputs})
         expected_response = {
@@ -262,64 +261,72 @@ def test_system_message_string_modifier():
         assert response == expected_response
 
 
-def test_callable_messages_modifier():
-    model = FakeToolCallingModel()
-
+def test_callable_prompt():
     def messages_modifier(messages):
         modified_message = f"Bar {messages[-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
-    assert response == expected_response
-
-
-def test_callable_state_modifier():
-    model = FakeToolCallingModel()
-
-    def state_modifier(state):
+    def prompt(state):
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    agent = create_react_agent(model, [], state_modifier=state_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
-    assert response == expected_response
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+        create_react_agent(
+            FakeToolCallingModel(), [], messages_modifier=messages_modifier
+        ),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
+        }
+        assert response == expected_response
 
 
-def test_runnable_messages_modifier():
-    model = FakeToolCallingModel()
+async def test_callable_prompt_async():
+    async def prompt(state):
+        modified_message = f"Bar {state['messages'][-1].content}"
+        return [HumanMessage(content=modified_message)]
 
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = await agent.ainvoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
+        }
+        assert response == expected_response
+
+
+def test_runnable_prompt():
     messages_modifier = RunnableLambda(
         lambda messages: [HumanMessage(content=f"Baz {messages[-1].content}")]
     )
-
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
-    assert response == expected_response
-
-
-def test_runnable_state_modifier():
-    model = FakeToolCallingModel()
-
-    state_modifier = RunnableLambda(
+    prompt = RunnableLambda(
         lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
     )
 
-    agent = create_react_agent(model, [], state_modifier=state_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
-    assert response == expected_response
+    for agent in (
+        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
+        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
+        create_react_agent(
+            FakeToolCallingModel(), [], messages_modifier=messages_modifier
+        ),
+    ):
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Baz hi?", id="0")]
+        }
+        assert response == expected_response
 
 
 @pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_state_modifier_with_store(tool_call_parallelism: str):
+def test_prompt_with_store(tool_call_parallelism: str):
     def add(a: int, b: int):
         """Adds a and b"""
         return a + b
@@ -328,12 +335,12 @@ def test_state_modifier_with_store(tool_call_parallelism: str):
     in_memory_store.put(("memories", "1"), "user_name", {"data": "User name is Alice"})
     in_memory_store.put(("memories", "2"), "user_name", {"data": "User name is Bob"})
 
-    def modify(state, config, *, store):
+    def prompt(state, config, *, store):
         user_id = config["configurable"]["user_id"]
         system_str = store.get(("memories", user_id), "user_name").value["data"]
         return [SystemMessage(system_str)] + state["messages"]
 
-    def modify_no_store(state, config):
+    def prompt_no_store(state, config):
         return SystemMessage("foo") + state["messages"]
 
     model = FakeToolCallingModel()
@@ -342,7 +349,7 @@ def test_state_modifier_with_store(tool_call_parallelism: str):
     agent = create_react_agent(
         model,
         [add],
-        state_modifier=modify,
+        prompt=prompt,
         store=in_memory_store,
         tool_call_parallelism=tool_call_parallelism,
     )
@@ -355,7 +362,7 @@ def test_state_modifier_with_store(tool_call_parallelism: str):
     agent = create_react_agent(
         model,
         [add],
-        state_modifier=modify_no_store,
+        prompt=prompt_no_store,
         store=in_memory_store,
         tool_call_parallelism=tool_call_parallelism,
     )
@@ -365,7 +372,7 @@ def test_state_modifier_with_store(tool_call_parallelism: str):
     assert response["messages"][-1].content == "foo-hi"
 
 
-async def test_state_modifier_with_store_async():
+async def test_prompt_with_store_async():
     async def add(a: int, b: int):
         """Adds a and b"""
         return a + b
@@ -378,22 +385,20 @@ async def test_state_modifier_with_store_async():
         ("memories", "2"), "user_name", {"data": "User name is Bob"}
     )
 
-    async def modify(state, config, *, store):
+    async def prompt(state, config, *, store):
         user_id = config["configurable"]["user_id"]
         system_str = (await store.aget(("memories", user_id), "user_name")).value[
             "data"
         ]
         return [SystemMessage(system_str)] + state["messages"]
 
-    async def modify_no_store(state, config):
+    async def prompt_no_store(state, config):
         return SystemMessage("foo") + state["messages"]
 
     model = FakeToolCallingModel()
 
     # test state modifier that uses store works
-    agent = create_react_agent(
-        model, [add], state_modifier=modify, store=in_memory_store
-    )
+    agent = create_react_agent(model, [add], prompt=prompt, store=in_memory_store)
     response = await agent.ainvoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
     )
@@ -401,7 +406,7 @@ async def test_state_modifier_with_store_async():
 
     # test state modifier that doesn't use store works
     agent = create_react_agent(
-        model, [add], state_modifier=modify_no_store, store=in_memory_store
+        model, [add], prompt=prompt_no_store, store=in_memory_store
     )
     response = await agent.ainvoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
@@ -781,7 +786,7 @@ async def test_tool_node_tool_call_input():
         ToolMessage(content="2 - bar", tool_call_id="some 1", name="tool1"),
     ]
 
-    # Test raises with unknown tool
+    # Test with unknown tool
     tool_call_3 = tool_call_1.copy()
     tool_call_3["name"] = "tool2"
     result = ToolNode([tool1]).invoke([tool_call_1, tool_call_3])
@@ -1739,7 +1744,7 @@ def test_react_agent_update_state(tool_call_parallelism: str):
             }
         )
 
-    def state_modifier(state: State):
+    def prompt(state: State):
         user_name = state.get("user_name")
         if user_name is None:
             return state["messages"]
@@ -1754,7 +1759,7 @@ def test_react_agent_update_state(tool_call_parallelism: str):
         model,
         [get_user_name],
         state_schema=State,
-        state_modifier=state_modifier,
+        prompt=prompt,
         checkpointer=checkpointer,
         tool_call_parallelism=tool_call_parallelism,
     )

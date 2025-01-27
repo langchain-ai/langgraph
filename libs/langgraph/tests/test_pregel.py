@@ -6277,6 +6277,7 @@ def test_named_tasks_functional() -> None:
 
     # class method task
     foo = task(f.foo, name="custom_foo")
+    other_foo = task(f.foo, name="other_foo")
 
     # regular function task
     @task(name="custom_bar")
@@ -6299,8 +6300,9 @@ def test_named_tasks_functional() -> None:
 
     @entrypoint()
     def workflow(inputs: dict) -> dict:
-        fut_foo = foo(inputs)
-        fut_bar = bar(fut_foo.result())
+        foo_result = foo(inputs).result()
+        other_foo(inputs).result()
+        fut_bar = bar(foo_result)
         fut_baz = baz_task(fut_bar.result())
         fut_custom_baz = custom_baz_task(fut_baz.result())
         fut_qux = qux_task(fut_custom_baz.result())
@@ -6308,6 +6310,7 @@ def test_named_tasks_functional() -> None:
 
     assert list(workflow.stream("", stream_mode="updates")) == [
         {"custom_foo": "foo"},
+        {"other_foo": "foo"},
         {"custom_bar": "foo|bar"},
         {"baz": "foo|bar|baz"},
         {"custom_baz": "foo|bar|baz|custom_baz"},

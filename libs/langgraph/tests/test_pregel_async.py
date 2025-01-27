@@ -7338,6 +7338,7 @@ async def test_named_tasks_functional() -> None:
 
     # class method task
     foo = task(f.foo, name="custom_foo")
+    other_foo = task(f.foo, name="other_foo")
 
     # regular function task
     @task(name="custom_bar")
@@ -7361,6 +7362,7 @@ async def test_named_tasks_functional() -> None:
     @entrypoint()
     async def workflow(inputs: dict) -> dict:
         foo_result = await foo(inputs)
+        await other_foo(inputs)
         bar_result = await bar(foo_result)
         baz_result = await baz_task(bar_result)
         custom_baz_result = await custom_baz_task(baz_result)
@@ -7369,6 +7371,7 @@ async def test_named_tasks_functional() -> None:
 
     assert [c async for c in workflow.astream("", stream_mode="updates")] == [
         {"custom_foo": "foo"},
+        {"other_foo": "foo"},
         {"custom_bar": "foo|bar"},
         {"baz": "foo|bar|baz"},
         {"custom_baz": "foo|bar|baz|custom_baz"},
