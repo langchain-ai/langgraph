@@ -31,7 +31,7 @@ from langgraph.pregel.call import (
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode, StreamWriter
+from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
 
 
 @overload
