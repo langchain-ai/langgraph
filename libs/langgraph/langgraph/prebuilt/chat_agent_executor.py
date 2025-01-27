@@ -244,7 +244,9 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    version: str = "v1",
+    tool_call_parallelism: Literal[
+        "single_tool_node", "parallel_tool_nodes"
+    ] = "single_tool_node",
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -583,9 +585,10 @@ def create_react_agent(
         TimeoutError: Timed out at step 2
         ```
     """
-    if version not in ("v1", "v2"):
+    if tool_call_parallelism not in ("single_tool_node", "parallel_tool_nodes"):
         raise ValueError(
-            f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
+            f"Invalid version {tool_call_parallelism}. Supported versions are "
+            "'single_tool_node' and 'parallel_tool_nodes'."
         )
 
     if state_schema is not None:
@@ -774,9 +777,9 @@ def create_react_agent(
             return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
-            if version == "v1":
+            if tool_call_parallelism == "single_tool_node":
                 return "tools"
-            elif version == "v2":
+            elif tool_call_parallelism == "parallel_tool_nodes":
                 return [
                     Send("tools", [tool_call]) for tool_call in last_message.tool_calls
                 ]
