@@ -123,7 +123,11 @@ def task(
         if name is not None:
             if hasattr(func, "__func__"):
                 # handle class methods
-                func.__func__.__name__ = name
+                # NOTE: we're modifying the instance method to avoid modifying
+                # the original class method in case it's shared across multiple tasks
+                instance_method = functools.partial(func.__func__, func.__self__)
+                instance_method.__name__ = name
+                func = instance_method
             else:
                 # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
