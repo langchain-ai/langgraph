@@ -409,7 +409,12 @@ class ToolNode(RunnableCallable):
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
-                tool_calls = [self._inject_store(call, store) for call in input]
+                tool_calls = [
+                    self._inject_store(call, store)
+                    if call["name"] in self.tools_by_name
+                    else call
+                    for call in input
+                ]
                 return tool_calls, input_type
             else:
                 input_type = "list"
