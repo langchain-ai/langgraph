@@ -53,7 +53,7 @@ from pydantic import BaseModel, Field
 class SearchQuery(BaseModel):
     search_query: str = Field(None, description="Query that is optimized web search.")
     justification: str = Field(
-        None, justification="Why this query is relevant to the user's request."
+        None, description="Why this query is relevant to the user's request."
     )
 
 
@@ -118,8 +118,8 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
 
         # Simple check - does the joke contain "?" or "!"
         if "?" in state["joke"] or "!" in state["joke"]:
-            return "Pass"
-        return "Fail"
+            return "Fail"
+        return "Pass"
 
 
     def improve_joke(state: State):
@@ -147,7 +147,7 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
     # Add edges to connect nodes
     workflow.add_edge(START, "generate_joke")
     workflow.add_conditional_edges(
-        "generate_joke", check_punchline, {"Pass": "improve_joke", "Fail": END}
+        "generate_joke", check_punchline, {"Fail": "improve_joke", "Pass": END}
     )
     workflow.add_edge("improve_joke", "polish_joke")
     workflow.add_edge("polish_joke", END)
@@ -222,7 +222,7 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
 
 
     @entrypoint()
-    def workflow(topic: str):
+    def parallel_workflow(topic: str):
         original_joke = generate_joke(topic).result()
         if check_punchline(original_joke) == "Pass":
             return original_joke
@@ -1235,7 +1235,7 @@ from langgraph.prebuilt import create_react_agent
 # Pass in:
 # (1) the augmented LLM with tools
 # (2) the tools list (which is used to create the tool node)
-pre_built_agent = create_react_agent(llm_with_tools, tools=tools)
+pre_built_agent = create_react_agent(llm, tools=tools)
 
 # Show the agent
 display(Image(pre_built_agent.get_graph().draw_mermaid_png()))
