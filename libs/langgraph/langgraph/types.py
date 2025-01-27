@@ -16,6 +16,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -289,6 +290,8 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
+        elif hints := get_type_hints(type(self.update)):
+            return [(k, getattr(self.update, k)) for k in hints]
         elif self.update is not None:
             return [("__root__", self.update)]
         else:

@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 import operator
 import random
@@ -6812,8 +6813,8 @@ async def test_falsy_return_from_task(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
-    """Test multiple interrupts with an imperative API."""
+async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
+    """Test multiple interrupts with functional API."""
     from langgraph.func import entrypoint, task
 
     counter = 0
@@ -7325,3 +7326,52 @@ async def test_entrypoint_from_async_generator() -> None:
 
     assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
     assert previous_return_values == [None]
+
+
+@NEEDS_CONTEXTVARS
+async def test_named_tasks_functional() -> None:
+    class Foo:
+        async def foo(self, value: str) -> dict:
+            return value + "foo"
+
+    f = Foo()
+
+    # class method task
+    foo = task(f.foo, name="custom_foo")
+
+    # regular function task
+    @task(name="custom_bar")
+    async def bar(value: str) -> dict:
+        return value + "|bar"
+
+    async def baz(update: str, value: str) -> dict:
+        return value + f"|{update}"
+
+    # partial function task (unnamed)
+    baz_task = task(functools.partial(baz, "baz"))
+    # partial function task (named_)
+    custom_baz_task = task(functools.partial(baz, "custom_baz"), name="custom_baz")
+
+    class Qux:
+        def __call__(self, value: str) -> dict:
+            return value + "|qux"
+
+    qux_task = task(Qux(), name="qux")
+
+    @entrypoint()
+    async def workflow(inputs: dict) -> dict:
+        foo_result = await foo(inputs)
+        bar_result = await bar(foo_result)
+        baz_result = await baz_task(bar_result)
+        custom_baz_result = await custom_baz_task(baz_result)
+        qux_result = await qux_task(custom_baz_result)
+        return qux_result
+
+    assert [c async for c in workflow.astream("", stream_mode="updates")] == [
+        {"custom_foo": "foo"},
+        {"custom_bar": "foo|bar"},
+        {"baz": "foo|bar|baz"},
+        {"custom_baz": "foo|bar|baz|custom_baz"},
+        {"qux": "foo|bar|baz|custom_baz|qux"},
+        {"workflow": "foo|bar|baz|custom_baz|qux"},
+    ]

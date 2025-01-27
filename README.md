@@ -245,7 +245,7 @@ final_state["messages"][-1].content
     We use <code>ChatAnthropic</code> as our LLM. <strong>NOTE:</strong> we need to make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the <code>.bind_tools()</code> method.
   </li>
   <li>
-    We define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that <a href="https://python.langchain.com/docs/modules/agents/tools/custom_tools">here</a>.
+    We define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that <a href="https://python.langchain.com/docs/how_to/custom_tools/">here</a>.
   </li>
 </ul>
 </details>
@@ -294,7 +294,7 @@ Then we define one normal and one conditional edge. Conditional edge means that 
 <ul>
   <li>
     When we compile the graph, we turn it into a LangChain 
-    <a href="https://python.langchain.com/v0.2/docs/concepts/#runnable-interface">Runnable</a>, 
+    <a href="https://python.langchain.com/docs/concepts/runnables/">Runnable</a>, 
     which automatically enables calling <code>.invoke()</code>, <code>.stream()</code> and <code>.batch()</code> 
     with your inputs
   </li>
