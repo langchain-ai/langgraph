@@ -118,6 +118,8 @@ nav:
               - how-tos/persistence_postgres.ipynb
               - how-tos/persistence_mongodb.ipynb
               - how-tos/persistence_redis.ipynb
+              - how-tos/persistence-functional.ipynb
+              - how-tos/cross-thread-persistence-functional.ipynb
           - Memory:
               - Memory: how-tos#memory
               - how-tos/memory/manage-conversation-history.ipynb
@@ -132,6 +134,8 @@ nav:
               - how-tos/human_in_the_loop/wait-user-input.ipynb
               - how-tos/human_in_the_loop/time-travel.ipynb
               - how-tos/human_in_the_loop/review-tool-calls.ipynb
+              - how-tos/wait-user-input-functional.ipynb
+              - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
               - how-tos/stream-values.ipynb
@@ -163,6 +167,8 @@ nav:
               - how-tos/agent-handoffs.ipynb
               - how-tos/multi-agent-network.ipynb
               - how-tos/multi-agent-multi-turn-convo.ipynb
+              - how-tos/multi-agent-network-functional.ipynb
+              - how-tos/multi-agent-multi-turn-convo-functional.ipynb
           - State Management:
               - State Management: how-tos#state-management
               - how-tos/state-model.ipynb
@@ -185,6 +191,7 @@ nav:
               - how-tos/create-react-agent-hitl.ipynb
               - how-tos/create-react-agent-structured-output.ipynb
               - how-tos/react-agent-from-scratch.ipynb
+              - how-tos/react-agent-from-scratch-functional.ipynb
         - LangGraph Platform:
             - LangGraph Platform: how-tos#langgraph-platform
             - Application Structure:
@@ -265,6 +272,7 @@ nav:
           - concepts/persistence.md
           - concepts/memory.md
           - concepts/streaming.md
+          - concepts/functional_api.md
         - LangGraph Platform:
           - LangGraph Platform: concepts#langgraph-platform
           - High Level:
@@ -296,7 +304,7 @@ nav:
         - Quick Start:
           - Quick Start: tutorials#quick-start
           - tutorials/introduction.ipynb
-          - tutorials/workflows.ipynb
+          - tutorials/workflows/index.md
           - tutorials/langgraph-platform/local-server.md
           - cloud/quick_start.md
         - Chatbots:

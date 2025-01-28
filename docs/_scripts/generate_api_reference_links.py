@@ -1,17 +1,11 @@
 import importlib
 import inspect
 import logging
-import os
 import re
-from typing import List, Literal, Optional
-from typing_extensions import TypedDict
-
-
 from functools import lru_cache
+from typing import List, Literal, Optional
 
-import nbformat
-from nbconvert.preprocessors import Preprocessor
-
+from typing_extensions import TypedDict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,6 +46,8 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.constants"], "langgraph.types", "Interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "Command", "types"),
+    (["langgraph.func"], "langgraph.func", "entrypoint", "func"),
+    (["langgraph.func"], "langgraph.func", "task", "func"),
     ([], "langgraph.types", "RetryPolicy", "types"),
     ([], "langgraph.checkpoint.base", "Checkpoint", "checkpoints"),
     ([], "langgraph.checkpoint.base", "CheckpointMetadata", "checkpoints"),
@@ -88,8 +84,6 @@ _IMPORT_LANGCHAIN_RE = _make_regular_expression("langchain")
 _IMPORT_LANGGRAPH_RE = _make_regular_expression("langgraph")
 
 
-
-
 @lru_cache(maxsize=10_000)
 def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
     """Get full module name using inspect, with LRU cache to memoize results."""
@@ -108,6 +102,7 @@ def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
     except ImportError as e:
         logger.warning(f"API Reference: Failed to load for class {class_name}, {e}")
         return None
+
 
 def _get_doc_title(data: str, file_name: str) -> str:
     try:

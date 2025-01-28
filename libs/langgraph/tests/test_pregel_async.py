@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 import operator
 import random
@@ -7330,26 +7331,52 @@ async def test_entrypoint_from_async_generator() -> None:
 @NEEDS_CONTEXTVARS
 async def test_named_tasks_functional() -> None:
     class Foo:
-        async def foo(self, state: dict) -> dict:
-            return "foo"
+        async def foo(self, value: str) -> dict:
+            return value + "foo"
 
     f = Foo()
-    foo = task(f.foo, name="custom_foo")
 
+    # class method task
+    foo = task(f.foo, name="custom_foo")
+    other_foo = task(f.foo, name="other_foo")
+
+    # regular function task
     @task(name="custom_bar")
-    async def bar(state: dict) -> dict:
-        return "bar"
+    async def bar(value: str) -> dict:
+        return value + "|bar"
+
+    async def baz(update: str, value: str) -> dict:
+        return value + f"|{update}"
+
+    # partial function task (unnamed)
+    baz_task = task(functools.partial(baz, "baz"))
+    # partial function task (named_)
+    custom_baz_task = task(functools.partial(baz, "custom_baz"), name="custom_baz")
+
+    class Qux:
+        def __call__(self, value: str) -> dict:
+            return value + "|qux"
+
+    qux_task = task(Qux(), name="qux")
 
     @entrypoint()
     async def workflow(inputs: dict) -> dict:
         foo_result = await foo(inputs)
+        await other_foo(inputs)
         bar_result = await bar(foo_result)
-        return bar_result
+        baz_result = await baz_task(bar_result)
+        custom_baz_result = await custom_baz_task(baz_result)
+        qux_result = await qux_task(custom_baz_result)
+        return qux_result
 
-    assert [c async for c in workflow.astream({}, stream_mode="updates")] == [
+    assert [c async for c in workflow.astream("", stream_mode="updates")] == [
         {"custom_foo": "foo"},
-        {"custom_bar": "bar"},
-        {"workflow": "bar"},
+        {"other_foo": "foo"},
+        {"custom_bar": "foo|bar"},
+        {"baz": "foo|bar|baz"},
+        {"custom_baz": "foo|bar|baz|custom_baz"},
+        {"qux": "foo|bar|baz|custom_baz|qux"},
+        {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
 
 

@@ -2,7 +2,6 @@ import asyncio
 import concurrent.futures
 import functools
 import inspect
-import types
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -123,8 +122,14 @@ def task(
     ]:
         if name is not None:
             if hasattr(func, "__func__"):
-                func.__func__.__name__ = name
+                # handle class methods
+                # NOTE: we're modifying the instance method to avoid modifying
+                # the original class method in case it's shared across multiple tasks
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
+                instance_method.__name__ = name  # type: ignore [attr-defined]
+                func = instance_method
             else:
+                # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
 
         call_func = functools.partial(call, func, retry=retry)
@@ -400,7 +405,7 @@ class entrypoint:
         A value will always be saved even if it is None.
         """
 
-    def __call__(self, func: types.FunctionType) -> Pregel:
+    def __call__(self, func: Callable[..., Any]) -> Pregel:
         """Convert a function into a Pregel graph.
 
         Args:

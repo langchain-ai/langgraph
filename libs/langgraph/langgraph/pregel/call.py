@@ -168,12 +168,21 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
     if key in CACHE:
         return CACHE[key]
     else:
+        if hasattr(func, "__name__"):
+            name = func.__name__
+        elif hasattr(func, "func"):
+            name = func.func.__name__
+        elif hasattr(func, "__class__"):
+            name = func.__class__.__name__
+        else:
+            name = str(func)
+
         if is_async_callable(func):
             run = RunnableCallable(
                 None,
                 func,
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
                 recurse=False,
             )
@@ -182,14 +191,14 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
                 func,
                 functools.wraps(func)(functools.partial(run_in_executor, None, func)),
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
                 recurse=False,
             )
         seq = RunnableSeq(
             run,
             ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
-            name=func.__name__,
+            name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)
             ),
