@@ -83,7 +83,6 @@ def test_runnable_callable_injectable_arguments() -> None:
     - Store injection override behavior
     - Store value injection and validation
     """
-    from langgraph.store.base import BaseStore
 
     # Test Optional[BaseStore] annotation.
     def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:
@@ -158,7 +157,6 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
     - Store injection via config
     - Store injection override behavior
     """
-    from langgraph.store.base import BaseStore
 
     # Test Optional[BaseStore] annotation.
     def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:

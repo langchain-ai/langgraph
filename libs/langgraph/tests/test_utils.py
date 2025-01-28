@@ -27,7 +27,6 @@ from langgraph.utils.fields import (
     get_field_default,
 )
 from langgraph.utils.runnable import (
-    RunnableCallable,
     is_async_callable,
     is_async_generator,
 )
