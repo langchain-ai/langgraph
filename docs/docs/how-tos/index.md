@@ -11,7 +11,7 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 
 ### Graph API Basics
 
-- [How to delcare graph state](state.ipynb)  # Write this, link to Pydantic state (how-tos/state-model/)
+- [How to define and update graph state](state-reducers.ipynb)
 - [How to create a sequence of steps](sequence.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)  # Update, link to map reduce
 - [How to create and control loops](recursion-limit.ipynb)  # Update this

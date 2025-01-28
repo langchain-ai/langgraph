@@ -106,7 +106,7 @@ nav:
           - LangGraph: how-tos#langgraph
           - Graph API Basics:
               - Graph API Basics: how-tos#graph-api-basics
-              #- how-tos/state.ipynb
+              - how-tos/state-reducers.ipynb
               - how-tos/sequence.ipynb
               - how-tos/branching.ipynb
               - how-tos/recursion-limit.ipynb
