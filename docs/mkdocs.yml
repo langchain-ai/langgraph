@@ -58,6 +58,12 @@ plugins:
   - autorefs
   - redirects:
       redirect_maps:
+        # lib redirects
+        'how-tos/stream-values.md': 'how-tos/streaming/streaming.md'
+        'how-tos/stream-updates.md': 'how-tos/streaming/streaming.md'
+        'how-tos/streaming-content.md': 'how-tos/streaming/streaming.md'
+        'how-tos/stream-multiple.md': 'how-tos/streaming/streaming.md'
+        # cloud redirects
         'cloud/index.md': 'concepts/index.md#langgraph-platform'
         'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
         'cloud/concepts/api.md': 'concepts/langgraph_server.md'
@@ -138,7 +144,7 @@ nav:
               - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
-              - how-tos/stream-values.ipynb
+              - how-tos/streaming/streaming.ipynb
               - how-tos/stream-updates.ipynb
               - how-tos/streaming-tokens.ipynb
               - how-tos/streaming-tokens-without-langchain.ipynb
