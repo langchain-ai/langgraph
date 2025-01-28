@@ -289,7 +289,7 @@ class ToolNode(RunnableCallable):
     def _run_one(
         self,
         call: ToolCall,
-        input_type: Literal["list", "dict"],
+        input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
     ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -344,7 +344,7 @@ class ToolNode(RunnableCallable):
     async def _arun_one(
         self,
         call: ToolCall,
-        input_type: Literal["list", "dict"],
+        input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
     ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
