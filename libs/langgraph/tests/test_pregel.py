@@ -1,4 +1,5 @@
 import enum
+import functools
 import json
 import logging
 import operator
@@ -5570,10 +5571,10 @@ def test_falsy_return_from_task(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_interrupts_imperative(
+def test_multiple_interrupts_functional(
     request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
 ):
-    """Test multiple interrupts with an imperative API."""
+    """Test multiple interrupts with functional API."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     counter = 0
@@ -5823,50 +5824,13 @@ def test_entrypoint_from_sync_generator() -> None:
     """@entrypoint does not support sync generators."""
     previous_return_values = []
 
-    @entrypoint(checkpointer=MemorySaver())
-    def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
+    with pytest.raises(NotImplementedError):
 
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert foo.invoke({"a": "1"}, config) == ["a", "b"]
-    assert previous_return_values == [None]
-    assert foo.invoke({"a": "2"}, config) == ["a", "b"]
-    assert previous_return_values == [None, ["a", "b"]]
-
-
-def test_entrypoint_request_stream_writer() -> None:
-    """Test using a stream writer with an entrypoint."""
-
-    @entrypoint(checkpointer=MemorySaver())
-    def foo(inputs, writer: StreamWriter) -> Any:
-        writer("a")
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    # Different invocations
-    # Are any of these confusing or unexpected?
-    assert list(foo.invoke({}, config)) == ["b"]
-    assert list(foo.stream({}, config)) == ["a", "b"]
-
-    # Stream modes
-    assert list(foo.stream({}, config, stream_mode=["updates"])) == [
-        ("updates", {"foo": ["b"]})
-    ]
-    assert list(foo.stream({}, config, stream_mode=["values"])) == [("values", ["b"])]
-    assert list(foo.stream({}, config, stream_mode=["custom"])) == [
-        (
-            "custom",
-            "a",
-        ),
-        (
-            "custom",
-            "b",
-        ),
-    ]
+        @entrypoint(checkpointer=MemorySaver())
+        def foo(inputs, previous=None) -> Any:
+            previous_return_values.append(previous)
+            yield "a"
+            yield "b"
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -5949,7 +5913,7 @@ def test_multiple_subgraphs_functional(
 
     # Define addition subgraph
     @entrypoint()
-    def add(inputs):
+    def add(inputs: tuple[int, int]):
         a, b = inputs
         return a + b
 
@@ -5959,7 +5923,7 @@ def test_multiple_subgraphs_functional(
         return a * b
 
     @entrypoint()
-    def multiply(inputs):
+    def multiply(inputs: tuple[int, int]):
         return multiply_task(*inputs).result()
 
     # Test calling the same subgraph multiple times
@@ -5992,9 +5956,10 @@ def test_multiple_subgraphs_functional(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_subgraphs_mixed(
+def test_multiple_subgraphs_mixed_entrypoint(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
+    """Test calling multiple StateGraph subgraphs from an entrypoint."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class State(TypedDict):
@@ -6052,7 +6017,77 @@ def test_multiple_subgraphs_mixed(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multiple_subgraphs_mixed_checkpointer(
+def test_multiple_subgraphs_mixed_state_graph(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    # Define addition subgraph
+    @entrypoint()
+    def add(inputs: tuple[int, int]):
+        a, b = inputs
+        return a + b
+
+    # Define multiplication subgraph using tasks
+    @task
+    def multiply_task(a, b):
+        return a * b
+
+    @entrypoint()
+    def multiply(inputs: tuple[int, int]):
+        return multiply_task(*inputs).result()
+
+    # Test calling the same subgraph multiple times
+    def call_same_subgraph(state):
+        result = add.invoke([state["a"], state["b"]])
+        another_result = add.invoke([result, 10])
+        return {"result": another_result}
+
+    parent_call_same_subgraph = (
+        StateGraph(State, output=Output)
+        .add_node(call_same_subgraph)
+        .add_edge(START, "call_same_subgraph")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_call_same_subgraph.invoke({"a": 2, "b": 3}, config) == {"result": 15}
+
+    # Test calling multiple subgraphs
+    class Output(TypedDict):
+        add_result: int
+        multiply_result: int
+
+    def call_multiple_subgraphs(state):
+        add_result = add.invoke([state["a"], state["b"]])
+        multiply_result = multiply.invoke([state["a"], state["b"]])
+        return {
+            "add_result": add_result,
+            "multiply_result": multiply_result,
+        }
+
+    parent_call_multiple_subgraphs = (
+        StateGraph(State, output=Output)
+        .add_node(call_multiple_subgraphs)
+        .add_edge(START, "call_multiple_subgraphs")
+        .compile(checkpointer=checkpointer)
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    assert parent_call_multiple_subgraphs.invoke({"a": 2, "b": 3}, config) == {
+        "add_result": 5,
+        "multiply_result": 6,
+    }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multiple_subgraphs_checkpointer(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
@@ -6159,18 +6194,6 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
         def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
             return entrypoint.final(value=1, save=1)  # type: ignore
 
-    @entrypoint()
-    def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
-        yield 1
-
-    assert foo.get_output_schema().model_json_schema() == {
-        "items": {
-            "type": "integer",
-        },
-        "title": "LangGraphOutput",
-        "type": "array",
-    }
-
 
 def test_entrypoint_with_return_and_save() -> None:
     """Test entrypoint with return and save."""
@@ -6197,71 +6220,52 @@ def test_entrypoint_with_return_and_save() -> None:
     assert previous_ == ["hello", "goodbye"]
 
 
-def test_entrypoint_generator_with_return_and_save() -> None:
-    """Verify that generators produce expected results."""
-    previous_ = None
+def test_named_tasks_functional() -> None:
+    class Foo:
+        def foo(self, value: str) -> dict:
+            return value + "foo"
 
-    @entrypoint(checkpointer=MemorySaver())
-    def workflow(inputs: dict, *, previous: Any):
-        nonlocal previous_
-        previous_ = previous
+    f = Foo()
 
-        yield "hello"
-        yield "world"
-        yield entrypoint.final(value="!", save="saved value")
+    # class method task
+    foo = task(f.foo, name="custom_foo")
+    other_foo = task(f.foo, name="other_foo")
 
-    assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
-        "hello",
-        "world",
+    # regular function task
+    @task(name="custom_bar")
+    def bar(value: str) -> dict:
+        return value + "|bar"
+
+    def baz(update: str, value: str) -> dict:
+        return value + f"|{update}"
+
+    # partial function task (unnamed)
+    baz_task = task(functools.partial(baz, "baz"))
+    # partial function task (named_)
+    custom_baz_task = task(functools.partial(baz, "custom_baz"), name="custom_baz")
+
+    class Qux:
+        def __call__(self, value: str) -> dict:
+            return value + "|qux"
+
+    qux_task = task(Qux(), name="qux")
+
+    @entrypoint()
+    def workflow(inputs: dict) -> dict:
+        foo_result = foo(inputs).result()
+        other_foo(inputs).result()
+        fut_bar = bar(foo_result)
+        fut_baz = baz_task(fut_bar.result())
+        fut_custom_baz = custom_baz_task(fut_baz.result())
+        fut_qux = qux_task(fut_custom_baz.result())
+        return fut_qux.result()
+
+    assert list(workflow.stream("", stream_mode="updates")) == [
+        {"custom_foo": "foo"},
+        {"other_foo": "foo"},
+        {"custom_bar": "foo|bar"},
+        {"baz": "foo|bar|baz"},
+        {"custom_baz": "foo|bar|baz|custom_baz"},
+        {"qux": "foo|bar|baz|custom_baz|qux"},
+        {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
-    assert list(
-        workflow.stream({}, {"configurable": {"thread_id": "0"}}, stream_mode="updates")
-    ) == [
-        {
-            "workflow": "!",
-        }
-    ]
-
-    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-    assert previous_ is None
-
-    # 2nd time around previous is set
-    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-    assert previous_ == "saved value"
-
-    # Test with another thread
-    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == "!"
-    assert previous_ is None
-
-
-async def test_entrypoint_async_generator_with_return_and_save() -> None:
-    """Verify that generators produce expected results."""
-    previous_ = None
-
-    @entrypoint(checkpointer=MemorySaver())
-    async def workflow(inputs: dict, *, previous: Any):
-        nonlocal previous_
-        previous_ = previous
-
-        yield "hello"
-        yield "world"
-        yield entrypoint.final(value="!", save="saved value")
-
-    assert [
-        c async for c in workflow.astream({}, {"configurable": {"thread_id": "0"}})
-    ] == [
-        "hello",
-        "world",
-    ]
-
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-
-    assert previous_ is None
-
-    # 2nd time around previous is set
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-    assert previous_ == "saved value"
-
-    # Test with another thread
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
-    assert previous_ is None

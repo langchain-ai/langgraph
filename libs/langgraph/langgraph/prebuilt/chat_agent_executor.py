@@ -1,3 +1,4 @@
+import functools
 import inspect
 from typing import (
     Any,
@@ -22,7 +23,6 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
-from langgraph._api.deprecation import deprecated_parameter
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
@@ -36,6 +36,7 @@ from langgraph.utils.runnable import RunnableCallable
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 # We create the AgentState that we will pass around
@@ -130,20 +131,28 @@ def _convert_messages_modifier_to_prompt(
     )
 
 
-def _get_model_preprocessing_runnable(
-    prompt: Optional[Prompt],
-    messages_modifier: Optional[MessagesModifier],
-) -> Runnable:
-    # Add the prompt or message modifier, if exists
-    if prompt is not None and messages_modifier is not None:
-        raise ValueError(
-            "Expected value for either prompt or messages_modifier, got values for both"
-        )
+def _convert_modifier_to_prompt(func: F) -> F:
+    """Decorator that converts state_modifier/messages_modifier kwargs to prompt kwarg."""
 
-    if prompt is None and messages_modifier is not None:
-        prompt = _convert_messages_modifier_to_prompt(messages_modifier)
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        prompt = kwargs.get("prompt")
+        state_modifier = kwargs.pop("state_modifier", None)
+        messages_modifier = kwargs.pop("messages_modifier", None)
+        if sum(p is not None for p in (prompt, state_modifier, messages_modifier)) > 1:
+            raise ValueError(
+                "Expected only one of prompt, state_modifier, or messages_modifier, got multiple values"
+            )
 
-    return _get_prompt_runnable(prompt)
+        if state_modifier is not None:
+            prompt = state_modifier
+        elif messages_modifier is not None:
+            prompt = _convert_messages_modifier_to_prompt(messages_modifier)
+
+        kwargs["prompt"] = prompt
+        return func(*args, **kwargs)
+
+    return cast(F, wrapper)
 
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
@@ -224,8 +233,7 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-@deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
-@deprecated_parameter("state_modifier", "0.2.67", "prompt", removal="0.4.0")
+@_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
@@ -240,7 +248,6 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    **deprecated_kwargs: Any,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -257,6 +264,9 @@ def create_react_agent(
             - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+
+            !!! Note
+                Prior to `v0.2.68`, the prompt was set using `state_modifier` / `messages_modifier` parameters.
         response_format: An optional schema for the final agent output.
 
             If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
@@ -599,11 +609,7 @@ def create_react_agent(
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
-    preprocessor = _get_model_preprocessing_runnable(
-        cast(Optional[Prompt], prompt or deprecated_kwargs.get("state_modifier")),
-        cast(Optional[MessagesModifier], deprecated_kwargs.get("messages_modifier")),
-    )
-    model_runnable = preprocessor | model
+    model_runnable = _get_prompt_runnable(prompt) | model
 
     # If any of the tools are configured to return_directly after running,
     # our graph needs to check if these were called

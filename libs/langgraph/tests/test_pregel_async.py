@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 import operator
 import random
@@ -6812,8 +6813,8 @@ async def test_falsy_return_from_task(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_interrupts_imperative(checkpointer_name: str) -> None:
-    """Test multiple interrupts with an imperative API."""
+async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
+    """Test multiple interrupts with functional API."""
     from langgraph.func import entrypoint, task
 
     counter = 0
@@ -7130,7 +7131,9 @@ async def test_multiple_subgraphs_functional(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_subgraphs_mixed(checkpointer_name: str) -> None:
+async def test_multiple_subgraphs_mixed_entrypoint(checkpointer_name: str) -> None:
+    """Test calling multiple StateGraph subgraphs from an entrypoint."""
+
     class State(TypedDict):
         a: int
         b: int
@@ -7195,7 +7198,82 @@ async def test_multiple_subgraphs_mixed(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_subgraphs_mixed_checkpointer(
+async def test_multiple_subgraphs_mixed_state_graph(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        class State(TypedDict):
+            a: int
+            b: int
+
+        class Output(TypedDict):
+            result: int
+
+        # Define addition subgraph
+        @entrypoint()
+        async def add(inputs):
+            a, b = inputs
+            return a + b
+
+        # Define multiplication subgraph using tasks
+        @task
+        async def multiply_task(a, b):
+            return a * b
+
+        @entrypoint()
+        async def multiply(inputs):
+            return await multiply_task(*inputs)
+
+        # Test calling the same subgraph multiple times
+        async def call_same_subgraph(state):
+            result = await add.ainvoke([state["a"], state["b"]])
+            another_result = await add.ainvoke([result, 10])
+            return {"result": another_result}
+
+        parent_call_same_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(call_same_subgraph)
+            .add_edge(START, "call_same_subgraph")
+            .compile(checkpointer=checkpointer)
+        )
+        config = {"configurable": {"thread_id": "1"}}
+        assert await parent_call_same_subgraph.ainvoke({"a": 2, "b": 3}, config) == {
+            "result": 15
+        }
+
+        # Test calling multiple subgraphs
+        class Output(TypedDict):
+            add_result: int
+            multiply_result: int
+
+        async def call_multiple_subgraphs(state):
+            add_result = await add.ainvoke([state["a"], state["b"]])
+            multiply_result = await multiply.ainvoke([state["a"], state["b"]])
+            return {
+                "add_result": add_result,
+                "multiply_result": multiply_result,
+            }
+
+        parent_call_multiple_subgraphs = (
+            StateGraph(State, output=Output)
+            .add_node(call_multiple_subgraphs)
+            .add_edge(START, "call_multiple_subgraphs")
+            .compile(checkpointer=checkpointer)
+        )
+        config = {"configurable": {"thread_id": "2"}}
+        assert await parent_call_multiple_subgraphs.ainvoke(
+            {"a": 2, "b": 3}, config
+        ) == {
+            "add_result": 5,
+            "multiply_result": 6,
+        }
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multiple_subgraphs_checkpointer(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -7308,20 +7386,63 @@ async def test_async_entrypoint_without_checkpointer() -> None:
     }
 
 
-@NEEDS_CONTEXTVARS
 async def test_entrypoint_from_async_generator() -> None:
     """@entrypoint does not support sync generators."""
-    # Test invoke
-    previous_return_values = []
+    with pytest.raises(NotImplementedError):
 
-    # In this version reducers do not work
-    @entrypoint(checkpointer=MemorySaver())
-    async def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
+        @entrypoint(checkpointer=MemorySaver())
+        async def foo(inputs) -> Any:
+            yield "a"
+            yield "b"
 
-    config = {"configurable": {"thread_id": "1"}}
 
-    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
-    assert previous_return_values == [None]
+@NEEDS_CONTEXTVARS
+async def test_named_tasks_functional() -> None:
+    class Foo:
+        async def foo(self, value: str) -> dict:
+            return value + "foo"
+
+    f = Foo()
+
+    # class method task
+    foo = task(f.foo, name="custom_foo")
+    other_foo = task(f.foo, name="other_foo")
+
+    # regular function task
+    @task(name="custom_bar")
+    async def bar(value: str) -> dict:
+        return value + "|bar"
+
+    async def baz(update: str, value: str) -> dict:
+        return value + f"|{update}"
+
+    # partial function task (unnamed)
+    baz_task = task(functools.partial(baz, "baz"))
+    # partial function task (named_)
+    custom_baz_task = task(functools.partial(baz, "custom_baz"), name="custom_baz")
+
+    class Qux:
+        def __call__(self, value: str) -> dict:
+            return value + "|qux"
+
+    qux_task = task(Qux(), name="qux")
+
+    @entrypoint()
+    async def workflow(inputs: dict) -> dict:
+        foo_result = await foo(inputs)
+        await other_foo(inputs)
+        bar_result = await bar(foo_result)
+        baz_result = await baz_task(bar_result)
+        custom_baz_result = await custom_baz_task(baz_result)
+        qux_result = await qux_task(custom_baz_result)
+        return qux_result
+
+    assert [c async for c in workflow.astream("", stream_mode="updates")] == [
+        {"custom_foo": "foo"},
+        {"other_foo": "foo"},
+        {"custom_bar": "foo|bar"},
+        {"baz": "foo|bar|baz"},
+        {"custom_baz": "foo|bar|baz|custom_baz"},
+        {"qux": "foo|bar|baz|custom_baz|qux"},
+        {"workflow": "foo|bar|baz|custom_baz|qux"},
+    ]

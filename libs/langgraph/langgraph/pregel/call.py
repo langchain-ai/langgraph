@@ -1,12 +1,11 @@
 """Utility to convert a user provided function into a Runnable with a ChannelWrite."""
 
-import asyncio
 import concurrent.futures
 import functools
 import inspect
 import sys
 import types
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Generator, Generic, Optional, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
@@ -169,12 +168,21 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
     if key in CACHE:
         return CACHE[key]
     else:
+        if hasattr(func, "__name__"):
+            name = func.__name__
+        elif hasattr(func, "func"):
+            name = func.func.__name__
+        elif hasattr(func, "__class__"):
+            name = func.__class__.__name__
+        else:
+            name = str(func)
+
         if is_async_callable(func):
             run = RunnableCallable(
                 None,
                 func,
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
                 recurse=False,
             )
@@ -183,14 +191,14 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
                 func,
                 functools.wraps(func)(functools.partial(run_in_executor, None, func)),
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
                 recurse=False,
             )
         seq = RunnableSeq(
             run,
             ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
-            name=func.__name__,
+            name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)
             ),
@@ -208,12 +216,17 @@ P1 = TypeVar("P1")
 T = TypeVar("T")
 
 
+class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
+    def __await__(self) -> Generator[T, None, T]:
+        yield cast(T, ...)
+
+
 def call(
     func: Callable[P, T],
     *args: Any,
     retry: Optional[RetryPolicy] = None,
     **kwargs: Any,
-) -> Union[concurrent.futures.Future[T], asyncio.Future[T]]:
+) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
     fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])

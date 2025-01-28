@@ -2,7 +2,6 @@ import asyncio
 import concurrent.futures
 import functools
 import inspect
-import types
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -22,46 +21,39 @@ from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
 from langgraph.pregel import Pregel
-from langgraph.pregel.call import P, T, call, get_runnable_for_entrypoint
+from langgraph.pregel.call import (
+    P,
+    SyncAsyncFuture,
+    T,
+    call,
+    get_runnable_for_entrypoint,
+)
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode, StreamWriter
+from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
 
 
 @overload
 def task(
-    *, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]]: ...
-
-
-@overload
-def task(  # type: ignore[overload-cannot-match]
-    *, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]]: ...
+    *, name: Optional[str] = None, retry: Optional[RetryPolicy] = None
+) -> Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]]: ...
 
 
 @overload
 def task(
     __func_or_none__: Callable[P, T],
-) -> Callable[P, concurrent.futures.Future[T]]: ...
-
-
-@overload
-def task(
-    __func_or_none__: Callable[P, Awaitable[T]],
-) -> Callable[P, asyncio.Future[T]]: ...
+) -> Callable[P, SyncAsyncFuture[T]]: ...
 
 
 def task(
     __func_or_none__: Optional[Union[Callable[P, T], Callable[P, Awaitable[T]]]] = None,
     *,
+    name: Optional[str] = None,
     retry: Optional[RetryPolicy] = None,
 ) -> Union[
-    Callable[[Callable[P, Awaitable[T]]], Callable[P, asyncio.Future[T]]],
-    Callable[[Callable[P, T]], Callable[P, concurrent.futures.Future[T]]],
-    Callable[P, asyncio.Future[T]],
-    Callable[P, concurrent.futures.Future[T]],
+    Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]],
+    Callable[P, SyncAsyncFuture[T]],
 ]:
     """Define a LangGraph task using the `task` decorator.
 
@@ -128,6 +120,18 @@ def task(
     ) -> Union[
         Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
     ]:
+        if name is not None:
+            if hasattr(func, "__func__"):
+                # handle class methods
+                # NOTE: we're modifying the instance method to avoid modifying
+                # the original class method in case it's shared across multiple tasks
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
+                instance_method.__name__ = name  # type: ignore [attr-defined]
+                func = instance_method
+            else:
+                # handle regular functions / partials / callable classes, etc.
+                func.__name__ = name
+
         call_func = functools.partial(call, func, retry=retry)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
@@ -171,8 +175,7 @@ class entrypoint:
     | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
     | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
 
-    The entrypoint decorator can be applied to sync functions, async functions,
-    generator functions, and async generator functions.
+    The entrypoint decorator can be applied to sync functions or async functions.
 
     ### State management
 
@@ -183,24 +186,6 @@ class entrypoint:
     If you want **`previous`** to be different from the return value, you can use the
     `entrypoint.final` object to return a value while saving a different value to the
     checkpoint.
-
-    ### Generator functions
-
-    In generator functions, `yield` is used as a shorthand for writing
-    to the `custom` channel using the `writer` parameter (i.e., `writer(chunk)`).
-
-    The value of `previous` will be the list of the values yielded during the previous
-    run for the given thread id, unless an `entrypoint.final` was yielded.
-
-    If an `entrypoint.final` object is yielded, the value of `previous` will be the
-    value the `save` attribute of the `entrypoint.final` object.
-
-    When executing an entrypoint created from a generator function, expect the following
-    behavior:
-    - stream_mode is set to 'custom' by default, and streaming will not stream the
-      return value
-    - add a `values` or `updates` stream_mode to stream the return value (if needed)
-    - using `invoke` will return the return value of the entrypoint
 
     Args:
         checkpointer: Specify a checkpointer to create a workflow that can persist
@@ -320,35 +305,6 @@ class entrypoint:
         my_workflow.invoke(3, config)  # 0 (previous was None)
         my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
         ```
-
-    Example: Using a generator entrypoint
-        You can decorate a generator function with the `entrypoint` decorator.
-
-        ```python
-        from langgraph.checkpoint.memory import MemorySaver
-        from langgraph.func import entrypoint
-
-        @entrypoint(checkpointer=MemorySaver())
-        def workflow(inputs: dict):
-            yield "hello"
-            yield "world"
-
-        config = {
-            "configurable": {
-                "thread_id": "1"
-            }
-        }
-
-        for result in workflow.stream({}, config):
-            print(result)
-        ```
-
-        This will print:
-        ```pycon
-        hello
-        world
-        ```
-
     """
 
     def __init__(
@@ -401,163 +357,23 @@ class entrypoint:
         A value will always be saved even if it is None.
         """
 
-    def __call__(self, func: types.FunctionType) -> Pregel:
+    def __call__(self, func: Callable[..., Any]) -> Pregel:
         """Convert a function into a Pregel graph.
 
         Args:
-            func: The function to convert. Support both sync and async functions, as well
-                   as generator and async generator functions.
+            func: The function to convert. Support both sync and async functions.
 
         Returns:
             A Pregel graph.
         """
         # wrap generators in a function that writes to StreamWriter
-        if inspect.isgeneratorfunction(func):
-            original_sig = inspect.signature(func)
-            # Check if original signature has a writer argument with a matching type.
-            # If not, we'll inject it into the decorator, but not pass it
-            # to the wrapped function.
-            if "writer" in original_sig.parameters:
+        if inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func):
+            raise NotImplementedError(
+                "Generators are not supported in the Functional API."
+            )
 
-                @functools.wraps(func)
-                def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
-                    final_: Optional[entrypoint.final] = None
-                    chunks = []
-                    for chunk in func(*args, writer=writer, **kwargs):
-                        if isinstance(chunk, entrypoint.final):
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding multiple entrypoint.final "
-                                    "objects is not allowed."
-                                )
-                            else:
-                                final_ = chunk
-                        else:
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding a value after a entrypoint.final "
-                                    "object is not allowed."
-                                )
-                            writer(chunk)
-                            chunks.append(chunk)
-
-                    return final_ if final_ else chunks
-            else:
-
-                @functools.wraps(func)
-                def gen_wrapper(*args: Any, writer: StreamWriter, **kwargs: Any) -> Any:
-                    final_: Optional[entrypoint.final] = None
-                    chunks = []
-                    # Do not pass the writer argument to the wrapped function
-                    # as it does not have a matching parameter
-                    for chunk in func(*args, **kwargs):
-                        if isinstance(chunk, entrypoint.final):
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding multiple entrypoint.final "
-                                    "objects is not allowed."
-                                )
-                            else:
-                                final_ = chunk
-                        else:
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding a value after a entrypoint.final "
-                                    "object is not allowed."
-                                )
-                            writer(chunk)
-                            chunks.append(chunk)
-                    return final_ if final_ else chunks
-
-                # Create a new parameter for the writer argument
-                extra_param = inspect.Parameter(
-                    "writer",
-                    inspect.Parameter.KEYWORD_ONLY,
-                    # The extra argument is a keyword-only argument
-                    default=lambda _: None,
-                )
-                # Update the function's signature to include the extra argument
-                new_params = list(original_sig.parameters.values()) + [extra_param]
-                new_sig = original_sig.replace(parameters=new_params)
-                # Update the signature of the wrapper function
-                gen_wrapper.__signature__ = new_sig  # type: ignore
-
-            bound = get_runnable_for_entrypoint(gen_wrapper)
-            stream_mode: StreamMode = "custom"
-        elif inspect.isasyncgenfunction(func):
-            original_sig = inspect.signature(func)
-            # Check if original signature has a writer argument with a matching type.
-            # If not, we'll inject it into the decorator, but not pass it
-            # to the wrapped function.
-            if "writer" in original_sig.parameters:
-
-                @functools.wraps(func)
-                async def agen_wrapper(
-                    *args: Any, writer: StreamWriter, **kwargs: Any
-                ) -> Any:
-                    final_: Optional[entrypoint.final] = None
-                    chunks = []
-                    async for chunk in func(*args, writer=writer, **kwargs):
-                        if isinstance(chunk, entrypoint.final):
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding multiple entrypoint.final objects is not allowed."
-                                )
-                            else:
-                                final_ = chunk
-                        else:
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding a value after a entrypoint.final object is not allowed."
-                                )
-                            writer(chunk)
-                            chunks.append(chunk)
-
-                    return final_ if final_ else chunks
-            else:
-
-                @functools.wraps(func)
-                async def agen_wrapper(
-                    *args: Any, writer: StreamWriter, **kwargs: Any
-                ) -> Any:
-                    final_: Optional[entrypoint.final] = None
-                    chunks = []
-                    async for chunk in func(*args, **kwargs):
-                        if isinstance(chunk, entrypoint.final):
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding multiple entrypoint.final objects is not allowed."
-                                )
-                            else:
-                                final_ = chunk
-                        else:
-                            if final_ is not None:
-                                raise RuntimeError(
-                                    "Yielding a value after a entrypoint.final object is not allowed."
-                                )
-                            writer(chunk)
-                            chunks.append(chunk)
-
-                    return final_ if final_ else chunks
-
-                # Create a new parameter for the writer argument
-                extra_param = inspect.Parameter(
-                    "writer",
-                    inspect.Parameter.KEYWORD_ONLY,
-                    # The extra argument is a keyword-only argument
-                    default=lambda _: None,
-                )
-                # Update the function's signature to include the extra argument
-                new_params = list(original_sig.parameters.values()) + [extra_param]
-                new_sig = original_sig.replace(parameters=new_params)
-                # Update the signature of the wrapper function
-                agen_wrapper.__signature__ = new_sig  # type: ignore
-
-            bound = get_runnable_for_entrypoint(agen_wrapper)
-            stream_mode = "custom"
-        else:
-            bound = get_runnable_for_entrypoint(func)
-            stream_mode = "updates"
+        bound = get_runnable_for_entrypoint(func)
+        stream_mode: StreamMode = "updates"
 
         # get input and output types
         sig = inspect.signature(func)
