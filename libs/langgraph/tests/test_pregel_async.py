@@ -7446,3 +7446,23 @@ async def test_named_tasks_functional() -> None:
         {"qux": "foo|bar|baz|custom_baz|qux"},
         {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_overriding_injectable_args_with_async_task() -> None:
+    """Test overriding injectable args in tasks."""
+    from langgraph.store.memory import InMemoryStore
+
+    @task
+    async def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
+        assert store is value
+        assert writer is value
+
+    @entrypoint(store=InMemoryStore())
+    async def main(inputs, store: BaseStore) -> str:
+        assert store is not None
+        await foo(store=None, writer=None, value=None)
+        await foo(store="hello", writer="hello", value="hello")
+        return "OK"
+
+    assert await main.ainvoke({}) == "OK"

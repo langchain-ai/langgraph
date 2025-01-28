@@ -6220,6 +6220,25 @@ def test_entrypoint_with_return_and_save() -> None:
     assert previous_ == ["hello", "goodbye"]
 
 
+def test_overriding_injectable_args_with_tasks() -> None:
+    """Test overriding injectable args in tasks."""
+    from langgraph.store.memory import InMemoryStore
+
+    @task
+    def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
+        assert store is value
+        assert writer is value
+
+    @entrypoint(store=InMemoryStore())
+    def main(inputs, store: BaseStore) -> str:
+        assert store is not None
+        foo(store=None, writer=None, value=None).result()
+        foo(store="hello", writer="hello", value="hello").result()
+        return "OK"
+
+    assert main.invoke({}) == "OK"
+
+
 def test_named_tasks_functional() -> None:
     class Foo:
         def foo(self, value: str) -> dict:
