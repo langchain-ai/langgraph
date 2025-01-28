@@ -21,6 +21,12 @@ Resource Allocation:
 
 See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for creating a new deployment.
 
+## Revision
+
+A revision is an iteration of a [deployment](#deployment). When a new deployment is created, an initial revision is automatically created. To deploy new code changes or update environment variable configurations for a deployment, a new revision must be created. When a revision is created, a new container image is built automatically.
+
+See the [how-to guide](../cloud/deployment/cloud.md#create-new-revision) for creating a new revision.
+
 ## Persistence
 
 A dedicated database is automatically created for each deployment. The database serves as the [persistence layer](../concepts/persistence.md) for the deployment.
@@ -41,12 +47,6 @@ Scale down actions are delayed for 30 minutes before any action is taken. In oth
 
 In the future, the autoscaling implementation may evolve to accommodate other metrics such as background run queue size.
 
-## Revision
-
-A revision is an iteration of a [deployment](#deployment). When a new deployment is created, an initial revision is automatically created. To deploy new code changes or update environment variable configurations for a deployment, a new revision must be created. When a revision is created, a new container image is built automatically.
-
-See the [how-to guide](../cloud/deployment/cloud.md#create-new-revision) for creating a new revision.
-
 ## Asynchronous Deployment
 
 Infrastructure for [deployments](#deployment) and [revisions](#revision) are provisioned and deployed asynchronously. They are not deployed immediately after submission. Currently, deployment can take up to several minutes.
@@ -54,6 +54,12 @@ Infrastructure for [deployments](#deployment) and [revisions](#revision) are pro
 - When a new deployment is created, a new database is created for the deployment. Database creation is a one-time step. This step contributes to a longer deployment time for the initial revision of the deployment.
 - When a subsequent revision is created for a deployment, there is no database creation step. The deployment time for a subsequent revision is significantly faster compared to the deployment time of the initial revision.
 - The deployment process for each revision contains a build step, which can take up to a few minutes.
+
+## LangSmith Integration
+
+A [LangSmith](https://docs.smith.langchain.com/) tracing project is automatically created for each deployemnt. The tracing project has the same name as the deployment. When creating a deployment, the `LANGCHAIN_TRACING_V2` and `LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set internally, automatically. Traces are created for each run and are emitted to the tracing project automatically.
+
+When a deployment is deleted, the traces and the tracing project are not deleted.
 
 ## Automatic Deletion
 
