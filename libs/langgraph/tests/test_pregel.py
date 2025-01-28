@@ -5824,50 +5824,13 @@ def test_entrypoint_from_sync_generator() -> None:
     """@entrypoint does not support sync generators."""
     previous_return_values = []
 
-    @entrypoint(checkpointer=MemorySaver())
-    def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
+    with pytest.raises(NotImplementedError):
 
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert foo.invoke({"a": "1"}, config) == ["a", "b"]
-    assert previous_return_values == [None]
-    assert foo.invoke({"a": "2"}, config) == ["a", "b"]
-    assert previous_return_values == [None, ["a", "b"]]
-
-
-def test_entrypoint_request_stream_writer() -> None:
-    """Test using a stream writer with an entrypoint."""
-
-    @entrypoint(checkpointer=MemorySaver())
-    def foo(inputs, writer: StreamWriter) -> Any:
-        writer("a")
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    # Different invocations
-    # Are any of these confusing or unexpected?
-    assert list(foo.invoke({}, config)) == ["b"]
-    assert list(foo.stream({}, config)) == ["a", "b"]
-
-    # Stream modes
-    assert list(foo.stream({}, config, stream_mode=["updates"])) == [
-        ("updates", {"foo": ["b"]})
-    ]
-    assert list(foo.stream({}, config, stream_mode=["values"])) == [("values", ["b"])]
-    assert list(foo.stream({}, config, stream_mode=["custom"])) == [
-        (
-            "custom",
-            "a",
-        ),
-        (
-            "custom",
-            "b",
-        ),
-    ]
+        @entrypoint(checkpointer=MemorySaver())
+        def foo(inputs, previous=None) -> Any:
+            previous_return_values.append(previous)
+            yield "a"
+            yield "b"
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -6231,18 +6194,6 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
         def foo(inputs, *, previous: Any) -> entrypoint.final[int]:
             return entrypoint.final(value=1, save=1)  # type: ignore
 
-    @entrypoint()
-    def foo(inputs, *, previous: Any) -> Generator[int, None, None]:
-        yield 1
-
-    assert foo.get_output_schema().model_json_schema() == {
-        "items": {
-            "type": "integer",
-        },
-        "title": "LangGraphOutput",
-        "type": "array",
-    }
-
 
 def test_entrypoint_with_return_and_save() -> None:
     """Test entrypoint with return and save."""
@@ -6267,76 +6218,6 @@ def test_entrypoint_with_return_and_save() -> None:
     assert previous_ == ["hello"]
     assert foo.invoke("definitely", config) == 2
     assert previous_ == ["hello", "goodbye"]
-
-
-def test_entrypoint_generator_with_return_and_save() -> None:
-    """Verify that generators produce expected results."""
-    previous_ = None
-
-    @entrypoint(checkpointer=MemorySaver())
-    def workflow(inputs: dict, *, previous: Any):
-        nonlocal previous_
-        previous_ = previous
-
-        yield "hello"
-        yield "world"
-        yield entrypoint.final(value="!", save="saved value")
-
-    assert list(workflow.stream({}, {"configurable": {"thread_id": "0"}})) == [
-        "hello",
-        "world",
-    ]
-    assert list(
-        workflow.stream({}, {"configurable": {"thread_id": "0"}}, stream_mode="updates")
-    ) == [
-        {
-            "workflow": "!",
-        }
-    ]
-
-    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-    assert previous_ is None
-
-    # 2nd time around previous is set
-    assert workflow.invoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-    assert previous_ == "saved value"
-
-    # Test with another thread
-    assert workflow.invoke({}, {"configurable": {"thread_id": "2"}}) == "!"
-    assert previous_ is None
-
-
-async def test_entrypoint_async_generator_with_return_and_save() -> None:
-    """Verify that generators produce expected results."""
-    previous_ = None
-
-    @entrypoint(checkpointer=MemorySaver())
-    async def workflow(inputs: dict, *, previous: Any):
-        nonlocal previous_
-        previous_ = previous
-
-        yield "hello"
-        yield "world"
-        yield entrypoint.final(value="!", save="saved value")
-
-    assert [
-        c async for c in workflow.astream({}, {"configurable": {"thread_id": "0"}})
-    ] == [
-        "hello",
-        "world",
-    ]
-
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-
-    assert previous_ is None
-
-    # 2nd time around previous is set
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "1"}}) == "!"
-    assert previous_ == "saved value"
-
-    # Test with another thread
-    assert await workflow.ainvoke({}, {"configurable": {"thread_id": "2"}}) == "!"
-    assert previous_ is None
 
 
 def test_named_tasks_functional() -> None:
