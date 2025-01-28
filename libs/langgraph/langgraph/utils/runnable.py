@@ -102,7 +102,6 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
             "Optional[BaseStore]",
         ),
         CONFIG_KEY_STORE,
-        # Default value is None, so we don't need to pass it here.
         None,
     ),
     (
