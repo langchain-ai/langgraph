@@ -7132,6 +7132,8 @@ async def test_multiple_subgraphs_functional(checkpointer_name: str) -> None:
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_subgraphs_mixed_entrypoint(checkpointer_name: str) -> None:
+    """Test calling multiple StateGraph subgraphs from an entrypoint."""
+
     class State(TypedDict):
         a: int
         b: int
@@ -7194,10 +7196,12 @@ async def test_multiple_subgraphs_mixed_entrypoint(checkpointer_name: str) -> No
         assert await parent_call_multiple_subgraphs.ainvoke([2, 3], config) == [5, 6]
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_subgraphs_mixed_state_graph(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
+    """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         class State(TypedDict):

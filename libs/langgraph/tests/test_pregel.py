@@ -5950,7 +5950,7 @@ def test_multiple_subgraphs_functional(
 
     # Define addition subgraph
     @entrypoint()
-    def add(inputs):
+    def add(inputs: tuple[int, int]):
         a, b = inputs
         return a + b
 
@@ -5960,7 +5960,7 @@ def test_multiple_subgraphs_functional(
         return a * b
 
     @entrypoint()
-    def multiply(inputs):
+    def multiply(inputs: tuple[int, int]):
         return multiply_task(*inputs).result()
 
     # Test calling the same subgraph multiple times
@@ -5996,6 +5996,7 @@ def test_multiple_subgraphs_functional(
 def test_multiple_subgraphs_mixed_entrypoint(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
+    """Test calling multiple StateGraph subgraphs from an entrypoint."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class State(TypedDict):
@@ -6056,6 +6057,7 @@ def test_multiple_subgraphs_mixed_entrypoint(
 def test_multiple_subgraphs_mixed_state_graph(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
+    """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class State(TypedDict):
@@ -6067,7 +6069,7 @@ def test_multiple_subgraphs_mixed_state_graph(
 
     # Define addition subgraph
     @entrypoint()
-    def add(inputs):
+    def add(inputs: tuple[int, int]):
         a, b = inputs
         return a + b
 
@@ -6077,7 +6079,7 @@ def test_multiple_subgraphs_mixed_state_graph(
         return a * b
 
     @entrypoint()
-    def multiply(inputs):
+    def multiply(inputs: tuple[int, int]):
         return multiply_task(*inputs).result()
 
     # Test calling the same subgraph multiple times
