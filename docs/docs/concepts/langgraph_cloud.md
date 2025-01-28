@@ -55,12 +55,20 @@ Infrastructure for [deployments](#deployment) and [revisions](#revision) are pro
 - When a subsequent revision is created for a deployment, there is no database creation step. The deployment time for a subsequent revision is significantly faster compared to the deployment time of the initial revision.
 - The deployment process for each revision contains a build step, which can take up to a few minutes.
 
-!!! info "Database creation for `Development` type deployments takes longer than database creation for `Production` type deployments."
+## Automatic Deletion
+
+Deployments are automatically deleted after 28 consecutive days of non-use (it is in an unused state). A deployment is in an unused state if there are no traces emitted to LangSmith from the deployment after 28 consecutive days. On any given day, if a deployment emits a trace to LangSmith, the counter for consecutive days of non-use is reset.
+
+- An email notification is sent after 7 consecutive days of non-use.
+- A deployment is deleted after 28 consecutive days of non-use.
+
+!!! danger "Data Cannot Be Recovered"
+    After a deployment is deleted, the data (i.e. [persistence](#persistence)) from the deployment cannot be recovered.
 
 ## Architecture
 
 !!! warning "Subject to Change"
-The Cloud SaaS deployment architecture may change in the future.
+    The Cloud SaaS deployment architecture may change in the future.
 
 A high-level diagram of a Cloud SaaS deployment.
 
