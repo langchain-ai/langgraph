@@ -7473,8 +7473,8 @@ async def test_overriding_injectable_args_with_async_task() -> None:
 async def test_tags_stream_mode_messages() -> None:
     model = GenericFakeChatModel(messages=iter(["foo"]), tags=["meow"])
 
-    async def call_model(state):
-        return {"messages": await model.ainvoke(state["messages"])}
+    async def call_model(state, config):
+        return {"messages": await model.ainvoke(state["messages"], config)}
 
     graph = (
         StateGraph(MessagesState)
