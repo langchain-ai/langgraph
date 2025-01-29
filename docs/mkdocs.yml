@@ -59,10 +59,11 @@ plugins:
   - redirects:
       redirect_maps:
         # lib redirects
-        'how-tos/stream-values.md': 'how-tos/streaming/streaming.md'
-        'how-tos/stream-updates.md': 'how-tos/streaming/streaming.md'
-        'how-tos/streaming-content.md': 'how-tos/streaming/streaming.md'
-        'how-tos/stream-multiple.md': 'how-tos/streaming/streaming.md'
+        'how-tos/stream-values.md': 'how-tos/streaming/streaming.md#stream_modevalues'
+        'how-tos/stream-updates.md': 'how-tos/streaming/streaming.md#stream_modeupdates'
+        'how-tos/streaming-content.md': 'how-tos/streaming/streaming.md#stream_modecustom'
+        'how-tos/stream-multiple.md': 'how-tos/streaming/streaming.md#multiple-streaming-modes'
+        'how-tos/streaming-tokens-without-langchain.md': 'how-tos/streaming-tokens.md#example-without-langchain'
         # cloud redirects
         'cloud/index.md': 'concepts/index.md#langgraph-platform'
         'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
