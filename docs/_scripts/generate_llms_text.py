@@ -10,7 +10,7 @@ from notebook_hooks import _on_page_markdown_with_config
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Get source directory (parent of HERE / docs)
-SOURCE_DIR = os.path.join(os.path.dirname(HERE), "docs")
+SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(HERE), "docs"))
 
 
 def _make_llms_text(output_file: str) -> str:
@@ -19,12 +19,13 @@ def _make_llms_text(output_file: str) -> str:
     Args:
         output_file: Path to output the consolidated text file
     """
-
     # Collect all markdown and notebook files
-    all_files = [
-        "docs/tutorials/introduction.ipynb",
-        # Can add more files here
+    relative_paths = [
+        # Files relative to docs/docs/
+        "tutorials/introduction.ipynb",
     ]
+    all_files = [os.path.join(SOURCE_DIR, path) for path in relative_paths]
+
     # Add all how-tos
 
     all_files.extend(
@@ -45,6 +46,7 @@ def _make_llms_text(output_file: str) -> str:
 
     # Process each file
     for file_path in all_files:
+        print(f"Processing {file_path}")
         rel_path = os.path.relpath(file_path, SOURCE_DIR)
 
         # Create File and Page objects to match mkdocs structure
