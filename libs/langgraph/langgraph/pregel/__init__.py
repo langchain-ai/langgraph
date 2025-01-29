@@ -1493,10 +1493,11 @@ class Pregel(PregelProtocol):
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step.
-                - `"updates"`: Emit only the node name(s) and updates returned by the node(s) after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
-                - `"custom"`: Emit custom data using from inside graph nodes via `writer: StreamWriter` kwarg of each node.
-                - `"messages"`: Emit LLM messages token-by-token together with metadata for the graph node where LLM is invoked.
+                - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
@@ -1768,10 +1769,11 @@ class Pregel(PregelProtocol):
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step.
-                - `"updates"`: Emit only the node name(s) and updates returned by the node(s) after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
-                - `"custom"`: Emit custom data using from inside graph nodes via `writer: StreamWriter` kwarg of each node.
-                - `"messages"`: Emit LLM messages token-by-token together with metadata for the graph node where LLM is invoked.
+                - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.

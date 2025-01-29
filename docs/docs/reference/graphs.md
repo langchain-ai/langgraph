@@ -12,11 +12,6 @@
         - StateGraph
         - CompiledStateGraph
 
-::: langgraph.pregel
-    options:
-      members:
-        - Pregel
-
 ::: langgraph.graph.message
     options:
       members:
