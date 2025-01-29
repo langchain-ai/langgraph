@@ -6288,3 +6288,97 @@ def test_named_tasks_functional() -> None:
         {"qux": "foo|bar|baz|custom_baz|qux"},
         {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
+
+
+# pylint: disable=invalid-name, missing-module-docstring, unused-argument, missing-function-docstring, global-statement
+import asyncio
+from typing_extensions import Literal
+from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command, interrupt
+from langgraph.graph import MessagesState
+
+
+async def test_interrupt_resume_with_update_state() -> None:
+    # This test is a minimal repro for a bug where the `update_state` method
+    # was not correctly updating the state after an interrupt.
+
+    # This is used to get a minimal repro:
+    # Route to END after simulate_interrupt_node
+    goto_end = False
+
+    async def react_node(
+        state: MessagesState,
+    ) -> Command[Literal["simulate_interrupt_node", "__end__"]]:
+        return Command(goto=END if goto_end else "simulate_interrupt_node")
+
+    async def simulate_interrupt_node(
+        state: MessagesState,
+    ) -> Command[Literal["react_node"]]:
+        global goto_end
+        goto_end = True
+        print("--- Interrupting ---", flush=True)
+        value = interrupt("Hey what's up?")
+        print(f"--- Resuming: {value} ---", flush=True)
+
+        return Command(
+            goto="react_node",
+        )
+
+    workflow = StateGraph(MessagesState)
+    workflow.add_node("react_node", react_node)
+    workflow.add_node("simulate_interrupt_node", simulate_interrupt_node)
+    workflow.set_entry_point("react_node")
+
+    memory = MemorySaver()
+    graph = workflow.compile(
+        checkpointer=memory,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    async for _chunk in graph.astream_events(
+        {"messages": [HumanMessage(content="interrupt")]}, config, version="v2"
+    ):
+        pass
+
+    graph.update_state(
+        config,
+        {"messages": [AIMessage(content="Hey what's up?"), HumanMessage(content="ok")]},
+    )
+
+    async for _chunk in graph.astream_events(
+        Command(resume="ok"), config, version="v2"
+    ):
+        pass
+
+
+def test_update_preserve_pending_writes():
+    """Test that pending writes are preserved after a state update."""
+
+    def node(state: MessagesState):
+        value = interrupt("Hey what's up?")
+        return False
+
+    workflow = StateGraph(MessagesState)
+    workflow.add_node("node", node)
+    workflow.set_entry_point("node")
+
+    checkpointer = MemorySaver()
+    graph = workflow.compile(
+        checkpointer=checkpointer,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"messages": [HumanMessage(content="hello")]}, config)
+
+    pending_writes = graph.checkpointer.get_tuple(config).pending_writes
+    assert len(pending_writes) == 1
+    pending_write = pending_writes[0]
+    _, write_type, _ = pending_write
+    assert write_type == "__interrupt__"
+
+    graph.update_state(config, {"messages": [AIMessage(content="Hey what's up?")]})
+    pending_writes = graph.checkpointer.get_tuple(config).pending_writes
+    assert len(pending_writes) == 1
