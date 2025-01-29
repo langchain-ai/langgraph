@@ -83,7 +83,6 @@ See the below guides for how-to implement human-in-the-loop workflows with the (
 
 - [How to stream graph outputs](streaming/streaming.ipynb)
 - [How to stream LLM tokens](streaming-tokens.ipynb)
-- [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
