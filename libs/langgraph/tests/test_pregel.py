@@ -6293,11 +6293,13 @@ def test_named_tasks_functional() -> None:
 def test_update_preserve_pending_writes():
     """Test that pending writes are preserved after a state update."""
 
-    def node(state: MessagesState):
-        value = interrupt("Hey what's up?")
-        return False
+    class State(TypedDict):
+        foo: str
 
-    workflow = StateGraph(MessagesState)
+    def node(state: State):
+        value = interrupt("Hey what's up?")
+
+    workflow = StateGraph(State)
     workflow.add_node("node", node)
     workflow.set_entry_point("node")
 
@@ -6307,7 +6309,7 @@ def test_update_preserve_pending_writes():
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"messages": [HumanMessage(content="hello")]}, config)
+    graph.invoke({"foo": "hello"}, config)
 
     pending_writes = graph.checkpointer.get_tuple(config).pending_writes
     assert len(pending_writes) == 1
@@ -6315,6 +6317,6 @@ def test_update_preserve_pending_writes():
     _, write_type, _ = pending_write
     assert write_type == "__interrupt__"
 
-    graph.update_state(config, {"messages": [AIMessage(content="Hey what's up?")]})
+    graph.update_state(config, {"foo": "goodbye"})
     pending_writes = graph.checkpointer.get_tuple(config).pending_writes
     assert len(pending_writes) == 1
