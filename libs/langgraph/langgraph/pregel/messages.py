@@ -82,7 +82,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
-            filtered_tags = [t for t in (tags or []) if "seq" not in t]
+            filtered_tags = [t for t in (tags or []) if not t.startswith("seq:step")]
             if filtered_tags:
                 meta[1]["tags"] = filtered_tags
             self._emit(meta, chunk.message)
