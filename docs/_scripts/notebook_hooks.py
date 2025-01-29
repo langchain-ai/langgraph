@@ -112,6 +112,7 @@ def _on_page_markdown_with_config(
     *,
     add_api_references: bool = True,
     remove_base64_images: bool = False,
+    **kwargs: Any,
 ) -> str:
     if DISABLED:
         return markdown
