@@ -26,6 +26,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -82,6 +83,7 @@ from tests.memory_assert import (
 )
 from tests.messages import (
     _AnyIdAIMessage,
+    _AnyIdAIMessageChunk,
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
@@ -7466,3 +7468,41 @@ async def test_overriding_injectable_args_with_async_task() -> None:
         return "OK"
 
     assert await main.ainvoke({}) == "OK"
+
+
+async def test_tags_stream_mode_messages() -> None:
+    model = GenericFakeChatModel(messages=iter(["foo"]), tags=["meow"])
+
+    async def call_model(state):
+        return {"messages": await model.ainvoke(state["messages"])}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(call_model)
+        .add_edge(START, "call_model")
+        .compile()
+    )
+    assert [
+        c
+        async for c in graph.astream(
+            {
+                "messages": "hi",
+            },
+            stream_mode="messages",
+        )
+    ] == [
+        (
+            _AnyIdAIMessageChunk(content="foo"),
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_model",
+                "langgraph_triggers": ["start:call_model"],
+                "langgraph_path": ("__pregel_pull", "call_model"),
+                "langgraph_checkpoint_ns": AnyStr("call_model:"),
+                "checkpoint_ns": AnyStr("call_model:"),
+                "ls_provider": "genericfakechatmodel",
+                "ls_model_type": "chat",
+                "tags": ["meow"],
+            },
+        )
+    ]

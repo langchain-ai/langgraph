@@ -30,7 +30,6 @@ from typing import (
 import httpx
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AIMessageChunk
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
