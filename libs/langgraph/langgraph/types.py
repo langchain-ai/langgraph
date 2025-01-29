@@ -48,12 +48,13 @@ Checkpointer = Union[None, bool, BaseCheckpointSaver]
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
-- 'values': Emit all values of the state for each step.
-- 'updates': Emit only the node name(s) and updates
-    that were returned by the node(s) **after** each step.
-- 'debug': Emit debug events for each step.
-- 'messages': Emit LLM messages token-by-token.
-- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
+- `"values"`: Emit all values in the state after each step.
+    When used with functional API, values are emitted once at the end of the workflow.
+- `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+- `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+- `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+- `"debug"`: Emit debug events with as much information as possible for each step.
 """
 
 StreamWriter = Callable[[Any], None]
