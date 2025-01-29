@@ -66,7 +66,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if metadata and (not tags or TAG_NOSTREAM not in tags):
             self.metadata[run_id] = (
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                {**metadata, "tags": tags},
+                metadata,
             )
 
     def on_llm_new_token(
@@ -76,11 +76,15 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         chunk: Optional[ChatGenerationChunk] = None,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
+        tags: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> Any:
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
+            filtered_tags = [t for t in (tags or []) if "seq" not in t]
+            if filtered_tags:
+                meta[1]["tags"] = filtered_tags
             self._emit(meta, chunk.message)
 
     def on_llm_end(
