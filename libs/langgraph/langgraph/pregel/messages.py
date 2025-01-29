@@ -66,7 +66,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if metadata and (not tags or TAG_NOSTREAM not in tags):
             self.metadata[run_id] = (
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
+                {**metadata, "tags": tags},
             )
 
     def on_llm_new_token(
