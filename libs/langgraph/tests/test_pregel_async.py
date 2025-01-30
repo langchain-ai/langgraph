@@ -26,6 +26,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -82,6 +83,7 @@ from tests.memory_assert import (
 )
 from tests.messages import (
     _AnyIdAIMessage,
+    _AnyIdAIMessageChunk,
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
@@ -7131,7 +7133,9 @@ async def test_multiple_subgraphs_functional(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_subgraphs_mixed(checkpointer_name: str) -> None:
+async def test_multiple_subgraphs_mixed_entrypoint(checkpointer_name: str) -> None:
+    """Test calling multiple StateGraph subgraphs from an entrypoint."""
+
     class State(TypedDict):
         a: int
         b: int
@@ -7196,7 +7200,82 @@ async def test_multiple_subgraphs_mixed(checkpointer_name: str) -> None:
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_subgraphs_mixed_checkpointer(
+async def test_multiple_subgraphs_mixed_state_graph(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        class State(TypedDict):
+            a: int
+            b: int
+
+        class Output(TypedDict):
+            result: int
+
+        # Define addition subgraph
+        @entrypoint()
+        async def add(inputs):
+            a, b = inputs
+            return a + b
+
+        # Define multiplication subgraph using tasks
+        @task
+        async def multiply_task(a, b):
+            return a * b
+
+        @entrypoint()
+        async def multiply(inputs):
+            return await multiply_task(*inputs)
+
+        # Test calling the same subgraph multiple times
+        async def call_same_subgraph(state):
+            result = await add.ainvoke([state["a"], state["b"]])
+            another_result = await add.ainvoke([result, 10])
+            return {"result": another_result}
+
+        parent_call_same_subgraph = (
+            StateGraph(State, output=Output)
+            .add_node(call_same_subgraph)
+            .add_edge(START, "call_same_subgraph")
+            .compile(checkpointer=checkpointer)
+        )
+        config = {"configurable": {"thread_id": "1"}}
+        assert await parent_call_same_subgraph.ainvoke({"a": 2, "b": 3}, config) == {
+            "result": 15
+        }
+
+        # Test calling multiple subgraphs
+        class Output(TypedDict):
+            add_result: int
+            multiply_result: int
+
+        async def call_multiple_subgraphs(state):
+            add_result = await add.ainvoke([state["a"], state["b"]])
+            multiply_result = await multiply.ainvoke([state["a"], state["b"]])
+            return {
+                "add_result": add_result,
+                "multiply_result": multiply_result,
+            }
+
+        parent_call_multiple_subgraphs = (
+            StateGraph(State, output=Output)
+            .add_node(call_multiple_subgraphs)
+            .add_edge(START, "call_multiple_subgraphs")
+            .compile(checkpointer=checkpointer)
+        )
+        config = {"configurable": {"thread_id": "2"}}
+        assert await parent_call_multiple_subgraphs.ainvoke(
+            {"a": 2, "b": 3}, config
+        ) == {
+            "add_result": 5,
+            "multiply_result": 6,
+        }
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multiple_subgraphs_checkpointer(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -7309,23 +7388,14 @@ async def test_async_entrypoint_without_checkpointer() -> None:
     }
 
 
-@NEEDS_CONTEXTVARS
 async def test_entrypoint_from_async_generator() -> None:
     """@entrypoint does not support sync generators."""
-    # Test invoke
-    previous_return_values = []
+    with pytest.raises(NotImplementedError):
 
-    # In this version reducers do not work
-    @entrypoint(checkpointer=MemorySaver())
-    async def foo(inputs, previous=None) -> Any:
-        previous_return_values.append(previous)
-        yield "a"
-        yield "b"
-
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert list(await foo.ainvoke({"a": "1"}, config)) == ["a", "b"]
-    assert previous_return_values == [None]
+        @entrypoint(checkpointer=MemorySaver())
+        async def foo(inputs) -> Any:
+            yield "a"
+            yield "b"
 
 
 @NEEDS_CONTEXTVARS
@@ -7377,4 +7447,62 @@ async def test_named_tasks_functional() -> None:
         {"custom_baz": "foo|bar|baz|custom_baz"},
         {"qux": "foo|bar|baz|custom_baz|qux"},
         {"workflow": "foo|bar|baz|custom_baz|qux"},
+    ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_overriding_injectable_args_with_async_task() -> None:
+    """Test overriding injectable args in tasks."""
+    from langgraph.store.memory import InMemoryStore
+
+    @task
+    async def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
+        assert store is value
+        assert writer is value
+
+    @entrypoint(store=InMemoryStore())
+    async def main(inputs, store: BaseStore) -> str:
+        assert store is not None
+        await foo(store=None, writer=None, value=None)
+        await foo(store="hello", writer="hello", value="hello")
+        return "OK"
+
+    assert await main.ainvoke({}) == "OK"
+
+
+async def test_tags_stream_mode_messages() -> None:
+    model = GenericFakeChatModel(messages=iter(["foo"]), tags=["meow"])
+
+    async def call_model(state, config):
+        return {"messages": await model.ainvoke(state["messages"], config)}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(call_model)
+        .add_edge(START, "call_model")
+        .compile()
+    )
+    assert [
+        c
+        async for c in graph.astream(
+            {
+                "messages": "hi",
+            },
+            stream_mode="messages",
+        )
+    ] == [
+        (
+            _AnyIdAIMessageChunk(content="foo"),
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_model",
+                "langgraph_triggers": ["start:call_model"],
+                "langgraph_path": ("__pregel_pull", "call_model"),
+                "langgraph_checkpoint_ns": AnyStr("call_model:"),
+                "checkpoint_ns": AnyStr("call_model:"),
+                "ls_provider": "genericfakechatmodel",
+                "ls_model_type": "chat",
+                "tags": ["meow"],
+            },
+        )
     ]

@@ -27,7 +27,6 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
-from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import get_all_basemodel_annotations
@@ -210,7 +209,7 @@ class ToolNode(RunnableCallable):
         ],
         config: RunnableConfig,
         *,
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
@@ -220,12 +219,14 @@ class ToolNode(RunnableCallable):
                 *executor.map(self._run_one, tool_calls, input_types, config_list)
             ]
 
-        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        # preserve existing behavior for non-command tool outputs for backwards
+        # compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
             return outputs if input_type == "list" else {self.messages_key: outputs}
 
-        # LangGraph will automatically handle list of Command and non-command node updates
+        # LangGraph will automatically handle list of Command and non-command node
+        # updates
         combined_outputs: list[
             Command | list[ToolMessage] | dict[str, list[ToolMessage]]
         ] = []
@@ -238,20 +239,6 @@ class ToolNode(RunnableCallable):
                 )
         return combined_outputs
 
-    def invoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if "store" not in kwargs:
-            kwargs["store"] = None
-        return super().invoke(input, config, **kwargs)
-
-    async def ainvoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if "store" not in kwargs:
-            kwargs["store"] = None
-        return await super().ainvoke(input, config, **kwargs)
-
     async def _afunc(
         self,
         input: Union[
@@ -261,7 +248,7 @@ class ToolNode(RunnableCallable):
         ],
         config: RunnableConfig,
         *,
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
@@ -404,7 +391,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
@@ -494,7 +481,9 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_store(self, tool_call: ToolCall, store: BaseStore) -> ToolCall:
+    def _inject_store(
+        self, tool_call: ToolCall, store: Optional[BaseStore]
+    ) -> ToolCall:
         store_arg = self.tool_to_store_arg[tool_call["name"]]
         if not store_arg:
             return tool_call
@@ -519,7 +508,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> ToolCall:
         if tool_call["name"] not in self.tools_by_name:
             return tool_call

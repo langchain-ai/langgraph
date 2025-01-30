@@ -183,6 +183,16 @@ def validate_config(config: Config) -> Config:
             "No graphs found in config. "
             "Add at least one graph to 'graphs' dictionary."
         )
+
+    # Validate auth config
+    if auth_conf := config.get("auth"):
+        if "path" in auth_conf:
+            if ":" not in auth_conf["path"]:
+                raise ValueError(
+                    f"Invalid auth.path format: '{auth_conf['path']}'. "
+                    "Must be in format './path/to/file.py:attribute_name'"
+                )
+
     return config
 
 
@@ -373,6 +383,47 @@ def _update_graph_paths(
             config["graphs"][graph_id] = f"{module_str}:{attr_str}"
 
 
+def _update_auth_path(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update auth.path to use Docker container paths."""
+    auth_conf = config.get("auth")
+    if not auth_conf or not (path_str := auth_conf.get("path")):
+        return
+
+    module_str, sep, attr_str = path_str.partition(":")
+    if not sep or not module_str.startswith("."):
+        return  # Already validated or absolute path
+
+    resolved = config_path.parent / module_str
+    if not resolved.exists():
+        raise FileNotFoundError(f"Auth file not found: {resolved} (from {path_str})")
+    if not resolved.is_file():
+        raise IsADirectoryError(f"Auth path must be a file: {resolved}")
+
+    # Check faux packages first (higher priority)
+    for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
+        if resolved.is_relative_to(faux_path):
+            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            auth_conf["path"] = new_path
+            return
+
+    # Check real packages
+    for real_path in local_deps.real_pkgs:
+        if resolved.is_relative_to(real_path):
+            new_path = (
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+            )
+            auth_conf["path"] = new_path
+            return
+
+    raise ValueError(
+        f"Auth file '{resolved}' not covered by dependencies.\n"
+        "Add its parent directory to the 'dependencies' array in your config.\n"
+        f"Current dependencies: {config['dependencies']}"
+    )
+
+
 def python_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
     # configure pip
     pip_install = (
@@ -389,9 +440,9 @@ def python_config_to_docker(config_path: pathlib.Path, config: Config, base_imag
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
-
     # rewrite graph paths
     _update_graph_paths(config_path, config, local_deps)
+    _update_auth_path(config_path, config, local_deps)
 
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:

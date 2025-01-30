@@ -7,7 +7,7 @@
 
 The Functional API is an alternative to [Graph API (StateGraph)](low_level.md#stategraph) for development in LangGraph. 
 
-It allows you to take advantage of LangGraph's key features for [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md) workflows, and [streaming](streaming.md) without explicitly specifying state, or control flow in terms of nodes and edges.  
+If modeling your application with explicit nodes and edges is not useful to you, the Functional API allows you to take advantage of LangGraph's key features for [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md) workflows, and [streaming](streaming.md) without explicitly specifying state, or control flow in terms of nodes and edges.
 
 The **Functional API** and the **[Graph API](./low_level.md)** can be used together in the same application, allowing you to intermix the two paradigms if needed.
 
@@ -120,6 +120,15 @@ def workflow(topic: str) -> dict:
 
     The workflow has been completed and the review has been added to the essay.
 
+## Functional API vs. Graph API
+
+The **Functional API** and the [Graph APIs (StateGraph)](./low_level.md#stategraph) provide two different paradigms to create applications with LangGraph. Here are some key differences:
+
+- **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows. This will usually trim the amount of code you need to write.
+- **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
+- **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
+- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
+
 ## Building Blocks
 
 The **Functional API** provides two primitives for building workflows:
@@ -137,7 +146,7 @@ An **entrypoint** is defined by decorating a function with the `@entrypoint` dec
 
 The function **must accept a single positional argument**, which serves as the workflow input. If you need to pass multiple pieces of data, use a dictionary as the input type for the first argument.
 
-Decorating a function with an `entrypoint` produces a Pregel instance which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
+Decorating a function with an `entrypoint` produces a [`Pregel`][langgraph.pregel.Pregel.stream] instance which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
 
 You will usually want to pass a **checkpointer** to the `@entrypoint` decorator to enable persistence and use features like **human-in-the-loop**.
 
@@ -214,7 +223,7 @@ When declaring an `entrypoint`, you can request access to additional parameters 
 
 ### Executing
 
-Using the [`@entrypoint`](#entrypoint) yields a Pregel object that can be executed using the `invoke`, `ainvoke`, `stream`, and `astream` methods.
+Using the [`@entrypoint`](#entrypoint) yields a [`Pregel`][langgraph.pregel.Pregel.stream] object that can be executed using the `invoke`, `ainvoke`, `stream`, and `astream` methods.
 
 === "Invoke"
 
@@ -331,6 +340,8 @@ Resuming an execution after an [interrupt][langgraph.types.interrupt] can be don
 
 To resume after an error, run the `entrypoint` with a `None` and the same **thread id** (config).
 
+This assumes that the underlying **error** has been resolved and execution can proceed successfully.
+
 === "Invoke"
 
     ```python
@@ -436,7 +447,10 @@ my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocat
 
 ## Task
 
-A **task** represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously. Invoking a **task** returns a future, which can be waited on to obtain the result.
+A **task** represents a discrete unit of work, such as an API call or data processing step. It has two key characteristics:
+
+* **Asynchronous Execution**: Tasks are designed to be executed asynchronously, allowing multiple operations to run concurrently without blocking.
+* **Checkpointing**: Task results are saved to a checkpoint, enabling resumption of the workflow from the last saved state. (See [persistence](persistence.md) for more details).
 
 ### Definition
 
@@ -458,7 +472,14 @@ def slow_computation(input_value):
 
 ### Execution
 
-**Tasks** can only be called from within an **entrypoint**, another **task**, or a [state graph node](./low_level.md#nodes). They **cannot** be called directly from the main application code. Calling a **task** produces a future-like object that can be awaited or resolved to obtain the result.
+**Tasks** can only be called from within an **entrypoint**, another **task**, or a [state graph node](./low_level.md#nodes). 
+
+Tasks *cannot* be called directly from the main application code. 
+
+When you call a **task**, it returns *immediately* with a future object. A future is a placeholder for a result that will be available later.
+
+To obtain the result of a **task**, you can either wait for it synchronously (using `result()`) or await it asynchronously (using `await`).
+
 
 === "Synchronous Invocation"
 
@@ -481,9 +502,11 @@ def slow_computation(input_value):
 
 **Tasks** are useful in the following scenarios:
 
-- **Resumable Graph Execution**: When graph execution may need to be **resumed** after being **interrupted** (e.g., for **human-in-the-loop**), **tasks** can encapsulate any source of non-determinism, such as API calls, database queries, or random number generation. See the [determinism](#determinism) for more details.
-- **Retryable Work**: When work needs to be retried to handle failures or inconsistencies, **tasks** provide a way to encapsulate and manage the retry logic.
+- **Checkpointing**: When you need to save the result of a long-running operation to a checkpoint, so you don't need to recompute it when resuming the workflow.
+- **Human-in-the-loop**: If you're building a workflow that requires human intervention, you MUST use **tasks** to encapsulate any randomness (e.g., API calls) to ensure that the workflow can be resumed correctly. See the [determinism](#determinism) section for more details.
 - **Parallel Execution**: For I/O-bound tasks, **tasks** enable parallel execution, allowing multiple operations to run concurrently without blocking (e.g., calling multiple APIs).
+- **Observability**: Wrapping operations in **tasks** provides a way to track the progress of the workflow and monitor the execution of individual operations using [LangSmith](https://docs.smith.langchain.com/).
+- **Retryable Work**: When work needs to be retried to handle failures or inconsistencies, **tasks** provide a way to encapsulate and manage the retry logic.
  
 ## Serialization
 
@@ -511,24 +534,16 @@ While different runs of a workflow can produce different results, resuming a **s
 
 Idempotency ensures that running the same operation multiple times produces the same result. This helps prevent duplicate API calls and redundant processing if a step is rerun due to a failure. Always place API calls inside **tasks** functions for checkpointing, and design them to be idempotent in case of re-execution. Re-execution can occur if a **task** starts, but does not complete successfully. Then, if the workflow is resumed, the **task** will run again. Use idempotency keys or verify existing results to avoid duplication.
 
-## Functional API vs. Graph API
-
-The **Functional API** and the **Graph APIs** provide two different paradigms to create workflows in LangGraph. Here are some key differences:
-
-- **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows.
-- **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
-- **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
-- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
 
 ## Common Pitfalls
 
 ### Handling side effects
 
-Side effects, such as writing to a file or sending an email, should be encapsulated in tasks to ensure consistent execution upon resumption.
+Encapsulate side effects (e.g., writing to a file, sending an email) in tasks to ensure they are not executed multiple times when resuming a workflow.
 
 === "Incorrect"
 
-    In this example, a side effect (writing to a file) is directly included in the workflow, making resumption inconsistent.
+    In this example, a side effect (writing to a file) is directly included in the workflow, so it will be executed a second time when resuming the workflow.
 
     ```python
     @entrypoint(checkpointer=checkpointer)
@@ -567,7 +582,18 @@ Side effects, such as writing to a file or sending an email, should be encapsula
 
 ### Non-deterministic control flow
 
-[Non-deterministic control flow](#determinism) can lead to inconsistent results when resuming a workflow. To ensure correct behavior, encapsulate non-deterministic operations (e.g., random number generation, time-based logic) inside **tasks**.
+Operations that might give different results each time (like getting current time or random numbers) should be encapsulated in tasks to ensure that on resume, the same result is returned.
+
+* In a task: Get random number (5) → interrupt → resume → (returns 5 again) → ...
+* Not in a task: Get random number (5) → interrupt → resume → get new random number (7) → ...
+
+This is especially important when using **human-in-the-loop** workflows with multiple interrupts calls. LangGraph keeps a list
+of resume values for each task/entrypoint. When an interrupt is encountered, it's matched with the corresponding resume value.
+This matching is strictly **index-based**, so the order of the resume values should match the order of the interrupts.
+
+If order of execution is not maintained when resuming, one `interrupt` call may be matched with the wrong `resume` value, leading to incorrect results.
+
+Please read the section on [determinism](#determinism) for more details.
 
 === "Incorrect"
 
