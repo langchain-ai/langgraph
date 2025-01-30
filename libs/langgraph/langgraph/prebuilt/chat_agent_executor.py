@@ -766,9 +766,11 @@ def create_react_agent(
             if tool_call_parallelism == "single_tool_node":
                 return "tools"
             elif tool_call_parallelism == "parallel_tool_nodes":
-                return [
-                    Send("tools", [tool_call]) for tool_call in last_message.tool_calls
+                tool_calls = [
+                    tool_node._inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
                 ]
+                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState)

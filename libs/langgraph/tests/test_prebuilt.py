@@ -2046,6 +2046,49 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     assert tool_message.content == "hi?"
 
 
+@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
+def test_create_react_agent_inject_vars(tool_call_parallelism: str) -> None:
+    class AgentStateExtraKey(AgentState):
+        foo: int
+
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"bar": 3})
+
+    def tool1(
+        some_val: int,
+        state: Annotated[dict, InjectedState],
+        store: Annotated[BaseStore, InjectedStore()],
+    ) -> str:
+        """Tool 1 docstring."""
+        store_val = store.get(namespace, "test_key").value["bar"]
+        return some_val + state["foo"] + store_val
+
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+    agent = create_react_agent(
+        model,
+        [tool1],
+        state_schema=AgentStateExtraKey,
+        store=store,
+        tool_call_parallelism=tool_call_parallelism,
+    )
+    input_message = HumanMessage("hi")
+    result = agent.invoke({"messages": [input_message], "foo": 2})
+    assert result["messages"] == [
+        input_message,
+        AIMessage(content="hi", tool_calls=[tool_call], id="0"),
+        _AnyIdToolMessage(content="6", name="tool1", tool_call_id="some 0"),
+        AIMessage("hi-hi-6", id="1"),
+    ]
+    assert result["foo"] == 2
+
+
 @pytest.mark.skipif(
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
