@@ -85,7 +85,6 @@ See the below guides for how-to implement human-in-the-loop workflows with the (
 - [How to stream LLM tokens](streaming-tokens.ipynb)
 - [How to stream LLM tokens from specific nodes](streaming-specific-nodes.ipynb)
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
-- [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream from subgraphs](streaming-subgraphs.ipynb)
 - [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 
