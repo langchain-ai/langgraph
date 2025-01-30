@@ -68,6 +68,7 @@ from tests.conftest import (
     IS_LANGCHAIN_CORE_030_OR_GREATER,
     awith_checkpointer,
 )
+from langgraph.utils.config import get_stream_writer
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 
 pytestmark = pytest.mark.anyio
@@ -2212,5 +2213,61 @@ def test_react_with_subgraph_tools() -> None:
         ),
         AIMessage(
             content="What's 2 + 3 and 2 * 3?-What's 2 + 3 and 2 * 3?-5-6", id="1"
+        ),
+    ]
+
+
+def test_tool_node_stream_writer() -> None:
+    @dec_tool
+    def streaming_tool(
+        x: int
+    ) -> str:
+        """Do something with writer."""
+        my_writer = get_stream_writer()
+        for value in ["foo", "bar", "baz"]:
+            my_writer({"custom_tool_value": value})
+
+        return x
+
+    tool_node = ToolNode([streaming_tool])
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", tool_node)
+        .add_edge(START, "tools")
+        .compile()
+    )
+
+    tool_call = {
+        "name": "streaming_tool",
+        "args": {"x": 1},
+        "id": "1",
+        "type": "tool_call",
+    }
+    inputs = {
+        "messages": [AIMessage("", tool_calls=[tool_call])],
+    }
+
+    assert list(graph.stream(inputs, stream_mode="custom")) == [
+        {"custom_tool_value": "foo"},
+        {"custom_tool_value": "bar"},
+        {"custom_tool_value": "baz"},
+    ]
+    assert list(graph.stream(inputs, stream_mode=["custom", "updates"])) == [
+        ("custom", {"custom_tool_value": "foo"}),
+        ("custom", {"custom_tool_value": "bar"}),
+        ("custom", {"custom_tool_value": "baz"}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        _AnyIdToolMessage(
+                            content="1",
+                            name="streaming_tool",
+                            tool_call_id="1",
+                        ),
+                    ],
+                },
+            },
         ),
     ]
