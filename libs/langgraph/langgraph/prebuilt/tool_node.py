@@ -420,7 +420,7 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         tool_calls = [
-            self._inject_tool_args(call, input, store) for call in message.tool_calls
+            self.inject_tool_args(call, input, store) for call in message.tool_calls
         ]
         return tool_calls, input_type
 
@@ -500,7 +500,7 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_tool_args(
+    def inject_tool_args(
         self,
         tool_call: ToolCall,
         input: Union[
@@ -510,6 +510,21 @@ class ToolNode(RunnableCallable):
         ],
         store: Optional[BaseStore],
     ) -> ToolCall:
+        """Injects the state and store into the tool call.
+
+        Tool arguments with types annotated as ``InjectedState`` and ``InjectedStore``
+        are ignored in tool schemas for generation purposes. This method injects them
+        into tool calls for tool invocation.
+
+        Args:
+            tool_call (ToolCall): The tool call to inject state and store into.
+            input (Union[list[AnyMessage], dict[str, Any], BaseModel]): The input state
+                to inject.
+            store (Optional[BaseStore]): The store to inject.
+
+        Returns:
+            ToolCall: The tool call with injected state and store.
+        """
         if tool_call["name"] not in self.tools_by_name:
             return tool_call
 

@@ -767,7 +767,7 @@ def create_react_agent(
                 return "tools"
             elif tool_call_parallelism == "parallel_tool_nodes":
                 tool_calls = [
-                    tool_node._inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in last_message.tool_calls
                 ]
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
