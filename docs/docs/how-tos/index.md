@@ -14,7 +14,7 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 - [How to define and update graph state](state-reducers.ipynb)
 - [How to create a sequence of steps](sequence.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)
-- [How to create and control loops](recursion-limit.ipynb)  # Update this
+- [How to create and control loops with recursion limits](recursion-limit.ipynb)
 - [How to visualize your graph](visualization.ipynb)
 
 ### Fine-grained Control
