@@ -62,13 +62,13 @@ from langgraph.prebuilt.tool_node import (
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
+from langgraph.utils.config import get_stream_writer
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
     IS_LANGCHAIN_CORE_030_OR_GREATER,
     awith_checkpointer,
 )
-from langgraph.utils.config import get_stream_writer
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 
 pytestmark = pytest.mark.anyio
@@ -2219,9 +2219,7 @@ def test_react_with_subgraph_tools() -> None:
 
 def test_tool_node_stream_writer() -> None:
     @dec_tool
-    def streaming_tool(
-        x: int
-    ) -> str:
+    def streaming_tool(x: int) -> str:
         """Do something with writer."""
         my_writer = get_stream_writer()
         for value in ["foo", "bar", "baz"]:
