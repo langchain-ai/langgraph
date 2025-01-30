@@ -35,7 +35,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
-from langgraph.types import Command
+from langgraph.types import Command, StreamWriter
 from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
@@ -191,6 +191,7 @@ class ToolNode(RunnableCallable):
         self.tools_by_name: dict[str, BaseTool] = {}
         self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
+        self.tool_to_stream_writer_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
@@ -199,6 +200,7 @@ class ToolNode(RunnableCallable):
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+            self.tool_to_stream_writer_arg[tool_.name] = _get_stream_writer_arg(tool_)
 
     def _func(
         self,
@@ -210,8 +212,9 @@ class ToolNode(RunnableCallable):
         config: RunnableConfig,
         *,
         store: Optional[BaseStore],
+        writer: StreamWriter,
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, writer)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -249,8 +252,9 @@ class ToolNode(RunnableCallable):
         config: RunnableConfig,
         *,
         store: Optional[BaseStore],
+        writer: StreamWriter,
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, writer)
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -392,6 +396,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        writer: StreamWriter,
     ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
             input_type = "list"
@@ -410,7 +415,8 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         tool_calls = [
-            self._inject_tool_args(call, input, store) for call in message.tool_calls
+            self._inject_tool_args(call, input, store, writer)
+            for call in message.tool_calls
         ]
         return tool_calls, input_type
 
@@ -490,6 +496,19 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
+    def _inject_stream_writer(
+        self, tool_call: ToolCall, writer: StreamWriter
+    ) -> ToolCall:
+        stream_writer_arg = self.tool_to_stream_writer_arg[tool_call["name"]]
+        if not stream_writer_arg:
+            return tool_call
+
+        tool_call["args"] = {
+            **tool_call["args"],
+            stream_writer_arg: writer,
+        }
+        return tool_call
+
     def _inject_tool_args(
         self,
         tool_call: ToolCall,
@@ -499,6 +518,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        writer: StreamWriter,
     ) -> ToolCall:
         if tool_call["name"] not in self.tools_by_name:
             return tool_call
@@ -506,7 +526,10 @@ class ToolNode(RunnableCallable):
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
-        return tool_call_with_store
+        tool_call_with_stream_writer = self._inject_stream_writer(
+            tool_call_with_store, writer
+        )
+        return tool_call_with_stream_writer
 
     def _validate_tool_command(
         self, command: Command, call: ToolCall, input_type: Literal["list", "dict"]
@@ -745,8 +768,66 @@ class InjectedStore(InjectedToolArg):
     """  # noqa: E501
 
 
+class InjectedStreamWriter(InjectedToolArg):
+    """Annotation for a Tool arg that is meant to be populated with LangGraph StreamWriter.
+
+    Any Tool argument annotated with InjectedStreamWriter will be hidden from a tool-calling
+    model, so that the model doesn't attempt to generate the argument. If using
+    ToolNode, the appropriate writer field will be automatically injected into
+    the model-generated tool args.
+
+    !!! Warning
+        `InjectedStreamWriter` annotation requires `langchain-core >= 0.3.8`
+
+    Example:
+        ```python
+        from typing_extensions import Annotated
+        from langchain_core.messages import AIMessage
+        from langchain_core.tools import tool
+
+        from langgraph.types import StreamWriter
+        from langgraph.graph import StateGraph, START, MessagesState
+        from langgraph.prebuilt import InjectedStreamWriter, ToolNode
+
+        @tool
+        def streaming_tool(x: int, my_writer: Annotated[StreamWriter, InjectedStreamWriter]) -> str:
+            '''Do something with writer.'''
+            for value in ["foo", "bar", "baz"]:
+                my_writer({"custom_tool_value": value})
+
+            return x
+
+
+        tool_node = ToolNode([streaming_tool])
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("tools", tool_node)
+            .add_edge(START, "tools")
+            .compile()
+        )
+
+        tool_call = {"name": "streaming_tool", "args": {"x": 1}, "id": "1", "type": "tool_call"}
+        inputs = {
+            "messages": [AIMessage("", tool_calls=[tool_call])],
+        }
+
+        for chunk in graph.stream(inputs, stream_mode="custom"):
+            print(chunk)
+        ```
+
+        ```pycon
+        {'custom_tool_value': 'foo'}
+        {'custom_tool_value': 'bar'}
+        {'custom_tool_value': 'baz'}
+        ```
+    """  # noqa: E501
+
+
 def _is_injection(
-    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
+    type_arg: Any,
+    injection_type: Union[
+        Type[InjectedState], Type[InjectedStore], Type[InjectedStreamWriter]
+    ],
 ) -> bool:
     if isinstance(type_arg, injection_type) or (
         isinstance(type_arg, type) and issubclass(type_arg, injection_type)
@@ -793,8 +874,29 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             if _is_injection(type_arg, InjectedStore)
         ]
         if len(injections) > 1:
-            ValueError(
+            raise ValueError(
                 "A tool argument should not be annotated with InjectedStore more than "
+                f"once. Received arg {name} with annotations {injections}."
+            )
+        elif len(injections) == 1:
+            return name
+        else:
+            pass
+
+    return None
+
+
+def _get_stream_writer_arg(tool: BaseTool) -> Optional[str]:
+    full_schema = tool.get_input_schema()
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        injections = [
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedStreamWriter)
+        ]
+        if len(injections) > 1:
+            raise ValueError(
+                "A tool argument should not be annotated with InjectedStreamWriter more than "
                 f"once. Received arg {name} with annotations {injections}."
             )
         elif len(injections) == 1:

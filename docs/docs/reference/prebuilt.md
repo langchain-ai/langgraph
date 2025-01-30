@@ -11,6 +11,7 @@
         - ToolNode
         - InjectedState
         - InjectedStore
+        - InjectedStreamWriter
         - tools_condition
 
 ::: langgraph.prebuilt.tool_validator
