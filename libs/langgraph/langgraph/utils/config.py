@@ -24,10 +24,12 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STORE,
+    CONFIG_KEY_STREAM_WRITER,
     NS_END,
     NS_SEP,
 )
 from langgraph.store.base import BaseStore
+from langgraph.types import StreamWriter
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -340,3 +342,8 @@ def get_config() -> RunnableConfig:
 def get_store() -> BaseStore:
     config = get_config()
     return config[CONF][CONFIG_KEY_STORE]
+
+
+def get_stream_writer() -> StreamWriter:
+    config = get_config()
+    return config[CONF][CONFIG_KEY_STREAM_WRITER]
