@@ -25,10 +25,145 @@ def get_config() -> RunnableConfig:
 
 
 def get_store() -> BaseStore:
+    """Access LangGraph store from inside a graph node or entrypoint task at runtime.
+
+    Can be called from inside any [StateGraph][langgraph.graph.StateGraph] node or
+    functional API [task][langgraph.func.task], as long as the StateGraph or the [entrypoint][langgraph.func.entrypoint]
+    was initialized with a store, e.g.:
+
+    ```python
+    # with StateGraph
+    graph = (
+        StateGraph(...)
+        ...
+        .compile(store=store)
+    )
+
+    # or with entrypoint
+    @entrypoint(store=store)
+    def workflow(inputs):
+        ...
+    ```
+
+    Example: Using with StateGraph
+        ```python
+        from typing_extensions import TypedDict
+        from langgraph.graph import StateGraph, START
+        from langgraph.store.memory import InMemoryStore
+        from langgraph.config import get_store
+
+        store = InMemoryStore()
+        store.put(("values",), "foo", {"bar": 2})
+
+        class State(TypedDict):
+            foo: int
+
+        def my_node(state: State):
+            my_store = get_store()
+            stored_value = my_store.get(("values",), "foo").value["bar"]
+            return {"foo": stored_value + 1}
+
+        graph = (
+            StateGraph(State)
+            .add_node(my_node)
+            .add_edge(START, "my_node")
+            .compile(store=store)
+        )
+
+        graph.invoke({"foo": 1})
+        ```
+
+        ```pycon
+        {'foo': 3}
+        ```
+
+    Example: Using with functional API
+        ```python
+        from langgraph.func import entrypoint, task
+        from langgraph.store.memory import InMemoryStore
+        from langgraph.config import get_store
+
+        store = InMemoryStore()
+        store.put(("values",), "foo", {"bar": 2})
+
+        @task
+        def my_task(value: int):
+            my_store = get_store()
+            stored_value = my_store.get(("values",), "foo").value["bar"]
+            return stored_value + 1
+
+        @entrypoint(store=store)
+        def workflow(value: int):
+            return my_task(value).result()
+
+        workflow.invoke(1)
+        ```
+
+        ```pycon
+        3
+        ```
+    """
     config = get_config()
     return config[CONF][CONFIG_KEY_STORE]
 
 
 def get_stream_writer() -> StreamWriter:
+    """Access LangGraph [StreamWriter][langgraph.types.StreamWriter] from inside a graph node or entrypoint task at runtime.
+
+    Can be called from inside any [StateGraph][langgraph.graph.StateGraph] node or
+    functional API [task][langgraph.func.task].
+
+    Example: Using with StateGraph
+        ```python
+        from typing_extensions import TypedDict
+        from langgraph.graph import StateGraph, START
+        from langgraph.config import get_stream_writer
+
+        class State(TypedDict):
+            foo: int
+
+        def my_node(state: State):
+            my_stream_writer = get_stream_writer()
+            my_stream_writer({"custom_data": "Hello!"})
+            return {"foo": state["foo"] + 1}
+
+        graph = (
+            StateGraph(State)
+            .add_node(my_node)
+            .add_edge(START, "my_node")
+            .compile(store=store)
+        )
+
+        for chunk in graph.stream({"foo": 1}, stream_mode="custom"):
+            print(chunk)
+        ```
+
+        ```pycon
+        {'custom_data': 'Hello!'}
+        ```
+
+    Example: Using with functional API
+        ```python
+        from langgraph.func import entrypoint, task
+        from langgraph.config import get_stream_writer
+
+        @task
+        def my_task(value: int):
+            my_stream_writer = get_stream_writer()
+            my_stream_writer({"custom_data": "Hello!"})
+            return value + 1
+
+        @entrypoint(store=store)
+        def workflow(value: int):
+            return my_task(value).result()
+
+        for chunk in workflow.stream(1, stream_mode="custom"):
+            print(chunk)
+        ```
+
+        ```pycon
+        {'custom_data': 'Hello!'}
+        ```
+    """
     config = get_config()
     return config[CONF][CONFIG_KEY_STREAM_WRITER]
