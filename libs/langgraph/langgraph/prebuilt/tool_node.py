@@ -135,6 +135,8 @@ class ToolNode(RunnableCallable):
     If multiple tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
 
+    Tool calls can also be passed directly as a list of `ToolCall` dicts.
+
     Args:
         tools: A sequence of tools that can be invoked by the ToolNode.
         name: The name of the ToolNode in the graph. Defaults to "tools".
@@ -168,8 +170,23 @@ class ToolNode(RunnableCallable):
         return {"messages": result}
     ```
 
+    Tool calls can also be passed directly to a ToolNode. This can be useful when using
+    the Send API, e.g., in a conditional edge:
+
+    ```python
+    def example_conditional_edge(state: dict) -> List[Send]:
+        tool_calls = state["messages"][-1].tool_calls
+        # If tools rely on state or store variables (whose values are not generated
+        # directly by a model), you can inject them into the tool calls.
+        tool_calls = [
+            tool_node.inject_tool_args(call, state, store)
+            for call in last_message.tool_calls
+        ]
+        return [Send("tools", [tool_call]) for tool_call in tool_calls]
+    ```
+
     Important:
-        - The state MUST contain a list of messages.
+        - The input state MUST contain either a list of messages or a list of tool calls.
         - The last message MUST be an `AIMessage`.
         - The `AIMessage` MUST have `tool_calls` populated.
     """
@@ -512,9 +529,9 @@ class ToolNode(RunnableCallable):
     ) -> ToolCall:
         """Injects the state and store into the tool call.
 
-        Tool arguments with types annotated as ``InjectedState`` and ``InjectedStore``
-        are ignored in tool schemas for generation purposes. This method injects them
-        into tool calls for tool invocation.
+        Tool arguments with types annotated as `InjectedState` and `InjectedStore` are
+        ignored in tool schemas for generation purposes. This method injects them into
+        tool calls for tool invocation.
 
         Args:
             tool_call (ToolCall): The tool call to inject state and store into.
