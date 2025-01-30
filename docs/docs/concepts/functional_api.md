@@ -5,11 +5,21 @@
 
 ## Overview
 
-The Functional API is an alternative to [Graph API (StateGraph)](low_level.md#stategraph) for development in LangGraph. 
+The **Functional API** allows you to add LangGraph's key features -- [persistence](./persistence.md), [memory](./memory.md), [human-in-the-loop](./human_in_the_loop.md), and [streaming](./streaming.md) — to your applications with minimal changes to your existing code.
 
-If modeling your application with explicit nodes and edges is not useful to you, the Functional API allows you to take advantage of LangGraph's key features for [persistence](persistence.md), [human-in-the-loop](human_in_the_loop.md) workflows, and [streaming](streaming.md) without explicitly specifying state, or control flow in terms of nodes and edges.
+It is designed to integrate these features into existing code that may use standard language primitives for branching and control flow, such as `if` statements, `for` loops, and function calls. Unlike many data orchestration frameworks that require restructuring code into an explicit pipeline or DAG, the Functional API allows you to incorporate these capabilities without enforcing a rigid execution model.  
 
-The **Functional API** and the **[Graph API](./low_level.md)** can be used together in the same application, allowing you to intermix the two paradigms if needed.
+The Functional API uses two key building blocks:  
+
+- **`@entrypoint`** – Marks a function as the starting point of a workflow, encapsulating logic and managing execution flow, including handling long-running tasks and interrupts.  
+- **`@task`** – Represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously within an entrypoint. Tasks return a future-like object that can be awaited or resolved synchronously.  
+
+This provides a minimal abstraction for building workflows with state management and streaming.
+
+!!! tip 
+
+    For users who prefer a more declarative approach, LangGraph's [Graph API](./low_level.md) allows you to define workflows using a Graph paradigm. Both APIs share the same underlying runtime, so you can use them together in the same application.
+    Please see the [Functional API vs. Graph API](#functional-api-vs-graph-api) section for a comparison of the two paradigms.
 
 ## Example
 
@@ -120,22 +130,6 @@ def workflow(topic: str) -> dict:
 
     The workflow has been completed and the review has been added to the essay.
 
-## Functional API vs. Graph API
-
-The **Functional API** and the [Graph APIs (StateGraph)](./low_level.md#stategraph) provide two different paradigms to create in LangGraph. Here are some key differences:
-
-- **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows. This will usually trim the amount of code you need to write.
-- **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
-- **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
-- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
-
-## Building Blocks
-
-The **Functional API** provides two primitives for building workflows:
-
-- **[Entrypoint](#entrypoint)**: An **entrypoint** is a decorator that designates a function as the starting point of a workflow. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](human_in_the_loop.md).
-- **[Task](#task)**: Represents a discrete unit of work, such as an API call or data processing step, that can be executed asynchronously from within an **entrypoint**. Invoking a **task** returns a future-like object, which can be awaited to obtain the result or resolved synchronously.
-
 ## Entrypoint
 
 The [`@entrypoint`][langgraph.func.entrypoint] decorator can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt).
@@ -146,7 +140,7 @@ An **entrypoint** is defined by decorating a function with the `@entrypoint` dec
 
 The function **must accept a single positional argument**, which serves as the workflow input. If you need to pass multiple pieces of data, use a dictionary as the input type for the first argument.
 
-Decorating a function with an `entrypoint` produces a Pregel instance which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
+Decorating a function with an `entrypoint` produces a [`Pregel`][langgraph.pregel.Pregel.stream] instance which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
 
 You will usually want to pass a **checkpointer** to the `@entrypoint` decorator to enable persistence and use features like **human-in-the-loop**.
 
@@ -223,7 +217,7 @@ When declaring an `entrypoint`, you can request access to additional parameters 
 
 ### Executing
 
-Using the [`@entrypoint`](#entrypoint) yields a Pregel object that can be executed using the `invoke`, `ainvoke`, `stream`, and `astream` methods.
+Using the [`@entrypoint`](#entrypoint) yields a [`Pregel`][langgraph.pregel.Pregel.stream] object that can be executed using the `invoke`, `ainvoke`, `stream`, and `astream` methods.
 
 === "Invoke"
 
@@ -534,6 +528,14 @@ While different runs of a workflow can produce different results, resuming a **s
 
 Idempotency ensures that running the same operation multiple times produces the same result. This helps prevent duplicate API calls and redundant processing if a step is rerun due to a failure. Always place API calls inside **tasks** functions for checkpointing, and design them to be idempotent in case of re-execution. Re-execution can occur if a **task** starts, but does not complete successfully. Then, if the workflow is resumed, the **task** will run again. Use idempotency keys or verify existing results to avoid duplication.
 
+## Functional API vs. Graph API
+
+The **Functional API** and the [Graph APIs (StateGraph)](./low_level.md#stategraph) provide two different paradigms to create applications with LangGraph. Here are some key differences:
+
+- **Control flow**: The Functional API does not require thinking about graph structure. You can use standard Python constructs to define workflows. This will usually trim the amount of code you need to write.
+- **State management**: The **GraphAPI** requires declaring a [**State**](./low_level.md#state) and may require defining [**reducers**](./low_level.md#reducers) to manage updates to the graph state. `@entrypoint` and `@tasks` do not require explicit state management as their state is scoped to the function and is not shared across functions.
+- **Checkpointing**: Both APIs generate and use checkpoints. In the **Graph API** a new checkpoint is generated after every [superstep](./low_level.md). In the **Functional API**, when tasks are executed, their results are saved to an existing checkpoint associated with the given entrypoint instead of creating a new checkpoint.
+- **Visualization**: The Graph API makes it easy to visualize the workflow as a graph which can be useful for debugging, understanding the workflow, and sharing with others. The Functional API does not support visualization as the graph is dynamically generated during runtime.
 
 ## Common Pitfalls
 
