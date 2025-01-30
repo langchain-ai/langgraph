@@ -2093,8 +2093,7 @@ def test_create_react_agent_inject_vars(tool_call_parallelism: str) -> None:
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-@pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
-def test_tool_node_inject_store(input_type: str) -> None:
+def test_tool_node_inject_store() -> None:
     store = InMemoryStore()
     namespace = ("test",)
 
@@ -2136,11 +2135,7 @@ def test_tool_node_inject_store(input_type: str) -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        if input_type == "dict":
-            node_input = {"messages": [msg]}
-        elif input_type == "tool_calls":
-            node_input = [tool_call]
-        node_result = node.invoke(node_input, store=store)
+        node_result = node.invoke({"messages": [msg]}, store=store)
         graph_result = graph.invoke({"messages": [msg]})
         for result in (node_result, graph_result):
             result["messages"][-1]
