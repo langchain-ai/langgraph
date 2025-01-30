@@ -2222,7 +2222,8 @@ def test_tool_node_messages_key() -> None:
     ]
 
 
-async def test_return_direct() -> None:
+@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
+async def test_return_direct(tool_call_parallelism: str) -> None:
     @dec_tool(return_direct=True)
     def tool_return_direct(input: str) -> str:
         """A tool that returns directly."""
@@ -2246,7 +2247,11 @@ async def test_return_direct() -> None:
         tool_calls=first_tool_call,
     )
     model = FakeToolCallingModel(tool_calls=[first_tool_call, []])
-    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    agent = create_react_agent(
+        model,
+        [tool_return_direct, tool_normal],
+        tool_call_parallelism=tool_call_parallelism,
+    )
 
     # Test direct return for tool_return_direct
     result = agent.invoke(
