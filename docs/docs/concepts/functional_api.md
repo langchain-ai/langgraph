@@ -18,7 +18,7 @@ This provides a minimal abstraction for building workflows with state management
 
 !!! tip 
 
-    For users who prefer a more declarative approach, LangGraph's [Graph API](./low_level.md) allows you to define workflows using a Graph DSL. Both APIs share the same underlying runtime, so you can use them together in the same application.
+    For users who prefer a more declarative approach, LangGraph's [Graph API](./low_level.md) allows you to define workflows using a Graph paradigm. Both APIs share the same underlying runtime, so you can use them together in the same application.
     Please see the [Functional API vs. Graph API](#functional-api-vs-graph-api) section for a comparison of the two paradigms.
 
 ## Example
