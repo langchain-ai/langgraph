@@ -1490,11 +1490,15 @@ class Pregel(PregelProtocol):
             input: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to self.stream_mode.
-                Options are 'values', 'updates', and 'debug'.
-                values: Emit the current values of the state for each step.
-                updates: Emit only the updates to the state for each step.
-                    Output is a dict with the node name as key and the updated values as value.
-                debug: Emit debug events for each step.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+                - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -1509,8 +1513,7 @@ class Pregel(PregelProtocol):
             ```pycon
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
-            >>> from langgraph.graph import StateGraph
-            >>> from langgraph.constants import START
+            >>> from langgraph.graph import StateGraph, START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1549,6 +1552,57 @@ class Pregel(PregelProtocol):
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
             {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+
+            With stream_mode="custom":
+
+            ```pycon
+            >>> from langgraph.types import StreamWriter
+            ...
+            >>> def node_a(state: State, writer: StreamWriter):
+            ...     writer({"custom_data": "foo"})
+            ...     return {"alist": ["hi"]}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ...
+            >>> for event in graph.stream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
+            ...     print(event)
+            {'custom_data': 'foo'}
+            ```
+
+            With stream_mode="messages":
+
+            ```pycon
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph, START
+            >>> from langchain_openai import ChatOpenAI
+            ...
+            >>> llm = ChatOpenAI(model="gpt-4o-mini")
+            ...
+            >>> class State(TypedDict):
+            ...     question: str
+            ...     answer: str
+            ...
+            >>> def node_a(state: State):
+            ...     response = llm.invoke(state["question"])
+            ...     return {"answer": response.content}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+
+            >>> for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
+            ...     print(event)
+            (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
+            (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
+            (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
             ```
         """
 
@@ -1712,11 +1766,15 @@ class Pregel(PregelProtocol):
             input: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to self.stream_mode.
-                Options are 'values', 'updates', and 'debug'.
-                values: Emit the current values of the state for each step.
-                updates: Emit only the updates to the state for each step.
-                    Output is a dict with the node name as key and the updated values as value.
-                debug: Emit debug events for each step.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+                - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -1731,8 +1789,7 @@ class Pregel(PregelProtocol):
             ```pycon
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
-            >>> from langgraph.graph import StateGraph
-            >>> from langgraph.constants import START
+            >>> from langgraph.graph import StateGraph, START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1771,6 +1828,57 @@ class Pregel(PregelProtocol):
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
             {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+
+            With stream_mode="custom":
+
+            ```pycon
+            >>> from langgraph.types import StreamWriter
+            ...
+            >>> async def node_a(state: State, writer: StreamWriter):
+            ...     writer({"custom_data": "foo"})
+            ...     return {"alist": ["hi"]}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ...
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
+            ...     print(event)
+            {'custom_data': 'foo'}
+            ```
+
+            With stream_mode="messages":
+
+            ```pycon
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph, START
+            >>> from langchain_openai import ChatOpenAI
+            ...
+            >>> llm = ChatOpenAI(model="gpt-4o-mini")
+            ...
+            >>> class State(TypedDict):
+            ...     question: str
+            ...     answer: str
+            ...
+            >>> async def node_a(state: State):
+            ...     response = await llm.ainvoke(state["question"])
+            ...     return {"answer": response.content}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+
+            >>> for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
+            ...     print(event)
+            (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
+            (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
+            (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
             ```
         """
 

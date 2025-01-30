@@ -29,6 +29,7 @@ from typing import (
 
 import httpx
 import pytest
+from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -80,6 +81,7 @@ from tests.conftest import (
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
 from tests.messages import (
     _AnyIdAIMessage,
+    _AnyIdAIMessageChunk,
     _AnyIdHumanMessage,
     _AnyIdToolMessage,
 )
@@ -6220,6 +6222,25 @@ def test_entrypoint_with_return_and_save() -> None:
     assert previous_ == ["hello", "goodbye"]
 
 
+def test_overriding_injectable_args_with_tasks() -> None:
+    """Test overriding injectable args in tasks."""
+    from langgraph.store.memory import InMemoryStore
+
+    @task
+    def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
+        assert store is value
+        assert writer is value
+
+    @entrypoint(store=InMemoryStore())
+    def main(inputs, store: BaseStore) -> str:
+        assert store is not None
+        foo(store=None, writer=None, value=None).result()
+        foo(store="hello", writer="hello", value="hello").result()
+        return "OK"
+
+    assert main.invoke({}) == "OK"
+
+
 def test_named_tasks_functional() -> None:
     class Foo:
         def foo(self, value: str) -> dict:
@@ -6268,4 +6289,39 @@ def test_named_tasks_functional() -> None:
         {"custom_baz": "foo|bar|baz|custom_baz"},
         {"qux": "foo|bar|baz|custom_baz|qux"},
         {"workflow": "foo|bar|baz|custom_baz|qux"},
+    ]
+
+
+def test_tags_stream_mode_messages() -> None:
+    model = GenericFakeChatModel(messages=iter(["foo"]), tags=["meow"])
+    graph = (
+        StateGraph(MessagesState)
+        .add_node(
+            "call_model", lambda state: {"messages": model.invoke(state["messages"])}
+        )
+        .add_edge(START, "call_model")
+        .compile()
+    )
+    assert list(
+        graph.stream(
+            {
+                "messages": "hi",
+            },
+            stream_mode="messages",
+        )
+    ) == [
+        (
+            _AnyIdAIMessageChunk(content="foo"),
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_model",
+                "langgraph_triggers": ["start:call_model"],
+                "langgraph_path": ("__pregel_pull", "call_model"),
+                "langgraph_checkpoint_ns": AnyStr("call_model:"),
+                "checkpoint_ns": AnyStr("call_model:"),
+                "ls_provider": "genericfakechatmodel",
+                "ls_model_type": "chat",
+                "tags": ["meow"],
+            },
+        )
     ]

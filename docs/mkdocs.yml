@@ -382,6 +382,7 @@ nav:
       - Errors: reference/errors.md
       - Types: reference/types.md
       - Constants: reference/constants.md
+      - Pregel: reference/pregel.md
       - Functional API: reference/func.md
     - LangGraph Platform:
       - Server API: "cloud/reference/api/api_ref.md"

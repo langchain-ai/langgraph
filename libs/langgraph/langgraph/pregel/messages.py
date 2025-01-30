@@ -76,11 +76,15 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         chunk: Optional[ChatGenerationChunk] = None,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
+        tags: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> Any:
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
+            filtered_tags = [t for t in (tags or []) if not t.startswith("seq:step")]
+            if filtered_tags:
+                meta[1]["tags"] = filtered_tags
             self._emit(meta, chunk.message)
 
     def on_llm_end(
