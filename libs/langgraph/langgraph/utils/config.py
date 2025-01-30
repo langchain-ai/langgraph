@@ -1,5 +1,3 @@
-import asyncio
-import sys
 from collections import ChainMap
 from typing import Any, Optional, Sequence, cast
 
@@ -18,18 +16,15 @@ from langchain_core.runnables.config import (
 )
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.config import get_config, get_store, get_stream_writer  # noqa
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
-    CONFIG_KEY_STORE,
-    CONFIG_KEY_STREAM_WRITER,
     NS_END,
     NS_SEP,
 )
-from langgraph.store.base import BaseStore
-from langgraph.types import StreamWriter
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -322,28 +317,3 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
         ):
             empty["metadata"][key] = value
     return empty
-
-
-def get_config() -> RunnableConfig:
-    if sys.version_info < (3, 11):
-        try:
-            if asyncio.current_task():
-                raise RuntimeError(
-                    "Python 3.11 or later required to use this in an async context"
-                )
-        except RuntimeError:
-            pass
-    if var_config := var_child_runnable_config.get():
-        return var_config
-    else:
-        raise RuntimeError("Called get_config outside of a runnable context")
-
-
-def get_store() -> BaseStore:
-    config = get_config()
-    return config[CONF][CONFIG_KEY_STORE]
-
-
-def get_stream_writer() -> StreamWriter:
-    config = get_config()
-    return config[CONF][CONFIG_KEY_STREAM_WRITER]
