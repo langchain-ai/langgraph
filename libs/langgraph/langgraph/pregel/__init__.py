@@ -97,7 +97,7 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
-from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_versions
+from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -429,7 +429,7 @@ class Pregel(PregelProtocol):
 
     def get_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, Pregel]]:
+    ) -> Iterator[tuple[str, PregelProtocol]]:
         for name, node in self.nodes.items():
             # filter by prefix
             if namespace is not None:
@@ -437,7 +437,7 @@ class Pregel(PregelProtocol):
                     continue
 
             # find the subgraph, if any
-            graph = cast(Optional[Pregel], find_subgraph_pregel(node.bound))
+            graph = node.subgraphs[0] if node.subgraphs else None
 
             # if found, yield recursively
             if graph:
@@ -446,7 +446,7 @@ class Pregel(PregelProtocol):
                     return  # we found it, stop searching
                 if namespace is None:
                     yield name, graph
-                if recurse:
+                if recurse and isinstance(graph, Pregel):
                     if namespace is not None:
                         namespace = namespace[len(name) + 1 :]
                     yield from (
@@ -458,7 +458,7 @@ class Pregel(PregelProtocol):
 
     async def aget_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, Pregel]]:
+    ) -> AsyncIterator[tuple[str, PregelProtocol]]:
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 

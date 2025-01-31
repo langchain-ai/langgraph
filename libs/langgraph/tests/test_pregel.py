@@ -6256,6 +6256,8 @@ def test_merging_updates_command_parent():
         ),
         ((), {"node_3": {"bar": ["node_3"]}}),
     ]
+
+
 def test_entrypoint_output_schema_with_return_and_save() -> None:
     """Test output schema inference with entrypoint.final."""
 
