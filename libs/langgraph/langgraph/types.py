@@ -25,6 +25,7 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 if TYPE_CHECKING:
+    from langgraph.pregel.protocol import PregelProtocol
     from langgraph.store.base import BaseStore
 
 
@@ -155,6 +156,7 @@ class PregelExecutableTask(NamedTuple):
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
     writers: Sequence[Runnable] = ()
+    subgraphs: Sequence["PregelProtocol"] = ()
 
 
 class StateSnapshot(NamedTuple):
