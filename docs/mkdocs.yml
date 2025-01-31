@@ -187,7 +187,6 @@ nav:
               - how-tos/async.ipynb
               - how-tos/react-agent-structured-output.ipynb
               - how-tos/run-id-langsmith.ipynb
-              - how-tos/return-when-recursion-limit-hits.ipynb
               - how-tos/autogen-integration.ipynb
               - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
