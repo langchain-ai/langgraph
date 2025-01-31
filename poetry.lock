@@ -3036,7 +3036,7 @@ langchain-core = ">=0.3.29,<0.4.0"
 
 [[package]]
 name = "langgraph"
-version = "0.2.62"
+version = "0.2.69"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -3045,7 +3045,7 @@ develop = true
 
 [package.dependencies]
 langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14,!=0.3.15,!=0.3.16,!=0.3.17,!=0.3.18,!=0.3.19,!=0.3.20,!=0.3.21,!=0.3.22"
-langgraph-checkpoint = "^2.0.4"
+langgraph-checkpoint = "^2.0.10"
 langgraph-sdk = "^0.1.42"
 
 [package.source]
@@ -3054,7 +3054,7 @@ url = "libs/langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.9"
+version = "2.0.10"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3088,7 +3088,7 @@ pymongo = ">=4.9.0,<4.10.0"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.10"
+version = "2.0.13"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3096,7 +3096,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langgraph-checkpoint = "^2.0.7"
+langgraph-checkpoint = "^2.0.10"
 orjson = ">=3.10.1"
 psycopg = "^3.2.0"
 psycopg-pool = "^3.2.0"
@@ -3107,7 +3107,7 @@ url = "libs/checkpoint-postgres"
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.1"
+version = "2.0.3"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0"
@@ -3116,7 +3116,7 @@ develop = true
 
 [package.dependencies]
 aiosqlite = "^0.20.0"
-langgraph-checkpoint = "^2.0.2"
+langgraph-checkpoint = "^2.0.10"
 
 [package.source]
 type = "directory"
@@ -3599,25 +3599,6 @@ csscompressor = ">=0.9.5"
 htmlmin2 = ">=0.1.13"
 jsmin = ">=3.0.1"
 mkdocs = ">=1.4.1"
-
-[[package]]
-name = "mkdocs-redirects"
-version = "1.2.1"
-description = "A MkDocs plugin for dynamic page redirects to prevent broken links."
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "mkdocs-redirects-1.2.1.tar.gz", hash = "sha256:9420066d70e2a6bb357adf86e67023dcdca1857f97f07c7fe450f8f1fb42f861"},
-    {file = "mkdocs_redirects-1.2.1-py3-none-any.whl", hash = "sha256:497089f9e0219e7389304cffefccdfa1cac5ff9509f2cb706f4c9b221726dffb"},
-]
-
-[package.dependencies]
-mkdocs = ">=1.1.1"
-
-[package.extras]
-dev = ["autoflake", "black", "isort", "pytest", "twine (>=1.13.0)"]
-release = ["twine (>=1.13.0)"]
-test = ["autoflake", "black", "isort", "pytest"]
 
 [[package]]
 name = "mkdocs-rss-plugin"
@@ -7506,4 +7487,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "17042b8ecd2c023fd9151609e5770ed5baac9c2b805dc4bc833525c5d400f944"
+content-hash = "5df4a9a753999458fc4154797633a64ae4c6da9986cb2ed6b03ea86d23684a7f"

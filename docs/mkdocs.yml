@@ -56,22 +56,6 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
-  - redirects:
-      redirect_maps:
-        # lib redirects
-        'how-tos/stream-values.md': 'how-tos/streaming.md#values'
-        'how-tos/stream-updates.md': 'how-tos/streaming.md#updates'
-        'how-tos/streaming-content.md': 'how-tos/streaming.md#custom'
-        'how-tos/stream-multiple.md': 'how-tos/streaming.md#multiple'
-        'how-tos/streaming-tokens-without-langchain.md': 'how-tos/streaming-tokens.md#example-without-langchain'
-        'how-tos/streaming-from-final-node.md': 'how-tos/streaming-specific-nodes.md'
-        'how-tos/streaming-events-from-within-tools-without-langchain.md': 'how-tos/streaming-events-from-within-tools.md#example-without-langchain'
-        # cloud redirects
-        'cloud/index.md': 'concepts/index.md#langgraph-platform'
-        'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
-        'cloud/concepts/api.md': 'concepts/langgraph_server.md'
-        'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
-        'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
       handlers:
         python:

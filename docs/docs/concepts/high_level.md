@@ -19,7 +19,7 @@ LangGraph has a [persistence layer](https://langchain-ai.github.io/langgraph/con
 
 ### Streaming
 
-LangGraph also provides support for [streaming](../how-tos/index.md#streaming) workflow / agent state to the user (or developer) over the course of execution. LangGraph supports streaming of both events ([such as feedback from a tool call](../how-tos/streaming.md#updates)) and [tokens from LLM calls](../how-tos/streaming-tokens.md) embedded in an application.
+LangGraph also provides support for [streaming](../how-tos/index.md#streaming) workflow / agent state to the user (or developer) over the course of execution. LangGraph supports streaming of both events ([such as feedback from a tool call](../how-tos/streaming.ipynb#updates)) and [tokens from LLM calls](../how-tos/streaming-tokens.ipynb) embedded in an application.
 
 ### Debugging and Deployment
 
