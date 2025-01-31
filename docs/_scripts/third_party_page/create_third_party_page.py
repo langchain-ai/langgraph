@@ -4,9 +4,9 @@ import argparse
 from typing import List
 from typing import TypedDict
 
-import yml
+import yaml
 
-MARKDOWN = """
+MARKDOWN = """\
 # 🚀 Third-party Libraries 
 
 A collection of third-party libraries that extend LangGraph's functionality.
@@ -77,7 +77,7 @@ def main(input_file: str, output_file: str, language: str) -> None:
     """
     # Parse the input YAML file
     with open(input_file, "r") as f:
-        resolved_packages: List[ResolvedPackage] = yml.safe_load(f)
+        resolved_packages: List[ResolvedPackage] = yaml.safe_load(f)
 
     markdown_content = generate_markdown(resolved_packages, language)
 
@@ -96,9 +96,10 @@ if __name__ == "__main__":
         "output_file", help="Path to the output file for the third party page."
     )
     parser.add_argument(
-        "language",
+        "--language",
         choices=["python", "js"],
-        help="The language for which to generate the third party page.",
+        default="python",
+        help="The language for which to generate the third party page. Defaults to 'python'.",
     )
     args = parser.parse_args()
 
