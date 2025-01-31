@@ -51,7 +51,7 @@ For more information, please see:
 
     The LangGraph Platform Deployments view (within LangSmith SaaS and self-hosted LangSmith) is not available for Self-Hosted Lite LangGraph deployments. Self-hosted LangGraph deployments are managed externally from LangSmith (e.g. there is no UI to manage these deployments).
 
-The Self-Hosted Lite deployment option is a free (up to 1 million nodes executed), limited version of LangGraph Platform that you can run locally or in a self-hosted manner.
+The Self-Hosted Lite deployment option is a free (up to 1 million nodes executed per annum), limited version of LangGraph Platform that you can run locally or in a self-hosted manner.
 
 With a Self-Hosted Lite deployment, you are responsible for managing the infrastructure, including setting up and maintaining required databases and Redis instances.
 
