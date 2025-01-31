@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Create the third party page for the documentation."""
 
 import argparse
@@ -29,6 +30,9 @@ class ResolvedPackage(TypedDict):
     repo: str
     """Repository ID within github. Format is: [orgname]/[repo_name]."""
     weekly_downloads: int | None
+    """The weekly download count of the package."""
+    description: str
+    """A brief description of what the package does."""
 
 
 def generate_markdown(resolved_packages: List[ResolvedPackage], language: str) -> str:
@@ -49,21 +53,22 @@ def generate_markdown(resolved_packages: List[ResolvedPackage], language: str) -
     else:
         raise ValueError(f"Invalid language '{language}'. Expected 'python' or 'js'.")
 
-
     sorted_packages = sorted(
         resolved_packages, key=lambda p: p["weekly_downloads"] or 0, reverse=True
     )
     rows = [
-        "| Name | GitHub URL | Downloads |",
-        "| --- | --- | --- |",
+        "| Name | GitHub URL | Description | Downloads |",
+        "| --- | --- | --- | --- |",
     ]
     for package in sorted_packages:
         name = f"**{package['name']}**"
         repo_url = f"[{package['repo']}](https://github.com/{package['repo']})"
         downloads = package["weekly_downloads"] or 0
-        row = f"| {name} | {repo_url} | {downloads} |"
+        row = f"| {name} | {repo_url} | {package['description']} | {downloads} |"
         rows.append(row)
-    markdown_content = MARKDOWN.format(library_list="\n".join(rows), langgraph_url=langgraph_url)
+    markdown_content = MARKDOWN.format(
+        library_list="\n".join(rows), langgraph_url=langgraph_url
+    )
     return markdown_content
 
 

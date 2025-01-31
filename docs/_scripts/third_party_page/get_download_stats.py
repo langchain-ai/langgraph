@@ -1,18 +1,13 @@
+#!/usr/bin/env python
 """Retrieve download count for a list of Python packages from PyPI."""
 
 import argparse
 from datetime import datetime
 from typing import TypedDict
+import pathlib
 
 import requests
 import yaml
-
-PACKAGES = [
-    {
-        "name": "trustcall",
-        "repo": "hinthornw/trustcall",
-    },
-]
 
 
 class Package(TypedDict):
@@ -22,10 +17,17 @@ class Package(TypedDict):
     """The name of the package."""
     repo: str
     """Repository ID within github. Format is: [orgname]/[repo_name]."""
+    description: str
+    """A brief description of what the package does."""
 
 
 class ResolvedPackage(Package):
     weekly_downloads: int | None
+
+
+HERE = pathlib.Path(__file__).parent
+PACKAGES_FILE = HERE / "packages.yml"
+PACKAGES = yaml.safe_load(PACKAGES_FILE.read_text())['packages']
 
 
 def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
@@ -53,10 +55,12 @@ def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
                 "name": package["name"],
                 "repo": package["repo"],
                 "weekly_downloads": num_downloads,
+                "description": package["description"],
             }
         )
 
     return resolved_packages
+
 
 
 def main(output_file: str) -> None:
