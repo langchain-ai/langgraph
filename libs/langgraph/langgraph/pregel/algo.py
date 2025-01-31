@@ -630,6 +630,7 @@ def prepare_single_task(
                     task_id,
                     task_path[:3],
                     writers=proc.flat_writers,
+                    subgraphs=proc.subgraphs,
                 )
         else:
             return PregelTask(task_id, packet.node, task_path[:3])
@@ -754,6 +755,7 @@ def prepare_single_task(
                         task_id,
                         task_path[:3],
                         writers=proc.flat_writers,
+                        subgraphs=proc.subgraphs,
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
