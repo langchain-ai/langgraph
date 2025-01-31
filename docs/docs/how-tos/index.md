@@ -89,15 +89,10 @@ See the below guides for how-to implement human-in-the-loop workflows with the (
 
 [Streaming](../concepts/streaming.md) is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
 
-- [How to stream full state of your graph](stream-values.ipynb)
-- [How to stream state updates of your graph](stream-updates.ipynb)
+- [How to stream](streaming.ipynb)
 - [How to stream LLM tokens](streaming-tokens.ipynb)
-- [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)
-- [How to stream custom data](streaming-content.ipynb)
-- [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
-- [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
-- [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
-- [How to stream events from the final node](streaming-from-final-node.ipynb)
+- [How to stream LLM tokens from specific nodes](streaming-specific-nodes.ipynb)
+- [How to stream data from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream from subgraphs](streaming-subgraphs.ipynb)
 - [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 

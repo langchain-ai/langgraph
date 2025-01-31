@@ -56,13 +56,6 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
-  - redirects:
-      redirect_maps:
-        'cloud/index.md': 'concepts/index.md#langgraph-platform'
-        'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
-        'cloud/concepts/api.md': 'concepts/langgraph_server.md'
-        'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
-        'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
       handlers:
         python:
@@ -146,15 +139,10 @@ nav:
               - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
-              - how-tos/stream-values.ipynb
-              - how-tos/stream-updates.ipynb
+              - how-tos/streaming.ipynb
               - how-tos/streaming-tokens.ipynb
-              - how-tos/streaming-tokens-without-langchain.ipynb
-              - how-tos/streaming-content.ipynb
-              - how-tos/stream-multiple.ipynb
+              - how-tos/streaming-specific-nodes.ipynb
               - how-tos/streaming-events-from-within-tools.ipynb
-              - how-tos/streaming-events-from-within-tools-without-langchain.ipynb
-              - how-tos/streaming-from-final-node.ipynb
               - how-tos/streaming-subgraphs.ipynb
               - how-tos/disable-streaming.ipynb
           - Tool calling:
