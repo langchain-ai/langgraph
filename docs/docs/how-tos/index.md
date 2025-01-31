@@ -81,7 +81,7 @@ See the below guides for how-to implement human-in-the-loop workflows with the (
 
 [Streaming](../concepts/streaming.md) is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
 
-- [How to stream graph outputs](streaming.ipynb)
+- [How to stream](streaming.ipynb)
 - [How to stream LLM tokens](streaming-tokens.ipynb)
 - [How to stream LLM tokens from specific nodes](streaming-specific-nodes.ipynb)
 - [How to stream data from within a tool](streaming-events-from-within-tools.ipynb)
