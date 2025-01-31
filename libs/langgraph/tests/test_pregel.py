@@ -6290,6 +6290,7 @@ def test_named_tasks_functional() -> None:
     ]
 
 
+# OK: current behavior is expected currently always create a new checkpoint
 def test_update_preserve_pending_writes():
     """Test that pending writes are preserved after a state update."""
 
@@ -6322,9 +6323,9 @@ def test_update_preserve_pending_writes():
     assert len(pending_writes) == 1
 
 
+# OK: current behavior is expected -- to make it work need to specify an explicit
+# reducer that has "last one to win" semantics
 def test_update_twice_with_interrupt() -> None:
-    """Test that pending writes are preserved after a state update."""
-
     class State(TypedDict):
         foo: str
 
