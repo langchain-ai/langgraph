@@ -9,16 +9,24 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 
 ## LangGraph
 
-### Controllability
+### Graph API Basics
 
-LangGraph offers a high level of control over the execution of your graph.
-
-These how-to guides show how to achieve that controllability.
-
+- [How to update graph state from nodes](state-reducers.ipynb)
+- [How to create a sequence of steps](sequence.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)
+- [How to create and control loops with recursion limits](recursion-limit.ipynb)
+- [How to visualize your graph](visualization.ipynb)
+
+### Fine-grained Control
+
+These guides demonstrate LangGraph features that grant fine-grained control over the
+execution of your graph.
+
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
-- [How to control graph recursion limit](recursion-limit.ipynb)
-- [How to combine control flow and state updates with Command](command.ipynb)
+- [How to update state and jump to nodes in graphs and subgraphs](command.ipynb)
+- [How to add runtime configuration to your graph](configuration.ipynb)
+- [How to add node retries](node-retries.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ### Persistence
 
@@ -142,12 +150,8 @@ See the below guides for how to implement multi-agent workflows with the (beta)
 ### Other
 
 - [How to run graph asynchronously](async.ipynb)
-- [How to visualize your graph](visualization.ipynb)
-- [How to add runtime configuration to your graph](configuration.ipynb)
-- [How to add node retries](node-retries.ipynb)
 - [How to force tool-calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
-- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 - [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
 
 See the below guide for how to integrate with other frameworks using the (beta)

@@ -104,12 +104,20 @@ nav:
         - how-tos/index.md
         - LangGraph:
           - LangGraph: how-tos#langgraph
+          - Graph API Basics:
+              - Graph API Basics: how-tos#graph-api-basics
+              - how-tos/state-reducers.ipynb
+              - how-tos/sequence.ipynb
+              - how-tos/branching.ipynb
+              - how-tos/recursion-limit.ipynb
+              - how-tos/visualization.ipynb
           - Controllability:
               - Controllability: how-tos#controllability
-              - how-tos/branching.ipynb
               - how-tos/map-reduce.ipynb
-              - how-tos/recursion-limit.ipynb
               - how-tos/command.ipynb
+              - how-tos/configuration.ipynb
+              - how-tos/node-retries.ipynb
+              - how-tos/return-when-recursion-limit-hits.ipynb
           - Persistence:
               - Persistence: how-tos#persistence
               - how-tos/persistence.ipynb
@@ -177,12 +185,8 @@ nav:
           - Other:
               - Other: how-tos#other
               - how-tos/async.ipynb
-              - how-tos/visualization.ipynb
-              - how-tos/configuration.ipynb
-              - how-tos/node-retries.ipynb
               - how-tos/react-agent-structured-output.ipynb
               - how-tos/run-id-langsmith.ipynb
-              - how-tos/return-when-recursion-limit-hits.ipynb
               - how-tos/autogen-integration.ipynb
               - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
