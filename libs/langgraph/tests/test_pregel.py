@@ -6320,3 +6320,33 @@ def test_update_preserve_pending_writes():
     graph.update_state(config, {"foo": "goodbye"})
     pending_writes = graph.checkpointer.get_tuple(config).pending_writes
     assert len(pending_writes) == 1
+
+
+def test_update_twice_with_interrupt() -> None:
+    """Test that pending writes are preserved after a state update."""
+
+    class State(TypedDict):
+        foo: str
+
+    def node(state: State):
+        value1 = interrupt("1")
+        value2 = interrupt("2")
+        return {
+            "foo": value1 + "|" + value2 + "|" + state["foo"],
+        }
+
+    workflow = StateGraph(State)
+    workflow.add_node("node", node)
+    workflow.set_entry_point("node")
+
+    checkpointer = MemorySaver()
+    graph = workflow.compile(
+        checkpointer=checkpointer,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"foo": "hello"}, config)
+    graph.invoke(Command(resume="123", update={"foo": "abc"}), config)
+    assert graph.invoke(Command(resume="456", update={"foo": "def"}), config) == {
+        "foo": "123|456|def"
+    }
