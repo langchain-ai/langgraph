@@ -22,6 +22,8 @@ class EscapePreprocessor(Preprocessor):
             )
 
         elif cell.cell_type == "code":
+            # Remove noqa comments
+            cell.source = re.sub(r'#\s*noqa.*$', '', cell.source, flags=re.MULTILINE)
             # escape ``` in code
             cell.source = cell.source.replace("```", r"\`\`\`")
             # escape ``` in output

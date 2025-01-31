@@ -58,6 +58,15 @@ plugins:
   - autorefs
   - redirects:
       redirect_maps:
+        # lib redirects
+        'how-tos/stream-values.md': 'how-tos/streaming.md#values'
+        'how-tos/stream-updates.md': 'how-tos/streaming.md#updates'
+        'how-tos/streaming-content.md': 'how-tos/streaming.md#custom'
+        'how-tos/stream-multiple.md': 'how-tos/streaming.md#multiple'
+        'how-tos/streaming-tokens-without-langchain.md': 'how-tos/streaming-tokens.md#example-without-langchain'
+        'how-tos/streaming-from-final-node.md': 'how-tos/streaming-specific-nodes.md'
+        'how-tos/streaming-events-from-within-tools-without-langchain.md': 'how-tos/streaming-events-from-within-tools.md#example-without-langchain'
+        # cloud redirects
         'cloud/index.md': 'concepts/index.md#langgraph-platform'
         'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
         'cloud/concepts/api.md': 'concepts/langgraph_server.md'
@@ -138,15 +147,10 @@ nav:
               - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
-              - how-tos/stream-values.ipynb
-              - how-tos/stream-updates.ipynb
+              - how-tos/streaming.ipynb
               - how-tos/streaming-tokens.ipynb
-              - how-tos/streaming-tokens-without-langchain.ipynb
-              - how-tos/streaming-content.ipynb
-              - how-tos/stream-multiple.ipynb
+              - how-tos/streaming-specific-nodes.ipynb
               - how-tos/streaming-events-from-within-tools.ipynb
-              - how-tos/streaming-events-from-within-tools-without-langchain.ipynb
-              - how-tos/streaming-from-final-node.ipynb
               - how-tos/streaming-subgraphs.ipynb
               - how-tos/disable-streaming.ipynb
           - Tool calling:
