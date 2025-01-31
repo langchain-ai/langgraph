@@ -183,6 +183,7 @@ nav:
               - how-tos/react-agent-structured-output.ipynb
               - how-tos/run-id-langsmith.ipynb
               - how-tos/return-when-recursion-limit-hits.ipynb
+              - how-tos/autogen-integration.ipynb
           - Prebuilt ReAct Agent:
               - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
               - how-tos/create-react-agent.ipynb
@@ -203,6 +204,7 @@ nav:
                 - cloud/deployment/custom_docker.md
                 - cloud/deployment/test_locally.md
                 - cloud/deployment/graph_rebuild.md
+                - how-tos/autogen-langgraph-platform.ipynb
             - Deployment:
                 - Deployment: how-tos#deployment
                 - cloud/deployment/cloud.md
