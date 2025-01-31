@@ -31,7 +31,7 @@ from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, Send
 from langgraph.utils.runnable import RunnableCallable
 
 StructuredResponse = Union[dict, BaseModel]
@@ -248,6 +248,9 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    tool_call_parallelism: Literal[
+        "single_tool_node", "parallel_tool_nodes"
+    ] = "single_tool_node",
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -297,6 +300,15 @@ def create_react_agent(
             Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        tool_call_parallelism: Determines what state is sent to the tool node.
+            Can be one of:
+
+            - `"single_tool_node"`: The tool node processes a single message. All tool
+                calls in the message are executed in parallel within the tool node.
+            - `"parallel_tool_nodes"`: The tool node processes a tool call.
+                Tool calls are distributed across multiple instances of the tool
+                node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
+                API.
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
@@ -572,6 +584,11 @@ def create_react_agent(
         TimeoutError: Timed out at step 2
         ```
     """
+    if tool_call_parallelism not in ("single_tool_node", "parallel_tool_nodes"):
+        raise ValueError(
+            f"Invalid version {tool_call_parallelism}. Supported versions are "
+            "'single_tool_node' and 'parallel_tool_nodes'."
+        )
 
     if state_schema is not None:
         required_keys = {"messages", "remaining_steps"}
@@ -747,7 +764,7 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> str:
+    def should_continue(state: AgentState) -> Union[str, list]:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -755,7 +772,14 @@ def create_react_agent(
             return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
-            return "tools"
+            if tool_call_parallelism == "single_tool_node":
+                return "tools"
+            elif tool_call_parallelism == "parallel_tool_nodes":
+                tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
+                ]
+                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState)
