@@ -186,9 +186,12 @@ class ToolNode(RunnableCallable):
     ```
 
     Important:
-        - The input state MUST contain either a list of messages or a list of tool calls.
-        - The last message MUST be an `AIMessage`.
-        - The `AIMessage` MUST have `tool_calls` populated.
+        - The input state can be one of the following:
+            - A dict with a messages key containing a list of messages.
+            - A list of messages.
+            - A list of tool calls.
+        - If operating on a message list, the last message must be an `AIMessage` with
+            `tool_calls` populated.
     """
 
     name: str = "ToolNode"
