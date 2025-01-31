@@ -1147,7 +1147,7 @@ def test_tool_node_node_interrupt(tool_call_parallelism: str):
     ]
     if tool_call_parallelism == "single_tool_node":
         # Interrupt blocks second tool result
-        assert result["messages"] == expected_messages[:2]
+        assert result["messages"] == expected_messages[:-1]
     elif tool_call_parallelism == "parallel_tool_nodes":
         assert result["messages"] == expected_messages
 
