@@ -73,7 +73,7 @@ from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 
 pytestmark = pytest.mark.anyio
 
-REACT_TOOL_CALL_PARALLELISM = ["single_tool_node", "parallel_tool_nodes"]
+REACT_TOOL_CALL_VERSIONS = ["v1", "v2"]
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -150,9 +150,9 @@ class FakeToolCallingModel(BaseChatModel):
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_no_prompt(
-    request: pytest.FixtureRequest, checkpointer_name: str, tool_call_parallelism: str
+    request: pytest.FixtureRequest, checkpointer_name: str, version: str
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         "checkpointer_" + checkpointer_name
@@ -163,7 +163,7 @@ def test_no_prompt(
         model,
         [],
         checkpointer=checkpointer,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     inputs = [HumanMessage("hi?")]
     thread = {"configurable": {"thread_id": "123"}}
@@ -326,8 +326,8 @@ def test_runnable_prompt():
         assert response == expected_response
 
 
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_prompt_with_store(tool_call_parallelism: str):
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_prompt_with_store(version: str):
     def add(a: int, b: int):
         """Adds a and b"""
         return a + b
@@ -352,7 +352,7 @@ def test_prompt_with_store(tool_call_parallelism: str):
         [add],
         prompt=prompt,
         store=in_memory_store,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
@@ -365,7 +365,7 @@ def test_prompt_with_store(tool_call_parallelism: str):
         [add],
         prompt=prompt_no_store,
         store=in_memory_store,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
@@ -416,8 +416,8 @@ async def test_prompt_with_store_async():
 
 
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_model_with_tools(tool_style: str, tool_call_parallelism: str):
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_model_with_tools(tool_style: str, version: str):
     model = FakeToolCallingModel(tool_style=tool_style)
 
     @dec_tool
@@ -434,7 +434,7 @@ def test_model_with_tools(tool_style: str, tool_call_parallelism: str):
     agent = create_react_agent(
         model.bind_tools([tool1, tool2]),
         [tool1, tool2],
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     result = agent.nodes["tools"].invoke(
         {
@@ -602,8 +602,8 @@ def test__infer_handled_types() -> None:
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
 )
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_react_agent_with_structured_response(tool_call_parallelism: str) -> None:
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_agent_with_structured_response(version: str) -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
 
@@ -622,7 +622,7 @@ def test_react_agent_with_structured_response(tool_call_parallelism: str) -> Non
             model,
             [get_weather],
             response_format=response_format,
-            tool_call_parallelism=tool_call_parallelism,
+            version=version,
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
         assert response["structured_response"] == expected_structured_response
@@ -1070,8 +1070,8 @@ def test_tool_node_incorrect_tool_name():
     assert tool_message.tool_call_id == "some 0"
 
 
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_tool_node_node_interrupt(tool_call_parallelism: str):
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_tool_node_node_interrupt(version: str):
     def tool_normal(some_val: int) -> str:
         """Tool docstring."""
         return "normal"
@@ -1120,7 +1120,7 @@ def test_tool_node_node_interrupt(tool_call_parallelism: str):
         model,
         [tool_interrupt, tool_normal],
         checkpointer=checkpointer,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     result = agent.invoke({"messages": [HumanMessage("hi?")]}, config)
     expected_messages = [
@@ -1145,10 +1145,10 @@ def test_tool_node_node_interrupt(tool_call_parallelism: str):
         ),
         _AnyIdToolMessage(content="normal", name="tool_normal", tool_call_id="2"),
     ]
-    if tool_call_parallelism == "single_tool_node":
+    if version == "v1":
         # Interrupt blocks second tool result
         assert result["messages"] == expected_messages[:-1]
-    elif tool_call_parallelism == "parallel_tool_nodes":
+    elif version == "v2":
         assert result["messages"] == expected_messages
 
     state = agent.get_state(config)
@@ -1723,8 +1723,8 @@ async def test_tool_node_command_list_input():
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_react_agent_update_state(tool_call_parallelism: str):
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_agent_update_state(version: str):
     from langchain_core.tools.base import InjectedToolCallId
 
     class State(AgentState):
@@ -1762,7 +1762,7 @@ def test_react_agent_update_state(tool_call_parallelism: str):
         state_schema=State,
         prompt=prompt,
         checkpointer=checkpointer,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
     # run until interrpupted
@@ -1782,8 +1782,8 @@ def test_react_agent_update_state(tool_call_parallelism: str):
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_react_agent_parallel_tool_calls(tool_call_parallelism: str):
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_agent_parallel_tool_calls(version: str):
     human_assistance_execution_count = 0
 
     @dec_tool
@@ -1816,7 +1816,7 @@ def test_react_agent_parallel_tool_calls(tool_call_parallelism: str):
         model,
         [human_assistance, get_weather],
         checkpointer=checkpointer,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
     query = "Get user assistance and also check the weather"
@@ -1826,12 +1826,12 @@ def test_react_agent_parallel_tool_calls(tool_call_parallelism: str):
     ):
         message_types.append([message.type for message in event["messages"]])
 
-    if tool_call_parallelism == "single_tool_node":
+    if version == "v1":
         assert message_types == [
             ["human"],
             ["human", "ai"],
         ]
-    elif tool_call_parallelism == "parallel_tool_nodes":
+    elif version == "v2":
         assert message_types == [
             ["human"],
             ["human", "ai"],
@@ -1851,10 +1851,10 @@ def test_react_agent_parallel_tool_calls(tool_call_parallelism: str):
         ["human", "ai", "tool", "tool", "ai"],
     ]
 
-    if tool_call_parallelism == "single_tool_node":
+    if version == "v1":
         assert human_assistance_execution_count == 1
         assert get_weather_execution_count == 2
-    elif tool_call_parallelism == "parallel_tool_nodes":
+    elif version == "v2":
         assert human_assistance_execution_count == 1
         assert get_weather_execution_count == 1
 
@@ -2047,8 +2047,8 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     assert tool_message.content == "hi?"
 
 
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_create_react_agent_inject_vars(tool_call_parallelism: str) -> None:
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_create_react_agent_inject_vars(version: str) -> None:
     class AgentStateExtraKey(AgentState):
         foo: int
 
@@ -2077,7 +2077,7 @@ def test_create_react_agent_inject_vars(tool_call_parallelism: str) -> None:
         [tool1],
         state_schema=AgentStateExtraKey,
         store=store,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     input_message = HumanMessage("hi")
     result = agent.invoke({"messages": [input_message], "foo": 2})
@@ -2223,8 +2223,8 @@ def test_tool_node_messages_key() -> None:
     ]
 
 
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-async def test_return_direct(tool_call_parallelism: str) -> None:
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+async def test_return_direct(version: str) -> None:
     @dec_tool(return_direct=True)
     def tool_return_direct(input: str) -> str:
         """A tool that returns directly."""
@@ -2251,7 +2251,7 @@ async def test_return_direct(tool_call_parallelism: str) -> None:
     agent = create_react_agent(
         model,
         [tool_return_direct, tool_normal],
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
 
     # Test direct return for tool_return_direct
@@ -2346,8 +2346,8 @@ def test_inspect_react() -> None:
     inspect.getclosurevars(agent.nodes["agent"].bound.func)
 
 
-@pytest.mark.parametrize("tool_call_parallelism", REACT_TOOL_CALL_PARALLELISM)
-def test_react_with_subgraph_tools(tool_call_parallelism: str) -> None:
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_with_subgraph_tools(version: str) -> None:
     class State(TypedDict):
         a: int
         b: int
@@ -2400,7 +2400,7 @@ def test_react_with_subgraph_tools(tool_call_parallelism: str) -> None:
         model,
         tool_node,
         checkpointer=checkpointer,
-        tool_call_parallelism=tool_call_parallelism,
+        version=version,
     )
     result = agent.invoke(
         {"messages": [HumanMessage(content="What's 2 + 3 and 2 * 3?")]},

@@ -248,9 +248,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    tool_call_parallelism: Literal[
-        "single_tool_node", "parallel_tool_nodes"
-    ] = "single_tool_node",
+    version: Literal["v1", "v2"] = "v1",
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -300,12 +298,12 @@ def create_react_agent(
             Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
-        tool_call_parallelism: Determines what state is sent to the tool node.
+        version: Determines the version of the graph to create.
             Can be one of:
 
-            - `"single_tool_node"`: The tool node processes a single message. All tool
+            - `"v1"`: The tool node processes a single message. All tool
                 calls in the message are executed in parallel within the tool node.
-            - `"parallel_tool_nodes"`: The tool node processes a tool call.
+            - `"v2"`: The tool node processes a tool call.
                 Tool calls are distributed across multiple instances of the tool
                 node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
                 API.
@@ -584,10 +582,9 @@ def create_react_agent(
         TimeoutError: Timed out at step 2
         ```
     """
-    if tool_call_parallelism not in ("single_tool_node", "parallel_tool_nodes"):
+    if version not in ("v1", "v2"):
         raise ValueError(
-            f"Invalid version {tool_call_parallelism}. Supported versions are "
-            "'single_tool_node' and 'parallel_tool_nodes'."
+            f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
         )
 
     if state_schema is not None:
@@ -772,9 +769,9 @@ def create_react_agent(
             return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
-            if tool_call_parallelism == "single_tool_node":
+            if version == "v1":
                 return "tools"
-            elif tool_call_parallelism == "parallel_tool_nodes":
+            elif version == "v2":
                 tool_calls = [
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in last_message.tool_calls
