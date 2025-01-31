@@ -1,3 +1,4 @@
+"""CLI entrypoint for LangGraph API server."""
 import os
 import pathlib
 import shutil
