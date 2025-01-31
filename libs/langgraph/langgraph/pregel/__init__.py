@@ -1496,7 +1496,7 @@ class Pregel(PregelProtocol):
                     When used with functional API, values are emitted once at the end of the workflow.
                 - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
-                - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
+                - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
@@ -1772,7 +1772,7 @@ class Pregel(PregelProtocol):
                     When used with functional API, values are emitted once at the end of the workflow.
                 - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
-                - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
+                - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.

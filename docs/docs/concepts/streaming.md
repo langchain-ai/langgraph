@@ -7,11 +7,11 @@ LangGraph is built with first class support for streaming. There are several dif
 `.stream` and `.astream` are sync and async methods for streaming back outputs from a graph run.
 There are several different modes you can specify when calling these methods (e.g. `graph.stream(..., mode="...")):
 
-- [`"values"`](../how-tos/streaming.md#values): This streams the full value of the state after each step of the graph.
-- [`"updates"`](../how-tos/streaming.md#updates): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
-- [`"custom"`](../how-tos/streaming.md#custom): This streams custom data from inside your graph nodes.
-- [`"messages"`](../how-tos/streaming-tokens.md): This streams LLM tokens and metadata for the graph node where LLM is invoked.
-- [`"debug"`](../how-tos/streaming.md#debug): This streams as much information as possible throughout the execution of the graph.
+- [`"values"`](../how-tos/stream-values.ipynb): This streams the full value of the state after each step of the graph.
+- [`"updates"`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
+- [`"custom"`](../how-tos/streaming-content.ipynb): This streams custom data from inside your graph nodes.
+- [`"messages"`](../how-tos/streaming-tokens.ipynb): This streams LLM tokens and metadata for the graph node where LLM is invoked.
+- `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
 You can also specify multiple streaming modes at the same time by passing them as a list. When you do this, the streamed outputs will be tuples `(stream_mode, data)`. For example:
 
@@ -145,7 +145,7 @@ guide for that [here](../how-tos/streaming-tokens.ipynb).
 
 
 !!! warning "ASYNC IN PYTHON<=3.10"
-    You may fail to see events being emitted from inside a node when using `.astream_events` in Python <= 3.10. If you're using a Langchain RunnableLambda, a RunnableGenerator, or Tool asynchronously inside your node, you will have to propagate callbacks to these objects manually. This is because LangChain cannot automatically propagate callbacks to child objects in this case. Please see examples [here](../how-tos/streaming-tokens.md) and [here](../how-tos/streaming-events-from-within-tools.md).
+    You may fail to see events being emitted from inside a node when using `.astream_events` in Python <= 3.10. If you're using a Langchain RunnableLambda, a RunnableGenerator, or Tool asynchronously inside your node, you will have to propagate callbacks to these objects manually. This is because LangChain cannot automatically propagate callbacks to child objects in this case. Please see examples [here](../how-tos/streaming-content.ipynb) and [here](../how-tos/streaming-events-from-within-tools.ipynb).
 
 
 ## LangGraph Platform
