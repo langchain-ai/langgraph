@@ -135,7 +135,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
-See the below guides for how-to implement multi-agent workflows with the (beta)
+See the below guides for how to implement multi-agent workflows with the (beta)
 [Functional API](../concepts/functional_api.md):
 
 - [How to build a multi-agent network (functional API)](multi-agent-network-functional.ipynb)
@@ -153,6 +153,11 @@ See the below guides for how-to implement multi-agent workflows with the (beta)
 - [How to force tool-calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 - [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
+
+See the below guide for how to integrate with other frameworks using the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to integrate LangGraph (functional API) with AutoGen, CrewAI, and other frameworks](autogen-integration-functional.ipynb)
 
 ### Prebuilt ReAct Agent
 
