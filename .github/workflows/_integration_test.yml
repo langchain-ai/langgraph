@@ -14,7 +14,7 @@ jobs:
         python-version:
           - "3.10"
           - "3.11"
-    name: "CLI integration test"
+    name: "CLI integration test (ubuntu)"
     defaults:
       run:
         working-directory: libs/cli
@@ -71,4 +71,32 @@ jobs:
         working-directory: libs/cli/js-examples
         run: |
           langgraph build -t langgraph-test-e
+
+  windows-build:
+    runs-on: windows-latest
+    name: "CLI integration test (Windows)"
+    defaults:
+      run:
+        working-directory: libs/cli
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "libs/cli/**"
+      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
+        if: steps.changed-files.outputs.all
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.11"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: integration-test-cli-windows
+      - name: Setup env
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples
+        run: cp .env.example .env
+
+          
   
