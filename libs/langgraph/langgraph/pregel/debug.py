@@ -30,7 +30,6 @@ from langgraph.constants import (
     TAG_HIDDEN,
 )
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 from langgraph.utils.config import patch_checkpoint_map
 
@@ -157,7 +156,7 @@ def map_debug_checkpoint(
     task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
 
     for task in tasks:
-        if not find_subgraph_pregel(task.proc):
+        if not task.subgraphs:
             continue
 
         # assemble checkpoint_ns for this task
