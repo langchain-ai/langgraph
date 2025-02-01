@@ -9,6 +9,10 @@ build-typedoc:
 build-docs: build-typedoc
 	poetry run python -m mkdocs build --clean -f docs/mkdocs.yml --strict
 
+vercel-build-docs:
+	poetry install
+	make build-docs
+
 serve-clean-docs: clean-docs
 	poetry run python -m mkdocs serve -c -f docs/mkdocs.yml --strict -w ./libs/langgraph
 
