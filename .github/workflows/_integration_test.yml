@@ -105,6 +105,7 @@ jobs:
         working-directory: libs/cli/examples
         run: |
           # The build-arg isn't used; just testing that we accept other args
+          langgraph dockerfile Dockerfile -c langgraph.json && cat Dockerfile
           langgraph build -t langgraph-test-a  --base-image "langchain/langgraph-trial"
           cp .env.example .envg
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
