@@ -1,5 +1,6 @@
 """CLI entrypoint for LangGraph API server."""
 import os
+import sys
 import pathlib
 import shutil
 import sys
@@ -19,6 +20,8 @@ from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.version import __version__
+
+sys.stdout.reconfigure(encoding="utf-8")
 
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
