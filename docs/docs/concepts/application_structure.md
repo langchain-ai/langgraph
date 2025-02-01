@@ -34,10 +34,10 @@ Below are examples of directory structures for Python and JavaScript application
     │   │   ├── tools.py # tools for your graph
     │   │   ├── nodes.py # node functions for you graph
     │   │   └── state.py # state definition of your graph
-    │   ├── requirements.txt # package dependencies
     │   ├── __init__.py
     │   └── agent.py # code for constructing your graph
     ├── .env # environment variables
+    ├── requirements.txt # package dependencies
     └── langgraph.json # configuration file for LangGraph
     ```
 === "Python (pyproject.toml)"
