@@ -1,4 +1,4 @@
 {
   "buildCommand": "yarn build",
-  "outputDirectory": "docs/site"
+  "outputDirectory": "site"
 }
