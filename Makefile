@@ -9,7 +9,11 @@ build-typedoc:
 build-docs: build-typedoc
 	poetry run python -m mkdocs build --clean -f docs/mkdocs.yml --strict
 
-vercel-build-docs:
+install-vercel-deps:
+	curl -sSL https://install.python-poetry.org | python3 -
+	poetry self update 1.8.5
+
+vercel-build-docs: install-vercel-deps
 	poetry install
 	make build-docs
 

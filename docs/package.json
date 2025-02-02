@@ -1,7 +1,0 @@
-{
-  "name": "docs",
-  "version": "1.0.0",
-  "scripts": {
-    "build": "make -C ../ vercel-build-docs"
-  }
-}
