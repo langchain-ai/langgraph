@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import nbformat
 from nbconvert.exporters import MarkdownExporter
@@ -165,19 +165,33 @@ DOCS = HERE.parent / "docs"
 
 
 # Convert notebooks to markdown
-def _convert_notebooks(output_dir: str) -> None:
+def _convert_notebooks(
+    *, output_dir: Optional[Path] = None, replace: bool = False
+) -> None:
     """Converting notebooks."""
-    output_dir_path = Path(output_dir)
+    if not output_dir and not replace:
+        raise ValueError("Either --output_dir or --replace must be specified")
+
+    output_dir_path = DOCS if replace else Path(output_dir)
     for notebook in DOCS.rglob("*.ipynb"):
         markdown = convert_notebook(notebook, mode="exec")
         markdown_path = output_dir_path / notebook.relative_to(DOCS).with_suffix(".md")
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         with open(markdown_path, "w") as f:
             f.write(markdown)
+        if replace:
+            notebook.unlink(missing_ok=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert notebooks to markdown")
-    parser.add_argument("output_dir", help="Directory to output markdown files")
+    parser.add_argument(
+        "--output_dir", default=None, help="Directory to output markdown files"
+    )
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace original notebooks with markdown files",
+    )
     args = parser.parse_args()
-    _convert_notebooks(args.output_dir)
+    _convert_notebooks(args.replace, args.output_dir)
