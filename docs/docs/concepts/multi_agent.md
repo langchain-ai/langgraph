@@ -299,7 +299,7 @@ builder = StateGraph(MessagesState)
 builder.add_node(top_level_supervisor)
 builder.add_node("team_1_graph", team_1_graph)
 builder.add_node("team_2_graph", team_2_graph)
-
+builder.add_node("team_1_graph", team_1_graph)
 builder.add_edge(START, "top_level_supervisor")
 builder.add_edge("team_1_graph", "top_level_supervisor")
 builder.add_edge("team_2_graph", "top_level_supervisor")
