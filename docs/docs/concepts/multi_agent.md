@@ -245,8 +245,6 @@ from langgraph.types import Command
 model = ChatOpenAI()
 
 # define team 1 (same as the single supervisor example above)
-class Team1State(MessagesState):
-    next: Literal["team_1_agent_1", "team_1_agent_2", "__end__"]
 
 def team_1_supervisor(state: MessagesState) -> Command[Literal["team_1_agent_1", "team_1_agent_2", END]]:
     response = model.invoke(...)
@@ -288,7 +286,7 @@ team_2_graph = team_2_builder.compile()
 # define top-level supervisor
 
 builder = StateGraph(MessagesState)
-def top_level_supervisor(state: MessagesState) -> Command[Literal['team_1_graph', 'team_2_graph', END]]:
+def top_level_supervisor(state: MessagesState) -> Command[Literal["team_1_graph", "team_2_graph", END]]:
     # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
     # to determine which team to call next. a common pattern is to call the model
     # with a structured output (e.g. force it to return an output with a "next_team" field)
@@ -299,12 +297,12 @@ def top_level_supervisor(state: MessagesState) -> Command[Literal['team_1_graph'
 
 builder = StateGraph(MessagesState)
 builder.add_node(top_level_supervisor)
-builder.add_node('team_1_graph', team_1_graph)
-builder.add_node('team_2_graph', team_2_graph)
+builder.add_node("team_1_graph", team_1_graph)
+builder.add_node("team_2_graph", team_2_graph)
 
 builder.add_edge(START, "top_level_supervisor")
-builder.add_edge('team_1_graph', 'top_level_supervisor')
-builder.add_edge('team_2_graph', 'top_level_supervisor')
+builder.add_edge("team_1_graph", "top_level_supervisor")
+builder.add_edge("team_2_graph", "top_level_supervisor")
 graph = builder.compile()
 ```
 
