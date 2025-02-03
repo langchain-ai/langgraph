@@ -38,7 +38,7 @@ lint-docs:
 	poetry run ruff check docs
 
 codespell:
-	./docs/codespell_notebooks.sh .
+	./codespell_notebooks.sh .
 
 start-services:
 	docker compose -f test-compose.yml up -V --force-recreate --wait --remove-orphans
