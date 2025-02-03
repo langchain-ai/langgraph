@@ -74,7 +74,7 @@ def map_command(
 ) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if cmd.graph == Command.PARENT:
-        raise InvalidUpdateError("There is not parent graph")
+        raise InvalidUpdateError("There is no parent graph")
     if cmd.goto:
         if isinstance(cmd.goto, (tuple, list)):
             sends = cmd.goto
@@ -89,7 +89,7 @@ def map_command(
                 raise TypeError(
                     f"In Command.goto, expected Send/str, got {type(send).__name__}"
                 )
-    if cmd.resume:
+    if cmd.resume is not None:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
                 existing: list[Any] = next(

@@ -16,14 +16,16 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self, TypedDict
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 if TYPE_CHECKING:
+    from langgraph.pregel.protocol import PregelProtocol
     from langgraph.store.base import BaseStore
 
 
@@ -47,12 +49,13 @@ Checkpointer = Union[None, bool, BaseCheckpointSaver]
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
-- 'values': Emit all values of the state for each step.
-- 'updates': Emit only the node name(s) and updates
-    that were returned by the node(s) **after** each step.
-- 'debug': Emit debug events for each step.
-- 'messages': Emit LLM messages token-by-token.
-- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
+- `"values"`: Emit all values in the state after each step.
+    When used with functional API, values are emitted once at the end of the workflow.
+- `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+- `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+- `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+- `"debug"`: Emit debug events with as much information as possible for each step.
 """
 
 StreamWriter = Callable[[Any], None]
@@ -153,6 +156,7 @@ class PregelExecutableTask(NamedTuple):
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
     writers: Sequence[Runnable] = ()
+    subgraphs: Sequence["PregelProtocol"] = ()
 
 
 class StateSnapshot(NamedTuple):
@@ -289,6 +293,8 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
+        elif hints := get_type_hints(type(self.update)):
+            return [(k, getattr(self.update, k)) for k in hints]
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
@@ -339,15 +345,25 @@ class LoopProtocol:
         self.stop = stop
 
 
-class PregelScratchpad(TypedDict):
+@dataclasses.dataclass(**{**_DC_KWARGS, "frozen": False})
+class PregelScratchpad:
     # call
-    call_counter: int
+    call_counter: Callable[[], int]
     # interrupt
-    interrupt_counter: int
+    interrupt_counter: Callable[[], int]
     resume: list[Any]
-    null_resume: Any
+    null_resume: Optional[Any]
+    _consume_null_resume: Callable[[], None]
     # subgraph
-    subgraph_counter: int
+    subgraph_counter: Callable[[], int]
+
+    def consume_null_resume(self) -> Any:
+        if self.null_resume is not None:
+            value = self.null_resume
+            self._consume_null_resume()
+            self.null_resume = None
+            return value
+        raise ValueError("No null resume to consume")
 
 
 def interrupt(value: Any) -> Any:
@@ -449,7 +465,6 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        MISSING,
         NS_SEP,
         RESUME,
     )
@@ -459,19 +474,17 @@ def interrupt(value: Any) -> Any:
     conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    scratchpad["interrupt_counter"] += 1
-    idx = scratchpad["interrupt_counter"]
+    idx = scratchpad.interrupt_counter()
     # find previous resume values
-    if scratchpad["resume"]:
-        if idx < len(scratchpad["resume"]):
-            return scratchpad["resume"][idx]
+    if scratchpad.resume:
+        if idx < len(scratchpad.resume):
+            return scratchpad.resume[idx]
     # find current resume value
-    if scratchpad["null_resume"] is not MISSING:
-        assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
-        v = scratchpad["null_resume"]
-        scratchpad["null_resume"] = MISSING
-        scratchpad["resume"].append(v)
-        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
+    if scratchpad.null_resume is not None:
+        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        v = scratchpad.consume_null_resume()
+        scratchpad.resume.append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return v
     # no resume value found
     raise GraphInterrupt(

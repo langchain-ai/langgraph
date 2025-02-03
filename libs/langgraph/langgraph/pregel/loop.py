@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
+from dataclasses import replace
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -54,7 +55,6 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
-    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -67,6 +67,7 @@ from langgraph.errors import (
     EmptyInputError,
     GraphDelegate,
     GraphInterrupt,
+    ParentCommand,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -229,20 +230,23 @@ class PregelLoop(LoopProtocol):
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: Optional[PregelScratchpad] = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
-        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and scratchpad is not None:
-            if scratchpad["subgraph_counter"]:
+        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and isinstance(
+            scratchpad, PregelScratchpad
+        ):
+            # if count is > 0, append to checkpoint_ns
+            # if count is 0, leave as is
+            if cnt := scratchpad.subgraph_counter():
                 self.config = patch_configurable(
                     self.config,
                     {
                         CONFIG_KEY_CHECKPOINT_NS: NS_SEP.join(
                             (
                                 config[CONF][CONFIG_KEY_CHECKPOINT_NS],
-                                str(scratchpad["subgraph_counter"]),
+                                str(cnt),
                             )
                         )
                     },
                 )
-            scratchpad["subgraph_counter"] += 1
         if not self.is_nested and config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
             self.config = patch_configurable(
                 self.config,
@@ -563,9 +567,14 @@ class PregelLoop(LoopProtocol):
         )
 
         # take resume value from parent
-        if scratchpad := configurable.get(CONFIG_KEY_SCRATCHPAD):
-            if scratchpad["null_resume"] is not MISSING:
-                self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad["null_resume"])])
+        if scratchpad := cast(
+            Optional[PregelScratchpad], configurable.get(CONFIG_KEY_SCRATCHPAD)
+        ):
+            if (
+                isinstance(scratchpad, PregelScratchpad)
+                and scratchpad.null_resume is not None
+            ):
+                self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad.null_resume)])
         # map command to writes
         if isinstance(self.input, Command):
             if self.input.resume is not None and not self.checkpointer:
@@ -729,6 +738,16 @@ class PregelLoop(LoopProtocol):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # add current state to parent command
+        if isinstance(exc_value, ParentCommand):
+            cmd = exc_value.args[0]
+            state = (
+                [(self.output_keys, read_channels(self.channels, self.output_keys))]
+                if isinstance(self.output_keys, str)
+                else list(read_channels(self.channels, self.output_keys).items())
+            )
+            exc_value.args = (replace(cmd, update=[*state, *cmd._update_as_tuples()]),)
+        # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:
             # emit one last "values" event, with pending writes applied
@@ -1084,6 +1103,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             return await exit_task
         except asyncio.CancelledError as e:
             # Bubble up the exit task upon cancellation to permit the API
-            # consumer to await it before e.g., re-using the DB connection.
+            # consumer to await it before e.g., reusing the DB connection.
             e.args = (*e.args, exit_task)
             raise

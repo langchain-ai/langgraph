@@ -26,7 +26,7 @@ def get_new_channel_versions(
     return new_versions
 
 
-def find_subgraph_pregel(candidate: Runnable) -> Optional[Runnable]:
+def find_subgraph_pregel(candidate: Runnable) -> Optional[PregelProtocol]:
     from langgraph.pregel import Pregel
 
     candidates: list[Runnable] = [candidate]

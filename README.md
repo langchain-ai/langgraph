@@ -21,10 +21,7 @@ LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [A
 
 ### Why use LangGraph?
 
-LangGraph provides fine-grained control over both the flow and state of your
-agent applications. It implements a central
-[persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/),
-enabling features that are common to most agent architectures:
+LangGraph powers [production-grade agents](https://www.langchain.com/built-with-langgraph), trusted by Linkedin, Uber, Klarna, GitLab, and many more. LangGraph provides fine-grained control over both the flow and state of your agent applications. It implements a central [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/), enabling features that are common to most agent architectures:
 
 - **Memory**: LangGraph persists arbitrary aspects of your application's state,
 supporting memory of conversations and other updates within and across user
@@ -245,7 +242,7 @@ final_state["messages"][-1].content
     We use <code>ChatAnthropic</code> as our LLM. <strong>NOTE:</strong> we need to make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the <code>.bind_tools()</code> method.
   </li>
   <li>
-    We define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that <a href="https://python.langchain.com/docs/modules/agents/tools/custom_tools">here</a>.
+    We define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that <a href="https://python.langchain.com/docs/how_to/custom_tools/">here</a>.
   </li>
 </ul>
 </details>
@@ -294,7 +291,7 @@ Then we define one normal and one conditional edge. Conditional edge means that 
 <ul>
   <li>
     When we compile the graph, we turn it into a LangChain 
-    <a href="https://python.langchain.com/v0.2/docs/concepts/#runnable-interface">Runnable</a>, 
+    <a href="https://python.langchain.com/docs/concepts/runnables/">Runnable</a>, 
     which automatically enables calling <code>.invoke()</code>, <code>.stream()</code> and <code>.batch()</code> 
     with your inputs
   </li>
@@ -332,6 +329,10 @@ Then we define one normal and one conditional edge. Conditional edge means that 
 * [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/high_level/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
 * [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
 * [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/#langgraph-platform): LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework.
+
+## Resources
+
+* [Built with LangGraph](https://www.langchain.com/built-with-langgraph): Hear how industry leaders use LangGraph to ship powerful, production-ready AI applications.
 
 ## Contributing
 

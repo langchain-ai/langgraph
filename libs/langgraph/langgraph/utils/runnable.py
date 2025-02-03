@@ -14,6 +14,7 @@ from typing import (
     Iterator,
     Optional,
     Sequence,
+    Tuple,
     Union,
     cast,
 )
@@ -22,21 +23,23 @@ from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
     RunnableLambda,
-    RunnableLike,
     RunnableParallel,
     RunnableSequence,
+)
+from langchain_core.runnables.base import (
+    RunnableLike as LCRunnableLike,
 )
 from langchain_core.runnables.config import (
     run_in_executor,
     var_child_runnable_config,
 )
-from langchain_core.runnables.utils import Input
+from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from typing_extensions import TypeGuard
+from typing_extensions import Concatenate, ParamSpec, TypeGuard
 
 from langgraph.constants import (
     CONF,
-    CONFIG_KEY_END,
+    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM_WRITER,
 )
@@ -66,9 +69,10 @@ class StrEnum(str, enum.Enum):
 # Special type to denote any type is accepted
 ANY_TYPE = object()
 
-
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
+# List of keyword arguments that can be injected at runtime from the config object.
+# A named argument may appear multiple times if it appears with distinct types.
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         sys.intern("writer"),
@@ -77,15 +81,35 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         lambda _: None,
     ),
     (
+        # Covers store that is not optional (will raise an error if a store
+        # cannot be injected).
         sys.intern("store"),
-        (BaseStore, "BaseStore", inspect.Parameter.empty),
+        (
+            BaseStore,
+            "BaseStore",
+            inspect.Parameter.empty,
+        ),
         CONFIG_KEY_STORE,
         inspect.Parameter.empty,
     ),
     (
+        # Covers store that is optional. Will set to None if not found in config.
+        sys.intern("store"),
+        (
+            Optional[BaseStore],
+            # Best effort to catch some forward references.
+            # This will not work for cases like `"Union[None, BaseStore]"`,
+            # we'll need to re-write logic to use get_type_hints()
+            # to resolve forward references.
+            "Optional[BaseStore]",
+        ),
+        CONFIG_KEY_STORE,
+        None,
+    ),
+    (
         sys.intern("previous"),
         (ANY_TYPE,),
-        CONFIG_KEY_END,
+        CONFIG_KEY_PREVIOUS,
         inspect.Parameter.empty,
     ),
 )
@@ -106,6 +130,15 @@ Each tuple contains:
 """
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+
+
+P = ParamSpec("P")  # to handle injected kwargs like `writer` / `store`
+
+RunnableLike = Union[
+    LCRunnableLike,
+    Callable[Concatenate[Input, P], Output],
+    Callable[Concatenate[Input, P], Awaitable[Output]],
+]
 
 
 class RunnableCallable(Runnable):
@@ -149,15 +182,24 @@ class RunnableCallable(Runnable):
         params = inspect.signature(cast(Callable, func or afunc)).parameters
 
         self.func_accepts_config = "config" in params
-        self.func_accepts: dict[str, bool] = {}
-        for kw, typ, _, _ in KWARGS_CONFIG_KEYS:
+        # Mapping from kwarg name to (config key, default value) to be used.
+        # The default value is used if the config key is not found in the config.
+        self.func_accepts: dict[str, Tuple[str, Any]] = {}
+
+        for kw, typ, config_key, default in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
-            if typ == (ANY_TYPE,):
-                self.func_accepts[kw] = p is not None and p.kind in VALID_KINDS
-            else:
-                self.func_accepts[kw] = (
-                    p is not None and p.annotation in typ and p.kind in VALID_KINDS
-                )
+
+            if p is None or p.kind not in VALID_KINDS:
+                # If parameter is not found or is not a valid kind, skip
+                continue
+
+            if typ != (ANY_TYPE,) and p.annotation not in typ:
+                # A specific type is required, but the function annotation does
+                # not match the expected type.
+                continue
+
+            # If the kwarg is accepted by the function, store the default value
+            self.func_accepts[kw] = (config_key, default)
 
     def __repr__(self) -> str:
         repr_args = {
@@ -187,20 +229,22 @@ class RunnableCallable(Runnable):
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
-        for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            if not self.func_accepts[kw]:
+
+        for kw, (config_key, default_value) in self.func_accepts.items():
+            # If the kwarg is already set, use the set value
+            if kw in kwargs:
                 continue
 
             if (
-                default_value is inspect.Parameter.empty
-                and kw not in kwargs
-                and config_key not in _conf
+                # If the kwarg is requested, but isn't in the config AND has no
+                # default value, raise an error
+                config_key not in _conf and default_value is inspect.Parameter.empty
             ):
                 raise ValueError(
                     f"Missing required config key '{config_key}' for '{self.name}'."
                 )
-            elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(config_key, default_value)
+
+            kwargs[kw] = _conf.get(config_key, default_value)
 
         context = copy_context()
         if self.trace:
@@ -244,20 +288,20 @@ class RunnableCallable(Runnable):
         if self.func_accepts_config:
             kwargs["config"] = config
         _conf = config[CONF]
-        for kw, _, config_key, default_value in KWARGS_CONFIG_KEYS:
-            if not self.func_accepts[kw]:
+        for kw, (config_key, default_value) in self.func_accepts.items():
+            # If the kwarg has already been set, use the set value
+            if kw in kwargs:
                 continue
 
             if (
-                default_value is inspect.Parameter.empty
-                and kw not in kwargs
-                and config_key not in _conf
+                # If the kwarg is requested, but isn't in the config AND has no
+                # default value, raise an error
+                config_key not in _conf and default_value is inspect.Parameter.empty
             ):
                 raise ValueError(
                     f"Missing required config key '{config_key}' for '{self.name}'."
                 )
-            elif kwargs.get(kw) is None:
-                kwargs[kw] = _conf.get(config_key, default_value)
+            kwargs[kw] = _conf.get(config_key, default_value)
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)

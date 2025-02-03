@@ -56,13 +56,6 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
-  - redirects:
-      redirect_maps:
-        'cloud/index.md': 'concepts/index.md#langgraph-platform'
-        'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
-        'cloud/concepts/api.md': 'concepts/langgraph_server.md'
-        'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
-        'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
       handlers:
         python:
@@ -104,12 +97,20 @@ nav:
         - how-tos/index.md
         - LangGraph:
           - LangGraph: how-tos#langgraph
+          - Graph API Basics:
+              - Graph API Basics: how-tos#graph-api-basics
+              - how-tos/state-reducers.ipynb
+              - how-tos/sequence.ipynb
+              - how-tos/branching.ipynb
+              - how-tos/recursion-limit.ipynb
+              - how-tos/visualization.ipynb
           - Controllability:
               - Controllability: how-tos#controllability
-              - how-tos/branching.ipynb
               - how-tos/map-reduce.ipynb
-              - how-tos/recursion-limit.ipynb
               - how-tos/command.ipynb
+              - how-tos/configuration.ipynb
+              - how-tos/node-retries.ipynb
+              - how-tos/return-when-recursion-limit-hits.ipynb
           - Persistence:
               - Persistence: how-tos#persistence
               - how-tos/persistence.ipynb
@@ -118,6 +119,8 @@ nav:
               - how-tos/persistence_postgres.ipynb
               - how-tos/persistence_mongodb.ipynb
               - how-tos/persistence_redis.ipynb
+              - how-tos/persistence-functional.ipynb
+              - how-tos/cross-thread-persistence-functional.ipynb
           - Memory:
               - Memory: how-tos#memory
               - how-tos/memory/manage-conversation-history.ipynb
@@ -132,17 +135,14 @@ nav:
               - how-tos/human_in_the_loop/wait-user-input.ipynb
               - how-tos/human_in_the_loop/time-travel.ipynb
               - how-tos/human_in_the_loop/review-tool-calls.ipynb
+              - how-tos/wait-user-input-functional.ipynb
+              - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
-              - how-tos/stream-values.ipynb
-              - how-tos/stream-updates.ipynb
+              - how-tos/streaming.ipynb
               - how-tos/streaming-tokens.ipynb
-              - how-tos/streaming-tokens-without-langchain.ipynb
-              - how-tos/streaming-content.ipynb
-              - how-tos/stream-multiple.ipynb
+              - how-tos/streaming-specific-nodes.ipynb
               - how-tos/streaming-events-from-within-tools.ipynb
-              - how-tos/streaming-events-from-within-tools-without-langchain.ipynb
-              - how-tos/streaming-from-final-node.ipynb
               - how-tos/streaming-subgraphs.ipynb
               - how-tos/disable-streaming.ipynb
           - Tool calling:
@@ -163,6 +163,8 @@ nav:
               - how-tos/agent-handoffs.ipynb
               - how-tos/multi-agent-network.ipynb
               - how-tos/multi-agent-multi-turn-convo.ipynb
+              - how-tos/multi-agent-network-functional.ipynb
+              - how-tos/multi-agent-multi-turn-convo-functional.ipynb
           - State Management:
               - State Management: how-tos#state-management
               - how-tos/state-model.ipynb
@@ -171,12 +173,10 @@ nav:
           - Other:
               - Other: how-tos#other
               - how-tos/async.ipynb
-              - how-tos/visualization.ipynb
-              - how-tos/configuration.ipynb
-              - how-tos/node-retries.ipynb
               - how-tos/react-agent-structured-output.ipynb
               - how-tos/run-id-langsmith.ipynb
-              - how-tos/return-when-recursion-limit-hits.ipynb
+              - how-tos/autogen-integration.ipynb
+              - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
               - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
               - how-tos/create-react-agent.ipynb
@@ -185,6 +185,7 @@ nav:
               - how-tos/create-react-agent-hitl.ipynb
               - how-tos/create-react-agent-structured-output.ipynb
               - how-tos/react-agent-from-scratch.ipynb
+              - how-tos/react-agent-from-scratch-functional.ipynb
         - LangGraph Platform:
             - LangGraph Platform: how-tos#langgraph-platform
             - Application Structure:
@@ -196,6 +197,7 @@ nav:
                 - cloud/deployment/custom_docker.md
                 - cloud/deployment/test_locally.md
                 - cloud/deployment/graph_rebuild.md
+                - how-tos/autogen-langgraph-platform.ipynb
             - Deployment:
                 - Deployment: how-tos#deployment
                 - cloud/deployment/cloud.md
@@ -265,6 +267,7 @@ nav:
           - concepts/persistence.md
           - concepts/memory.md
           - concepts/streaming.md
+          - concepts/functional_api.md
         - LangGraph Platform:
           - LangGraph Platform: concepts#langgraph-platform
           - High Level:
@@ -296,6 +299,7 @@ nav:
         - Quick Start:
           - Quick Start: tutorials#quick-start
           - tutorials/introduction.ipynb
+          - tutorials/workflows/index.md
           - tutorials/langgraph-platform/local-server.md
           - cloud/quick_start.md
         - Chatbots:
@@ -371,6 +375,8 @@ nav:
       - Errors: reference/errors.md
       - Types: reference/types.md
       - Constants: reference/constants.md
+      - Pregel: reference/pregel.md
+      - Config: reference/config.md
       - Functional API: reference/func.md
     - LangGraph Platform:
       - Server API: "cloud/reference/api/api_ref.md"

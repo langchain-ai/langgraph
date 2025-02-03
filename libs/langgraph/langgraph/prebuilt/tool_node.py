@@ -27,7 +27,6 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
-from langchain_core.runnables.utils import Input
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import get_all_basemodel_annotations
@@ -136,6 +135,8 @@ class ToolNode(RunnableCallable):
     If multiple tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
 
+    Tool calls can also be passed directly as a list of `ToolCall` dicts.
+
     Args:
         tools: A sequence of tools that can be invoked by the ToolNode.
         name: The name of the ToolNode in the graph. Defaults to "tools".
@@ -169,10 +170,28 @@ class ToolNode(RunnableCallable):
         return {"messages": result}
     ```
 
+    Tool calls can also be passed directly to a ToolNode. This can be useful when using
+    the Send API, e.g., in a conditional edge:
+
+    ```python
+    def example_conditional_edge(state: dict) -> List[Send]:
+        tool_calls = state["messages"][-1].tool_calls
+        # If tools rely on state or store variables (whose values are not generated
+        # directly by a model), you can inject them into the tool calls.
+        tool_calls = [
+            tool_node.inject_tool_args(call, state, store)
+            for call in last_message.tool_calls
+        ]
+        return [Send("tools", [tool_call]) for tool_call in tool_calls]
+    ```
+
     Important:
-        - The state MUST contain a list of messages.
-        - The last message MUST be an `AIMessage`.
-        - The `AIMessage` MUST have `tool_calls` populated.
+        - The input state can be one of the following:
+            - A dict with a messages key containing a list of messages.
+            - A list of messages.
+            - A list of tool calls.
+        - If operating on a message list, the last message must be an `AIMessage` with
+            `tool_calls` populated.
     """
 
     name: str = "ToolNode"
@@ -210,7 +229,7 @@ class ToolNode(RunnableCallable):
         ],
         config: RunnableConfig,
         *,
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
@@ -220,12 +239,14 @@ class ToolNode(RunnableCallable):
                 *executor.map(self._run_one, tool_calls, input_types, config_list)
             ]
 
-        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        # preserve existing behavior for non-command tool outputs for backwards
+        # compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
             return outputs if input_type == "list" else {self.messages_key: outputs}
 
-        # LangGraph will automatically handle list of Command and non-command node updates
+        # LangGraph will automatically handle list of Command and non-command node
+        # updates
         combined_outputs: list[
             Command | list[ToolMessage] | dict[str, list[ToolMessage]]
         ] = []
@@ -238,20 +259,6 @@ class ToolNode(RunnableCallable):
                 )
         return combined_outputs
 
-    def invoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if "store" not in kwargs:
-            kwargs["store"] = None
-        return super().invoke(input, config, **kwargs)
-
-    async def ainvoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if "store" not in kwargs:
-            kwargs["store"] = None
-        return await super().ainvoke(input, config, **kwargs)
-
     async def _afunc(
         self,
         input: Union[
@@ -261,7 +268,7 @@ class ToolNode(RunnableCallable):
         ],
         config: RunnableConfig,
         *,
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
@@ -289,7 +296,7 @@ class ToolNode(RunnableCallable):
     def _run_one(
         self,
         call: ToolCall,
-        input_type: Literal["list", "dict"],
+        input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
     ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -344,7 +351,7 @@ class ToolNode(RunnableCallable):
     async def _arun_one(
         self,
         call: ToolCall,
-        input_type: Literal["list", "dict"],
+        input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
     ) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -404,11 +411,16 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: BaseStore,
-    ) -> Tuple[list[ToolCall], Literal["list", "dict"]]:
+        store: Optional[BaseStore],
+    ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         if isinstance(input, list):
-            input_type = "list"
-            message: AnyMessage = input[-1]
+            if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
+                input_type = "tool_calls"
+                tool_calls = input
+                return tool_calls, input_type
+            else:
+                input_type = "list"
+                message: AnyMessage = input[-1]
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
             message = messages[-1]
@@ -423,7 +435,7 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         tool_calls = [
-            self._inject_tool_args(call, input, store) for call in message.tool_calls
+            self.inject_tool_args(call, input, store) for call in message.tool_calls
         ]
         return tool_calls, input_type
 
@@ -484,7 +496,9 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_store(self, tool_call: ToolCall, store: BaseStore) -> ToolCall:
+    def _inject_store(
+        self, tool_call: ToolCall, store: Optional[BaseStore]
+    ) -> ToolCall:
         store_arg = self.tool_to_store_arg[tool_call["name"]]
         if not store_arg:
             return tool_call
@@ -501,7 +515,7 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_tool_args(
+    def inject_tool_args(
         self,
         tool_call: ToolCall,
         input: Union[
@@ -509,8 +523,23 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: BaseStore,
+        store: Optional[BaseStore],
     ) -> ToolCall:
+        """Injects the state and store into the tool call.
+
+        Tool arguments with types annotated as `InjectedState` and `InjectedStore` are
+        ignored in tool schemas for generation purposes. This method injects them into
+        tool calls for tool invocation.
+
+        Args:
+            tool_call (ToolCall): The tool call to inject state and store into.
+            input (Union[list[AnyMessage], dict[str, Any], BaseModel]): The input state
+                to inject.
+            store (Optional[BaseStore]): The store to inject.
+
+        Returns:
+            ToolCall: The tool call with injected state and store.
+        """
         if tool_call["name"] not in self.tools_by_name:
             return tool_call
 
@@ -520,11 +549,14 @@ class ToolNode(RunnableCallable):
         return tool_call_with_store
 
     def _validate_tool_command(
-        self, command: Command, call: ToolCall, input_type: Literal["list", "dict"]
+        self,
+        command: Command,
+        call: ToolCall,
+        input_type: Literal["list", "dict", "tool_calls"],
     ) -> Command:
         if isinstance(command.update, dict):
             # input type is dict when ToolNode is invoked with a dict input (e.g. {"messages": [AIMessage(..., tool_calls=[...])]})
-            if input_type != "dict":
+            if input_type not in ("dict", "tool_calls"):
                 raise ValueError(
                     f"Tools can provide a dict in Command.update only when using dict with '{self.messages_key}' key as ToolNode input, "
                     f"got: {command.update} for tool '{call['name']}'"

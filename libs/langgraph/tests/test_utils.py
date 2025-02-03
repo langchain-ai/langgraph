@@ -26,7 +26,10 @@ from langgraph.utils.fields import (
     get_enhanced_type_hints,
     get_field_default,
 )
-from langgraph.utils.runnable import is_async_callable, is_async_generator
+from langgraph.utils.runnable import (
+    is_async_callable,
+    is_async_generator,
+)
 
 pytestmark = pytest.mark.anyio
 

@@ -1,13 +1,13 @@
 """Utility to convert a user provided function into a Runnable with a ChannelWrite."""
 
-import asyncio
 import concurrent.futures
 import functools
 import inspect
 import sys
 import types
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Any, Callable, Generator, Generic, Optional, TypeVar, cast
 
+from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
 from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN, TAG_HIDDEN
@@ -144,7 +144,9 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE[key]
     else:
         if is_async_callable(func):
-            run = RunnableCallable(None, func, name=func.__name__, trace=False)
+            run = RunnableCallable(
+                None, func, name=func.__name__, trace=False, recurse=False
+            )
         else:
             afunc = functools.update_wrapper(
                 functools.partial(run_in_executor, None, func), func
@@ -154,15 +156,11 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
                 afunc,
                 name=func.__name__,
                 trace=False,
+                recurse=False,
             )
-        seq = RunnableSeq(
-            run,
-            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
-            name=func.__name__,
-        )
         if not _lookup_module_and_qualname(func):
-            return seq
-        return CACHE.setdefault(key, seq)
+            return run
+        return CACHE.setdefault(key, run)
 
 
 def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
@@ -170,22 +168,37 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
     if key in CACHE:
         return CACHE[key]
     else:
+        if hasattr(func, "__name__"):
+            name = func.__name__
+        elif hasattr(func, "func"):
+            name = func.func.__name__
+        elif hasattr(func, "__class__"):
+            name = func.__class__.__name__
+        else:
+            name = str(func)
+
         if is_async_callable(func):
             run = RunnableCallable(
-                None, func, explode_args=True, name=func.__name__, trace=False
+                None,
+                func,
+                explode_args=True,
+                name=name,
+                trace=False,
+                recurse=False,
             )
         else:
             run = RunnableCallable(
                 func,
                 functools.wraps(func)(functools.partial(run_in_executor, None, func)),
                 explode_args=True,
-                name=func.__name__,
+                name=name,
                 trace=False,
+                recurse=False,
             )
         seq = RunnableSeq(
             run,
             ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
-            name=func.__name__,
+            name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)
             ),
@@ -195,7 +208,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE.setdefault(key, seq)
 
 
-CACHE: dict[tuple[Callable[..., Any], bool], RunnableSeq] = {}
+CACHE: dict[tuple[Callable[..., Any], bool], Runnable] = {}
 
 
 P = ParamSpec("P")
@@ -203,12 +216,17 @@ P1 = TypeVar("P1")
 T = TypeVar("T")
 
 
+class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
+    def __await__(self) -> Generator[T, None, T]:
+        yield cast(T, ...)
+
+
 def call(
     func: Callable[P, T],
     *args: Any,
     retry: Optional[RetryPolicy] = None,
     **kwargs: Any,
-) -> Union[concurrent.futures.Future[T], asyncio.Future[T]]:
+) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
     fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
