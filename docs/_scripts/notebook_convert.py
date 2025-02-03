@@ -186,7 +186,7 @@ def _convert_notebooks(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert notebooks to markdown")
     parser.add_argument(
-        "--output_dir", default=None, help="Directory to output markdown files"
+        "--output_dir", default=None, help="Directory to output markdown files",
     )
     parser.add_argument(
         "--replace",
@@ -194,4 +194,4 @@ if __name__ == "__main__":
         help="Replace original notebooks with markdown files",
     )
     args = parser.parse_args()
-    _convert_notebooks(args.replace, args.output_dir)
+    _convert_notebooks(replace=args.replace, output_dir=args.output_dir)
