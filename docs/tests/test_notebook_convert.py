@@ -31,9 +31,16 @@ def test_convert_notebook():
     nb.cells.append(nbformat.v4.new_markdown_cell(md_cell_source))
 
     # Add a code cell with a noqa comment
-    code_cell_source = "print('hello')  # noqa: F401"
+    code_cell_source = "print('hello')"
     nb.cells.append(nbformat.v4.new_code_cell(code_cell_source))
     nb.metadata.mode = "exec"
 
     body, _ = exporter.from_notebook_node(nb)
-    assert body == """"""
+    assert (
+        _remove_consecutive_new_lines(body)
+        == """\
+This is a [link](example_notebook.ipynb) in markdown.
+```python exec="1" source="below" result="ini"
+print('hello')
+```"""
+    )
