@@ -12,6 +12,9 @@
     
     jobs:
       codespell:
+        defaults:
+          run:
+            working-directory: docs
         name: (Check for spelling errors)
         runs-on: ubuntu-latest
     
