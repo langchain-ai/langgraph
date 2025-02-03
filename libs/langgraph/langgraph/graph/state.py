@@ -22,7 +22,6 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from langchain_core.runnables.base import RunnableLike
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
@@ -60,7 +59,7 @@ from langgraph.store.base import BaseStore
 from langgraph.types import All, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default
 from langgraph.utils.pydantic import create_model
-from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
