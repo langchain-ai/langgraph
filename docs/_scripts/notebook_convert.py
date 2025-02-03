@@ -1,6 +1,8 @@
+import argparse
 import os
 import re
 from pathlib import Path
+from typing import Literal
 
 import nbformat
 from nbconvert.exporters import MarkdownExporter
@@ -8,17 +10,28 @@ from nbconvert.preprocessors import Preprocessor
 
 
 class EscapePreprocessor(Preprocessor):
+    def __init__(self, rewrite_links: bool = True, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.rewrite_links = rewrite_links
+
     def preprocess_cell(self, cell, resources, cell_index):
         if cell.cell_type == "markdown":
-            # Temporarily disable this.
-            # We'll re-enable, but keeping markdown format and replacing ipynb links
-            # with links to corresponding markdown files.
-            # # rewrite markdown links to html links (excluding image links)
-            # cell.source = re.sub(
-            #     r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
-            #     r'<a href="\2">\1</a>',
-            #     cell.source,
-            # )
+            if self.rewrite_links:
+                # We'll need to adjust the logic for this to keep markdown format
+                # but link to markdown files rather than ipynb files.
+                cell.source = re.sub(
+                    r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
+                    r'<a href="\2">\1</a>',
+                    cell.source,
+                )
+            else:
+                # Keep format but replace the .ipynb extension with .md
+                cell.source = re.sub(
+                    r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
+                    r"[\1](\2.md)",
+                    cell.source,
+                )
+
             # Fix image paths in <img> tags
             cell.source = re.sub(
                 r'<img\s+src="\.?/img/([^"]+)"', r'<img src="../img/\1"', cell.source
@@ -120,14 +133,51 @@ exporter = MarkdownExporter(
     ],
 )
 
+md_executable = MarkdownExporter(
+    preprocessors=[
+        ExtractAttachmentsPreprocessor,
+        EscapePreprocessor(rewrite_links=False),
+    ],
+    template_name="md_executable",
+    extra_template_basedirs=[
+        os.path.join(os.path.dirname(__file__), "notebook_convert_templates")
+    ],
+)
+
 
 def convert_notebook(
     notebook_path: Path,
-) -> Path:
+    mode: Literal["markdown", "exec"] = "markdown",
+) -> str:
     with open(notebook_path) as f:
         nb = nbformat.read(f, as_version=4)
 
-    nb.metadata.target = "exec"
-
-    body, _ = exporter.from_notebook_node(nb)
+    nb.metadata.mode = mode
+    if mode == "markdown":
+        body, _ = exporter.from_notebook_node(nb)
+    else:
+        body, _ = md_executable.from_notebook_node(nb)
     return body
+
+
+HERE = Path(__file__).parent
+DOCS = HERE.parent / "docs"
+
+
+# Convert notebooks to markdown
+def _convert_notebooks(output_dir: str) -> None:
+    """Converting notebooks."""
+    output_dir_path = Path(output_dir)
+    for notebook in DOCS.rglob("*.ipynb"):
+        markdown = convert_notebook(notebook, mode="exec")
+        markdown_path = output_dir_path / notebook.relative_to(DOCS).with_suffix(".md")
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(markdown_path, "w") as f:
+            f.write(markdown)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert notebooks to markdown")
+    parser.add_argument("output_dir", help="Directory to output markdown files")
+    args = parser.parse_args()
+    _convert_notebooks(args.output_dir)
