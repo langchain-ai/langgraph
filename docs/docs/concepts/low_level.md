@@ -374,7 +374,7 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
 !!! important "State updates with `Command.PARENT`"
 
-    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](../../concepts/low_level#schema), you **must** define a [reducer](../../concepts/low_level#reducers) for the key you're updating in the parent graph state. See this [example](../how-tos/command.ipynb#navigating-to-a-node-in-a-parent-graph).
+    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](#schema), you **must** define a [reducer](#reducers) for the key you're updating in the parent graph state. See this [example](../how-tos/command.ipynb#navigating-to-a-node-in-a-parent-graph).
 
 This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
 
