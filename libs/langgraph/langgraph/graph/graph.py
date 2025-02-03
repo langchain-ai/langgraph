@@ -19,7 +19,6 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
@@ -40,7 +39,7 @@ from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import All, Checkpointer
-from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 

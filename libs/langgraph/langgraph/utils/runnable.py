@@ -10,9 +10,12 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Concatenate,
     Coroutine,
     Iterator,
     Optional,
+    ParamSpec,
+    Protocol,
     Sequence,
     Tuple,
     Union,
@@ -23,15 +26,17 @@ from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
     RunnableLambda,
-    RunnableLike,
     RunnableParallel,
     RunnableSequence,
+)
+from langchain_core.runnables.base import (
+    RunnableLike as LCRunnableLike,
 )
 from langchain_core.runnables.config import (
     run_in_executor,
     var_child_runnable_config,
 )
-from langchain_core.runnables.utils import Input
+from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
@@ -128,6 +133,15 @@ Each tuple contains:
 """
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+
+
+P = ParamSpec("P")  # to handle injected kwargs like `writer` / `store`
+
+RunnableLike = Union[
+    LCRunnableLike,
+    Callable[Concatenate[Input, P], Output],
+    Callable[Concatenate[Input, P], Awaitable[Output]],
+]
 
 
 class RunnableCallable(Runnable):
