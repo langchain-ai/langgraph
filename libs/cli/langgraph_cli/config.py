@@ -86,15 +86,42 @@ class AuthConfig(TypedDict, total=False):
 
 
 class Config(TypedDict, total=False):
+    """Configuration for langgraph-cli."""
+
     python_version: str
+    """Python version to use."""
+
     node_version: Optional[str]
+    """Node.js version to use."""
+
     pip_config_file: Optional[str]
+    """Path to a pip configuration file."""
+
     dockerfile_lines: list[str]
+    """Additional lines to add to the Dockerfile."""
+
     dependencies: list[str]
+    """Additional Python dependencies to install."""
+
     graphs: dict[str, str]
+    """Mapping of graph names to their definitions."""
+
     env: Union[dict[str, str], str]
+    """Environment variables to set.
+
+    If a dictionary is provided, the keys are environment variable names
+    and the values are the corresponding environment variable values.
+
+    If a string is provided, it is interpreted as a path to a file containing
+    environment variables in the format KEY=VALUE, with one environment variable
+    per line.
+    """
+
     store: Optional[StoreConfig]
+    """Configuration for vector embeddings in store."""
+
     auth: Optional[AuthConfig]
+    """Configuration for authentication."""
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
