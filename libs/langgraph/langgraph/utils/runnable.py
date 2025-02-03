@@ -15,7 +15,6 @@ from typing import (
     Iterator,
     Optional,
     ParamSpec,
-    Protocol,
     Sequence,
     Tuple,
     Union,
