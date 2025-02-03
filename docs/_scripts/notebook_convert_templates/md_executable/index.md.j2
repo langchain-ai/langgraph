@@ -7,11 +7,7 @@
 {%- if 'magics_language' in cell.metadata  -%}
     {{ cell.metadata.magics_language}}
 {%- elif 'name' in nb.metadata.get('language_info', {}) -%}
-    {%- if nb.metadata.get('mode') == 'exec' -%}
     {{ nb.metadata.language_info.name }} exec="1" source="below" result="ini"
-    {%- else -%}
-    {{ nb.metadata.language_info.name }}
-    {%- endif %}
 {%- endif %}
 {{ cell.source}}
 ```
@@ -19,21 +15,12 @@
 {% endblock input %}
 
 {%- block traceback_line -%}
-```output
-{{ line.rstrip() | strip_ansi }}
-```
 {%- endblock traceback_line -%}
 
 {%- block stream -%}
-```output
-{{ output.text.rstrip() }}
-```
 {%- endblock stream -%}
 
 {%- block data_text scoped -%}
-```output
-{{ output.data['text/plain'].rstrip() }}
-```
 {%- endblock data_text -%}
 
 {%- block data_html scoped -%}
