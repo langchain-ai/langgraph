@@ -303,3 +303,9 @@ These are the guides for resolving common errors you may find while building wit
 - [INVALID_GRAPH_NODE_RETURN_VALUE](../troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
 - [MULTIPLE_SUBGRAPHS](../troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
 - [INVALID_CHAT_HISTORY](../troubleshooting/errors/INVALID_CHAT_HISTORY.md)
+
+### LangGraph Platform Troubleshooting
+
+These guides provide troubleshooting information for errors that are specific to the LangGraph Platform.
+
+- [INVALID_LICENSE](../troubleshooting/errors/INVALID_LICENSE.md)
