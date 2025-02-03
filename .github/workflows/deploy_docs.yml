@@ -134,7 +134,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./site/
+          path: ./docs/site/
 
       - name: Deploy to GitHub Pages
         if: github.ref == 'refs/heads/main'
