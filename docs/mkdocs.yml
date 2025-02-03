@@ -359,7 +359,6 @@ nav:
             - tutorials/auth/add_auth_server.md
     - Resources:
       - FAQ: concepts/faq.md
-      - Integrations: integrations.md
       - Troubleshooting:
           - Troubleshooting: troubleshooting/errors/index.md
           - troubleshooting/errors/index.md
