@@ -10,11 +10,9 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
-    Concatenate,
     Coroutine,
     Iterator,
     Optional,
-    ParamSpec,
     Sequence,
     Tuple,
     Union,
@@ -37,7 +35,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from typing_extensions import TypeGuard
+from typing_extensions import Concatenate, ParamSpec, TypeGuard
 
 from langgraph.constants import (
     CONF,
