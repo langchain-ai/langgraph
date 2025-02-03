@@ -38,6 +38,11 @@ class EscapePreprocessor(Preprocessor):
             )
 
         elif cell.cell_type == "code":
+            # Determine if the cell has bash or cell magic
+            if cell.source.startswith("%") or cell.source.startswith("!"):
+                # update metadata to denote that it's not a python cell
+                cell.metadata["language_info"] = {"name": "unknown"}
+
             # Remove noqa comments
             cell.source = re.sub(r"#\s*noqa.*$", "", cell.source, flags=re.MULTILINE)
             # escape ``` in code
