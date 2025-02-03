@@ -181,3 +181,4 @@ Chinook.db
 
 libs/langgraph/out
 .vercel
+cassettes/

@@ -19,7 +19,9 @@ jobs:
         lib-version:
           - "development"
           - "latest"
-
+    defaults:
+      run:
+        working-directory: docs
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python + Poetry
@@ -39,14 +41,14 @@ jobs:
 
       - name: Pre-download tiktoken files
         run: |
-          poetry run python docs/_scripts/download_tiktoken.py
+          poetry run python _scripts/download_tiktoken.py
 
       - name: Prepare notebooks
         run: |
           if [ "${{ matrix.lib-version }}" = "development" ]; then
-            poetry run python docs/_scripts/prepare_notebooks_for_ci.py --comment-install-cells
+            poetry run python _scripts/prepare_notebooks_for_ci.py --comment-install-cells
           else
-            poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+            poetry run python _scripts/prepare_notebooks_for_ci.py
           fi
 
       - name: Run notebooks
@@ -68,7 +70,7 @@ jobs:
             CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '\.ipynb$' || true)
             if [ -n "$CHANGED_FILES" ]; then
               echo "Running changed notebooks: $CHANGED_FILES"
-              ./docs/_scripts/execute_notebooks.sh $CHANGED_FILES
+              ./_scripts/execute_notebooks.sh $CHANGED_FILES
             else
               echo "No notebook files changed, skipping execution"
             fi
