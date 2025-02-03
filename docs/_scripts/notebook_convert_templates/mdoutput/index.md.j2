@@ -1,4 +1,23 @@
+{#https://github.com/rdbisme/nbconvert/blob/master/share/jupyter/nbconvert/templates/markdown/index.md.j2#}
 {% extends 'markdown/index.md.j2' %}
+
+{% block input %}
+
+{{ nb.metadata.target }}
+```
+{%- if 'magics_language' in cell.metadata  -%}
+    {{ cell.metadata.magics_language}}
+{%- elif 'name' in nb.metadata.get('language_info', {}) -%}
+    {%- if nb.metadata.get('mode') == 'exec' -%}
+    {{ nb.metadata.language_info.name }} exec="1" source="below" result="ini"
+    {%- else -%}
+    {{ nb.metadata.language_info.name }}
+    {%- endif %}
+{%- endif %}
+{{ cell.source}}
+```
+
+{% endblock input %}
 
 {%- block traceback_line -%}
 ```output

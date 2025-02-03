@@ -10,12 +10,15 @@ from nbconvert.preprocessors import Preprocessor
 class EscapePreprocessor(Preprocessor):
     def preprocess_cell(self, cell, resources, cell_index):
         if cell.cell_type == "markdown":
-            # rewrite markdown links to html links (excluding image links)
-            cell.source = re.sub(
-                r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
-                r'<a href="\2">\1</a>',
-                cell.source,
-            )
+            # Temporarily disable this.
+            # We'll re-enable, but keeping markdown format and replacing ipynb links
+            # with links to corresponding markdown files.
+            # # rewrite markdown links to html links (excluding image links)
+            # cell.source = re.sub(
+            #     r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
+            #     r'<a href="\2">\1</a>',
+            #     cell.source,
+            # )
             # Fix image paths in <img> tags
             cell.source = re.sub(
                 r'<img\s+src="\.?/img/([^"]+)"', r'<img src="../img/\1"', cell.source
@@ -23,8 +26,11 @@ class EscapePreprocessor(Preprocessor):
 
         elif cell.cell_type == "code":
             # Remove noqa comments
-            cell.source = re.sub(r'#\s*noqa.*$', '', cell.source, flags=re.MULTILINE)
+            cell.source = re.sub(r"#\s*noqa.*$", "", cell.source, flags=re.MULTILINE)
             # escape ``` in code
+            # This is needed because the markdown exporter will wrap code blocks in
+            # triple backticks, which will break the markdown output if the code block
+            # contains triple backticks.
             cell.source = cell.source.replace("```", r"\`\`\`")
             # escape ``` in output
             if "outputs" in cell:
@@ -58,7 +64,7 @@ class EscapePreprocessor(Preprocessor):
 
 class ExtractAttachmentsPreprocessor(Preprocessor):
     """
-    Extracts all of the outputs from the notebook file.  The extracted
+    Extracts all the outputs from the notebook file.  The extracted
     outputs are returned in the 'resources' dictionary.
     """
 
@@ -82,7 +88,7 @@ class ExtractAttachmentsPreprocessor(Preprocessor):
         if not isinstance(resources["outputs"], dict):
             resources["outputs"] = {}
 
-        # Loop through all of the attachments in the cell
+        # Loop through all the attachments in the cell
         for name, attach in cell.get("attachments", {}).items():
             for mime, data in attach.items():
                 if mime not in {
@@ -120,6 +126,8 @@ def convert_notebook(
 ) -> Path:
     with open(notebook_path) as f:
         nb = nbformat.read(f, as_version=4)
+
+    nb.metadata.target = "exec"
 
     body, _ = exporter.from_notebook_node(nb)
     return body
