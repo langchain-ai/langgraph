@@ -125,24 +125,6 @@ jobs:
             fi
           fi
 
-      - name: Copy libs directory
-        working-directory: .
-        run: |
-          cp -r libs/ docs/libs/
-
-      - name: Install Vercel CLI
-        if: github.ref != 'refs/heads/main'
-        run: npm install --global vercel@latest
-
-      - name: Deploy Docs Preview to Vercel
-        if: github.ref != 'refs/heads/main'
-        run: |
-          vercel link --yes \
-            --project ${{ secrets.VERCEL_PROJECT_ID }} \
-            --scope ${{ secrets.VERCEL_ORG_ID }} \
-            --token ${{ secrets.VERCEL_TOKEN }}
-          vercel deploy
-
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v4
