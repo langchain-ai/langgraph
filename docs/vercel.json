@@ -1,0 +1,4 @@
+{
+  "buildCommand": "yarn build",
+  "outputDirectory": "site"
+}

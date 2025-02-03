@@ -1,0 +1,8 @@
+{
+  "name": "docs",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "build": "echo 'export PATH=$PATH:/vercel/.local/bin:$PATH' > ~/.bashrc && source ~/.bashrc && make vercel-build-docs"
+  }
+}
