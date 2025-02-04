@@ -21,6 +21,7 @@ your project on the official LangGraph documentation pages! 🏆
 To share your project, simply open a Pull Request adding an entry for your package in our [packages.yml](https://github.com/langchain-ai/langgraph/blob/main/docs/_scripts/third_party_page/packages.yml) file.
 
 **Guidelines**
+
 - Your repo must be distributed as an installable package (e.g., PyPI for Python, npm 
   for JavaScript/TypeScript, etc.) 📦
 - The repo should either use the Graph API (exposing a `StateGraph` instance) or 
