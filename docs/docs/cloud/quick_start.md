@@ -90,7 +90,7 @@ For this guide, we'll use the pre-built Python [**ReAct Agent**](https://github.
     </figure>
 
 
-## Lagraph Studio Web UI
+## LangGraph Studio Web UI
 
 Once your application is deployed, you can test it in **LangGraph Studio**. 
 
