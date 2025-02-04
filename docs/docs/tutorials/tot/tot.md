@@ -1,0 +1,386 @@
+# Tree of Thoughts
+
+[Tree of Thoughts](https://arxiv.org/abs/2305.10601) (ToT), by Yao, et. al, is a general LLM agent search algorithm that combines reflection/evaluation and simple search (in this case BFS, though you can apply DFS or other algorithms if you'd like).
+
+![LATS diagram](./img/tot.png)
+
+It has three main steps:
+
+1. Expand: generate 1 or more candidate solutions to the problem.
+2. Score: measure the quality of the responses.
+3. Prune: retain the top K best candidates
+
+Then return to "Expand" if no solution is found (or if the solution is of insufficient quality).
+
+
+## Prerequisites
+
+We'll install the tutorial's dependent packages and set our API key for the LLM provider of choice.
+
+
+```
+%%capture --no-stderr
+%pip install -U langgraph langchain-openai
+```
+
+
+```python
+import getpass
+import os
+
+
+def _set_env(var: str):
+    if not os.environ.get(var):
+        os.environ[var] = getpass.getpass(f"{var}: ")
+
+
+_set_env("OPENAI_API_KEY")
+# To visualize the algorithm
+trace = True
+if trace:
+    _set_env("LANGSMITH_API_KEY")
+    os.environ["LANGSMITH_PROJECT"] = "ToT Tutorial"
+```
+
+## Task Definition
+
+Our agent will try to play the "Game of 24". Given 4 numbers, it must generate a math equation that uses each of these numbers exactly one time to evaluate to a value of `24`.
+
+
+```python
+import operator
+from typing import List, Literal, Union, NamedTuple, Optional
+from pydantic import BaseModel, Field
+
+OperatorType = Literal["+", "-", "*", "/"]
+TokenType = Union[float, OperatorType]
+
+## We use these schemas to prompt the LLM to generate equations that evaluate to 24.
+
+
+class Equation(BaseModel):
+    """The formula combining the provided numbers to reach the target of 24."""
+
+    tokens: List[TokenType] = Field(
+        description="The stack of tokens and operators in reverse-polish notation. Example: [3, 4, '+', -1, '*'] would evaluate to (3 + 4) * -1 = -7.",
+    )
+
+    def compute(self) -> float:
+        op_funcs = {
+            "+": operator.add,
+            "-": operator.sub,
+            "*": operator.mul,
+            "/": operator.truediv,
+        }
+        stack = []
+        for token in self.tokens:
+            if isinstance(token, float):
+                stack.append(token)
+            else:
+                b, a = stack.pop(), stack.pop()
+                stack.append(op_funcs[token](a, b))
+
+        return stack[0]
+
+
+class GuessEquations(BaseModel):
+    """Submit multiple equations as guesses."""
+
+    reasoning: str = Field(
+        description="The reasoning behind the submitted guesses. Explain how you arrived at these equations."
+    )
+
+    equations: List[Equation] = Field(
+        description="The list of equations to submit as guesses."
+    )
+
+
+## These objects will represent a single "candidate" (or scored candidate) within our agent's state.
+# You can update the candidate object to match your own task.
+
+
+class Candidate(NamedTuple):
+    candidate: Equation
+    score: Optional[float] = None
+    feedback: Optional[str] = None
+
+    def __str__(self):
+        try:
+            computed = self.candidate.compute()
+        except Exception as e:
+            computed = f"Invalid equation: {self.candidate.tokens}; Error: {repr(e)}"
+
+        return f"Equation({self.candidate.tokens}) = {computed} (Reward: {self.score})"
+
+
+class ScoredCandidate(Candidate):
+    candidate: Equation
+    score: float
+    feedback: str
+```
+
+#### Fetch data
+
+We'll use an example from the [Game of 24](https://github.com/princeton-nlp/tree-of-thought-llm) dataset.
+
+
+```python
+import requests
+import csv
+
+csv_data = requests.get(
+    "https://storage.googleapis.com/benchmarks-artifacts/game-of-24/24.csv"
+).content.decode("utf-8")
+# Get just the Puzzles column (column index 1)
+puzzles = [row[1].strip() for row in csv.reader(csv_data.splitlines()[1:])]
+
+print(f"Example puzzles: {puzzles[:3]}")
+```
+
+## Expander
+
+The "tree of thoughts" algorithm is relatively generic. The primary two task-specific components are the **expander** and the **scorer**.
+The expander (the augmented LLM) tries to generate 1 or more solutions to the problem. On subsequent attempts, it is given a seed/candidate value from 
+the previous search.
+
+You can update this section to match your own task requirements. The expander can be arbitrarily complex. All that's required is that it accepts the problem and an optional previous attempt (or attempts) and returns a new result.
+
+
+```python
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
+
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are playing the Game of 24. Using the provide numbers, create an equation that evaluates to 24.\n"
+            "Submit exactly {k} guesses for this round.",
+        ),
+        ("user", "Solve the 24 game for these numbers: {problem}.{candidate}"),
+    ],
+).partial(candidate="")
+llm = ChatOpenAI(model="gpt-4o-mini")
+
+bound_llm = llm.with_structured_output(GuessEquations)
+solver = prompt | bound_llm
+```
+
+# Scorer
+
+In this game, the scorer is easy. We need to assert two things:
+
+1. The LLM has generated a valid equation using each number exactly one time.
+2. The equation evaluates to 24.
+
+You can update this function to match your own task requirements.
+
+
+```python
+def compute_score(problem: str, candidate: Candidate) -> ScoredCandidate:
+    numbers = list(map(int, problem.split()))
+    # Check that the candidate equation uses all 4 numbers exactly once
+    used_numbers = [
+        token for token in candidate.candidate.tokens if isinstance(token, float)
+    ]
+    if sorted(used_numbers) != sorted(numbers):
+        score = 0
+        feedback = "The equation must use all 4 numbers exactly once."
+        return ScoredCandidate(
+            candidate=candidate.candidate, score=score, feedback=feedback
+        )
+    try:
+        result = candidate.candidate.compute()
+        score = 1 / (1 + abs(24 - result))
+        feedback = f"Result: {result}"
+    except Exception as e:
+        score = 0
+        feedback = f"Invalid equation. Error: {repr(e)}"
+    return ScoredCandidate(
+        candidate=candidate.candidate, score=score, feedback=feedback
+    )
+```
+
+## Graph
+
+Now it's time to create our graph.
+
+
+```python
+import operator
+from typing import Optional, Dict, Any
+from typing_extensions import Annotated, TypedDict
+from langgraph.graph import StateGraph
+
+from langchain_core.runnables import RunnableConfig
+from langgraph.constants import Send
+from langgraph.checkpoint.memory import MemorySaver
+
+
+def update_candidates(
+    existing: Optional[list] = None,
+    updates: Optional[Union[list, Literal["clear"]]] = None,
+) -> List[str]:
+    if existing is None:
+        existing = []
+    if updates is None:
+        return existing
+    if updates == "clear":
+        return []
+    # Concatenate the lists
+    return existing + updates
+
+
+class ToTState(TypedDict):
+    problem: str
+    candidates: Annotated[List[Candidate], update_candidates]
+    scored_candidates: Annotated[List[ScoredCandidate], update_candidates]
+    depth: Annotated[int, operator.add]
+
+
+class Configuration(TypedDict, total=False):
+    max_depth: int
+    threshold: float
+    k: int
+    beam_size: int
+
+
+def _ensure_configurable(config: RunnableConfig) -> Configuration:
+    """Get params that configure the search algorithm."""
+    configurable = config.get("configurable", {})
+    return {
+        **configurable,
+        "max_depth": configurable.get("max_depth", 10),
+        "threshold": config.get("threshold", 0.9),
+        "k": configurable.get("k", 5),
+        "beam_size": configurable.get("beam_size", 3),
+    }
+
+
+class ExpansionState(ToTState):
+    seed: Optional[Candidate]
+
+
+def expand(state: ExpansionState, *, config: RunnableConfig) -> Dict[str, List[str]]:
+    """Generate the next state."""
+    configurable = _ensure_configurable(config)
+    if not state.get("seed"):
+        candidate_str = ""
+    else:
+        candidate_str = "\n\n" + str(state["seed"])
+    try:
+        equation_submission = solver.invoke(
+            {
+                "problem": state["problem"],
+                "candidate": candidate_str,
+                "k": configurable["k"],
+            },
+            config=config,
+        )
+    except Exception:
+        return {"candidates": []}
+    new_candidates = [
+        Candidate(candidate=equation) for equation in equation_submission.equations
+    ]
+    return {"candidates": new_candidates}
+
+
+def score(state: ToTState) -> Dict[str, List[float]]:
+    """Evaluate the candidate generations."""
+    candidates = state["candidates"]
+    scored = []
+    for candidate in candidates:
+        scored.append(compute_score(state["problem"], candidate))
+    return {"scored_candidates": scored, "candidates": "clear"}
+
+
+def prune(
+    state: ToTState, *, config: RunnableConfig
+) -> Dict[str, List[Dict[str, Any]]]:
+    scored_candidates = state["scored_candidates"]
+    beam_size = _ensure_configurable(config)["beam_size"]
+    organized = sorted(
+        scored_candidates, key=lambda candidate: candidate[1], reverse=True
+    )
+    pruned = organized[:beam_size]
+    return {
+        # Update the starting point for the next iteration
+        "candidates": pruned,
+        # Clear the old memory
+        "scored_candidates": "clear",
+        # Increment the depth by 1
+        "depth": 1,
+    }
+
+
+def should_terminate(
+    state: ToTState, config: RunnableConfig
+) -> Union[Literal["__end__"], Send]:
+    configurable = _ensure_configurable(config)
+    solved = state["candidates"][0].score >= configurable["threshold"]
+    if solved or state["depth"] >= configurable["max_depth"]:
+        return "__end__"
+    return [
+        Send("expand", {**state, "somevalseed": candidate})
+        for candidate in state["candidates"]
+    ]
+
+
+# Create the graph
+builder = StateGraph(state_schema=ToTState, config_schema=Configuration)
+
+# Add nodes
+builder.add_node(expand)
+builder.add_node(score)
+builder.add_node(prune)
+
+# Add edges
+builder.add_edge("expand", "score")
+builder.add_edge("score", "prune")
+builder.add_conditional_edges("prune", should_terminate, path_map=["expand", "__end__"])
+
+# Set entry point
+builder.add_edge("__start__", "expand")
+
+# Compile the graph
+graph = builder.compile(checkpointer=MemorySaver())
+```
+
+
+```python
+from IPython.display import Image, display
+
+display(Image(graph.get_graph().draw_mermaid_png()))
+```
+
+![](data:image/jpg;base64,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)
+
+## Run
+
+Now let's try it on one of the puzzles!
+
+
+```python
+config = {
+    "configurable": {
+        "thread_id": "test_1",
+        "depth": 10,
+    }
+}
+for step in graph.stream({"problem": puzzles[42]}, config):
+    print(step)
+```
+
+
+```python
+final_state = graph.get_state(config)
+winning_solution = final_state.values["candidates"][0]
+search_depth = final_state.values["depth"]
+if winning_solution[1] == 1:
+    print(f"Found a winning solution in {search_depth} steps: {winning_solution}")
+else:
+    print(
+        f"Failed to find a winning solution in {search_depth} steps. Best guess: {winning_solution}"
+    )
+```
