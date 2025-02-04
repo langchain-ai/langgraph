@@ -220,7 +220,7 @@ class RunnableCallable(Runnable):
                 " via the async API (ainvoke, astream, etc.)"
             )
 
-        input = copy.deepcopy(input)
+        input = copy.copy(input)
         if config is None:
             config = ensure_config()
         if self.explode_args:
@@ -281,7 +281,7 @@ class RunnableCallable(Runnable):
         if not self.afunc:
             return self.invoke(input, config)
 
-        input = copy.deepcopy(input)
+        input = copy.copy(input)
         if config is None:
             config = ensure_config()
         if self.explode_args:
