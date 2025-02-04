@@ -25,8 +25,7 @@ below. These libraries can extend LangGraph's functionality in various ways.
 Have you built an awesome open-source library using LangGraph? We'd love to feature 
 your project on the official LangGraph documentation pages! 🏆
 
-If you have something cool to share, simply open a Pull Request to add an entry for 
-your package in our [packages.yml]({langgraph_url}) file. 
+To share your project, simply open a Pull Request adding an entry for your package in our [packages.yml]({langgraph_url}) file.
 
 **Guidelines**
 - Your repo must be distributed as an installable package (e.g., PyPI for Python, npm 
@@ -35,8 +34,8 @@ your package in our [packages.yml]({langgraph_url}) file.
   the Functional API (exposing an `entrypoint`).
 - The package must include documentation (e.g., a `README.md` or docs site) 
   explaining how to use it.
-
-We'll review it and merge it in!
+  
+We'll review your contribution and merge it in!
 
 Thanks for contributing! 🚀
 """
@@ -65,9 +64,15 @@ def generate_markdown(resolved_packages: List[ResolvedPackage], language: str) -
     """
     # Update the URL to the actual file once the initial version is merged
     if language == "python":
-        langgraph_url = "https://github.com/langchain-ai/langgraph/pulls"
+        langgraph_url = (
+            "https://github.com/langchain-ai/langgraph/blob/main/docs"
+            "/_scripts/third_party_page/packages.yml"
+        )
     elif language == "js":
-        langgraph_url = "https://github.com/langchain-ai/langgraphjs/pulls"
+        langgraph_url = (
+            "https://github.com/langchain-ai/langgraphjs/blob/main/docs"
+            "/_scripts/third_party/packages.yml"
+        )
     else:
         raise ValueError(f"Invalid language '{language}'. Expected 'python' or 'js'.")
 
