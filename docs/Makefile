@@ -10,7 +10,7 @@ build-docs: build-typedoc
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
-	python _scripts/generate_llms_text.py docs/llms-full.txt
+	poetry run python _scripts/generate_llms_text.py docs/llms-full.txt
 
 install-vercel-deps:
 	curl -sSL https://install.python-poetry.org | python3 -
