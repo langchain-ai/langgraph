@@ -187,11 +187,27 @@ def _convert_notebooks(
         if replace:
             notebook.unlink(missing_ok=False)
 
+    if replace:
+        # Update links in markdown files from ipynb to md files
+        for markdown in output_dir_path.rglob("*.md"):
+            with open(markdown, "r") as f:
+                content = f.read()
+            # Keep format but replace the .ipynb extension with .md
+            source = re.sub(
+                r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
+                r"[\1](\2.md)",
+                content,
+            )
+            with open(markdown, "w") as f:
+                f.write(source)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert notebooks to markdown")
     parser.add_argument(
-        "--output_dir", default=None, help="Directory to output markdown files",
+        "--output_dir",
+        default=None,
+        help="Directory to output markdown files",
     )
     parser.add_argument(
         "--replace",
