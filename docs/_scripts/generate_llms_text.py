@@ -2,6 +2,7 @@
 
 import glob
 import os
+import pathlib
 
 from mkdocs.structure.files import File
 from mkdocs.structure.pages import Page
@@ -26,8 +27,6 @@ def _make_llms_text(output_file: str) -> str:
     ]
     all_files = [os.path.join(SOURCE_DIR, path) for path in relative_paths]
 
-    # Add all how-tos
-
     all_files.extend(
         glob.glob(os.path.join(SOURCE_DIR, "how-tos/*.md"), recursive=True)
     )
@@ -41,6 +40,10 @@ def _make_llms_text(output_file: str) -> str:
     all_files.extend(
         glob.glob(os.path.join(SOURCE_DIR, "concepts/*.ipynb"), recursive=True)
     )
+
+    all_files = [
+        path if isinstance(pathlib.Path) else pathlib.Path(path) for path in all_files
+    ]
 
     all_content = []
 
@@ -82,7 +85,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Generate consolidated text file from markdown/notebook files for LLM training"
+        description=(
+            "Generate consolidated text file from markdown/notebook files for LLMs."
+        )
     )
     parser.add_argument("output_file", help="Path to output the consolidated text file")
 
