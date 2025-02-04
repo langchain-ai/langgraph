@@ -77,12 +77,12 @@ jobs:
         # This step lints the docs using the existing linting set up.
         # It should be very fast and should not require any external services.
         run: make lint-docs
+      - name: Build llms-text
+        run: make llms-text
       - name: Build site
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
-      - name: Build llms-text
-        run: make llms-text
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
