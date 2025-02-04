@@ -81,7 +81,8 @@ jobs:
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
-
+      - name: Build llms-text
+        run: make llms-text
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test

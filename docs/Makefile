@@ -1,4 +1,4 @@
-.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc
+.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc llms-text
 
 build-typedoc:
 	cd ../libs/sdk-js && yarn install --include-dev && yarn typedoc
@@ -8,6 +8,9 @@ build-typedoc:
 
 build-docs: build-typedoc
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
+
+llms-text:
+	poetry run python _scripts/generate_llms_text.py docs/llms-full.txt
 
 install-vercel-deps:
 	curl -sSL https://install.python-poetry.org | python3 -

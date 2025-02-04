@@ -41,10 +41,6 @@ def _make_llms_text(output_file: str) -> str:
         glob.glob(os.path.join(SOURCE_DIR, "concepts/*.ipynb"), recursive=True)
     )
 
-    all_files = [
-        path if isinstance(pathlib.Path) else pathlib.Path(path) for path in all_files
-    ]
-
     all_content = []
 
     # Process each file
