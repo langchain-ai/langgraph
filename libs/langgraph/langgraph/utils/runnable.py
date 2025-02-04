@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import enum
 import inspect
 import sys
@@ -218,6 +219,8 @@ class RunnableCallable(Runnable):
                 "\nEither initialize with a synchronous function or invoke"
                 " via the async API (ainvoke, astream, etc.)"
             )
+
+        input = copy.deepcopy(input)
         if config is None:
             config = ensure_config()
         if self.explode_args:
@@ -277,6 +280,8 @@ class RunnableCallable(Runnable):
     ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
+
+        input = copy.deepcopy(input)
         if config is None:
             config = ensure_config()
         if self.explode_args:
