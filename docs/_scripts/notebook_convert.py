@@ -189,16 +189,19 @@ def _convert_notebooks(
 
     if replace:
         # Update links in markdown files from ipynb to md files
-        for markdown in output_dir_path.rglob("*.md"):
-            with open(markdown, "r") as f:
+        for path in output_dir_path.rglob("*.md"):
+            with open(path, "r") as f:
                 content = f.read()
             # Keep format but replace the .ipynb extension with .md
+            pattern = r"(?<!!)\[([^\]]*)\]\((?![^)]*//)([^)]*)\.ipynb\)"
+            replacement = r"[\1](\2.md)"
+
             source = re.sub(
-                r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
-                r"[\1](\2.md)",
+                pattern,
+                replacement,
                 content,
             )
-            with open(markdown, "w") as f:
+            with open(path, "w") as f:
                 f.write(source)
 
 
