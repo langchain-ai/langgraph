@@ -8,9 +8,13 @@ from typing import TypedDict
 import yaml
 
 MARKDOWN = """\
-# 🚀 Third-party Libraries 
+# 🚀 Prebuilt Libraries
 
-A collection of third-party libraries that extend LangGraph's functionality.
+LangGraph includes a prebuilt React agent. For more information on how to use it, 
+check out our [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/#prebuilt-react-agent).
+
+If you’re looking for other prebuilt libraries, explore the community-built options 
+below. These libraries can extend LangGraph's functionality in various ways.
 
 ## 📚 Available Libraries
 
@@ -18,7 +22,21 @@ A collection of third-party libraries that extend LangGraph's functionality.
 
 ## ✨ Contributing Your Library
 
-If you'd like to add your library to this list, please open a pull request on the {langgraph_url}.
+Have you built an awesome open-source library using LangGraph? We'd love to feature 
+your project on the official LangGraph documentation pages! 🏆
+
+If you have something cool to share, simply open a Pull Request to add an entry for 
+your package in our [packages.yml]({langgraph_url}) file. 
+
+**Guidelines**
+- Your repo must be distributed as an installable package (e.g., PyPI for Python, npm 
+  for JavaScript/TypeScript, etc.) 📦
+- The repo should either use the Graph API (exposing a `StateGraph` instance) or 
+  the Functional API (exposing an `entrypoint`).
+- The package must include documentation (e.g., a `README.md` or docs site) 
+  explaining how to use it.
+
+We'll review it and merge it in!
 
 Thanks for contributing! 🚀
 """

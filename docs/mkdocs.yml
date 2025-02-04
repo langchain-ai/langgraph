@@ -353,6 +353,7 @@ nav:
             - tutorials/auth/resource_auth.md
             - tutorials/auth/add_auth_server.md
     - Resources:
+      - Prebuilt: prebuilt.md
       - FAQ: concepts/faq.md
       - Troubleshooting:
           - Troubleshooting: troubleshooting/errors/index.md
@@ -364,7 +365,7 @@ nav:
           - troubleshooting/errors/INVALID_CHAT_HISTORY.md
           - troubleshooting/errors/INVALID_LICENSE.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
-  
+
   - API reference:
     - Library:
       - Graphs: reference/graphs.md
