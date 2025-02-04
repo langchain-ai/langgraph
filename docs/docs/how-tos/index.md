@@ -9,16 +9,24 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 
 ## LangGraph
 
-### Controllability
+### Graph API Basics
 
-LangGraph offers a high level of control over the execution of your graph.
-
-These how-to guides show how to achieve that controllability.
-
+- [How to update graph state from nodes](state-reducers.ipynb)
+- [How to create a sequence of steps](sequence.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)
+- [How to create and control loops with recursion limits](recursion-limit.ipynb)
+- [How to visualize your graph](visualization.ipynb)
+
+### Fine-grained Control
+
+These guides demonstrate LangGraph features that grant fine-grained control over the
+execution of your graph.
+
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
-- [How to control graph recursion limit](recursion-limit.ipynb)
-- [How to combine control flow and state updates with Command](command.ipynb)
+- [How to update state and jump to nodes in graphs and subgraphs](command.ipynb)
+- [How to add runtime configuration to your graph](configuration.ipynb)
+- [How to add node retries](node-retries.ipynb)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 
 ### Persistence
 
@@ -81,15 +89,10 @@ See the below guides for how-to implement human-in-the-loop workflows with the (
 
 [Streaming](../concepts/streaming.md) is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
 
-- [How to stream full state of your graph](stream-values.ipynb)
-- [How to stream state updates of your graph](stream-updates.ipynb)
+- [How to stream](streaming.ipynb)
 - [How to stream LLM tokens](streaming-tokens.ipynb)
-- [How to stream LLM tokens without LangChain models](streaming-tokens-without-langchain.ipynb)
-- [How to stream custom data](streaming-content.ipynb)
-- [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
-- [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
-- [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
-- [How to stream events from the final node](streaming-from-final-node.ipynb)
+- [How to stream LLM tokens from specific nodes](streaming-specific-nodes.ipynb)
+- [How to stream data from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream from subgraphs](streaming-subgraphs.ipynb)
 - [How to disable streaming for models that don't support it](disable-streaming.ipynb)
 
@@ -127,7 +130,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
-See the below guides for how-to implement multi-agent workflows with the (beta)
+See the below guides for how to implement multi-agent workflows with the (beta)
 [Functional API](../concepts/functional_api.md):
 
 - [How to build a multi-agent network (functional API)](multi-agent-network-functional.ipynb)
@@ -142,13 +145,14 @@ See the below guides for how-to implement multi-agent workflows with the (beta)
 ### Other
 
 - [How to run graph asynchronously](async.ipynb)
-- [How to visualize your graph](visualization.ipynb)
-- [How to add runtime configuration to your graph](configuration.ipynb)
-- [How to add node retries](node-retries.ipynb)
 - [How to force tool-calling agent to structure output](react-agent-structured-output.ipynb)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
-- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
 - [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
+
+See the below guide for how to integrate with other frameworks using the (beta)
+[Functional API](../concepts/functional_api.md):
+
+- [How to integrate LangGraph (functional API) with AutoGen, CrewAI, and other frameworks](autogen-integration-functional.ipynb)
 
 ### Prebuilt ReAct Agent
 
@@ -299,3 +303,9 @@ These are the guides for resolving common errors you may find while building wit
 - [INVALID_GRAPH_NODE_RETURN_VALUE](../troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md)
 - [MULTIPLE_SUBGRAPHS](../troubleshooting/errors/MULTIPLE_SUBGRAPHS.md)
 - [INVALID_CHAT_HISTORY](../troubleshooting/errors/INVALID_CHAT_HISTORY.md)
+
+### LangGraph Platform Troubleshooting
+
+These guides provide troubleshooting information for errors that are specific to the LangGraph Platform.
+
+- [INVALID_LICENSE](../troubleshooting/errors/INVALID_LICENSE.md)

@@ -11,16 +11,15 @@ python = "^3.10"
 aiohappyeyeballs = "2.4.3"
 
 [tool.poetry.group.docs.dependencies]
-langgraph = { path = "libs/langgraph/", develop = true }
-langgraph-checkpoint = { path = "libs/checkpoint/", develop = true }
-langgraph-checkpoint-sqlite = { path = "libs/checkpoint-sqlite", develop = true }
-langgraph-checkpoint-postgres = { path = "libs/checkpoint-postgres", develop = true }
-langgraph-sdk = {path = "libs/sdk-py", develop = true}
+langgraph = { path = "../libs/langgraph/", develop = true }
+langgraph-checkpoint = { path = "../libs/checkpoint/", develop = true }
+langgraph-checkpoint-sqlite = { path = "../libs/checkpoint-sqlite", develop = true }
+langgraph-checkpoint-postgres = { path = "../libs/checkpoint-postgres", develop = true }
+langgraph-sdk = {path = "../libs/sdk-py", develop = true}
 mkdocs = "^1.6.0"
 mkdocs-autorefs = ">=1.0.1,<1.1.0"
 mkdocstrings = "^0.25.1"
 mkdocstrings-python = "^1.10.4"
-mkdocs-redirects = "^1.2.1"
 mkdocs-minify-plugin = "^0.8.0"
 mkdocs-rss-plugin = "^1.13.1"
 mkdocs-git-committers-plugin-2 = "^2.3.0"

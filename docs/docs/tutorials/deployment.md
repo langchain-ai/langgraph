@@ -12,7 +12,7 @@ Get started deploying your LangGraph applications locally or on the cloud with
 
 ## Deployment Options
 
-- [Self-Hosted Lite](../concepts/self_hosted.md): A free (up to 1 million nodes executed), limited version of LangGraph Platform that you can run locally or in a self-hosted manner
+- [Self-Hosted Lite](../concepts/self_hosted.md): A free (up to 1 million nodes executed per year), limited version of LangGraph Platform that you can run locally or in a self-hosted manner
 - [Cloud SaaS](../concepts/langgraph_cloud.md): Hosted as part of LangSmith.
 - [Bring Your Own Cloud](../concepts/bring_your_own_cloud.md): We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud.
 - [Self-Hosted Enterprise](../concepts/self_hosted.md): Completely managed by you.

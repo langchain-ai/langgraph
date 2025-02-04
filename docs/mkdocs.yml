@@ -56,13 +56,6 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
-  - redirects:
-      redirect_maps:
-        'cloud/index.md': 'concepts/index.md#langgraph-platform'
-        'cloud/how-tos/index.md': 'how-tos/index.md#langgraph-platform'
-        'cloud/concepts/api.md': 'concepts/langgraph_server.md'
-        'cloud/concepts/cloud.md': 'concepts/langgraph_cloud.md'
-        'cloud/faq/studio.md': 'concepts/langgraph_studio.md#studio-faqs'
   - mkdocstrings:
       handlers:
         python:
@@ -104,12 +97,20 @@ nav:
         - how-tos/index.md
         - LangGraph:
           - LangGraph: how-tos#langgraph
+          - Graph API Basics:
+              - Graph API Basics: how-tos#graph-api-basics
+              - how-tos/state-reducers.ipynb
+              - how-tos/sequence.ipynb
+              - how-tos/branching.ipynb
+              - how-tos/recursion-limit.ipynb
+              - how-tos/visualization.ipynb
           - Controllability:
               - Controllability: how-tos#controllability
-              - how-tos/branching.ipynb
               - how-tos/map-reduce.ipynb
-              - how-tos/recursion-limit.ipynb
               - how-tos/command.ipynb
+              - how-tos/configuration.ipynb
+              - how-tos/node-retries.ipynb
+              - how-tos/return-when-recursion-limit-hits.ipynb
           - Persistence:
               - Persistence: how-tos#persistence
               - how-tos/persistence.ipynb
@@ -138,15 +139,10 @@ nav:
               - how-tos/review-tool-calls-functional.ipynb
           - Streaming:
               - Streaming: how-tos#streaming
-              - how-tos/stream-values.ipynb
-              - how-tos/stream-updates.ipynb
+              - how-tos/streaming.ipynb
               - how-tos/streaming-tokens.ipynb
-              - how-tos/streaming-tokens-without-langchain.ipynb
-              - how-tos/streaming-content.ipynb
-              - how-tos/stream-multiple.ipynb
+              - how-tos/streaming-specific-nodes.ipynb
               - how-tos/streaming-events-from-within-tools.ipynb
-              - how-tos/streaming-events-from-within-tools-without-langchain.ipynb
-              - how-tos/streaming-from-final-node.ipynb
               - how-tos/streaming-subgraphs.ipynb
               - how-tos/disable-streaming.ipynb
           - Tool calling:
@@ -177,12 +173,10 @@ nav:
           - Other:
               - Other: how-tos#other
               - how-tos/async.ipynb
-              - how-tos/visualization.ipynb
-              - how-tos/configuration.ipynb
-              - how-tos/node-retries.ipynb
               - how-tos/react-agent-structured-output.ipynb
               - how-tos/run-id-langsmith.ipynb
-              - how-tos/return-when-recursion-limit-hits.ipynb
+              - how-tos/autogen-integration.ipynb
+              - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
               - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
               - how-tos/create-react-agent.ipynb
@@ -203,6 +197,7 @@ nav:
                 - cloud/deployment/custom_docker.md
                 - cloud/deployment/test_locally.md
                 - cloud/deployment/graph_rebuild.md
+                - how-tos/autogen-langgraph-platform.ipynb
             - Deployment:
                 - Deployment: how-tos#deployment
                 - cloud/deployment/cloud.md
@@ -358,6 +353,7 @@ nav:
             - tutorials/auth/resource_auth.md
             - tutorials/auth/add_auth_server.md
     - Resources:
+      - Prebuilt: prebuilt.md
       - FAQ: concepts/faq.md
       - Troubleshooting:
           - Troubleshooting: troubleshooting/errors/index.md
@@ -367,8 +363,9 @@ nav:
           - troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md
           - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
           - troubleshooting/errors/INVALID_CHAT_HISTORY.md
+          - troubleshooting/errors/INVALID_LICENSE.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
-  
+
   - API reference:
     - Library:
       - Graphs: reference/graphs.md
@@ -380,6 +377,7 @@ nav:
       - Types: reference/types.md
       - Constants: reference/constants.md
       - Pregel: reference/pregel.md
+      - Config: reference/config.md
       - Functional API: reference/func.md
     - LangGraph Platform:
       - Server API: "cloud/reference/api/api_ref.md"

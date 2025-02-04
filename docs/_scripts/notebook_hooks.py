@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
+import posixpath
 
 from generate_api_reference_links import update_markdown_with_imports
 from notebook_convert import convert_notebook
@@ -13,6 +14,24 @@ logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.INFO)
 DISABLED = os.getenv("DISABLE_NOTEBOOK_CONVERT") in ("1", "true", "True")
+
+
+REDIRECT_MAP = {
+    # lib redirects
+    "how-tos/stream-values.ipynb": "how-tos/streaming.ipynb#values",
+    "how-tos/stream-updates.ipynb": "how-tos/streaming.ipynb#updates",
+    "how-tos/streaming-content.ipynb": "how-tos/streaming.ipynb#custom",
+    "how-tos/stream-multiple.ipynb": "how-tos/streaming.ipynb#multiple",
+    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
+    "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
+    "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
+    # cloud redirects
+    "cloud/index.md": "concepts/index.md#langgraph-platform",
+    "cloud/how-tos/index.md": "how-tos/index.md#langgraph-platform",
+    "cloud/concepts/api.md": "concepts/langgraph_server.md",
+    "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
+    "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
+}
 
 
 class NotebookFile(File):
@@ -140,3 +159,57 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         add_api_references=True,
         **kwargs,
     )
+
+# redirects
+
+HTML_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <link rel="canonical" href="{url}">
+    <meta name="robots" content="noindex">
+    <script>var anchor=window.location.hash.substr(1);location.href="{url}"+(anchor?"#"+anchor:"")</script>
+    <meta http-equiv="refresh" content="0; url={url}">
+</head>
+<body>
+Redirecting...
+</body>
+</html>
+"""
+
+
+def write_html(site_dir, old_path, new_path):
+    """Write an HTML file in the site_dir with a meta redirect to the new page"""
+    # Determine all relevant paths
+    old_path_abs = os.path.join(site_dir, old_path)
+    old_dir_abs = os.path.dirname(old_path_abs)
+
+    # Create parent directories if they don't exist
+    if not os.path.exists(old_dir_abs):
+        os.makedirs(old_dir_abs)
+
+    # Write the HTML redirect file in place of the old file
+    content = HTML_TEMPLATE.format(url=new_path)
+    with open(old_path_abs, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+# Create HTML files for redirects after site dir has been built
+def on_post_build(config):
+    use_directory_urls = config.get("use_directory_urls")
+    for page_old, page_new in REDIRECT_MAP.items():
+        page_old = page_old.replace(".ipynb", ".md")
+        page_new = page_new.replace(".ipynb", ".md")
+        page_new_before_hash, hash, suffix = page_new.partition("#")
+        old_html_path = File(page_old, "", "", use_directory_urls).dest_path.replace(
+            os.sep, "/"
+        )
+        new_html_path = File(page_new_before_hash, "", "", True).url
+        new_html_path = (
+            posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
+            + hash
+            + suffix
+        )
+        write_html(config["site_dir"], old_html_path, new_html_path)

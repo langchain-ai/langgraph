@@ -11,6 +11,10 @@ on:
   schedule:
     - cron: '0 13 * * *'
 
+defaults:
+  run:
+    working-directory: docs
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,14 +43,14 @@ jobs:
 
       - name: Pre-download tiktoken files
         run: |
-          poetry run python docs/_scripts/download_tiktoken.py
+          poetry run python _scripts/download_tiktoken.py
 
       - name: Prepare notebooks
         run: |
           if [ "${{ matrix.lib-version }}" = "development" ]; then
-            poetry run python docs/_scripts/prepare_notebooks_for_ci.py --comment-install-cells
+            poetry run python _scripts/prepare_notebooks_for_ci.py --comment-install-cells
           else
-            poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+            poetry run python _scripts/prepare_notebooks_for_ci.py
           fi
 
       - name: Run notebooks
@@ -63,12 +67,12 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             echo "Running all notebooks"
-            ./docs/_scripts/execute_notebooks.sh
+            ./_scripts/execute_notebooks.sh
           else
-            CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '\.ipynb$' || true)
+            CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | tr ' ' '\n' | sed 's|^docs/docs/|docs/|' | grep '\.ipynb$' || true)
             if [ -n "$CHANGED_FILES" ]; then
               echo "Running changed notebooks: $CHANGED_FILES"
-              ./docs/_scripts/execute_notebooks.sh $CHANGED_FILES
+              ./_scripts/execute_notebooks.sh $CHANGED_FILES
             else
               echo "No notebook files changed, skipping execution"
             fi

@@ -9,7 +9,11 @@
     
     permissions:
       contents: read
-    
+
+    defaults:
+      run:
+        working-directory: docs
+
     jobs:
       codespell:
         name: (Check for spelling errors)
@@ -26,7 +30,7 @@
           - name: Extract Ignore Words List
             run: |
               # Use a Python script to extract the ignore words list from pyproject.toml
-              python .github/workflows/extract_ignored_words_list.py
+              python ../.github/workflows/extract_ignored_words_list.py
             id: extract_ignore_words
     
           - name: Codespell

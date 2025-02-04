@@ -21,10 +21,7 @@ LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [A
 
 ### Why use LangGraph?
 
-LangGraph provides fine-grained control over both the flow and state of your
-agent applications. It implements a central
-[persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/),
-enabling features that are common to most agent architectures:
+LangGraph powers [production-grade agents](https://www.langchain.com/built-with-langgraph), trusted by Linkedin, Uber, Klarna, GitLab, and many more. LangGraph provides fine-grained control over both the flow and state of your agent applications. It implements a central [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/), enabling features that are common to most agent architectures:
 
 - **Memory**: LangGraph persists arbitrary aspects of your application's state,
 supporting memory of conversations and other updates within and across user
@@ -332,6 +329,10 @@ Then we define one normal and one conditional edge. Conditional edge means that 
 * [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/high_level/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
 * [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
 * [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/#langgraph-platform): LangGraph Platform is a commercial solution for deploying agentic applications in production, built on the open-source LangGraph framework.
+
+## Resources
+
+* [Built with LangGraph](https://www.langchain.com/built-with-langgraph): Hear how industry leaders use LangGraph to ship powerful, production-ready AI applications.
 
 ## Contributing
 
