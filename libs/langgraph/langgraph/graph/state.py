@@ -500,6 +500,7 @@ class StateGraph(Graph):
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
+        workflow_mode: bool = False,
     ) -> "CompiledStateGraph":
         """Compiles the state graph into a `CompiledGraph` object.
 
@@ -515,7 +516,7 @@ class StateGraph(Graph):
             interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
             interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
             debug (bool): A flag indicating whether to enable debug mode.
-
+            workflow_mode (bool): A flag indicating whether to run the graph in workflow mode.x
         Returns:
             CompiledStateGraph: The compiled state graph.
         """
@@ -569,27 +570,43 @@ class StateGraph(Graph):
             interrupt_after_nodes=interrupt_after,
             auto_validate=False,
             debug=debug,
+            workflow_mode=workflow_mode,
             store=store,
         )
-
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
         compiled.attach_branch(START, SELF, CONTROL_BRANCH, with_reader=False)
         for key, node in self.nodes.items():
-            compiled.attach_branch(key, SELF, CONTROL_BRANCH, with_reader=False)
+            compiled.attach_branch(
+                key,
+                SELF,
+                CONTROL_BRANCH,
+                with_reader=False,
+                workflow_mode=workflow_mode,
+            )
 
         for start, end in self.edges:
-            compiled.attach_edge(start, end)
+            compiled.attach_edge(start, end, workflow_mode=workflow_mode)
 
         for starts, end in self.waiting_edges:
-            compiled.attach_edge(starts, end)
+            compiled.attach_edge(starts, end, workflow_mode=workflow_mode)
 
         for start, branches in self.branches.items():
+            if workflow_mode:
+                compiled.analyzer.condition_nodes_name.append(start)
             for name, branch in branches.items():
-                compiled.attach_branch(start, name, branch)
-
+                compiled.attach_branch(
+                    start,
+                    name,
+                    branch,
+                    workflow_mode=workflow_mode,
+                    condition_branch=True,
+                )
+        if workflow_mode:
+            compiled.add_workflow_trigger()
+            compiled.analyzer.find_connected_nodes()
         return compiled.validate()
 
 
@@ -741,7 +758,9 @@ class CompiledStateGraph(CompiledGraph):
         else:
             raise RuntimeError
 
-    def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
+    def attach_edge(
+        self, starts: Union[str, Sequence[str]], end: str, workflow_mode: bool = False
+    ) -> None:
         if isinstance(starts, str):
             if starts == START:
                 channel_name = f"start:{end}"
@@ -753,9 +772,15 @@ class CompiledStateGraph(CompiledGraph):
                 self.nodes[START] |= ChannelWrite(
                     [ChannelWriteEntry(channel_name, START)], tags=[TAG_HIDDEN]
                 )
+                if workflow_mode:
+                    self.analyzer.add_edge(starts, end)
+                    self.analyzer.nodes_precondition[end].append(starts)
             elif end != END:
                 # subscribe to start channel
                 self.nodes[end].triggers.append(starts)
+                if workflow_mode:
+                    self.analyzer.add_edge(starts, end)
+                    self.analyzer.nodes_precondition[end].append(starts)
         elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
@@ -767,9 +792,20 @@ class CompiledStateGraph(CompiledGraph):
                 self.nodes[start] |= ChannelWrite(
                     [ChannelWriteEntry(channel_name, start)], tags=[TAG_HIDDEN]
                 )
+                if workflow_mode:
+                    self.analyzer.add_edge(start, end)
+            if workflow_mode:
+                self.analyzer.nodes_precondition[end].append(starts)
 
     def attach_branch(
-        self, start: str, name: str, branch: Branch, *, with_reader: bool = True
+        self,
+        start: str,
+        name: str,
+        branch: Branch,
+        *,
+        with_reader: bool = True,
+        workflow_mode: bool = False,
+        condition_branch: bool = False,
     ) -> None:
         def branch_writer(
             packets: Sequence[Union[str, Send]], config: RunnableConfig
@@ -783,6 +819,7 @@ class CompiledStateGraph(CompiledGraph):
                     )
                     for p in filtered
                 ]
+
                 if branch.then and branch.then != END:
                     writes.append(
                         ChannelWriteEntry(
@@ -792,6 +829,8 @@ class CompiledStateGraph(CompiledGraph):
                             ),
                         )
                     )
+                if workflow_mode:
+                    self.analyzer.add_selector(start, filtered)
                 ChannelWrite.do_write(
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
@@ -806,7 +845,10 @@ class CompiledStateGraph(CompiledGraph):
             branch_writer,
             _get_state_reader(self.builder, schema) if with_reader else None,
         )
-
+        if workflow_mode and condition_branch and not branch.ends:
+            raise ValueError(
+                "When workflow_mode is True, add_conditional_edges function must set path_map or return Literal type"
+            )
         # attach branch subscribers
         ends = (
             branch.ends.values()
@@ -818,7 +860,9 @@ class CompiledStateGraph(CompiledGraph):
                 channel_name = f"branch:{start}:{name}:{end}"
                 self.channels[channel_name] = EphemeralValue(Any, guard=False)
                 self.nodes[end].triggers.append(channel_name)
-
+                if workflow_mode and condition_branch:
+                    self.analyzer.add_edge(start, end)
+                    self.analyzer.nodes_precondition[end].append(start)
         # attach then subscriber
         if branch.then and branch.then != END:
             channel_name = f"branch:{start}:{name}::then"
@@ -829,6 +873,44 @@ class CompiledStateGraph(CompiledGraph):
                     self.nodes[end] |= ChannelWrite(
                         [ChannelWriteEntry(channel_name, end)], tags=[TAG_HIDDEN]
                     )
+
+    def add_workflow_trigger(self):
+        # Use backtracking to generate all possible combinations of the preconditions
+        def _generate_combinations(input_list):
+            result = []
+
+            def backtrack(index, current_combination):
+                if index == len(input_list):
+                    if current_combination:
+                        current_combination = set(current_combination)
+                        if current_combination not in result:
+                            result.append(current_combination)
+                    return
+
+                current = input_list[index]
+
+                backtrack(index + 1, current_combination)
+
+                if isinstance(current, tuple):
+                    backtrack(index + 1, current_combination + list(current))
+                else:
+                    backtrack(index + 1, current_combination + [current])
+
+            backtrack(0, [])
+            return result
+
+        for key, value in self.analyzer.nodes_precondition.items():
+            iterable_list = _generate_combinations(value)
+            self.analyzer.nodes_precondition_combinations[key] = iterable_list
+            for starts in iterable_list:
+                channel_name = f"join:{'+'.join(sorted(list(starts)))}:{key}"
+                if channel_name not in self.channels:
+                    self.channels[channel_name] = NamedBarrierValue(str, set(starts))
+                    self.nodes[key].triggers.append(channel_name)
+                    for start in starts:
+                        self.nodes[start] |= ChannelWrite(
+                            [ChannelWriteEntry(channel_name, start)], tags=[TAG_HIDDEN]
+                        )
 
 
 def _get_state_reader(
@@ -925,13 +1007,15 @@ def _get_channels(
 @overload
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: Literal[False]
-) -> BaseChannel: ...
+) -> BaseChannel:
+    ...
 
 
 @overload
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: Literal[True] = True
-) -> Union[BaseChannel, ManagedValueSpec]: ...
+) -> Union[BaseChannel, ManagedValueSpec]:
+    ...
 
 
 def _get_channel(
