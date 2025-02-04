@@ -1,13 +1,17 @@
 import json
 import os
 import pathlib
+import sys
 import textwrap
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import NamedTuple, Optional, TypedDict, Union
 
 import click
 
 MIN_NODE_VERSION = "20"
 MIN_PYTHON_VERSION = "3.11"
+
+IS_WINDOWS = sys.platform.startswith("win")
 
 
 class IndexConfig(TypedDict, total=False):
@@ -524,7 +528,8 @@ RUN set -ex && \\
     if (auth_config := config.get("auth")) is not None:
         env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    posix_graphs = _convert_graphs_to_posix_paths(config["graphs"])
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(posix_graphs)}'")
 
     docker_file_contents = [
         f"FROM {base_image}:{config['python_version']}",
@@ -539,6 +544,29 @@ RUN set -ex && \\
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]
     return os.linesep.join(docker_file_contents)
+
+
+def _to_posix_if_windows(path_str: str) -> str:
+    """Convert a Windows path to POSIX if running on Windows; otherwise return as-is."""
+    if IS_WINDOWS:
+        # Interpret as Windows path
+        pure_win = PureWindowsPath(path_str)
+        # Convert to a 'pure' POSIX path
+        pure_posix = PurePosixPath(pure_win)
+        # Return the string with forward slashes
+        return pure_posix.as_posix()
+    else:
+        # If not on Windows, just return the original string
+        return path_str
+
+
+def _convert_graphs_to_posix_paths(graphs: dict[str, str]) -> dict[str, str]:
+    """Convert graph paths to POSIX paths."""
+    posix_graphs = {}
+    for graph_id, import_str in graphs.items():
+        module_str, _, attr_str = import_str.partition(":")
+        posix_graphs[graph_id] = f"{_to_posix_if_windows(module_str)}:{attr_str}"
+    return posix_graphs
 
 
 def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
@@ -580,6 +608,9 @@ ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
         env_additional_config += f"""
 ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
 """
+
+    posix_graphs = _convert_graphs_to_posix_paths(config["graphs"])
+
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -588,7 +619,7 @@ ADD . {faux_path}
 
 RUN cd {faux_path} && {install_cmd}
 {env_additional_config}
-ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
+ENV LANGSERVE_GRAPHS='{json.dumps(posix_graphs)}'
 
 WORKDIR {faux_path}
 
@@ -607,7 +638,7 @@ def config_to_compose(
     config: Config,
     base_image: str,
     watch: bool = False,
-):
+) -> str:
     env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
     env_vars_str = "\n".join(f'            {k}: "{v}"' for k, v in env_vars)
     env_file_str = (
