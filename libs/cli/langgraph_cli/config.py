@@ -562,6 +562,7 @@ def _to_posix_if_windows(path_str: str) -> str:
 
 def _convert_graphs_to_posix_paths(graphs: dict[str, str]) -> dict[str, str]:
     """Convert graph paths to POSIX paths."""
+    return graphs
     posix_graphs = {}
     for graph_id, import_str in graphs.items():
         module_str, _, attr_str = import_str.partition(":")
