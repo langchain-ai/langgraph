@@ -906,8 +906,8 @@ The functional API supports [human-in-the-loop](human_in_the_loop.md) workflows 
 
 Please see the following examples for more details:
 
-* [How to wait for user input (Functional API)](../how-tos/wait-user-input-functional.ipynb): Shows how to implement a simple human-in-the-loop workflow using the functional API.
-* [How to review tool calls (Functional API)](../how-tos/review-tool-calls-functional.ipynb): Guide demonstrates how to implement human-in-the-loop workflows in a ReAct agent using the LangGraph Functional API.
+* [How to wait for user input (Functional API)](../how-tos/wait-user-input-functional.md): Shows how to implement a simple human-in-the-loop workflow using the functional API.
+* [How to review tool calls (Functional API)](../how-tos/review-tool-calls-functional.md): Guide demonstrates how to implement human-in-the-loop workflows in a ReAct agent using the LangGraph Functional API.
 
 ### Short-term memory
 
@@ -915,7 +915,7 @@ Please see the following examples for more details:
 
 Please see the following how-to guides for more details:
 
-*  [How to add thread-level persistence (functional API)](../how-tos/persistence-functional.ipynb): Shows how to add thread-level persistence to a functional API workflow and implements a simple chatbot.
+*  [How to add thread-level persistence (functional API)](../how-tos/persistence-functional.md): Shows how to add thread-level persistence to a functional API workflow and implements a simple chatbot.
 
 ### Long-term memory
 
@@ -924,7 +924,7 @@ about a given user in one conversation and using it in another.
 
 Please see the following how-to guides for more details:
 
-* [How to add cross-thread persistence (functional API)](../how-tos/cross-thread-persistence-functional.ipynb): Shows how to add cross-thread persistence to a functional API workflow and implements a simple chatbot.
+* [How to add cross-thread persistence (functional API)](../how-tos/cross-thread-persistence-functional.md): Shows how to add cross-thread persistence to a functional API workflow and implements a simple chatbot.
 
 ### Workflows
 
@@ -932,7 +932,7 @@ Please see the following how-to guides for more details:
 
 ### Agents
 
-* [How to create a React agent from scratch (Functional API)](../how-tos/react-agent-from-scratch-functional.ipynb): Shows how to create a simple React agent from scratch using the functional API.
-* [How to build a multi-agent network](../how-tos/multi-agent-network-functional.ipynb): Shows how to build a multi-agent network using the functional API.
-* [How to add multi-turn conversation in a multi-agent application (functional API)](../how-tos/multi-agent-multi-turn-convo-functional.ipynb): allow an end-user to engage in a multi-turn conversation with one or more agents.  
+* [How to create a React agent from scratch (Functional API)](../how-tos/react-agent-from-scratch-functional.md): Shows how to create a simple React agent from scratch using the functional API.
+* [How to build a multi-agent network](../how-tos/multi-agent-network-functional.md): Shows how to build a multi-agent network using the functional API.
+* [How to add multi-turn conversation in a multi-agent application (functional API)](../how-tos/multi-agent-multi-turn-convo-functional.md): allow an end-user to engage in a multi-turn conversation with one or more agents.  
 

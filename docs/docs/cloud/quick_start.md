@@ -257,7 +257,7 @@ Congratulations! If you've worked your way through this tutorial you are well on
 
 ### LangGraph Framework
 
-- **[LangGraph Tutorial](../tutorials/introduction.ipynb)**: Get started with LangGraph framework.
+- **[LangGraph Tutorial](../tutorials/introduction.md)**: Get started with LangGraph framework.
 - **[LangGraph Concepts](../concepts/index.md)**: Learn the foundational concepts of LangGraph.
 - **[LangGraph How-to Guides](../how-tos/index.md)**: Guides for common tasks with LangGraph.
  

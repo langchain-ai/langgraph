@@ -61,4 +61,4 @@ for event in graph.stream(None, config, stream_mode="values"):
 ## Additional Resources 📚
 
 - [**Conceptual Guide: Persistence**](https://langchain-ai.github.io/langgraph/concepts/persistence/#replay): Read the persistence guide for more context on replaying.
-- [**How to View and Update Past Graph State**](../how-tos/human_in_the_loop/time-travel.ipynb): Step-by-step instructions for working with graph state that demonstrate the **replay** and **fork** actions.
+- [**How to View and Update Past Graph State**](../how-tos/human_in_the_loop/time-travel.md): Step-by-step instructions for working with graph state that demonstrate the **replay** and **fork** actions.

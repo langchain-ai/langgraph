@@ -87,7 +87,7 @@ nav:
   - Home:
     - Introduction: index.md
     - Get started:
-      - Learn the basics: tutorials/introduction.ipynb
+      - Learn the basics: tutorials/introduction.md
       - Deployment:
         - tutorials/deployment.md
         - Local Deploy: tutorials/langgraph-platform/local-server.md
@@ -100,93 +100,93 @@ nav:
           - LangGraph: how-tos#langgraph
           - Graph API Basics:
               - Graph API Basics: how-tos#graph-api-basics
-              - how-tos/state-reducers.ipynb
-              - how-tos/sequence.ipynb
-              - how-tos/branching.ipynb
-              - how-tos/recursion-limit.ipynb
-              - how-tos/visualization.ipynb
+              - how-tos/state-reducers.md
+              - how-tos/sequence.md
+              - how-tos/branching.md
+              - how-tos/recursion-limit.md
+              - how-tos/visualization.md
           - Controllability:
               - Controllability: how-tos#controllability
-              - how-tos/map-reduce.ipynb
-              - how-tos/command.ipynb
-              - how-tos/configuration.ipynb
-              - how-tos/node-retries.ipynb
-              - how-tos/return-when-recursion-limit-hits.ipynb
+              - how-tos/map-reduce.md
+              - how-tos/command.md
+              - how-tos/configuration.md
+              - how-tos/node-retries.md
+              - how-tos/return-when-recursion-limit-hits.md
           - Persistence:
               - Persistence: how-tos#persistence
-              - how-tos/persistence.ipynb
-              - how-tos/subgraph-persistence.ipynb
-              - how-tos/cross-thread-persistence.ipynb
-              - how-tos/persistence_postgres.ipynb
-              - how-tos/persistence_mongodb.ipynb
-              - how-tos/persistence_redis.ipynb
-              - how-tos/persistence-functional.ipynb
-              - how-tos/cross-thread-persistence-functional.ipynb
+              - how-tos/persistence.md
+              - how-tos/subgraph-persistence.md
+              - how-tos/cross-thread-persistence.md
+              - how-tos/persistence_postgres.md
+              - how-tos/persistence_mongodb.md
+              - how-tos/persistence_redis.md
+              - how-tos/persistence-functional.md
+              - how-tos/cross-thread-persistence-functional.md
           - Memory:
               - Memory: how-tos#memory
-              - how-tos/memory/manage-conversation-history.ipynb
-              - how-tos/memory/delete-messages.ipynb
-              - how-tos/memory/add-summary-conversation-history.ipynb
-              - how-tos/memory/semantic-search.ipynb
+              - how-tos/memory/manage-conversation-history.md
+              - how-tos/memory/delete-messages.md
+              - how-tos/memory/add-summary-conversation-history.md
+              - how-tos/memory/semantic-search.md
           - Human-in-the-loop:
               - Human-in-the-loop: how-tos#human-in-the-loop
-              - how-tos/human_in_the_loop/breakpoints.ipynb
-              - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
-              - how-tos/human_in_the_loop/edit-graph-state.ipynb
-              - how-tos/human_in_the_loop/wait-user-input.ipynb
-              - how-tos/human_in_the_loop/time-travel.ipynb
-              - how-tos/human_in_the_loop/review-tool-calls.ipynb
-              - how-tos/wait-user-input-functional.ipynb
-              - how-tos/review-tool-calls-functional.ipynb
+              - how-tos/human_in_the_loop/breakpoints.md
+              - how-tos/human_in_the_loop/dynamic_breakpoints.md
+              - how-tos/human_in_the_loop/edit-graph-state.md
+              - how-tos/human_in_the_loop/wait-user-input.md
+              - how-tos/human_in_the_loop/time-travel.md
+              - how-tos/human_in_the_loop/review-tool-calls.md
+              - how-tos/wait-user-input-functional.md
+              - how-tos/review-tool-calls-functional.md
           - Streaming:
               - Streaming: how-tos#streaming
-              - how-tos/streaming.ipynb
-              - how-tos/streaming-tokens.ipynb
-              - how-tos/streaming-specific-nodes.ipynb
-              - how-tos/streaming-events-from-within-tools.ipynb
-              - how-tos/streaming-subgraphs.ipynb
-              - how-tos/disable-streaming.ipynb
+              - how-tos/streaming.md
+              - how-tos/streaming-tokens.md
+              - how-tos/streaming-specific-nodes.md
+              - how-tos/streaming-events-from-within-tools.md
+              - how-tos/streaming-subgraphs.md
+              - how-tos/disable-streaming.md
           - Tool calling:
               - Tool calling: how-tos#tool-calling
-              - how-tos/tool-calling.ipynb
-              - how-tos/tool-calling-errors.ipynb
-              - how-tos/pass-run-time-values-to-tools.ipynb
-              - how-tos/update-state-from-tools.ipynb
-              - how-tos/pass-config-to-tools.ipynb
-              - how-tos/many-tools.ipynb
+              - how-tos/tool-calling.md
+              - how-tos/tool-calling-errors.md
+              - how-tos/pass-run-time-values-to-tools.md
+              - how-tos/update-state-from-tools.md
+              - how-tos/pass-config-to-tools.md
+              - how-tos/many-tools.md
           - Subgraphs:
               - Subgraphs: how-tos#subgraphs
-              - how-tos/subgraph.ipynb
-              - how-tos/subgraphs-manage-state.ipynb
-              - how-tos/subgraph-transform-state.ipynb
+              - how-tos/subgraph.md
+              - how-tos/subgraphs-manage-state.md
+              - how-tos/subgraph-transform-state.md
           - Multi-agent:
               - Multi-agent: how-tos#multi-agent
-              - how-tos/agent-handoffs.ipynb
-              - how-tos/multi-agent-network.ipynb
-              - how-tos/multi-agent-multi-turn-convo.ipynb
-              - how-tos/multi-agent-network-functional.ipynb
-              - how-tos/multi-agent-multi-turn-convo-functional.ipynb
+              - how-tos/agent-handoffs.md
+              - how-tos/multi-agent-network.md
+              - how-tos/multi-agent-multi-turn-convo.md
+              - how-tos/multi-agent-network-functional.md
+              - how-tos/multi-agent-multi-turn-convo-functional.md
           - State Management:
               - State Management: how-tos#state-management
-              - how-tos/state-model.ipynb
-              - how-tos/input_output_schema.ipynb
-              - how-tos/pass_private_state.ipynb
+              - how-tos/state-model.md
+              - how-tos/input_output_schema.md
+              - how-tos/pass_private_state.md
           - Other:
               - Other: how-tos#other
-              - how-tos/async.ipynb
-              - how-tos/react-agent-structured-output.ipynb
-              - how-tos/run-id-langsmith.ipynb
-              - how-tos/autogen-integration.ipynb
-              - how-tos/autogen-integration-functional.ipynb
+              - how-tos/async.md
+              - how-tos/react-agent-structured-output.md
+              - how-tos/run-id-langsmith.md
+              - how-tos/autogen-integration.md
+              - how-tos/autogen-integration-functional.md
           - Prebuilt ReAct Agent:
               - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
-              - how-tos/create-react-agent.ipynb
-              - how-tos/create-react-agent-memory.ipynb
-              - how-tos/create-react-agent-system-prompt.ipynb
-              - how-tos/create-react-agent-hitl.ipynb
-              - how-tos/create-react-agent-structured-output.ipynb
-              - how-tos/react-agent-from-scratch.ipynb
-              - how-tos/react-agent-from-scratch-functional.ipynb
+              - how-tos/create-react-agent.md
+              - how-tos/create-react-agent-memory.md
+              - how-tos/create-react-agent-system-prompt.md
+              - how-tos/create-react-agent-hitl.md
+              - how-tos/create-react-agent-structured-output.md
+              - how-tos/react-agent-from-scratch.md
+              - how-tos/react-agent-from-scratch-functional.md
         - LangGraph Platform:
             - LangGraph Platform: how-tos#langgraph-platform
             - Application Structure:
@@ -198,7 +198,7 @@ nav:
                 - cloud/deployment/custom_docker.md
                 - cloud/deployment/test_locally.md
                 - cloud/deployment/graph_rebuild.md
-                - how-tos/autogen-langgraph-platform.ipynb
+                - how-tos/autogen-langgraph-platform.md
             - Deployment:
                 - Deployment: how-tos#deployment
                 - cloud/deployment/cloud.md
@@ -299,55 +299,55 @@ nav:
         - tutorials/index.md
         - Quick Start:
           - Quick Start: tutorials#quick-start
-          - tutorials/introduction.ipynb
+          - tutorials/introduction.md
           - tutorials/workflows/index.md
           - tutorials/langgraph-platform/local-server.md
           - cloud/quick_start.md
         - Chatbots:
             - Chatbots: tutorials#chatbots
-            - tutorials/customer-support/customer-support.ipynb
-            - tutorials/chatbots/information-gather-prompting.ipynb
-            - tutorials/code_assistant/langgraph_code_assistant.ipynb
+            - tutorials/customer-support/customer-support.md
+            - tutorials/chatbots/information-gather-prompting.md
+            - tutorials/code_assistant/langgraph_code_assistant.md
         - RAG:
             - RAG: tutorials#rag
-            - tutorials/rag/langgraph_adaptive_rag.ipynb
-            - tutorials/rag/langgraph_adaptive_rag_local.ipynb
-            - tutorials/rag/langgraph_agentic_rag.ipynb
-            - tutorials/rag/langgraph_crag.ipynb
-            - tutorials/rag/langgraph_crag_local.ipynb
-            - tutorials/rag/langgraph_self_rag.ipynb
-            - tutorials/rag/langgraph_self_rag_local.ipynb
-            - tutorials/sql-agent.ipynb
+            - tutorials/rag/langgraph_adaptive_rag.md
+            - tutorials/rag/langgraph_adaptive_rag_local.md
+            - tutorials/rag/langgraph_agentic_rag.md
+            - tutorials/rag/langgraph_crag.md
+            - tutorials/rag/langgraph_crag_local.md
+            - tutorials/rag/langgraph_self_rag.md
+            - tutorials/rag/langgraph_self_rag_local.md
+            - tutorials/sql-agent.md
         - Agent Architectures:
             - Agent Architectures: tutorials#agent-architectures
             - Multi-Agent Systems:
                 - Multi-Agent Systems: tutorials#multi-agent-systems
-                - tutorials/multi_agent/multi-agent-collaboration.ipynb
-                - tutorials/multi_agent/agent_supervisor.ipynb
-                - tutorials/multi_agent/hierarchical_agent_teams.ipynb
+                - tutorials/multi_agent/multi-agent-collaboration.md
+                - tutorials/multi_agent/agent_supervisor.md
+                - tutorials/multi_agent/hierarchical_agent_teams.md
             - Planning Agents:
                 - Planning Agents: tutorials#planning-agents
-                - tutorials/plan-and-execute/plan-and-execute.ipynb
-                - tutorials/rewoo/rewoo.ipynb
-                - tutorials/llm-compiler/LLMCompiler.ipynb
+                - tutorials/plan-and-execute/plan-and-execute.md
+                - tutorials/rewoo/rewoo.md
+                - tutorials/llm-compiler/LLMCompiler.md
             - Reflection & Critique:
                 - Reflection & Critique: tutorials#reflection-critique
-                - tutorials/reflection/reflection.ipynb
-                - tutorials/reflexion/reflexion.ipynb
-                - tutorials/tot/tot.ipynb
-                - tutorials/lats/lats.ipynb
-                - tutorials/self-discover/self-discover.ipynb
+                - tutorials/reflection/reflection.md
+                - tutorials/reflexion/reflexion.md
+                - tutorials/tot/tot.md
+                - tutorials/lats/lats.md
+                - tutorials/self-discover/self-discover.md
         - Evaluation & Analysis:
             - Evaluation & Analysis: tutorials#evaluation
-            - tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
-            - tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+            - tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.md
+            - tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.md
         - Experimental:
             - Experimental: tutorials#experimental
-            - tutorials/storm/storm.ipynb
-            - tutorials/tnt-llm/tnt-llm.ipynb
-            - tutorials/web-navigation/web_voyager.ipynb
-            - tutorials/usaco/usaco.ipynb
-            - tutorials/extraction/retries.ipynb
+            - tutorials/storm/storm.md
+            - tutorials/tnt-llm/tnt-llm.md
+            - tutorials/web-navigation/web_voyager.md
+            - tutorials/usaco/usaco.md
+            - tutorials/extraction/retries.md
         - LangGraph Platform:
             - LangGraph Platform: concepts#langgraph-platform
             - tutorials/auth/getting_started.md
@@ -477,7 +477,7 @@ validation:
   absolute_links: warn
   unrecognized_links: warn
   # TODO: figure out how to enable 'warn' for this
-  # it's only an issue for tutorials/storm/storm.ipynb
+  # it's only an issue for tutorials/storm/storm.md
   # because it creates anchors in the generated report
   # and those anchors are not available in the actual doc
   anchors: info

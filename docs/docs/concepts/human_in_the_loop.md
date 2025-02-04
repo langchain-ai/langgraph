@@ -185,7 +185,7 @@ thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(Command(resume=True), config=thread_config)
 ```
 
-See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a more detailed example.
+See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls.md) for a more detailed example.
 
 ### Review & Edit State
 
@@ -230,7 +230,7 @@ graph.invoke(
 )
 ```
 
-See [How to wait for user input using interrupt](../how-tos/human_in_the_loop/wait-user-input.ipynb) for a more detailed example.
+See [How to wait for user input using interrupt](../how-tos/human_in_the_loop/wait-user-input.md) for a more detailed example.
 
 ### Review Tool Calls
 
@@ -273,7 +273,7 @@ def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
         return Command(goto="call_llm", update={"messages": [feedback_msg]})
 ```
 
-See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a more detailed example.
+See [how to review tool calls](../how-tos/human_in_the_loop/review-tool-calls.md) for a more detailed example.
 
 ### Multi-turn conversation
 
@@ -353,7 +353,7 @@ it may be part of a larger graph consisting of multiple nodes and include a cond
         )
     ```
 
-See [how to implement multi-turn conversations](../how-tos/multi-agent-multi-turn-convo.ipynb) for a more detailed example.
+See [how to implement multi-turn conversations](../how-tos/multi-agent-multi-turn-convo.md) for a more detailed example.
 
 ### Validating human input
 
@@ -741,4 +741,4 @@ To avoid issues, refrain from dynamically changing the node's structure between 
 
 - [**Conceptual Guide: Persistence**](persistence.md#replay): Read the persistence guide for more context on replaying.
 - [**How to Guides: Human-in-the-loop**](../how-tos/index.md#human-in-the-loop): Learn how to implement human-in-the-loop workflows in LangGraph.
-- [**How to implement multi-turn conversations**](../how-tos/multi-agent-multi-turn-convo.ipynb): Learn how to implement multi-turn conversations in LangGraph.
+- [**How to implement multi-turn conversations**](../how-tos/multi-agent-multi-turn-convo.md): Learn how to implement multi-turn conversations in LangGraph.

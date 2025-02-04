@@ -86,7 +86,7 @@ for event in graph.stream(None, thread_config, stream_mode="values"):
     print(event)
 ```
 
-See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) for a detailed how-to on doing this!
+See [our guide](../how-tos/human_in_the_loop/dynamic_breakpoints.md) for a detailed how-to on doing this!
 
 ## Interaction Patterns
 
@@ -119,7 +119,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
     print(event)
 ```
 
-See [our guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a detailed how-to on doing this!
+See [our guide](../how-tos/human_in_the_loop/breakpoints.md) for a detailed how-to on doing this!
 
 ### Editing
 
@@ -153,7 +153,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
     print(event)
 ```
 
-See [this guide](../how-tos/human_in_the_loop/edit-graph-state.ipynb) for a detailed how-to on doing this!
+See [this guide](../how-tos/human_in_the_loop/edit-graph-state.md) for a detailed how-to on doing this!
 
 ### Input
 
@@ -195,7 +195,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
     print(event)
 ```
 
-See [this guide](../how-tos/human_in_the_loop/wait-user-input.ipynb) for a detailed how-to on doing this!
+See [this guide](../how-tos/human_in_the_loop/wait-user-input.md) for a detailed how-to on doing this!
 
 ## Use-cases
 
@@ -237,7 +237,7 @@ for event in graph.stream(None, thread, stream_mode="values"):
     print(event)
 ```
 
-See [this guide](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for a detailed how-to on doing this!
+See [this guide](../how-tos/human_in_the_loop/review-tool-calls.md) for a detailed how-to on doing this!
 
 ### Time Travel
 
@@ -295,7 +295,7 @@ So, it will re-play any previously executed nodes rather than re-executing them.
 
 See [this additional conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#replay) for related context on replaying.
 
-See see [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a detailed how-to on doing time-travel!
+See see [this guide](../how-tos/human_in_the_loop/time-travel.md) for a detailed how-to on doing time-travel!
 
 #### Forking
 
@@ -326,4 +326,4 @@ for event in graph.stream(None, config, stream_mode="values"):
 
 See [this additional conceptual guide](https://langchain-ai.github.io/langgraph/concepts/persistence/#update-state) for related context on forking.
 
-See [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a detailed how-to on doing time-travel!
+See [this guide](../how-tos/human_in_the_loop/time-travel.md) for a detailed how-to on doing time-travel!

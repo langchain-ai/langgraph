@@ -10,7 +10,7 @@ There are several different modes you can specify when calling these methods (e.
 - [`"values"`](../how-tos/streaming.ipynb#values): This streams the full value of the state after each step of the graph.
 - [`"updates"`](../how-tos/streaming.ipynb#updates): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
 - [`"custom"`](../how-tos/streaming.ipynb#custom): This streams custom data from inside your graph nodes.
-- [`"messages"`](../how-tos/streaming-tokens.ipynb): This streams LLM tokens and metadata for the graph node where LLM is invoked.
+- [`"messages"`](../how-tos/streaming-tokens.md): This streams LLM tokens and metadata for the graph node where LLM is invoked.
 - [`"debug"`](../how-tos/streaming.ipynb#debug): This streams as much information as possible throughout the execution of the graph.
 
 You can also specify multiple streaming modes at the same time by passing them as a list. When you do this, the streamed outputs will be tuples `(stream_mode, data)`. For example:
@@ -33,7 +33,7 @@ The below visualization shows the difference between the `values` and `updates` 
 
 ## Streaming LLM tokens and events (`.astream_events`)
 
-In addition, you can use the `astream_events` method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb).
+In addition, you can use the `astream_events` method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.md).
 
 This is a standard method on all [LangChain objects](https://python.langchain.com/docs/concepts/#runnable-interface). This means that as the graph is executed, certain events are emitted along the way and can be seen if you run the graph using `.astream_events`. 
 
@@ -141,7 +141,7 @@ This is the ID of the overall AIMessage (not just this chunk) and is super helpf
 us track which chunks are part of the same message (so we can show them together in the UI).
 
 This information contains all that is needed for creating a UI for streaming LLM tokens. You can see a 
-guide for that [here](../how-tos/streaming-tokens.ipynb).
+guide for that [here](../how-tos/streaming-tokens.md).
 
 
 !!! warning "ASYNC IN PYTHON<=3.10"

@@ -61,7 +61,7 @@ LangGraph provides full control over memory implementation:
 - [`State`](./low_level.md#state): User-defined schema specifying the exact structure of memory to retain.
 - [`Checkpointers`](./persistence.md): Mechanism to store state at every step across different interactions.
 
-This flexible approach allows you to tailor the memory system to your specific agent architecture needs. For a practical guide on adding memory to your graph, see [this tutorial](../how-tos/persistence.ipynb).
+This flexible approach allows you to tailor the memory system to your specific agent architecture needs. For a practical guide on adding memory to your graph, see [this tutorial](../how-tos/persistence.md).
 
 Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time.
 
@@ -101,7 +101,7 @@ Parallel processing is vital for efficient multi-agent systems and complex tasks
 - Implementation of map-reduce-like operations
 - Efficient handling of independent subtasks
 
-For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduce.ipynb).
+For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduce.md).
 
 ### Subgraphs
 
@@ -111,7 +111,7 @@ For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduc
 - Hierarchical organization of agent teams
 - Controlled communication between agents and the main system
 
-Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.ipynb).
+Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.md).
 
 ### Reflection
 
