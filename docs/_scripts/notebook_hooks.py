@@ -7,8 +7,8 @@ from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 import posixpath
 
-from notebook_convert import convert_notebook
 from generate_api_reference_links import update_markdown_with_imports
+from notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -125,7 +125,14 @@ def _highlight_code_blocks(markdown: str) -> str:
     return markdown
 
 
-def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
+def _on_page_markdown_with_config(
+    markdown: str,
+    page: Page,
+    *,
+    add_api_references: bool = True,
+    remove_base64_images: bool = False,
+    **kwargs: Any,
+) -> str:
     if DISABLED:
         return markdown
     if page.file.src_path.endswith(".ipynb"):
@@ -133,11 +140,25 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         markdown = convert_notebook(page.file.abs_src_path)
 
     # Append API reference links to code blocks
-    markdown = update_markdown_with_imports(markdown)
+    if add_api_references:
+        markdown = update_markdown_with_imports(markdown)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
+
+    if remove_base64_images:
+        # Remove base64 encoded images from markdown
+        markdown = re.sub(r"!\[.*?\]\(data:image/[^;]+;base64,[^\)]+\)", "", markdown)
+
     return markdown
 
+
+def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
+    return _on_page_markdown_with_config(
+        markdown,
+        page,
+        add_api_references=True,
+        **kwargs,
+    )
 
 # redirects
 
