@@ -159,6 +159,24 @@
       color: #000000;
     }
 
+    .md-banner a {
+      color: #000000;
+      text-decoration: underline;
+    }
+
+    .md-banner a:hover {
+      color: #000000;
+    }
+
+    /* Dark mode banner links */
+    [data-md-color-scheme="slate"] .md-banner a {
+      color: #000000;
+    }
+
+    [data-md-color-scheme="slate"] .md-banner a:hover {
+      color: #000000;
+    }
+
     /* control the navbar depth */
     [data-md-level="2"] .md-nav {
       display: none;
@@ -197,5 +215,5 @@
 
 
 {% block announce %}
-  To learn more about LangGraph, check out our first LangChain Academy course, <em>Introduction to LangGraph</em>, available for free <a href="https://academy.langchain.com/courses/intro-to-langgraph">here</a>.
+  <b>Join us at <a href="https://interrupt.langchain.com/" target="_blank" rel="noopener noreferrer"> Interrupt: The Agent AI Conference by LangChain</a> on May 13 & 14 in San Francisco!</b>
 {% endblock %}
