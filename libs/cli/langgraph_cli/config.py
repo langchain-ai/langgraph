@@ -451,7 +451,10 @@ def _update_auth_path(
     )
 
 
-def python_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+def python_config_to_docker(
+    config_path: pathlib.Path, config: Config, base_image: str
+) -> str:
+    """Generate a Dockerfile from the configuration."""
     # configure pip
     pip_install = (
         "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
@@ -512,29 +515,30 @@ RUN set -ex && \\
             ],
         )
     )
-    store_config = config.get("store")
-    env_additional_config = (
-        ""
-        if not store_config
-        else f"""
-ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
-"""
-    )
+
+    env_vars = []
+
+    if (store_config := config.get("store")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+
     if (auth_config := config.get("auth")) is not None:
-        env_additional_config += f"""
-ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
-"""
-    return f"""FROM {base_image}:{config['python_version']}
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
-{os.linesep.join(config["dockerfile_lines"])}
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
-{installs}
-
-RUN {pip_install} -e /deps/*
-{env_additional_config}
-ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
-
-{f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
+    docker_file_contents = [
+        f"FROM {base_image}:{config['python_version']}",
+        "",
+        os.linesep.join(config["dockerfile_lines"]),
+        "",
+        installs,
+        "",
+        f"RUN {pip_install} -e /deps/*",
+        os.linesep.join(env_vars),
+        "",
+        f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
+    ]
+    return os.linesep.join(docker_file_contents)
 
 
 def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
