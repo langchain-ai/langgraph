@@ -2,7 +2,7 @@
 # 🚀 Prebuilt Libraries
 
 LangGraph includes a prebuilt React agent. For more information on how to use it, 
-check out our [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/#prebuilt-react-agent).
+check out our [how-to guides](https://langchain-ai.github.io/langgraph/how-tos/#prebuilt-react-agent).
 
 If you’re looking for other prebuilt libraries, explore the community-built options 
 below. These libraries can extend LangGraph's functionality in various ways.
