@@ -61,8 +61,9 @@ plugins:
         python:
           import:
             - https://docs.python.org/3/objects.inv
-            - https://api.python.langchain.com/en/latest/objects.inv
+            - https://python.langchain.com/api_reference/objects.inv
           options:
+            enable_inventory: true
             members_order: source
             allow_inspection: true
             heading_level: 2
