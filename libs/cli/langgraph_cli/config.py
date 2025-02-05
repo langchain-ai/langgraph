@@ -459,25 +459,6 @@ def _update_graph_paths(
     Paths inside the container must be POSIX-style paths (even if
     the host system is Windows).
 
-    Specifically:
-
-      1. It loops over all `graph_id → import_str` pairs in `config["graphs"]`.
-      2. Splits `import_str` into `<module_str>:<attr_str>`, verifying
-         that the format is correct.
-      3. If `module_str` points to a file path (contains a slash `/`):
-         - Resolves it relative to the directory containing the config file.
-         - Checks if it belongs to any of the local dependencies
-           (listed in `local_deps.real_pkgs` or `local_deps.faux_pkgs`).
-         - If found, rewrites `module_str` to the matching in-container path:
-           e.g. `/deps/{package_name}/{sub_path}`.
-         - If it cannot be found in the local dependencies, raises an error
-           prompting the user to add it to `dependencies`.
-      4. Replaces the original config entry with the updated import path,
-         in the form `"{module_str}:{attr_str}"`.
-
-    This process ensures that references to local `.py` files in the
-    `graphs` section are valid once inside the container.
-
     Args:
         config_path: The path to the config file (e.g. `langgraph.json`).
         config: The validated configuration dictionary.
