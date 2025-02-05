@@ -493,13 +493,14 @@ class IndexConfig(TypedDict, total=False):
         - cohere:embed-multilingual-light-v3.0: 384
     """
 
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc]
+    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, str]
     """Optional function to generate embeddings from text.
     
     Can be specified in three ways:
         1. A LangChain Embeddings instance
         2. A synchronous embedding function (EmbeddingsFunc)
         3. An asynchronous embedding function (AEmbeddingsFunc)
+        4. A provider string (e.g., "openai:text-embedding-3-small")
     
     ???+ example "Examples"
         Using LangChain's initialization with InMemoryStore:
