@@ -17,21 +17,11 @@ jobs:
           - "3.11"
           - "3.12"
           - "3.13"
-        core-version:
-          - "latest"
-        ff-send-v2:
-          - "false"
-        include:
-          - python-version: "3.11"
-            core-version: ">=0.2.42,<0.3.0"
-          - python-version: "3.11"
-            core-version: "latest"
-            ff-send-v2: "true"
 
     defaults:
       run:
         working-directory: libs/langgraph
-    name: "test #${{ matrix.python-version }} (langchain-core: ${{ matrix.core-version }}, ff-send-v2: ${{ matrix.ff-send-v2 }})"
+    name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
@@ -51,16 +41,11 @@ jobs:
         shell: bash
         run: |
           poetry install --with dev
-          if [ "${{ matrix.core-version }}" != "latest" ]; then
-            poetry run pip install "langchain-core${{ matrix.core-version }}"
-          fi
 
       - name: Run tests
         shell: bash
-        env:
-          LANGGRAPH_FF_SEND_V2: ${{ matrix.ff-send-v2 }}
         run: |
-          make test
+          make test_parallel
 
       - name: Ensure the tests did not create any additional files
         shell: bash

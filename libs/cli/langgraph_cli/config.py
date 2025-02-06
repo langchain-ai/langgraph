@@ -47,6 +47,44 @@ class StoreConfig(TypedDict, total=False):
     """Configuration for vector embeddings in store."""
 
 
+class SecurityConfig(TypedDict, total=False):
+    securitySchemes: dict
+    security: list
+    # path => {method => security}
+    paths: dict[str, dict[str, list]]
+
+
+class AuthConfig(TypedDict, total=False):
+    path: str
+    """Path to the authentication function in a Python file."""
+    disable_studio_auth: bool
+    """Whether to disable auth when connecting from the LangSmith Studio."""
+    openapi: SecurityConfig
+    """The schema to use for updating the openapi spec.
+
+    Example:
+        {
+            "securitySchemes": {
+                "OAuth2": {
+                    "type": "oauth2",
+                    "flows": {
+                        "password": {
+                            "tokenUrl": "/token",
+                            "scopes": {
+                                "me": "Read information about the current user",
+                                "items": "Access to create and manage items"
+                            }
+                        }
+                    }
+                }
+            },
+            "security": [
+                {"OAuth2": ["me"]}  # Default security requirement for all endpoints
+            ]
+        }
+    """
+
+
 class Config(TypedDict, total=False):
     python_version: str
     node_version: Optional[str]
@@ -56,12 +94,13 @@ class Config(TypedDict, total=False):
     graphs: dict[str, str]
     env: Union[dict[str, str], str]
     store: Optional[StoreConfig]
+    auth: Optional[AuthConfig]
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
     """Parse a version string into a tuple of (major, minor)."""
     try:
-        major, minor = map(int, version_str.split("."))
+        major, minor = map(int, version_str.split("-")[0].split("."))
         return (major, minor)
     except ValueError:
         raise click.UsageError(f"Invalid version format: {version_str}") from None
@@ -85,9 +124,11 @@ def validate_config(config: Config) -> Config:
         {
             "node_version": config.get("node_version"),
             "dockerfile_lines": config.get("dockerfile_lines", []),
+            "dependencies": config.get("dependencies", []),
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
+            "auth": config.get("auth"),
         }
         if config.get("node_version")
         else {
@@ -98,6 +139,7 @@ def validate_config(config: Config) -> Config:
             "graphs": config.get("graphs", {}),
             "env": config.get("env", {}),
             "store": config.get("store"),
+            "auth": config.get("auth"),
         }
     )
 
@@ -117,7 +159,7 @@ def validate_config(config: Config) -> Config:
     if config.get("python_version"):
         pyversion = config["python_version"]
         if not pyversion.count(".") == 1 or not all(
-            part.isdigit() for part in pyversion.split(".")
+            part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
             raise click.UsageError(
                 f"Invalid Python version format: {pyversion}. "
@@ -141,6 +183,16 @@ def validate_config(config: Config) -> Config:
             "No graphs found in config. "
             "Add at least one graph to 'graphs' dictionary."
         )
+
+    # Validate auth config
+    if auth_conf := config.get("auth"):
+        if "path" in auth_conf:
+            if ":" not in auth_conf["path"]:
+                raise ValueError(
+                    f"Invalid auth.path format: '{auth_conf['path']}'. "
+                    "Must be in format './path/to/file.py:attribute_name'"
+                )
+
     return config
 
 
@@ -288,7 +340,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                 rfile = resolved / "requirements.txt"
                 pip_reqs.append(
                     (
-                        rfile.relative_to(config_path.parent),
+                        rfile.relative_to(config_path.parent).as_posix(),
                         f"{container_path}/requirements.txt",
                     )
                 )
@@ -331,6 +383,47 @@ def _update_graph_paths(
             config["graphs"][graph_id] = f"{module_str}:{attr_str}"
 
 
+def _update_auth_path(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update auth.path to use Docker container paths."""
+    auth_conf = config.get("auth")
+    if not auth_conf or not (path_str := auth_conf.get("path")):
+        return
+
+    module_str, sep, attr_str = path_str.partition(":")
+    if not sep or not module_str.startswith("."):
+        return  # Already validated or absolute path
+
+    resolved = config_path.parent / module_str
+    if not resolved.exists():
+        raise FileNotFoundError(f"Auth file not found: {resolved} (from {path_str})")
+    if not resolved.is_file():
+        raise IsADirectoryError(f"Auth path must be a file: {resolved}")
+
+    # Check faux packages first (higher priority)
+    for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
+        if resolved.is_relative_to(faux_path):
+            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            auth_conf["path"] = new_path
+            return
+
+    # Check real packages
+    for real_path in local_deps.real_pkgs:
+        if resolved.is_relative_to(real_path):
+            new_path = (
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+            )
+            auth_conf["path"] = new_path
+            return
+
+    raise ValueError(
+        f"Auth file '{resolved}' not covered by dependencies.\n"
+        "Add its parent directory to the 'dependencies' array in your config.\n"
+        f"Current dependencies: {config['dependencies']}"
+    )
+
+
 def python_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
     # configure pip
     pip_install = (
@@ -347,9 +440,9 @@ def python_config_to_docker(config_path: pathlib.Path, config: Config, base_imag
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
-
     # rewrite graph paths
     _update_graph_paths(config_path, config, local_deps)
+    _update_auth_path(config_path, config, local_deps)
 
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:
@@ -400,6 +493,10 @@ RUN set -ex && \\
 ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -423,10 +520,11 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         except OSError:
             return False
 
-    npm, yarn, pnpm = [
+    npm, yarn, pnpm, bun = [
         test_file("package-lock.json"),
         test_file("yarn.lock"),
         test_file("pnpm-lock.yaml"),
+        test_file("bun.lockb"),
     ]
 
     if yarn:
@@ -435,6 +533,8 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
         install_cmd = "pnpm i --frozen-lockfile"
     elif npm:
         install_cmd = "npm ci"
+    elif bun:
+        install_cmd = "bun i"
     else:
         install_cmd = "npm i"
     store_config = config.get("store")
@@ -445,6 +545,10 @@ def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image:
 ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 """
     )
+    if (auth_config := config.get("auth")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -479,8 +583,9 @@ def config_to_compose(
         f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
     )
     if watch:
+        dependencies = config.get("dependencies") or ["."]
         watch_paths = [config_path.name] + [
-            dep for dep in config["dependencies"] if dep.startswith(".")
+            dep for dep in dependencies if dep.startswith(".")
         ]
         watch_actions = "\n".join(
             f"""- path: {path}

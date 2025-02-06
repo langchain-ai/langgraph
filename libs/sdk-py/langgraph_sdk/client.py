@@ -278,7 +278,12 @@ class HttpClient:
             raise e
 
     async def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         headers, content = await aencode_json(json)
@@ -286,7 +291,7 @@ class HttpClient:
         headers["Cache-Control"] = "no-store"
 
         async with self.client.stream(
-            method, path, headers=headers, content=content
+            method, path, headers=headers, content=content, params=params
         ) as res:
             # check status
             try:
@@ -314,6 +319,8 @@ class HttpClient:
 
 
 async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+    if json is None:
+        return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
@@ -1311,7 +1318,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -1496,7 +1505,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -1665,7 +1676,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -1766,7 +1779,7 @@ class RunsClient:
 
         Args:
             thread_id: The thread ID to cancel.
-            run_id: The run ID to cancek.
+            run_id: The run ID to cancel.
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
@@ -2447,11 +2460,18 @@ class SyncHttpClient:
             raise e
 
     def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         headers, content = encode_json(json)
-        with self.client.stream(method, path, headers=headers, content=content) as res:
+        with self.client.stream(
+            method, path, headers=headers, content=content, params=params
+        ) as res:
             # check status
             try:
                 res.raise_for_status()
@@ -3463,7 +3483,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3648,7 +3670,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3814,7 +3838,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": {k: v for k, v in command.items() if v is not None}
+            if command
+            else None,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -3891,7 +3917,7 @@ class SyncRunsClient:
 
         Args:
             thread_id: The thread ID to cancel.
-            run_id: The run ID to cancek.
+            run_id: The run ID to cancel.
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.

@@ -1,0 +1,5 @@
+#A list of third-party packages to surface on the third-party page.
+packages:
+  - name: "trustcall"
+    repo: "hinthornw/trustcall"
+    description: "Tenacious tool calling built on LangGraph"

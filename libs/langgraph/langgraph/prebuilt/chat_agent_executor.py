@@ -1,4 +1,16 @@
-from typing import Callable, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+import functools
+import inspect
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
@@ -8,25 +20,29 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
-from langgraph._api.deprecation import deprecated_parameter
 from langgraph.errors import ErrorCode, create_error_message
-from langgraph.graph import StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, Send
 from langgraph.utils.runnable import RunnableCallable
+
+StructuredResponse = Union[dict, BaseModel]
+StructuredResponseSchema = Union[dict, type[BaseModel]]
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 # We create the AgentState that we will pass around
 # This simply involves a list of messages
 # We want steps to return messages to append to the list
-# So we annotate the messages attribute with operator.add
+# So we annotate the messages attribute with `add_messages` reducer
 class AgentState(TypedDict):
     """The state of the agent."""
 
@@ -36,11 +52,13 @@ class AgentState(TypedDict):
 
     remaining_steps: RemainingSteps
 
+    structured_response: StructuredResponse
+
 
 StateSchema = TypeVar("StateSchema", bound=AgentState)
 StateSchemaType = Type[StateSchema]
 
-STATE_MODIFIER_RUNNABLE_NAME = "StateModifier"
+PROMPT_RUNNABLE_NAME = "Prompt"
 
 MessagesModifier = Union[
     SystemMessage,
@@ -49,7 +67,7 @@ MessagesModifier = Union[
     Runnable[Sequence[BaseMessage], Sequence[BaseMessage]],
 ]
 
-StateModifier = Union[
+Prompt = Union[
     SystemMessage,
     str,
     Callable[[StateSchema], Sequence[BaseMessage]],
@@ -57,75 +75,84 @@ StateModifier = Union[
 ]
 
 
-def _get_state_modifier_runnable(
-    state_modifier: Optional[StateModifier], store: Optional[BaseStore] = None
-) -> Runnable:
-    state_modifier_runnable: Runnable
-    if state_modifier is None:
-        state_modifier_runnable = RunnableCallable(
-            lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
+def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
+    prompt_runnable: Runnable
+    if prompt is None:
+        prompt_runnable = RunnableCallable(
+            lambda state: state["messages"], name=PROMPT_RUNNABLE_NAME
         )
-    elif isinstance(state_modifier, str):
-        _system_message: BaseMessage = SystemMessage(content=state_modifier)
-        state_modifier_runnable = RunnableCallable(
+    elif isinstance(prompt, str):
+        _system_message: BaseMessage = SystemMessage(content=prompt)
+        prompt_runnable = RunnableCallable(
             lambda state: [_system_message] + state["messages"],
-            name=STATE_MODIFIER_RUNNABLE_NAME,
+            name=PROMPT_RUNNABLE_NAME,
         )
-    elif isinstance(state_modifier, SystemMessage):
-        state_modifier_runnable = RunnableCallable(
-            lambda state: [state_modifier] + state["messages"],
-            name=STATE_MODIFIER_RUNNABLE_NAME,
+    elif isinstance(prompt, SystemMessage):
+        prompt_runnable = RunnableCallable(
+            lambda state: [prompt] + state["messages"],
+            name=PROMPT_RUNNABLE_NAME,
         )
-    elif callable(state_modifier):
-        state_modifier_runnable = RunnableCallable(
-            state_modifier,
-            name=STATE_MODIFIER_RUNNABLE_NAME,
+    elif inspect.iscoroutinefunction(prompt):
+        prompt_runnable = RunnableCallable(
+            None,
+            prompt,
+            name=PROMPT_RUNNABLE_NAME,
         )
-    elif isinstance(state_modifier, Runnable):
-        state_modifier_runnable = state_modifier
+    elif callable(prompt):
+        prompt_runnable = RunnableCallable(
+            prompt,
+            name=PROMPT_RUNNABLE_NAME,
+        )
+    elif isinstance(prompt, Runnable):
+        prompt_runnable = prompt
     else:
-        raise ValueError(
-            f"Got unexpected type for `state_modifier`: {type(state_modifier)}"
-        )
+        raise ValueError(f"Got unexpected type for `prompt`: {type(prompt)}")
 
-    return state_modifier_runnable
+    return prompt_runnable
 
 
-def _convert_messages_modifier_to_state_modifier(
+def _convert_messages_modifier_to_prompt(
     messages_modifier: MessagesModifier,
-) -> StateModifier:
-    state_modifier: StateModifier
+) -> Prompt:
+    prompt: Prompt
     if isinstance(messages_modifier, (str, SystemMessage)):
         return messages_modifier
     elif callable(messages_modifier):
 
-        def state_modifier(state: AgentState) -> Sequence[BaseMessage]:
+        def prompt(state: AgentState) -> Sequence[BaseMessage]:
             return messages_modifier(state["messages"])
 
-        return state_modifier
+        return prompt
     elif isinstance(messages_modifier, Runnable):
-        state_modifier = (lambda state: state["messages"]) | messages_modifier
-        return state_modifier
+        prompt = (lambda state: state["messages"]) | messages_modifier
+        return prompt
     raise ValueError(
         f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
     )
 
 
-def _get_model_preprocessing_runnable(
-    state_modifier: Optional[StateModifier],
-    messages_modifier: Optional[MessagesModifier],
-    store: Optional[BaseStore],
-) -> Runnable:
-    # Add the state or message modifier, if exists
-    if state_modifier is not None and messages_modifier is not None:
-        raise ValueError(
-            "Expected value for either state_modifier or messages_modifier, got values for both"
-        )
+def _convert_modifier_to_prompt(func: F) -> F:
+    """Decorator that converts state_modifier/messages_modifier kwargs to prompt kwarg."""
 
-    if state_modifier is None and messages_modifier is not None:
-        state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        prompt = kwargs.get("prompt")
+        state_modifier = kwargs.pop("state_modifier", None)
+        messages_modifier = kwargs.pop("messages_modifier", None)
+        if sum(p is not None for p in (prompt, state_modifier, messages_modifier)) > 1:
+            raise ValueError(
+                "Expected only one of prompt, state_modifier, or messages_modifier, got multiple values"
+            )
 
-    return _get_state_modifier_runnable(state_modifier, store)
+        if state_modifier is not None:
+            prompt = state_modifier
+        elif messages_modifier is not None:
+            prompt = _convert_messages_modifier_to_prompt(messages_modifier)
+
+        kwargs["prompt"] = prompt
+        return func(*args, **kwargs)
+
+    return cast(F, wrapper)
 
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
@@ -162,6 +189,19 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     return False
 
 
+def _get_model(model: LanguageModelLike) -> BaseChatModel:
+    """Get the underlying model from a RunnableBinding or return the model itself."""
+    if isinstance(model, RunnableBinding):
+        model = model.bound
+
+    if not isinstance(model, BaseChatModel):
+        raise TypeError(
+            f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(model)}"
+        )
+
+    return model
+
+
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -193,19 +233,22 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-@deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
+@_convert_modifier_to_prompt
 def create_react_agent(
-    model: LanguageModelLike,
+    model: Union[str, LanguageModelLike],
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
-    messages_modifier: Optional[MessagesModifier] = None,
-    state_modifier: Optional[StateModifier] = None,
+    prompt: Optional[Prompt] = None,
+    response_format: Optional[
+        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
+    ] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    version: Literal["v1", "v2"] = "v1",
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -216,26 +259,34 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
-        messages_modifier: An optional
-            messages modifier. This applies to messages BEFORE they are passed into the LLM.
+        prompt: An optional prompt for the LLM. Can take a few different forms:
 
-            Can take a few different forms:
-
-            - SystemMessage: this is added to the beginning of the list of messages.
-            - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
-            - Callable: This function should take in a list of messages and the output is then passed to the language model.
-            - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
-            !!! Warning
-                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.2.0
-        state_modifier: An optional
-            state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
-
-            Can take a few different forms:
-
-            - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
+            - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+
+            !!! Note
+                Prior to `v0.2.68`, the prompt was set using `state_modifier` / `messages_modifier` parameters.
+        response_format: An optional schema for the final agent output.
+
+            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If not provided, `structured_response` will not be present in the output state.
+            Can be passed in as:
+
+                - an OpenAI function/tool schema,
+                - a JSON Schema,
+                - a TypedDict class,
+                - or a Pydantic class.
+                - a tuple (prompt, schema), where schema is one of the above.
+                    The prompt will be used together with the model that is being used to generate the structured response.
+
+            !!! Important
+                `response_format` requires the model to support `.with_structured_output`
+
+            !!! Note
+                The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
+                This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -247,6 +298,15 @@ def create_react_agent(
             Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        version: Determines the version of the graph to create.
+            Can be one of:
+
+            - `"v1"`: The tool node processes a single message. All tool
+                calls in the message are executed in parallel within the tool node.
+            - `"v2"`: The tool node processes a tool call.
+                Tool calls are distributed across multiple instances of the tool
+                node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
+                API.
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
@@ -332,7 +392,7 @@ def create_react_agent(
 
         ```pycon
         >>> system_prompt = "You are a helpful bot named Fred."
-        >>> graph = create_react_agent(model, tools, state_modifier=system_prompt)
+        >>> graph = create_react_agent(model, tools, prompt=system_prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -364,11 +424,8 @@ def create_react_agent(
         ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
         ... ])
-        >>> def format_for_model(state: AgentState):
-        ...     # You can do more complex modifications here
-        ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, state_modifier=format_for_model)
+        >>> graph = create_react_agent(model, tools, prompt=prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -381,7 +438,9 @@ def create_react_agent(
         Add complex prompt with custom graph state:
 
         ```pycon
-        >>> from typing import TypedDict
+        >>> from typing_extensions import TypedDict
+        >>>
+        >>> from langgraph.managed import IsLastStep
         >>> prompt = ChatPromptTemplate.from_messages(
         ...     [
         ...         ("system", "Today is {today}"),
@@ -392,9 +451,9 @@ def create_react_agent(
         >>> class CustomState(TypedDict):
         ...     today: str
         ...     messages: Annotated[list[BaseMessage], add_messages]
-        ...     is_last_step: str
+        ...     is_last_step: IsLastStep
         >>>
-        >>> graph = create_react_agent(model, tools, state_schema=CustomState, state_modifier=prompt)
+        >>> graph = create_react_agent(model, tools, state_schema=CustomState, prompt=prompt)
         >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -480,7 +539,7 @@ def create_react_agent(
         >>> from langgraph.checkpoint.memory import MemorySaver
         >>> from langgraph.store.memory import InMemoryStore
         >>> store = InMemoryStore()
-        >>> graph = create_react_agent(model, [save_memory], state_modifier=prepare_model_inputs, store=store, checkpointer=MemorySaver())
+        >>> graph = create_react_agent(model, [save_memory], prompt=prepare_model_inputs, store=store, checkpointer=MemorySaver())
         >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
 
         >>> inputs = {"messages": [("user", "Hey I'm Will, how's it going?")]}
@@ -523,11 +582,17 @@ def create_react_agent(
         TimeoutError: Timed out at step 2
         ```
     """
+    if version not in ("v1", "v2"):
+        raise ValueError(
+            f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
+        )
 
     if state_schema is not None:
-        if missing_keys := {"messages", "is_last_step"} - set(
-            state_schema.__annotations__
-        ):
+        required_keys = {"messages", "remaining_steps"}
+        if response_format is not None:
+            required_keys.add("structured_response")
+
+        if missing_keys := required_keys - set(state_schema.__annotations__):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if isinstance(tools, ToolExecutor):
@@ -541,16 +606,28 @@ def create_react_agent(
         # get the tool functions wrapped in a tool class from the ToolNode
         tool_classes = list(tool_node.tools_by_name.values())
 
+    if isinstance(model, str):
+        try:
+            from langchain.chat_models import (  # type: ignore[import-not-found]
+                init_chat_model,
+            )
+        except ImportError:
+            raise ImportError(
+                "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
+            )
+
+        model = cast(BaseChatModel, init_chat_model(model))
+
     tool_calling_enabled = len(tool_classes) > 0
 
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
-    # we're passing store here for validation
-    preprocessor = _get_model_preprocessing_runnable(
-        state_modifier, messages_modifier, store
-    )
-    model_runnable = preprocessor | model
+    model_runnable = _get_prompt_runnable(prompt) | model
+
+    # If any of the tools are configured to return_directly after running,
+    # our graph needs to check if these were called
+    should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
     # Define the function that calls the model
     def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -565,7 +642,7 @@ def create_react_agent(
         if (
             (
                 "remaining_steps" not in state
-                and state["is_last_step"]
+                and state.get("is_last_step", False)
                 and has_tool_calls
             )
             or (
@@ -602,7 +679,7 @@ def create_react_agent(
         if (
             (
                 "remaining_steps" not in state
-                and state["is_last_step"]
+                and state.get("is_last_step", False)
                 and has_tool_calls
             )
             or (
@@ -627,11 +704,54 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
+    def generate_structured_response(
+        state: AgentState, config: RunnableConfig
+    ) -> AgentState:
+        # NOTE: we exclude the last message because there is enough information
+        # for the LLM to generate the structured response
+        messages = state["messages"][:-1]
+        structured_response_schema = response_format
+        if isinstance(response_format, tuple):
+            system_prompt, structured_response_schema = response_format
+            messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(StructuredResponseSchema, structured_response_schema)
+        )
+        response = model_with_structured_output.invoke(messages, config)
+        return {"structured_response": response}
+
+    async def agenerate_structured_response(
+        state: AgentState, config: RunnableConfig
+    ) -> AgentState:
+        # NOTE: we exclude the last message because there is enough information
+        # for the LLM to generate the structured response
+        messages = state["messages"][:-1]
+        structured_response_schema = response_format
+        if isinstance(response_format, tuple):
+            system_prompt, structured_response_schema = response_format
+            messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+        model_with_structured_output = _get_model(model).with_structured_output(
+            cast(StructuredResponseSchema, structured_response_schema)
+        )
+        response = await model_with_structured_output.ainvoke(messages, config)
+        return {"structured_response": response}
+
     if not tool_calling_enabled:
         # Define a new graph
         workflow = StateGraph(state_schema or AgentState)
         workflow.add_node("agent", RunnableCallable(call_model, acall_model))
         workflow.set_entry_point("agent")
+        if response_format is not None:
+            workflow.add_node(
+                "generate_structured_response",
+                RunnableCallable(
+                    generate_structured_response, agenerate_structured_response
+                ),
+            )
+            workflow.add_edge("agent", "generate_structured_response")
+
         return workflow.compile(
             checkpointer=checkpointer,
             store=store,
@@ -641,15 +761,22 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+    def should_continue(state: AgentState) -> Union[str, list]:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return "__end__"
+            return END if response_format is None else "generate_structured_response"
         # Otherwise if there is, we continue
         else:
-            return "tools"
+            if version == "v1":
+                return "tools"
+            elif version == "v2":
+                tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
+                ]
+                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState)
@@ -662,6 +789,19 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point("agent")
 
+    # Add a structured output node if response_format is provided
+    if response_format is not None:
+        workflow.add_node(
+            "generate_structured_response",
+            RunnableCallable(
+                generate_structured_response, agenerate_structured_response
+            ),
+        )
+        workflow.add_edge("generate_structured_response", END)
+        should_continue_destinations = ["tools", "generate_structured_response"]
+    else:
+        should_continue_destinations = ["tools", END]
+
     # We now add a conditional edge
     workflow.add_conditional_edges(
         # First, we define the start node. We use `agent`.
@@ -669,18 +809,15 @@ def create_react_agent(
         "agent",
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
+        path_map=should_continue_destinations,
     )
-
-    # If any of the tools are configured to return_directly after running,
-    # our graph needs to check if these were called
-    should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
     def route_tool_responses(state: AgentState) -> Literal["agent", "__end__"]:
         for m in reversed(state["messages"]):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
-                return "__end__"
+                return END
         return "agent"
 
     if should_return_direct:

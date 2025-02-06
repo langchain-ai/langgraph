@@ -21,7 +21,6 @@ from typing import (
 
 import orjson
 from psycopg import Capabilities, Connection, Cursor, Pipeline
-from psycopg.errors import UndefinedTable
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -73,7 +72,7 @@ CREATE TABLE IF NOT EXISTS store (
 """,
     """
 -- For faster lookups by prefix
-CREATE INDEX IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
 """,
 ]
 
@@ -107,7 +106,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     ),
     Migration(
         """
-CREATE INDEX IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS store_vectors_embedding_idx ON store_vectors 
     USING %(index_type)s (embedding %(ops)s)%(index_params)s;
 """,
         condition=lambda store: bool(
@@ -537,18 +536,35 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
     """Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"
-        Basic setup and key-value storage:
+        Basic setup and usage:
+        ```python
+        from langgraph.store.postgres import PostgresStore
+        from psycopg import Connection
+
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+
+        # Using direct connection
+        with Connection.connect(conn_string) as conn:
+            store = PostgresStore(conn)
+            store.setup() # Run migrations. Done once
+
+            # Store and retrieve data
+            store.put(("users", "123"), "prefs", {"theme": "dark"})
+            item = store.get(("users", "123"), "prefs")
+        ```
+
+        Or using the convenient from_conn_string helper:
         ```python
         from langgraph.store.postgres import PostgresStore
 
-        store = PostgresStore(
-            connection_string="postgresql://user:pass@localhost:5432/dbname"
-        )
-        store.setup()
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
 
-        # Store and retrieve data
-        store.put(("users", "123"), "prefs", {"theme": "dark"})
-        item = store.get(("users", "123"), "prefs")
+        with PostgresStore.from_conn_string(conn_string) as store:
+            store.setup()
+
+            # Store and retrieve data
+            store.put(("users", "123"), "prefs", {"theme": "dark"})
+            item = store.get(("users", "123"), "prefs")
         ```
 
         Vector search using LangChain embeddings:
@@ -556,23 +572,26 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         from langchain.embeddings import init_embeddings
         from langgraph.store.postgres import PostgresStore
 
-        store = PostgresStore(
-            connection_string="postgresql://user:pass@localhost:5432/dbname",
+        conn_string = "postgresql://user:pass@localhost:5432/dbname"
+
+        with PostgresStore.from_conn_string(
+            conn_string,
             index={
                 "dims": 1536,
                 "embed": init_embeddings("openai:text-embedding-3-small"),
                 "fields": ["text"]  # specify which fields to embed. Default is the whole serialized value
             }
-        )
-        store.setup() # Do this once to run migrations
+        ) as store:
+            store.setup() # Do this once to run migrations
 
-        # Store documents
-        store.put(("docs",), "doc1", {"text": "Python tutorial"})
-        store.put(("docs",), "doc2", {"text": "TypeScript guide"})
-        store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
+            # Store documents
+            store.put(("docs",), "doc1", {"text": "Python tutorial"})
+            store.put(("docs",), "doc2", {"text": "TypeScript guide"})
+            store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
 
-        # Search by similarity
-        results = store.search(("docs",), query="python programming")
+            # Search by similarity
+            results = store.search(("docs",), "programming guides", limit=2)
+        ```
 
     Note:
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
@@ -846,22 +865,19 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         """
 
         def _get_version(cur: Cursor[dict[str, Any]], table: str) -> int:
-            try:
-                cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
-                row = cast(dict, cur.fetchone())
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
-                version = -1
-                cur.execute(
-                    f"""
-                    CREATE TABLE IF NOT EXISTS {table} (
-                        v INTEGER PRIMARY KEY
-                    )
-                """
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    v INTEGER PRIMARY KEY
                 )
+            """
+            )
+            cur.execute(f"SELECT v FROM {table} ORDER BY v DESC LIMIT 1")
+            row = cast(dict, cur.fetchone())
+            if row is None:
+                version = -1
+            else:
+                version = row["v"]
             return version
 
         with self._cursor() as cur:

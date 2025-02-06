@@ -4,17 +4,15 @@ import random
 import sys
 import time
 from dataclasses import replace
-from functools import partial
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
-    CONFIG_KEY_SEND,
     NS_SEP,
 )
-from langgraph.errors import _SEEN_CHECKPOINT_NS, GraphBubbleUp, ParentCommand
+from langgraph.errors import GraphBubbleUp, ParentCommand
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable
 
@@ -25,25 +23,21 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Optional[RetryPolicy],
-    writer: Optional[
-        Callable[[PregelExecutableTask, Sequence[tuple[str, Any]]], None]
-    ] = None,
+    configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     config = task.config
-    if writer is not None:
-        config = patch_configurable(config, {CONFIG_KEY_SEND: partial(writer, task)})
+    if configurable is not None:
+        config = patch_configurable(config, configurable)
     while True:
         try:
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            task.proc.invoke(task.input, config)
-            # if successful, end
-            break
+            return task.proc.invoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -54,7 +48,10 @@ def run_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent
-                parent_ns = NS_SEP.join(ns.split(NS_SEP)[:-1])
+                parts = ns.split(NS_SEP)
+                if parts[-1].isdigit():
+                    parts.pop()
+                parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise
@@ -102,30 +99,21 @@ def run_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
-        finally:
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
 
 
 async def arun_with_retry(
     task: PregelExecutableTask,
     retry_policy: Optional[RetryPolicy],
     stream: bool = False,
-    writer: Optional[
-        Callable[[PregelExecutableTask, Sequence[tuple[str, Any]]], None]
-    ] = None,
+    configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     config = task.config
-    if writer is not None:
-        config = patch_configurable(config, {CONFIG_KEY_SEND: partial(writer, task)})
+    if configurable is not None:
+        config = patch_configurable(config, configurable)
     while True:
         try:
             # clear any writes from previous attempts
@@ -134,10 +122,10 @@ async def arun_with_retry(
             if stream:
                 async for _ in task.proc.astream(task.input, config):
                     pass
+                # if successful, end
+                break
             else:
-                await task.proc.ainvoke(task.input, config)
-            # if successful, end
-            break
+                return await task.proc.ainvoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -148,7 +136,10 @@ async def arun_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent
-                parent_ns = NS_SEP.join(ns.split(NS_SEP)[:-1])
+                parts = ns.split(NS_SEP)
+                if parts[-1].isdigit():
+                    parts.pop()
+                parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
             raise
@@ -196,10 +187,3 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)
-        finally:
-            # clear checkpoint_ns seen (for subgraph detection)
-            if checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS):
-                _SEEN_CHECKPOINT_NS.discard(checkpoint_ns)

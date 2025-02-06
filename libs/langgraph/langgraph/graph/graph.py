@@ -19,7 +19,6 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
@@ -40,7 +39,7 @@ from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import All, Checkpointer
-from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +256,7 @@ class Graph:
                 selected by `path`.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
 
         Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
@@ -308,7 +307,7 @@ class Graph:
             key (str): The key of the node to set as the entry point.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_edge(START, key)
 
@@ -334,7 +333,7 @@ class Graph:
                 selected by `path`.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_conditional_edges(START, path, path_map, then)
 
@@ -347,7 +346,7 @@ class Graph:
             key (str): The key of the node to set as the finish point.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_edge(key, END)
 
@@ -629,3 +628,10 @@ class CompiledGraph(Pregel):
                     add_edge(key, end, conditional=True)
 
         return graph
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
+        """Mime bundle used by Jupyter to display the graph"""
+        return {
+            "text/plain": repr(self),
+            "image/png": self.get_graph().draw_mermaid_png(),
+        }

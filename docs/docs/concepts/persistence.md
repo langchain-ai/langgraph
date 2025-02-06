@@ -147,28 +147,25 @@ In our example, the output of `get_state_history` will look like this:
 
 ### Replay
 
-It's also possible to play-back a prior graph execution. If we `invoking` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the graph from a checkpoint that corresponds to the `checkpoint_id`.
+It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the previously executed steps _before_ a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps _after_ the checkpoint.
 
-* `thread_id` is simply the ID of a thread. This is always required.
-* `checkpoint_id` This identifier refers to a specific checkpoint within a thread. 
+* `thread_id` is the ID of a thread.
+* `checkpoint_id` is an identifier that refers to a specific checkpoint within a thread.
 
 You must pass these when invoking the graph as part of the `configurable` portion of the config:
 
 ```python
-# {"configurable": {"thread_id": "1"}}  # valid config
-# {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
-
-config = {"configurable": {"thread_id": "1"}}
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}
 graph.invoke(None, config=config)
 ```
 
-Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
+Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps _before_ the provided `checkpoint_id`. All of the steps _after_ `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-![Replay](img/persistence/re_play.jpg)
+![Replay](img/persistence/re_play.png)
 
 ### Update state
 
-In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method three different arguments:
+In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method accepts three different arguments:
 
 #### `config`
 
@@ -222,7 +219,7 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 A [state schema](low_level.md#schema) specifies a set of keys that are populated as a graph is executed. As discussed above, state can be written by a checkpointer to a thread at each graph step, enabling state persistence.
 
-But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
+But, what if we want to retain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
 
 With checkpointers alone, we cannot share information across threads. This motivates the need for the [`Store`](../reference/store.md#langgraph.store.base.BaseStore) interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
 
@@ -276,9 +273,11 @@ The attributes it has are:
 Beyond simple retrieval, the store also supports semantic search, allowing you to find memories based on meaning rather than exact matches. To enable this, configure the store with an embedding model:
 
 ```python
+from langchain.embeddings import init_embeddings
+
 store = InMemoryStore(
     index={
-        "embed": "openai:text-embedding-3-small",  # Embedding provider
+        "embed": init_embeddings("openai:text-embedding-3-small"),  # Embedding provider
         "dims": 1536,                              # Embedding dimensions
         "fields": ["food_preference", "$"]              # Fields to embed
     }
@@ -289,6 +288,7 @@ Now when searching, you can use natural language queries to find relevant memori
 
 ```python
 # Find memories about food preferences
+# (This can be done after putting memories into the store)
 memories = store.search(
     namespace_for_memory,
     query="What does the user like to eat?",
@@ -427,7 +427,7 @@ When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) o
 }
 ```
 
-See the [deployment guide](../deployment/semantic_search.md) for more details and configuration options.
+See the [deployment guide](../cloud/deployment/semantic_search.md) for more details and configuration options.
 
 ## Checkpointer libraries
 
@@ -468,7 +468,7 @@ Second, checkpointers allow for ["memory"](agentic_concepts.md#memory) between i
 
 ### Time Travel
 
-Third, checkpointers allow for ["time travel"](../how-tos/human_in_the_loop/time-travel.ipynb), allowing users to replay prior graph executions to review and / or debug specific graph steps. In addition, checkpointers make it possible to fork the graph state at arbitrary checkpoints to explore alternative trajectories.
+Third, checkpointers allow for ["time travel"](time-travel.md), allowing users to replay prior graph executions to review and / or debug specific graph steps. In addition, checkpointers make it possible to fork the graph state at arbitrary checkpoints to explore alternative trajectories.
 
 ### Fault-tolerance
 

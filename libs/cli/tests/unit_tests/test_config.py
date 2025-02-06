@@ -31,6 +31,7 @@ def test_validate_config():
         "dockerfile_lines": [],
         "env": {},
         "store": None,
+        "auth": None,
         **expected_config,
     }
     actual_config = validate_config(expected_config)
@@ -48,6 +49,7 @@ def test_validate_config():
         },
         "env": env,
         "store": None,
+        "auth": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
@@ -88,6 +90,24 @@ def test_validate_config():
     with pytest.raises(click.UsageError) as exc_info:
         validate_config({"python_version": "3.10"})
     assert "Minimum required version" in str(exc_info.value)
+
+    config = validate_config(
+        {
+            "python_version": "3.11-bullseye",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    assert config["python_version"] == "3.11-bullseye"
+
+    config = validate_config(
+        {
+            "python_version": "3.12-slim",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    assert config["python_version"] == "3.12-slim"
 
 
 def test_validate_config_file():

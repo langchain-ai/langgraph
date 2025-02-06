@@ -10,13 +10,13 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    TypedDict,
     Union,
 )
 from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
+from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
@@ -30,7 +30,6 @@ from langgraph.constants import (
     TAG_HIDDEN,
 )
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 from langgraph.utils.config import patch_checkpoint_map
 
@@ -157,7 +156,7 @@ def map_debug_checkpoint(
     task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
 
     for task in tasks:
-        if not find_subgraph_pregel(task.proc):
+        if not task.subgraphs:
             continue
 
         # assemble checkpoint_ns for this task

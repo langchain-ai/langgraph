@@ -1,7 +1,17 @@
 """Data models for interacting with the LangGraph API."""
 
 from datetime import datetime
-from typing import Any, Dict, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
+from typing import (
+    Any,
+    Dict,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    TypedDict,
+    Union,
+)
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -373,6 +383,6 @@ class Send(TypedDict):
 
 
 class Command(TypedDict, total=False):
-    send: Union[Send, Sequence[Send]]
-    update: dict[str, Any]
+    goto: Union[Send, str, Sequence[Union[Send, str]]]
+    update: Union[dict[str, Any], Sequence[Tuple[str, Any]]]
     resume: Any

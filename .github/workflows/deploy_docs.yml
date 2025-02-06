@@ -21,6 +21,10 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
+defaults:
+  run:
+    working-directory: docs
+
 jobs:
   get-changed-files:
     runs-on: ubuntu-latest
@@ -73,11 +77,12 @@ jobs:
         # This step lints the docs using the existing linting set up.
         # It should be very fast and should not require any external services.
         run: make lint-docs
+      - name: Build llms-text
+        run: make llms-text
       - name: Build site
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
-
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
@@ -86,26 +91,32 @@ jobs:
             echo "Running link check on all HTML files matching notebooks in docs directory..."
             poetry run pytest -v \
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+              --check-links-ignore "https://academy\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
               --check-links-ignore "http://localhost:8123/.*" \
+              --check-links-ignore "http://localhost:2024.*" \
+              --check-links-ignore "http://127.0.0.1:.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
               --check-links-ignore "https://python\.langchain\.com/.*" \
               --check-links-ignore "https://openai\.com/.*" \
               --check-links-ignore "https://pepy\.tech/.*" \
-              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html') 
+              --check-links $(find site -name "index.html" | grep -v 'storm/index.html')
               
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|docs/site/|; s/\.ipynb$/\/index.html/' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|site/|; s/\.ipynb$/\/index.html/' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on HTML files matching changed notebook files..."
               poetry run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "https://academy\.langchain\.com/.*" \
                 --check-links-ignore "http://localhost:8123/.*" \
+                --check-links-ignore "http://localhost:2024.*" \
+                --check-links-ignore "http://127.0.0.1:.*" \
                 --check-links-ignore "https://x.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \

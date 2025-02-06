@@ -6,8 +6,6 @@ import nbformat
 from nbconvert.exporters import MarkdownExporter
 from nbconvert.preprocessors import Preprocessor
 
-from generate_api_reference_links import ImportPreprocessor
-
 
 class EscapePreprocessor(Preprocessor):
     def preprocess_cell(self, cell, resources, cell_index):
@@ -24,6 +22,8 @@ class EscapePreprocessor(Preprocessor):
             )
 
         elif cell.cell_type == "code":
+            # Remove noqa comments
+            cell.source = re.sub(r'#\s*noqa.*$', '', cell.source, flags=re.MULTILINE)
             # escape ``` in code
             cell.source = cell.source.replace("```", r"\`\`\`")
             # escape ``` in output
@@ -107,7 +107,6 @@ exporter = MarkdownExporter(
     preprocessors=[
         EscapePreprocessor,
         ExtractAttachmentsPreprocessor,
-        ImportPreprocessor,
     ],
     template_name="mdoutput",
     extra_template_basedirs=[

@@ -19,6 +19,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _ainternal.Conn  # For backward compatibility
@@ -284,6 +285,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint asynchronously.
 
@@ -305,6 +307,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config["configurable"]["checkpoint_ns"],
             config["configurable"]["checkpoint_id"],
             task_id,
+            task_path,
             writes,
         )
         async with self._cursor(pipeline=True) as cur:
@@ -379,6 +382,18 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Yields:
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
+        try:
+            # check if we are in the main thread, only bg threads can block
+            # we don't check in other methods to avoid the overhead
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `checkpointer.alist(...)` or `await "
+                    "graph.ainvoke(...)`."
+                )
+        except RuntimeError:
+            pass
         aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
         while True:
             try:
@@ -409,7 +424,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
                     "Synchronous calls to AsyncPostgresSaver are only allowed from a "
-                    "different thread. From the main thread, use the async interface."
+                    "different thread. From the main thread, use the async interface. "
                     "For example, use `await checkpointer.aget_tuple(...)` or `await "
                     "graph.ainvoke(...)`."
                 )
@@ -449,6 +464,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -458,10 +474,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
         """
         return asyncio.run_coroutine_threadsafe(
-            self.aput_writes(config, writes, task_id), self.loop
+            self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
 
 
-__all__ = ["AsyncPostgresSaver", "Conn"]
+__all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]

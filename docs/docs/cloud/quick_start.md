@@ -1,462 +1,272 @@
-# LangGraph Cloud Quick Start
+# Quickstart: Deploy on LangGraph Cloud
 
-In this tutorial you will build and deploy a simple chatbot agent that can look things up on the internet. You will be using [LangGraph Cloud](../concepts/langgraph_cloud.md), [LangGraph Studio](../concepts/langgraph_studio.md) to visualize and test it out, and [LangGraph SDK](./reference/sdk/python_sdk_ref.md) to interact with the deployed agent.
+!!! note "Prerequisites"
 
-If you want to learn how to build an agent like this from scratch, take a look at the [LangGraph Quick Start tutorial](../tutorials/introduction.ipynb).
+    Before you begin, ensure you have the following:
 
-## Set up requirements
+    - [GitHub account](https://github.com/)
+    - [LangSmith account](https://smith.langchain.com/)
 
-This tutorial will use:
+## Create a repository on GitHub
 
-- Anthropic for the LLM - sign up and get an API key [here](https://console.anthropic.com/).
-- Tavily for the search engine - sign up and get an API key [here](https://app.tavily.com/).
-- LangSmith for hosting - sign up and get an API key [here](https://smith.langchain.com/).
+To deploy a LangGraph application to **LangGraph Cloud**, your application code must reside in a GitHub repository. Both public and private repositories are supported.
 
-## Create and configure your app
+You can deploy any [LangGraph Application](../concepts/application_structure.md) to LangGraph Cloud.
 
-First, let's set create all of the necessary files for our LangGraph application.
+For this guide, we'll use the pre-built Python [**ReAct Agent**](https://github.com/langchain-ai/react-agent) template.
 
-1. __Create application directory and files__
+??? note "Get Required API Keys for the ReAct Agent template"
 
-    Create a new application `my-app` with the following file structure:
+    This **ReAct Agent** application requires an API key from [Anthropic](https://console.anthropic.com/) and [Tavily](https://app.tavily.com/). You can get these API keys by signing up on their respective websites.
 
-    ```shell
-    mkdir my-app
-    ```
+    **Alternative**: If you'd prefer a scaffold application that doesn't require API keys, use the [**New LangGraph Project**](https://github.com/langchain-ai/new-langgraph-project) template instead of the **ReAct Agent** template.
 
-    === "Python"
 
-            my-app/
-            |-- agent.py            # code for your LangGraph agent
-            |-- requirements.txt    # Python packages required for your graph
-            |-- langgraph.json      # configuration file for LangGraph
-            |-- .env                # environment files with API keys
-
-    === "Javascript"
-
-            my-app/
-            |-- agent.ts            # code for your LangGraph agent
-            |-- package.json        # Javascript packages required for your graph
-            |-- langgraph.json      # configuration file for LangGraph
-            |-- .env                # environment files with API keys
-
-
-1. __Define your graph__
-
-    === "Python"
-        The `agent.py` file should contain code with your graph.
-
-    === "Javascript"
-        The `agent.ts` file should contain code with your graph.
-
-    The following code example is a simple chatbot agent (similar to the one in the [previous tutorial](../tutorials/introduction.ipynb)). Specifically, it uses [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent], a prebuilt [ReAct](../concepts/agentic_concepts.md#react-implementation)-style agent.
-
-    The `agent` file needs to have a variable with a [CompiledGraph][langgraph.graph.graph.CompiledGraph] (in this case the `graph` variable).
-
-    === "Python"
-
-        ```python
-        # agent.py
-        from langchain_anthropic import ChatAnthropic
-        from langchain_community.tools.tavily_search import TavilySearchResults
-        from langgraph.prebuilt import create_react_agent
-
-        model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-
-        tools = [TavilySearchResults(max_results=2)]
-
-        # compiled graph
-        graph = create_react_agent(model, tools)
-        ```
-
-    === "Javascript"
-
-        ```ts
-        // agent.ts
-        import { ChatAnthropic } from "@langchain/anthropic";
-        import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
-        import { createReactAgent } from "@langchain/langgraph/prebuilt";
-
-        const model = new ChatAnthropic({
-          model: "claude-3-5-sonnet-20240620",
-        });
-
-        const tools = [
-          new TavilySearchResults({ maxResults: 3, }),
-        ];
-
-        // compiled graph
-        export const graph = createReactAgent({ llm: model, tools });
-        ```
-
-1. __Specify dependencies__
-
-    === "Python"
-        You should add dependencies for your graph(s) to `requirements.txt`.
-
-    === "Javascript"
-        You should add dependencies for your graph(s) to `package.json`.
-
-    In this case we only require four packages for our graph to run:
-
-    === "Python"
-
-          ```python
-          langgraph
-          langchain_anthropic
-          tavily-python
-          langchain_community
-          ```
-
-    === "Javascript"
-
-          ```js
-          {
-            "name": "my-app",
-            "packageManager": "yarn@1.22.22",
-            "dependencies": {
-              "@langchain/community": "^0.3.11",
-              "@langchain/core": "^0.3.16",
-              "@langchain/langgraph": "0.2.18",
-              "@langchain/anthropic": "^0.3.7"
-            }
-          }
-          ```
-
-1. __Create LangGraph configuration file__
-
-    The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to deploy. In this case we only have one graph: the compiled `graph` object from `agent.py` / `agent.ts`.
-
-    === "Python"
-
-        ```json
-        {
-          "dependencies": ["."],
-          "graphs": {
-            "agent": "./agent.py:graph"
-          },
-          "env": ".env"
-        }
-        ```
-
-    === "Javascript"
-
-        ```json
-        {
-          "node_version": "20",
-          "dockerfile_lines": [],
-          "dependencies": ["."],
-          "graphs": {
-            "agent": "./src/agent.ts:graph"
-          },
-          "env": ".env"
-        }
-        ```
-
-    Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
-
-1. __Specify environment variables__
-
-    The `.env` file should have any environment variables needed to run your graph. This will only be used for local testing, so if you are not testing locally you can skip this step. 
-
-    !!! warning
-        The `.env` file should NOT be included with the rest of source code in your Github repository. When creating a deployment using LangGraph Cloud, you will be able to specify the environment variables manually.
-
-    For this graph, we need two environment variables:
-
-    ```shell
-    ANTHROPIC_API_KEY=...
-    TAVILY_API_KEY=...
-    ```
-
-!!! tip
-    Learn more about different application structure options [here](../how-tos/index.md#application-structure).
-
-Now that we have set everything up on our local file system, we are ready to test our graph locally.
-
-## Test the app locally
-
-To test the LangGraph app before deploying it using LangGraph Cloud, you can start the [LangGraph server](../concepts/langgraph_server.md) locally or use [LangGraph Studio](../concepts/langgraph_studio.md).
-
-## Using local server
-
-You can test your app by running [LangGraph server](../concepts/langgraph_server.md) locally. This is useful to make sure you have configured our [CLI configuration file][langgraph.json] correctly and can interact with your graph.
-
-To run the server locally, you need to first install the LangGraph CLI:
-
-```shell
-pip install langgraph-cli
-```
-
-You can then test our API server locally. In order to run the server locally, you will need to add your `LANGSMITH_API_KEY` to the `.env` file.
-
-```shell
-langgraph up
-```
-
-This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
-
-```shell
-Ready!
-- API: http://localhost:8123
-```
-
-First, let's verify that the server is running correctly by calling `/ok` endpoint:
-
-```shell
-curl --request GET --url http://localhost:8123/ok
-```
-
-Output:
-
-```
-{"ok": "true"}
-```
-
-Now we're ready to test the app with the real inputs!
-
-```shell
-curl --request POST \
-    --url http://localhost:8123/runs/stream \
-    --header 'Content-Type: application/json' \
-    --data '{
-    "assistant_id": "agent",
-    "input": {
-        "messages": [
-            {
-                "role": "user",
-                "content": "What is the weather in NYC?"
-            }
-        ]
-    },
-    "stream_mode": "updates"
-}'
-```
-
-Output:
-
-```
-...
-
-data: {
-  "agent": {
-    "messages": [
-      {
-        "content": "The search results from Tavily provide the current weather conditions in New York City, including temperature, wind speed, precipitation, humidity, and cloud cover. According to the results, as of 3:00pm on October 30th, 2024, it is overcast in NYC with a temperature of around 66°F (19°C), light winds from the southwest around 8 mph (13 km/h), and 66% humidity.\n\nSo in summary, the current weather in NYC is overcast with mild temperatures in the mid 60sF and light winds, based on the search results. Let me know if you need any other details!",
-        "type": "ai",
-        ...
-      }
-    ]
-  }
-}
-```
-
-You can see that our agent responds with the up-to-date search results!
-
-###  Using LangGraph Studio Desktop
-
-You can also test your app locally with [LangGraph Studio](../concepts/langgraph_studio.md). LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications.
-
-With visual graphs and the ability to edit state, you can better understand agent workflows and iterate faster. LangGraph Studio integrates with LangSmith allowing you to collaborate with teammates to debug failure modes.
-
-LangGraph Studio is available as a [desktop app](https://studio.langchain.com/) for MacOS users. Once you have installed the app, you can select `my-app` directory, which will automatically start the server locally and load the graph in the UI.
-
-To interact with your chatbot agent in LangGraph Studio, you can add a new message in the `Input` section and press `Submit`.
-
-![LangGraph Studio Desktop](./deployment/img/quick_start_studio.png)
+1. Go to the [ReAct Agent](https://github.com/langchain-ai/react-agent) repository.
+2. Fork the repository to your GitHub account by clicking the `Fork` button in the top right corner.
 
 ## Deploy to LangGraph Cloud
 
-Once you've tested your graph locally and verified that it works as expected, you can deploy it to the LangGraph Cloud.
+??? note "1. Log in to [LangSmith](https://smith.langchain.com/)"
 
-First, you'll need to turn the `my-app` directory into a GitHub repo and [push it to GitHub](https://docs.github.com/en/migrations/importing-source-code/using-the-command-line-to-import-source-code/adding-locally-hosted-code-to-github).
+    <figure markdown="1">
+    [![Login to LangSmith](deployment/img/01_login.png){: style="max-height:300px"}](deployment/img/01_login.png)
+    <figcaption>
+    Go to [LangSmith](https://smith.langchain.com/) and log in. If you don't have an account, you can sign up for free.
+    </figcaption>
+    </figure>
 
-Once you have created your GitHub repository with a Python file containing your compiled graph as well as a `langgraph.json` with the configuration, you can head over to [LangSmith](https://smith.langchain.com/) and click on the graph icon (`LangGraph Cloud`) on the bottom of the left navbar. This will open the LangGraph deployments page. On this page, click the `+ New Deployment` button in the top right corner.
 
-![Langsmith Workflow](./deployment/img/cloud_deployment.png)
+??? note "2. Click on <em>LangGraph Platform</em> (the left sidebar)"
 
-**_If you have not deployed to LangGraph Cloud before:_** there will be a button that shows up saying `Import from GitHub`. You’ll need to follow that flow to connect LangGraph Cloud to GitHub.
+    <figure markdown="1">
+    [![Login to LangSmith](deployment/img/02_langgraph_platform.png){: style="max-height:300px"}](deployment/img/02_langgraph_platform.png)
+    <figcaption>
+    Select **LangGraph Platform** from the left sidebar.
+    </figcaption>
+    </figure>
 
-**_Once you have set up your GitHub connection:_** the new deployment page will look as follows:
+??? note "3. Click on + New Deployment (top right corner)"
 
-![Deployment before being filled out](./deployment/img/deployment_page.png)
+    <figure markdown="1">
+    [![Login to LangSmith](deployment/img/03_deployments_page.png){: style="max-height:300px"}](deployment/img/03_deployments_page.png)
+    <figcaption>
+    Click on **+ New Deployment** to create a new deployment. This button is located in the top right corner.
+    It'll open a new modal where you can fill out the required fields.
+    </figcaption>
+    </figure>
 
-To deploy your application, you should do the following:
+??? note "4. Click on Import from GitHub (first time users)"
 
-1. Select your GitHub username or organization from the selector
-1. Search for your repo to deploy in the search bar and select it
-1. Choose a name for your deployment
-1. In the `Git Branch` field, you can specify either the branch for the code you want to deploy, or the exact commit SHA.
-1. In the `LangGraph API config file` field, enter the path to your `langgraph.json` file (which in this case is just `langgraph.json`)
-1. If your application needs environment variables, add those in the `Environment Variables` section. They will be propagated to the underlying server so your code can access them. In this case, we will need `ANTHROPIC_API_KEY` and `TAVILY_API_KEY`.
+    <figure markdown="1">
+    [![image](deployment/img/04_create_new_deployment.png)](deployment/img/04_create_new_deployment.png)
+    <figcaption>
+    Click on **Import from GitHub** and follow the instructions to connect your GitHub account. This step is needed for **first-time users** or to add private repositories that haven't been connected before.</figcaption>
+        </figure>
 
-Hit `Submit` and your application will start deploying!
+??? note "5. Select the repository, configure ENV vars etc"
 
-After your deployment is complete, your deployments page should look as follows:
+    <figure markdown="1">
+    [![image](deployment/img/05_configure_deployment.png){: style="max-height:300px"}](deployment/img/05_configure_deployment.png)
+    <figcaption>
+    Select the <strong>repository</strong>, add env variables and secrets, and set other configuration options.
+    </figcaption>
+    </figure>
 
-![Deployed page](./deployment/img/deployed_page.png)
+    - **Repository**: Select the repository you forked earlier (or any other repository you want to deploy).
+    - Set the secrets and environment variables required by your application. For the **ReAct Agent** template, you need to set the following secrets:
+        - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
+        - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
 
-## Interact with your deployment
+??? note "6. Click Submit to Deploy!"
 
-### Using LangGraph Studio (Cloud)
 
-On the deployment page for your application,, you should see a button in the top right corner that says `LangGraph Studio`. Clicking on this button will take you to the web version of LangGraph Studio. This is the same UI that you interacted with when [testing the app locally](#using-langgraph-studio-recommended), but instead of using a local LangGraph server, it uses the one from your LangGraph Cloud deployment.
+    <figure markdown="1">
+    [![image](deployment/img/05_configure_deployment.png){: style="max-height:300px"}](deployment/img/05_configure_deployment.png)
+    <figcaption>
+        Please note that this step may ~15 minutes to complete. You can check the status of your deployment in the **Deployments** view.
+        Click the <strong>Submit</strong> button at the top right corner to deploy your application.
+    </figcaption>
+    </figure>
 
-![Studio UI once being run](./deployment/img/graph_run.png)
 
-### Using LangGraph SDK
+## LangGraph Studio Web UI
 
-You can also interact with your deployed LangGraph application programmatically, using [LangGraph SDK](./reference/sdk/python_sdk_ref.md).
+Once your application is deployed, you can test it in **LangGraph Studio**. 
 
-First, make sure you have the SDK installed:
+??? note "1. Click on an existing deployment"
 
-=== "Python"
+    <figure markdown="1">
+    [![image](deployment/img/07_deployments_page.png){: style="max-height:300px"}](deployment/img/07_deployments_page.png)
+    <figcaption>
+        Click on the deployment you just created to view more details.
+    </figcaption>
+    </figure>
 
-    ```shell
-    pip install langgraph_sdk
-    ```
+??? note "2. Click on LangGraph Studio"
 
-=== "Javascript"
+    <figure markdown="1">
+    [![image](deployment/img/08_deployment_view.png){: style="max-height:300px"}](deployment/img/08_deployment_view.png)
+    <figcaption>
+        Click on the <strong>LangGraph Studio</strong> button to open LangGraph Studio.
+    </figcaption>
+    </figure>
 
-    ```shell
-    yarn add @langchain/langgraph-sdk
-    ```
+<figure markdown="1">
+[![image](deployment/img/09_langgraph_studio.png){: style="max-height:400px"}](deployment/img/09_langgraph_studio.png)
+<figcaption>
+    Sample graph run in LangGraph Studio.
+</figcaption>
+</figure>
 
-Before using, you need to get the URL of your LangGraph deployment. You can find this in the `Deployment` view. Click the URL to copy it to the clipboard.
+## Test the API
 
-You also need to make sure you have set up your API key properly so you can authenticate with LangGraph Cloud.
+!!! note
+
+    The API calls below are for the **ReAct Agent** template. If you're deploying a different application, you may need to adjust the API calls accordingly.
+
+Before using, you need to get the `URL` of your LangGraph deployment. You can find this in the `Deployment` view. Click the `URL` to copy it to the clipboard.
+
+You also need to make sure you have set up your API key properly, so you can authenticate with LangGraph Cloud.
 
 ```shell
 export LANGSMITH_API_KEY=...
 ```
 
-The first thing to do when using the SDK is to setup our client, access our assistant, and create a thread to execute a run on:
+=== "Python SDK (Async)"
 
-=== "Python"
+    **Install the LangGraph Python SDK**
 
-     ```python
-     from langgraph_sdk import get_client
+    ```shell
+    pip install langgraph-sdk
+    ```
 
-     client = get_client(url=<DEPLOYMENT_URL>)
-     # get default assistant
-     assistants = await client.assistants.search(metadata={"created_by": "system"})
-     assistant = assistants[0]
-     # create thread
-     thread = await client.threads.create()
-     print(thread)
-     ```
-
-=== "Javascript"
-
-     ```js
-     import { Client } from "@langchain/langgraph-sdk";
-
-     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-     // get default assistant
-     const assistants = await client.assistants.search({ metadata: {"created_by": "system"} })
-     const assistant = assistants[0];
-     // create thread
-     const thread = await client.threads.create();
-     console.log(thread)
-     ```
-
-=== "CURL"
-
-     ```bash
-     curl --request POST \
-         --url <DEPLOYMENT_URL>/assistants/search \
-         --header 'Content-Type: application/json' \
-         --data '{
-             "limit": 10,
-             "offset": 0,
-             "metadata": {"created_by": "system"}
-         }' &&
-     curl --request POST \
-         --url <DEPLOYMENT_URL>/threads \
-         --header 'Content-Type: application/json' \
-         --data '{}'
-     ```
-
-We can then execute a run on the thread:
-
-=== "Python"
+    **Send a message to the assistant (threadless run)**
 
     ```python
-    input = {
-        "messages": [{"role": "user", "content": "What is the weather in NYC?"}]
-    }
+    from langgraph_sdk import get_client
+
+    client = get_client(url="your-deployment-url", api_key="your-langsmith-api-key")
 
     async for chunk in client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        input=input,
+        None,  # Threadless run
+        "agent", # Name of assistant. Defined in langgraph.json.
+        input={
+            "messages": [{
+                "role": "human",
+                "content": "What is LangGraph?",
+            }],
+        },
         stream_mode="updates",
     ):
-        if chunk.data:
-            print(chunk.data)
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+        print("\n\n")
     ```
 
-=== "Javascript"
+=== "Python SDK (Sync)"
+
+    **Install the LangGraph Python SDK**
+
+    ```shell
+    pip install langgraph-sdk
+    ```
+
+    **Send a message to the assistant (threadless run)**
+
+    ```python
+    from langgraph_sdk import get_sync_client
+
+    client = get_sync_client(url="your-deployment-url", api_key="your-langsmith-api-key")
+
+    for chunk in client.runs.stream(
+        None,  # Threadless run
+        "agent", # Name of assistant. Defined in langgraph.json.
+        input={
+            "messages": [{
+                "role": "human",
+                "content": "What is LangGraph?",
+            }],
+        },
+        stream_mode="updates",
+    ):
+        print(f"Receiving new event of type: {chunk.event}...")
+        print(chunk.data)
+        print("\n\n")
+    ```
+
+=== "Javascript SDK"
+
+    **Install the LangGraph JS SDK**
+
+    ```shell
+    npm install @langchain/langgraph-sdk
+    ```
+
+    **Send a message to the assistant (threadless run)**
 
     ```js
-    const input = { "messages": [{ "role": "user", "content": "What is the weather in NYC?" }] };
+    const { Client } = await import("@langchain/langgraph-sdk");
+
+    const client = new Client({ apiUrl: "your-deployment-url", apiKey: "your-langsmith-api-key" });
 
     const streamResponse = client.runs.stream(
-      thread["thread_id"],
-      assistant["assistant_id"],
-      {
-        input,
-        streamMode: "updates"
-      }
+        null, // Threadless run
+        "agent", // Assistant ID
+        {
+            input: {
+                "messages": [
+                    { "role": "user", "content": "What is LangGraph?"}
+                ]
+            },
+            streamMode: "messages",
+        }
     );
+
     for await (const chunk of streamResponse) {
-      if (chunk.data) {
-        console.log(chunk.data);
-      }
+        console.log(`Receiving new event of type: ${chunk.event}...`);
+        console.log(JSON.stringify(chunk.data));
+        console.log("\n\n");
     }
     ```
 
-=== "CURL"
+=== "Rest API"
 
     ```bash
-    curl --request POST \
-      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
-      --header 'Content-Type: application/json' \
-      --data '{
-        "assistant_id": <ASSISTANT_ID>,
-        "input": {
-        "messages": [
-            {
-                "role": "user",
-                "content": "What is the weather in NYC?"
-            }
-          ]
-        },
-        "stream_mode": "updates"
-      }'
+    curl -s --request POST \
+        --url <DEPLOYMENT_URL> \
+        --header 'Content-Type: application/json' \
+        --data "{
+            \"assistant_id\": \"agent\",
+            \"input\": {
+                \"messages\": [
+                    {
+                        \"role\": \"human\",
+                        \"content\": \"What is LangGraph?\"
+                    }
+                ]
+            },
+            \"stream_mode\": \"updates\"
+        }" 
     ```
 
-Output:
 
-```
-...
-
-data: {
-  "agent": {
-    "messages": [
-      {
-        "content": "The search results from Tavily provide the current weather conditions in New York City, including temperature, wind speed, precipitation, humidity, and cloud cover. According to the results, as of 3:00pm on October 30th, 2024, it is overcast in NYC with a temperature of around 66°F (19°C), light winds from the southwest around 8 mph (13 km/h), and 66% humidity.\n\nSo in summary, the current weather in NYC is overcast with mild temperatures in the mid 60sF and light winds, based on the search results. Let me know if you need any other details!",
-        "type": "ai",
-        ...
-      }
-    ]
-  }
-}
-```
-
-## Next steps
+## Next Steps
 
 Congratulations! If you've worked your way through this tutorial you are well on your way to becoming a LangGraph Cloud expert. Here are some other resources to check out to help you out on the path to expertise:
 
-* [LangGraph How-to guides](../how-tos/index.md)
-* [LangGraph Tutorials](../tutorials/index.md)
+### LangGraph Framework
+
+- **[LangGraph Tutorial](../tutorials/introduction.ipynb)**: Get started with LangGraph framework.
+- **[LangGraph Concepts](../concepts/index.md)**: Learn the foundational concepts of LangGraph.
+- **[LangGraph How-to Guides](../how-tos/index.md)**: Guides for common tasks with LangGraph.
+ 
+### 📚 Learn More about LangGraph Platform
+
+Expand your knowledge with these resources:
+
+- **[LangGraph Platform Concepts](../concepts/index.md#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.
+- **[LangGraph Platform How-to Guides](../how-tos/index.md#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+- **[Launch Local LangGraph Server](../tutorials/langgraph-platform/local-server.md)**: This quick start guide shows how to start a LangGraph Server locally for the **ReAct Agent** template. The steps are similar for other templates.
+
+

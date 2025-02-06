@@ -18,7 +18,6 @@ from typing import (
     Type,
     Union,
     cast,
-    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -98,7 +97,7 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
-from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_versions
+from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -116,7 +115,9 @@ from langgraph.utils.config import (
     patch_checkpoint_map,
     patch_config,
     patch_configurable,
+    recast_checkpoint_ns,
 )
+from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
@@ -203,6 +204,10 @@ class Pregel(PregelProtocol):
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
 
+    stream_eager: bool = False
+    """Whether to force emitting stream events eagerly, automatically turned on
+    for stream_mode "messages" and "custom"."""
+
     output_channels: Union[str, Sequence[str]]
 
     stream_channels: Optional[Union[str, Sequence[str]]] = None
@@ -242,6 +247,7 @@ class Pregel(PregelProtocol):
         channels: Optional[dict[str, Union[BaseChannel, ManagedValueSpec]]],
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
+        stream_eager: bool = False,
         output_channels: Union[str, Sequence[str]],
         stream_channels: Optional[Union[str, Sequence[str]]] = None,
         interrupt_after_nodes: Union[All, Sequence[str]] = (),
@@ -259,6 +265,7 @@ class Pregel(PregelProtocol):
         self.nodes = nodes
         self.channels = channels or {}
         self.stream_mode = stream_mode
+        self.stream_eager = stream_eager
         self.output_channels = output_channels
         self.stream_channels = stream_channels
         self.interrupt_after_nodes = interrupt_after_nodes
@@ -319,8 +326,15 @@ class Pregel(PregelProtocol):
                 )
                 + (
                     [
-                        ConfigurableFieldSpec(id=name, annotation=typ)
-                        for name, typ in get_type_hints(self.config_type).items()
+                        ConfigurableFieldSpec(
+                            id=name,
+                            annotation=typ,
+                            default=default,
+                            description=description,
+                        )
+                        for name, typ, default, description in get_enhanced_type_hints(
+                            self.config_type
+                        )
                     ]
                     if self.config_type is not None
                     else []
@@ -415,7 +429,7 @@ class Pregel(PregelProtocol):
 
     def get_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, Pregel]]:
+    ) -> Iterator[tuple[str, PregelProtocol]]:
         for name, node in self.nodes.items():
             # filter by prefix
             if namespace is not None:
@@ -423,7 +437,7 @@ class Pregel(PregelProtocol):
                     continue
 
             # find the subgraph, if any
-            graph = cast(Optional[Pregel], find_subgraph_pregel(node.bound))
+            graph = node.subgraphs[0] if node.subgraphs else None
 
             # if found, yield recursively
             if graph:
@@ -432,7 +446,7 @@ class Pregel(PregelProtocol):
                     return  # we found it, stop searching
                 if namespace is None:
                     yield name, graph
-                if recurse:
+                if recurse and isinstance(graph, Pregel):
                     if namespace is not None:
                         namespace = namespace[len(name) + 1 :]
                     yield from (
@@ -444,7 +458,7 @@ class Pregel(PregelProtocol):
 
     async def aget_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, Pregel]]:
+    ) -> AsyncIterator[tuple[str, PregelProtocol]]:
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 
@@ -487,7 +501,9 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer or None,
+                checkpointer=self.checkpointer
+                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
                 manager=None,
             )
             # get the subgraphs
@@ -599,7 +615,9 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer or None,
+                checkpointer=self.checkpointer
+                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
                 manager=None,
             )
             # get the subgraphs
@@ -683,19 +701,15 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.get_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     subgraphs=subgraphs,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
         saved = checkpointer.get_tuple(config)
@@ -720,19 +734,15 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.aget_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     subgraphs=subgraphs,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
         saved = await checkpointer.aget_tuple(config)
@@ -763,13 +773,9 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 yield from pregel.get_state_history(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     filter=filter,
@@ -778,7 +784,7 @@ class Pregel(PregelProtocol):
                 )
                 return
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(
             self.config,
@@ -813,13 +819,9 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 async for state in pregel.aget_state_history(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     filter=filter,
@@ -829,7 +831,7 @@ class Pregel(PregelProtocol):
                     yield state
                 return
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(
             self.config,
@@ -868,20 +870,16 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.update_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     values,
                     as_node,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         # get last checkpoint
         config = ensure_config(self.config, config)
@@ -919,7 +917,9 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -959,7 +959,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # no values, copy checkpoint
+            # no values, empty checkpoint
             if values is None and as_node is None:
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -978,6 +978,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            # no values, copy checkpoint
             if values is None and as_node == "__copy__":
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1012,7 +1013,9 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer or None,
+                    checkpointer=self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None,
                     manager=None,
                 )
                 # apply null writes
@@ -1132,6 +1135,10 @@ class Pregel(PregelProtocol):
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
+        """Update the state of the graph asynchronously with the given values, as if they came from
+        node `as_node`. If `as_node` is not provided, it will be set to the last node
+        that updated the state, if not ambiguous.
+        """
         checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
@@ -1143,20 +1150,16 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.aupdate_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     values,
                     as_node,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         # get last checkpoint
         config = ensure_config(self.config, config)
@@ -1197,7 +1200,9 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -1237,7 +1242,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # no values, copy checkpoint
+            # no values, empty checkpoint
             if values is None and as_node is None:
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1256,6 +1261,7 @@ class Pregel(PregelProtocol):
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
+            # no values, copy checkpoint
             if values is None and as_node == "__copy__":
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1290,7 +1296,9 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer or None,
+                    checkpointer=self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None,
                     manager=None,
                 )
                 # apply null writes
@@ -1442,6 +1450,8 @@ class Pregel(PregelProtocol):
             checkpointer: Optional[BaseCheckpointSaver] = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
             checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
+        elif self.checkpointer is True:
+            raise RuntimeError("checkpointer=True cannot be used for root graphs.")
         else:
             checkpointer = self.checkpointer
         if checkpointer and not config.get(CONF):
@@ -1480,11 +1490,15 @@ class Pregel(PregelProtocol):
             input: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to self.stream_mode.
-                Options are 'values', 'updates', and 'debug'.
-                values: Emit the current values of the state for each step.
-                updates: Emit only the updates to the state for each step.
-                    Output is a dict with the node name as key and the updated values as value.
-                debug: Emit debug events for each step.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+                - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -1499,8 +1513,7 @@ class Pregel(PregelProtocol):
             ```pycon
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
-            >>> from langgraph.graph import StateGraph
-            >>> from langgraph.constants import START
+            >>> from langgraph.graph import StateGraph, START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1539,6 +1552,57 @@ class Pregel(PregelProtocol):
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
             {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+
+            With stream_mode="custom":
+
+            ```pycon
+            >>> from langgraph.types import StreamWriter
+            ...
+            >>> def node_a(state: State, writer: StreamWriter):
+            ...     writer({"custom_data": "foo"})
+            ...     return {"alist": ["hi"]}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ...
+            >>> for event in graph.stream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
+            ...     print(event)
+            {'custom_data': 'foo'}
+            ```
+
+            With stream_mode="messages":
+
+            ```pycon
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph, START
+            >>> from langchain_openai import ChatOpenAI
+            ...
+            >>> llm = ChatOpenAI(model="gpt-4o-mini")
+            ...
+            >>> class State(TypedDict):
+            ...     question: str
+            ...     answer: str
+            ...
+            >>> def node_a(state: State):
+            ...     response = llm.invoke(state["question"])
+            ...     return {"answer": response.content}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+
+            >>> for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
+            ...     print(event)
+            (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
+            (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
+            (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
             ```
         """
 
@@ -1585,6 +1649,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up subgraph checkpointing
+            if self.checkpointer is True:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
+                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1621,7 +1691,12 @@ class Pregel(PregelProtocol):
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
+                if (
+                    self.stream_eager
+                    or subgraphs
+                    or "messages" in stream_modes
+                    or "custom" in stream_modes
+                ):
                     # we are careful to have a single waiter live at any one time
                     # because on exit we increment semaphore count by exactly 1
                     waiter: Optional[concurrent.futures.Future] = None
@@ -1641,10 +1716,10 @@ class Pregel(PregelProtocol):
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
-                # computation proceeds in steps, while there are channel updates
-                # channel updates from step N are only visible in step N+1
+                # computation proceeds in steps, while there are channel updates.
+                # Channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
-                # with channel updates applied only at the transition between steps
+                # with channel updates applied only at the transition between steps.
                 while loop.tick(input_keys=self.input_channels):
                     for _ in runner.tick(
                         loop.tasks.values(),
@@ -1691,11 +1766,15 @@ class Pregel(PregelProtocol):
             input: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to self.stream_mode.
-                Options are 'values', 'updates', and 'debug'.
-                values: Emit the current values of the state for each step.
-                updates: Emit only the updates to the state for each step.
-                    Output is a dict with the node name as key and the updated values as value.
-                debug: Emit debug events for each step.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+                - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -1710,8 +1789,7 @@ class Pregel(PregelProtocol):
             ```pycon
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
-            >>> from langgraph.graph import StateGraph
-            >>> from langgraph.constants import START
+            >>> from langgraph.graph import StateGraph, START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1750,6 +1828,57 @@ class Pregel(PregelProtocol):
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
             {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+
+            With stream_mode="custom":
+
+            ```pycon
+            >>> from langgraph.types import StreamWriter
+            ...
+            >>> async def node_a(state: State, writer: StreamWriter):
+            ...     writer({"custom_data": "foo"})
+            ...     return {"alist": ["hi"]}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ...
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
+            ...     print(event)
+            {'custom_data': 'foo'}
+            ```
+
+            With stream_mode="messages":
+
+            ```pycon
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph, START
+            >>> from langchain_openai import ChatOpenAI
+            ...
+            >>> llm = ChatOpenAI(model="gpt-4o-mini")
+            ...
+            >>> class State(TypedDict):
+            ...     question: str
+            ...     answer: str
+            ...
+            >>> async def node_a(state: State):
+            ...     response = await llm.ainvoke(state["question"])
+            ...     return {"answer": response.content}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+
+            >>> for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
+            ...     print(event)
+            (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
+            (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
+            (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
             ```
         """
 
@@ -1810,6 +1939,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up subgraph checkpointing
+            if self.checkpointer is True:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
+                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1851,7 +1986,12 @@ class Pregel(PregelProtocol):
                         stream_put, stream_modes
                     )
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
+                if (
+                    self.stream_eager
+                    or subgraphs
+                    or "messages" in stream_modes
+                    or "custom" in stream_modes
+                ):
 
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())

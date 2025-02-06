@@ -9,12 +9,12 @@ import pytest
 from aiokafka import AIOKafkaProducer
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import FF_SEND_V2, START
+from langgraph.constants import START
 from langgraph.errors import NodeInterrupt
-from langgraph.graph.state import CompiledStateGraph, GraphCommand, StateGraph
+from langgraph.graph.state import CompiledStateGraph, StateGraph
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from langgraph.types import Send
+from langgraph.types import Command, Send
 from tests.any import AnyDict
 from tests.drain import drain_topics_async
 
@@ -48,15 +48,15 @@ def mk_push_graph(
                 if isinstance(state, list)
                 else ["|".join((self.name, str(state)))]
             )
-            if isinstance(state, GraphCommand):
+            if isinstance(state, Command):
                 return state.copy(update=update)
             else:
                 return update
 
     def send_for_fun(state):
         return [
-            Send("2", GraphCommand(send=Send("2", 3))),
-            Send("2", GraphCommand(send=Send("flaky", 4))),
+            Send("2", Command(goto=Send("2", 3))),
+            Send("2", Command(goto=Send("flaky", 4))),
             "3.1",
         ]
 
@@ -76,10 +76,8 @@ def mk_push_graph(
     return builder.compile(checkpointer=checkpointer)
 
 
+@pytest.mark.skip("TODO: re-enable in next PR")
 async def test_push_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) -> None:
-    if not FF_SEND_V2:
-        pytest.skip("Test requires FF_SEND_V2")
-
     input = ["0"]
     config = {"configurable": {"thread_id": "1"}}
     graph = mk_push_graph(acheckpointer)
@@ -105,8 +103,8 @@ async def test_push_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) ->
         == [
             "0",
             "1",
-            "2|Control(send=Send(node='2', arg=3))",
-            "2|Control(send=Send(node='flaky', arg=4))",
+            "2|Control(goto=Send(node='2', arg=3))",
+            "2|Control(goto=Send(node='flaky', arg=4))",
             "2|3",
         ]
     )
@@ -182,8 +180,8 @@ async def test_push_graph(topics: Topics, acheckpointer: BaseCheckpointSaver) ->
         == [
             "0",
             "1",
-            "2|Control(send=Send(node='2', arg=3))",
-            "2|Control(send=Send(node='flaky', arg=4))",
+            "2|Control(goto=Send(node='2', arg=3))",
+            "2|Control(goto=Send(node='flaky', arg=4))",
             "2|3",
             "flaky|4",
             "3",

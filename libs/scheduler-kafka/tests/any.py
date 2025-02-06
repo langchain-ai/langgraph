@@ -35,3 +35,29 @@ class AnyDict(dict):
                     return False
         else:
             return True
+
+
+class AnyList(list):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    def __eq__(self, other: object) -> bool:
+        if not self and isinstance(other, list):
+            return True
+        if not isinstance(other, list) or len(self) != len(other):
+            return False
+        for i, v in enumerate(self):
+            if v == other[i]:
+                continue
+            else:
+                return False
+        else:
+            return True
+
+
+class AnyInt(int):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, int)
