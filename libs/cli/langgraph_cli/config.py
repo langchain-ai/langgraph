@@ -86,15 +86,42 @@ class AuthConfig(TypedDict, total=False):
 
 
 class Config(TypedDict, total=False):
+    """Configuration for langgraph-cli."""
+
     python_version: str
+    """Python version to use."""
+
     node_version: Optional[str]
+    """Node.js version to use."""
+
     pip_config_file: Optional[str]
+    """Path to a pip configuration file."""
+
     dockerfile_lines: list[str]
+    """Additional lines to add to the Dockerfile."""
+
     dependencies: list[str]
+    """Additional Python dependencies to install."""
+
     graphs: dict[str, str]
+    """Mapping of graph names to their definitions."""
+
     env: Union[dict[str, str], str]
+    """Environment variables to set.
+
+    If a dictionary is provided, the keys are environment variable names
+    and the values are the corresponding environment variable values.
+
+    If a string is provided, it is interpreted as a path to a file containing
+    environment variables in the format KEY=VALUE, with one environment variable
+    per line.
+    """
+
     store: Optional[StoreConfig]
+    """Configuration for vector embeddings in store."""
+
     auth: Optional[AuthConfig]
+    """Configuration for authentication."""
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -120,6 +147,7 @@ def _parse_node_version(version_str: str) -> int:
 
 
 def validate_config(config: Config) -> Config:
+    """Validate a configuration dictionary."""
     config = (
         {
             "node_version": config.get("node_version"),
@@ -197,6 +225,7 @@ def validate_config(config: Config) -> Config:
 
 
 def validate_config_file(config_path: pathlib.Path) -> Config:
+    """Load and validate a configuration file."""
     with open(config_path) as f:
         config = json.load(f)
     validated = validate_config(config)
@@ -239,7 +268,51 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
 
 
 class LocalDeps(NamedTuple):
-    pip_reqs: list[tuple[pathlib.Path, str]]
+    """A container for referencing and managing local Python dependencies.
+
+    A "local dependency" is any entry in the config's `dependencies` list
+    that starts with "." (dot), denoting a relative path
+    to a local directory containing Python code.
+
+    For each local dependency, the system inspects its directory to
+    determine how it should be installed inside the Docker container.
+
+    Specifically, we detect:
+
+    - **Real packages**: Directories containing a `pyproject.toml` or a `setup.py`.
+      These can be installed with pip as a regular Python package.
+    - **Faux packages**: Directories that do not include a `pyproject.toml` or
+      `setup.py` but do contain Python files and possibly an `__init__.py`. For
+      these, the code dynamically generates a minimal `pyproject.toml` in the
+      Docker image so that they can still be installed with pip.
+    - **Requirements files**: If a local dependency directory
+      has a `requirements.txt`, it is tracked so that those dependencies
+      can be installed within the Docker container before installing the local package.
+
+    Attributes:
+        pip_reqs: A list of (host_requirements_path, container_requirements_path)
+            tuples. Each entry points to a local `requirements.txt` file and where
+            it should be placed inside the Docker container before running `pip install`.
+
+        real_pkgs: A dictionary mapping a local directory path (host side) to the
+            same dependency string from the config. These directories contain the
+            necessary files (e.g., `pyproject.toml` or `setup.py`) to be installed
+            as a standard Python package with pip.
+
+        faux_pkgs: A dictionary mapping a local directory path (host side) to a
+            tuple of (dependency_string, container_package_path). For these
+            directories—called "faux packages"—the code will generate a minimal
+            `pyproject.toml` inside the Docker image. This ensures that pip
+            recognizes them as installable packages, even though they do not
+            natively include packaging metadata.
+
+        working_dir: The path inside the Docker container to use as the working
+            directory. If the local dependency `"."` is present in the config, this
+            field captures the path where that dependency will appear in the
+            container (e.g., `/deps/<name>` or similar). Otherwise, it may be `None`.
+    """
+
+    pip_reqs: list[tuple[str, str]]
     real_pkgs: dict[pathlib.Path, str]
     faux_pkgs: dict[pathlib.Path, tuple[str, str]]
     # if . is in dependencies, use it as working_dir
@@ -279,8 +352,11 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
 
     for local_dep in config["dependencies"]:
         if not local_dep.startswith("."):
+            # If the dependency is not a local path, skip it
             continue
 
+        # Verify that the local dependency can be resolved
+        # (e.g., this would raise an informative error if a user mistyped a path).
         resolved = config_path.parent / local_dep
 
         # validate local dependency
@@ -295,18 +371,22 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                 f"Local dependency '{resolved}' must be a subdirectory of '{config_path.parent}'"
             )
 
-        # if it's installable, add it to local_pkgs
-        # otherwise, add it to faux_pkgs, and create a pyproject.toml
+        # Check for pyproject.toml or setup.py
+        # If found, treat as a real package, if not treat as a faux package.
+        # For faux packages, we'll also check for presence of requirements.txt.
         files = os.listdir(resolved)
         if "pyproject.toml" in files:
+            # real package
             real_pkgs[resolved] = local_dep
             if local_dep == ".":
                 working_dir = f"/deps/{resolved.name}"
         elif "setup.py" in files:
+            # real package
             real_pkgs[resolved] = local_dep
             if local_dep == ".":
                 working_dir = f"/deps/{resolved.name}"
         else:
+            # We could not find a pyproject.toml or setup.py, so treat as a faux package
             if any(file == "__init__.py" for file in files):
                 # flat layout
                 if "-" in resolved.name:
@@ -336,6 +416,9 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
             faux_pkgs[resolved] = (local_dep, container_path)
             if local_dep == ".":
                 working_dir = container_path
+
+            # If the faux package has a requirements.txt, we'll add
+            # the path to the list of requirements to install.
             if "requirements.txt" in files:
                 rfile = resolved / "requirements.txt"
                 pip_reqs.append(
@@ -351,6 +434,42 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
 def _update_graph_paths(
     config_path: pathlib.Path, config: Config, local_deps: LocalDeps
 ) -> None:
+    """Remap each graph's import path to the correct in-container path.
+
+    The config may contain entries in `graphs` that look like this:
+        {
+            "my_graph": "./mygraphs/main.py:graph_function"
+        }
+    or
+        {
+            "my_graph": "./src/some_subdir/my_file.py:my_graph"
+        }
+    which indicate a local file (on the host) followed by a colon and a
+    callable/object attribute within that file.
+
+    During the Docker build, local directories are copied into special
+    `/deps/` subdirectories, so they can be installed or referenced in
+    the container. This function updates each graph's import path to
+    reflect its new location **inside** the Docker container.
+
+    Paths inside the container must be POSIX-style paths (even if
+    the host system is Windows).
+
+    Args:
+        config_path: The path to the config file (e.g. `langgraph.json`).
+        config: The validated configuration dictionary.
+        local_deps: An object containing references to local dependencies:
+            - real Python packages (with a `pyproject.toml` or `setup.py`)
+            - “faux” packages that need minimal metadata to be installable
+            - potential `requirements.txt` for local dependencies
+            - container work directory (if "." is in `dependencies`)
+
+    Raises:
+        ValueError: If the import string is not in the format `<module>:<attribute>`
+                    or if the referenced local file is not found in `dependencies`.
+        FileNotFoundError: If the local file (module) does not actually exist on disk.
+        IsADirectoryError: If `module_str` points to a directory instead of a file.
+    """
     for graph_id, import_str in config["graphs"].items():
         module_str, _, attr_str = import_str.partition(":")
         if not module_str or not attr_str:
@@ -358,8 +477,12 @@ def _update_graph_paths(
                 'Import string "{import_str}" must be in format "<module>:<attribute>".'
             )
             raise ValueError(message.format(import_str=import_str))
-        if "/" in module_str:
-            resolved = config_path.parent / module_str
+
+        # Check for either forward slash or backslash in the module string
+        # to determine if it's a file path.
+        if "/" in module_str or "\\" in module_str:
+            # Resolve the local path properly on the current OS
+            resolved = (config_path.parent / module_str).resolve()
             if not resolved.exists():
                 raise FileNotFoundError(f"Could not find local module: {resolved}")
             elif not resolved.is_file():
@@ -367,12 +490,19 @@ def _update_graph_paths(
             else:
                 for path in local_deps.real_pkgs:
                     if resolved.is_relative_to(path):
-                        module_str = f"/deps/{path.name}/{resolved.relative_to(path)}"
+                        container_path = (
+                            pathlib.Path("/deps")
+                            / path.name
+                            / resolved.relative_to(path)
+                        )
+                        module_str = container_path.as_posix()
                         break
                 else:
                     for faux_pkg, (_, destpath) in local_deps.faux_pkgs.items():
                         if resolved.is_relative_to(faux_pkg):
-                            module_str = f"{destpath}/{resolved.relative_to(faux_pkg)}"
+                            container_subpath = resolved.relative_to(faux_pkg)
+                            # Construct the final path, ensuring POSIX style
+                            module_str = f"{destpath}/{container_subpath.as_posix()}"
                             break
                     else:
                         raise ValueError(
@@ -424,7 +554,10 @@ def _update_auth_path(
     )
 
 
-def python_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+def python_config_to_docker(
+    config_path: pathlib.Path, config: Config, base_image: str
+) -> str:
+    """Generate a Dockerfile from the configuration."""
     # configure pip
     pip_install = (
         "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
@@ -440,8 +573,9 @@ def python_config_to_docker(config_path: pathlib.Path, config: Config, base_imag
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
-    # rewrite graph paths
+    # Rewrite graph paths, so they point to the correct location in the Docker container
     _update_graph_paths(config_path, config, local_deps)
+    # Rewrite auth path, so it points to the correct location in the Docker container
     _update_auth_path(config_path, config, local_deps)
 
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
@@ -485,29 +619,31 @@ RUN set -ex && \\
             ],
         )
     )
-    store_config = config.get("store")
-    env_additional_config = (
-        ""
-        if not store_config
-        else f"""
-ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
-"""
-    )
+
+    env_vars = []
+
+    if (store_config := config.get("store")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+
     if (auth_config := config.get("auth")) is not None:
-        env_additional_config += f"""
-ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
-"""
-    return f"""FROM {base_image}:{config['python_version']}
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
-{os.linesep.join(config["dockerfile_lines"])}
+    graphs = config["graphs"]
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(graphs)}'")
 
-{installs}
-
-RUN {pip_install} -e /deps/*
-{env_additional_config}
-ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
-
-{f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
+    docker_file_contents = [
+        f"FROM {base_image}:{config['python_version']}",
+        "",
+        os.linesep.join(config["dockerfile_lines"]),
+        "",
+        installs,
+        "",
+        f"RUN {pip_install} -e /deps/*",
+        os.linesep.join(env_vars),
+        "",
+        f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
+    ]
+    return os.linesep.join(docker_file_contents)
 
 
 def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
@@ -549,6 +685,7 @@ ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
         env_additional_config += f"""
 ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
 """
+
     return f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
@@ -576,7 +713,7 @@ def config_to_compose(
     config: Config,
     base_image: str,
     watch: bool = False,
-):
+) -> str:
     env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
     env_vars_str = "\n".join(f'            {k}: "{v}"' for k, v in env_vars)
     env_file_str = (
