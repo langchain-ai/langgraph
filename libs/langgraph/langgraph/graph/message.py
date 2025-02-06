@@ -188,6 +188,7 @@ def add_messages(
             if isinstance(m, RemoveMessage):
                 ids_to_remove.add(m.id)
             else:
+                ids_to_remove.discard(m.id)
                 merged[existing_idx] = m
         else:
             if isinstance(m, RemoveMessage):
