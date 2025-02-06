@@ -500,6 +500,7 @@ class StateGraph(Graph):
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
+        name: Optional[str] = None,
     ) -> "CompiledStateGraph":
         """Compiles the state graph into a `CompiledGraph` object.
 
@@ -570,6 +571,7 @@ class StateGraph(Graph):
             auto_validate=False,
             debug=debug,
             store=store,
+            name=name or "LangGraph",
         )
 
         compiled.attach_node(START, None)

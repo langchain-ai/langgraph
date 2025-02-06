@@ -249,6 +249,7 @@ def create_react_agent(
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
     version: Literal["v1", "v2"] = "v1",
+    name: Optional[str] = None,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -307,6 +308,9 @@ def create_react_agent(
                 Tool calls are distributed across multiple instances of the tool
                 node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
                 API.
+        name: An optional name for the CompiledStateGraph.
+            This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
+            particularly useful for building multi-agent systems.
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
@@ -758,6 +762,7 @@ def create_react_agent(
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             debug=debug,
+            name=name,
         )
 
     # Define the function that determines whether to continue or not
@@ -834,6 +839,7 @@ def create_react_agent(
         interrupt_before=interrupt_before,
         interrupt_after=interrupt_after,
         debug=debug,
+        name=name,
     )
 
 
