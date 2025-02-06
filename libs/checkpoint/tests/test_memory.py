@@ -143,4 +143,4 @@ class TestMemorySaver:
 def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import MemorySaver
 
-    assert issubclass(MemorySaver(), InMemorySaver)
+    assert isinstance(MemorySaver(), InMemorySaver)

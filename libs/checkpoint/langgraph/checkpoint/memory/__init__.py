@@ -498,8 +498,7 @@ class InMemorySaver(
         return f"{next_v:032}.{next_h:016}"
 
 
-class MemorySaver(InMemorySaver):  # Kept for backwards compatibility
-    pass
+MemorySaver = InMemorySaver  # Kept for backwards compatibility
 
 
 class PersistentDict(defaultdict):
