@@ -78,6 +78,19 @@ def test_duplicates_in_input():
     assert result[0].content == "Hi there again!"
 
 
+def test_duplicates_in_input_with_remove():
+    left = [AIMessage(id="1", content="Hello!")]
+    right = [
+        RemoveMessage(id="1"),
+        AIMessage(id="1", content="Hi there!"),
+        AIMessage(id="1", content="Hi there again!"),
+    ]
+    result = add_messages(left, right)
+    assert len(result) == 1
+    assert result[0].id == "1"
+    assert result[0].content == "Hi there again!"
+
+
 def test_remove_message():
     left = [
         HumanMessage(content="Hello", id="1"),
