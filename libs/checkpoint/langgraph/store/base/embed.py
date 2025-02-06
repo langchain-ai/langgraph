@@ -403,9 +403,9 @@ def _is_async_callable(
 
 
 @functools.lru_cache
-def _get_init_embeddings() -> Callable[[str, ...], "Embeddings"] | None:
+def _get_init_embeddings() -> Optional[Callable[[str], Embeddings]]:
     try:
-        from langchain.embeddings import init_embeddings  # noqa: [import-not-found]
+        from langchain.embeddings import init_embeddings  # noqa
 
         return init_embeddings
     except ImportError:

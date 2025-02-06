@@ -493,7 +493,7 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
     if not Y:
         return []
     if _check_numpy():
-        import numpy as np  # type: ignore
+        import numpy as np  # type: ignore[import-not-found]
 
         X_arr = np.array(X) if not isinstance(X, np.ndarray) else X
         Y_arr = np.array(Y) if not isinstance(Y, np.ndarray) else Y
