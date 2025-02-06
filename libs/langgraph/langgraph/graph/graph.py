@@ -446,7 +446,7 @@ class Graph:
             interrupt_after_nodes=interrupt_after,
             auto_validate=False,
             debug=debug,
-            name=name,
+            name=name or "LangGraph",
         )
 
         # attach nodes, edges, and branches
