@@ -109,7 +109,9 @@ from langgraph.pregel.io import (
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions
+from langgraph.pregel.analyzer import Analyzer
 from langgraph.store.base import BaseStore
+from langgraph.graph.graph import START
 from langgraph.types import (
     All,
     Command,
@@ -143,6 +145,7 @@ class PregelLoop(LoopProtocol):
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
+    analyzer: Optional[Analyzer]
     output_keys: Union[str, Sequence[str]]
     stream_keys: Union[str, Sequence[str]]
     skip_done_tasks: bool
@@ -198,12 +201,14 @@ class PregelLoop(LoopProtocol):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        analyzer: Optional[Analyzer],
         output_keys: Union[str, Sequence[str]],
         stream_keys: Union[str, Sequence[str]],
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         debug: bool = False,
+        workflow_mode: bool = False,
     ) -> None:
         super().__init__(
             step=0,
@@ -216,6 +221,7 @@ class PregelLoop(LoopProtocol):
         self.checkpointer = checkpointer
         self.nodes = nodes
         self.specs = specs
+        self.analyzer = analyzer
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.interrupt_after = interrupt_after
@@ -227,6 +233,7 @@ class PregelLoop(LoopProtocol):
             or CONFIG_KEY_DEDUPE_TASKS in config[CONF]
         )
         self.debug = debug
+        self.workflow_mode = workflow_mode
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: Optional[PregelScratchpad] = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -458,7 +465,8 @@ class PregelLoop(LoopProtocol):
         if self.step > self.stop:
             self.status = "out_of_steps"
             return False
-
+        if self.workflow_mode:
+            self._set_workflow_trigger()
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
@@ -539,6 +547,31 @@ class PregelLoop(LoopProtocol):
         return True
 
     # private
+
+    def _set_workflow_trigger(self):
+        def find_max_subset(current_set, candidate_sets):
+            max_subset = set()
+
+            for candidate in candidate_sets:
+                if candidate.issubset(current_set):
+                    if len(candidate) > len(max_subset):
+                        max_subset = candidate
+
+            return max_subset
+
+        for node in self.analyzer.condition_nodes_children:
+            valid_edges = self.analyzer.filter_edges_to_end(START, node)
+            end_valid_edges = self.analyzer.get_node_valid_edges(node, valid_edges)
+            join_elements = []
+            if end_valid_edges:
+                join_nodes = find_max_subset(
+                    end_valid_edges, self.analyzer.nodes_precondition_combinations[node]
+                )
+                if join_nodes:
+                    join_elements = [
+                        "join:" + "+".join(sorted(list(join_nodes))) + ":" + node
+                    ]
+            self.nodes[node].triggers = join_elements
 
     def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
         for tid, k, v in self.checkpoint_pending_writes:
@@ -835,12 +868,14 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        analyzer: Optional[Analyzer],
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         debug: bool = False,
+        workflow_mode: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -850,12 +885,14 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             store=store,
             nodes=nodes,
             specs=specs,
+            analyzer=analyzer,
             output_keys=output_keys,
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
             manager=manager,
             debug=debug,
+            workflow_mode=workflow_mode,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -970,12 +1007,14 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        analyzer: Optional[Analyzer],
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         debug: bool = False,
+        workflow_mode: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -985,12 +1024,14 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             store=store,
             nodes=nodes,
             specs=specs,
+            analyzer=analyzer,
             output_keys=output_keys,
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
             interrupt_before=interrupt_before,
             manager=manager,
             debug=debug,
+            workflow_mode=workflow_mode,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

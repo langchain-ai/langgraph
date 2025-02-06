@@ -100,6 +100,7 @@ from langgraph.pregel.runner import PregelRunner
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.pregel.analyzer import Analyzer
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -133,7 +134,8 @@ class Channel:
         *,
         key: Optional[str] = None,
         tags: Optional[list[str]] = None,
-    ) -> PregelNode: ...
+    ) -> PregelNode:
+        ...
 
     @overload
     @classmethod
@@ -143,7 +145,8 @@ class Channel:
         *,
         key: None = None,
         tags: Optional[list[str]] = None,
-    ) -> PregelNode: ...
+    ) -> PregelNode:
+        ...
 
     @classmethod
     def subscribe_to(
@@ -225,6 +228,9 @@ class Pregel(PregelProtocol):
     debug: bool
     """Whether to print debug information during execution. Defaults to False."""
 
+    workflow_mode: bool
+    """Whether to execute workflow mode, in which nodes with conditional logic will recalculate and execute triggers. Defaults to False."""
+
     checkpointer: Checkpointer = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
@@ -238,6 +244,8 @@ class Pregel(PregelProtocol):
 
     config: Optional[RunnableConfig] = None
 
+    analyzer: Optional[Analyzer] = None
+
     name: str = "LangGraph"
 
     def __init__(
@@ -248,6 +256,7 @@ class Pregel(PregelProtocol):
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
         stream_eager: bool = False,
+        workflow_mode: bool = False,
         output_channels: Union[str, Sequence[str]],
         stream_channels: Optional[Union[str, Sequence[str]]] = None,
         interrupt_after_nodes: Union[All, Sequence[str]] = (),
@@ -273,6 +282,8 @@ class Pregel(PregelProtocol):
         self.input_channels = input_channels
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
+        self.workflow_mode = workflow_mode
+        self.analyzer = Analyzer() if workflow_mode else None
         self.checkpointer = checkpointer
         self.store = store
         self.retry_policy = retry_policy
@@ -501,9 +512,11 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None,
+                checkpointer=(
+                    self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None
+                ),
                 manager=None,
             )
             # get the subgraphs
@@ -615,9 +628,11 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None,
+                checkpointer=(
+                    self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None
+                ),
                 manager=None,
             )
             # get the subgraphs
@@ -917,9 +932,11 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=(
+                            self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None
+                        ),
                         manager=None,
                     )
                     # apply null writes
@@ -1013,9 +1030,11 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else None,
+                    checkpointer=(
+                        self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None
+                    ),
                     manager=None,
                 )
                 # apply null writes
@@ -1200,9 +1219,11 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=(
+                            self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None
+                        ),
                         manager=None,
                     )
                     # apply null writes
@@ -1296,9 +1317,11 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else None,
+                    checkpointer=(
+                        self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None
+                    ),
                     manager=None,
                 )
                 # apply null writes
@@ -1422,6 +1445,7 @@ class Pregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]],
         interrupt_after: Optional[Union[All, Sequence[str]]],
         debug: Optional[bool],
+        workflow_mode: Optional[bool],
     ) -> tuple[
         bool,
         set[StreamMode],
@@ -1434,6 +1458,9 @@ class Pregel(PregelProtocol):
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         debug = debug if debug is not None else self.debug
+        workflow_mode = (
+            workflow_mode if workflow_mode is not None else self.workflow_mode
+        )
         if output_keys is None:
             output_keys = self.stream_channels_asis
         else:
@@ -1470,6 +1497,7 @@ class Pregel(PregelProtocol):
             interrupt_after,
             checkpointer,
             store,
+            workflow_mode,
         )
 
     def stream(
@@ -1482,6 +1510,7 @@ class Pregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        workflow_mode: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
@@ -1641,6 +1670,7 @@ class Pregel(PregelProtocol):
                 interrupt_after_,
                 checkpointer,
                 store,
+                workflow_mode,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1648,6 +1678,7 @@ class Pregel(PregelProtocol):
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 debug=debug,
+                workflow_mode=workflow_mode,
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -1673,12 +1704,14 @@ class Pregel(PregelProtocol):
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
+                analyzer=self.analyzer,
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                workflow_mode=workflow_mode,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -1758,6 +1791,7 @@ class Pregel(PregelProtocol):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        workflow_mode: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
@@ -1779,6 +1813,7 @@ class Pregel(PregelProtocol):
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            workflow_mode: Whether to run the graph in workflow mode, defaults to False.
             subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
@@ -1928,9 +1963,9 @@ class Pregel(PregelProtocol):
                 stream_modes,
                 output_keys,
                 interrupt_before_,
-                interrupt_after_,
                 checkpointer,
                 store,
+                workflow_mode,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1938,6 +1973,7 @@ class Pregel(PregelProtocol):
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 debug=debug,
+                workflow_mode=workflow_mode,
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -1952,10 +1988,10 @@ class Pregel(PregelProtocol):
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
-                    lambda c: aioloop.call_soon_threadsafe(
-                        stream.put_nowait, ((), "custom", c)
-                    )
+                config[CONF][
+                    CONFIG_KEY_STREAM_WRITER
+                ] = lambda c: aioloop.call_soon_threadsafe(
+                    stream.put_nowait, ((), "custom", c)
                 )
             async with AsyncPregelLoop(
                 input,
@@ -1965,12 +2001,14 @@ class Pregel(PregelProtocol):
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
+                analyzer=self.analyzer,
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                workflow_mode=workflow_mode,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
