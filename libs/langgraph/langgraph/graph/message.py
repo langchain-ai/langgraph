@@ -176,9 +176,12 @@ def add_messages(
     for m in left:
         if m.id is None:
             m.id = str(uuid.uuid4())
+    dedupe_map = {}
     for m in right:
         if m.id is None:
             m.id = str(uuid.uuid4())
+        dedupe_map[m.id] = m
+    right = list(dedupe_map.values())
     # merge
     left_idx_by_id = {m.id: i for i, m in enumerate(left)}
     merged = left.copy()
