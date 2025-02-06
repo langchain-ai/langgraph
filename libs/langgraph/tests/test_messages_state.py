@@ -68,7 +68,10 @@ def test_missing_ids():
 
 def test_duplicates_in_input():
     left = []
-    right = [AIMessage(id="1", content="Hi there!"), AIMessage(id="1", content="Hi there again!")]
+    right = [
+        AIMessage(id="1", content="Hi there!"),
+        AIMessage(id="1", content="Hi there again!"),
+    ]
     result = add_messages(left, right)
     assert len(result) == 1
     assert result[0].id == "1"
