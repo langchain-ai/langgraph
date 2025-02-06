@@ -9,6 +9,7 @@ import posixpath
 
 from generate_api_reference_links import update_markdown_with_imports
 from notebook_convert import convert_notebook
+from setup_vcr import add_vcr_setup_to_markdown, wrap_python_code_block_with_vcr
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -124,6 +125,56 @@ def _highlight_code_blocks(markdown: str) -> str:
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
     return markdown
 
+def handle_vcr_setup(markdown: str, cassette_prefix: str) -> str:
+    """Handle VCR setup in markdown content if necessary."""
+    # Check if the markdown as any executable markdown code blocks.
+    # Looking for code blocks that look like this:
+    # ```python exec="on"
+    has_executable_code_blocks = re.search(r"```python\s+exec=\"on\"", markdown)
+
+    # Use the cassette prefix to generate a unique session ID
+    session_id = cassette_prefix.replace("/", "_")
+
+    if has_executable_code_blocks:
+        # Then let's wrap each executable code block with a VCR cassette context manager
+        cell_counter: int = 0
+
+        # Regex pattern explanation:
+        # - It looks for a code block starting with "```python exec="on"" or similar
+        # e.g., ```pycon exec="1" source="console"
+        pattern = re.compile(
+            # Opening fence must include exec="on"
+            r"(?P<open>^```(?:python|pycon)(?=[^\n]*exec=\"on\")[^\n]*\n)"
+            r"(?P<code>.*?)(?<=\n)"  # Lazily capture the code block (ending with a newline)
+            r"(?P<close>^```$)",  # Closing fence (a line with only three backticks)
+            re.DOTALL | re.MULTILINE,
+        )
+
+        def replace_executable_block(match: re.Match) -> str:
+            nonlocal cell_counter
+            cell_counter += 1
+            # Extract the inner code (the code inside the fenced block).
+            code = match.group("code")
+            # Wrap the code using your helper function. You can adjust the cassette prefix
+            # as needed (here "my_cassette" is used as an example).
+            wrapped_code = wrap_python_code_block_with_vcr(
+                code, cassette_prefix=cassette_prefix, block_id=cell_counter
+            )
+            # Return the modified code block. Note that we keep the original
+            # code fence and exec="on" marker.
+            # Add a session attribute to the code block
+            open = match.group("open").rstrip("\n")
+            return f"{open} session=\"{session_id}\"\n{wrapped_code}\n{match.group('close')}"
+
+        # Replace all matching executable code blocks in the markdown.
+        markdown = pattern.sub(replace_executable_block, markdown)
+
+        # And add the VCR setup code block at the beginning of the markdown content.
+        markdown = add_vcr_setup_to_markdown(markdown, session_id)
+
+    return markdown
+
+
 
 def _on_page_markdown_with_config(
     markdown: str,
@@ -138,6 +189,11 @@ def _on_page_markdown_with_config(
     if page.file.src_path.endswith(".ipynb"):
         logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
+
+    # Get filename
+    filename = os.path.basename(page.file.src_path)
+    cassette_prefix = os.path.join("cassettes", os.path.splitext(filename)[0])
+    markdown = handle_vcr_setup(markdown, cassette_prefix)
 
     # Append API reference links to code blocks
     if add_api_references:

@@ -1,5 +1,23 @@
 # LangGraph Glossary
 
+
+```python exec="on" source="above"
+from langchain_openai import ChatOpenAI
+import time
+
+model = ChatOpenAI()
+
+tic = time.time()
+print(model.invoke([{"role": "user", "content": "What is the capital of France?"}]).content)
+toc = time.time()
+print()
+print('hello')
+print()
+print(toc-tic)
+```
+
+
+
 ## Graphs
 
 At its core, LangGraph models agent workflows as graphs. You define the behavior of your agents using three key components:
