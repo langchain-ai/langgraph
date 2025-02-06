@@ -26,7 +26,7 @@ from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 logger = logging.getLogger(__name__)
 
 
-class MemorySaver(
+class InMemorySaver(
     BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
@@ -34,7 +34,7 @@ class MemorySaver(
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
     Note:
-        Only use `MemorySaver` for debugging or testing purposes.
+        Only use `InMemorySaver` for debugging or testing purposes.
         For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresSaver` / `AsyncPostgresSaver`.
 
     Args:
@@ -44,7 +44,7 @@ class MemorySaver(
 
             import asyncio
 
-            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.checkpoint.memory import InMemorySaver
             from langgraph.graph import StateGraph
 
             builder = StateGraph(int)
@@ -52,7 +52,7 @@ class MemorySaver(
             builder.set_entry_point("add_one")
             builder.set_finish_point("add_one")
 
-            memory = MemorySaver()
+            memory = InMemorySaver()
             graph = builder.compile(checkpointer=memory)
             coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
             asyncio.run(coro)  # Output: 2
@@ -84,7 +84,7 @@ class MemorySaver(
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
 
-    def __enter__(self) -> "MemorySaver":
+    def __enter__(self) -> "InMemorySaver":
         return self.stack.__enter__()
 
     def __exit__(
@@ -95,7 +95,7 @@ class MemorySaver(
     ) -> Optional[bool]:
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
-    async def __aenter__(self) -> "MemorySaver":
+    async def __aenter__(self) -> "InMemorySaver":
         return self.stack.__enter__()
 
     async def __aexit__(
@@ -149,15 +149,17 @@ class MemorySaver(
                     pending_writes=[
                         (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                     ],
-                    parent_config={
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": parent_checkpoint_id,
+                    parent_config=(
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
                         }
-                    }
-                    if parent_checkpoint_id
-                    else None,
+                        if parent_checkpoint_id
+                        else None
+                    ),
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
@@ -193,15 +195,17 @@ class MemorySaver(
                     pending_writes=[
                         (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                     ],
-                    parent_config={
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": parent_checkpoint_id,
+                    parent_config=(
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
                         }
-                    }
-                    if parent_checkpoint_id
-                    else None,
+                        if parent_checkpoint_id
+                        else None
+                    ),
                 )
 
     def list(
@@ -307,15 +311,17 @@ class MemorySaver(
                             ],
                         },
                         metadata=metadata,
-                        parent_config={
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": parent_checkpoint_id,
+                        parent_config=(
+                            {
+                                "configurable": {
+                                    "thread_id": thread_id,
+                                    "checkpoint_ns": checkpoint_ns,
+                                    "checkpoint_id": parent_checkpoint_id,
+                                }
                             }
-                        }
-                        if parent_checkpoint_id
-                        else None,
+                            if parent_checkpoint_id
+                            else None
+                        ),
                         pending_writes=[
                             (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                         ],
@@ -490,6 +496,9 @@ class MemorySaver(
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
+
+MemorySaver = InMemorySaver  # Kept for backwards compatibility
 
 
 class PersistentDict(defaultdict):
