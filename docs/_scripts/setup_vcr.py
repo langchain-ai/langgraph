@@ -129,5 +129,5 @@ def wrap_python_code_block_with_vcr(
         "c.__enter__() # markdown-exec: hide",
     ]
     wrapped_lines.extend(lines)
-    wrapped_lines.append("c.__exit__() ")
+    wrapped_lines.append("c.__exit__() # markdown-exec: hide")
     return "\n".join(wrapped_lines)
