@@ -131,3 +131,12 @@ def wrap_python_code_block_with_vcr(
     wrapped_lines.extend(lines)
     wrapped_lines.append("c.__exit__() # markdown-exec: hide")
     return "\n".join(wrapped_lines)
+
+
+def add_nock_setup_to_markdown(content: str, session_id: str) -> str:
+    """Prepend a Typescript code block to the Markdown content that sets up Nock.
+
+    The code block defines Nock configuration and helper functions. You can
+    call this function once on your Markdown file so that later Typescript code blocks
+    will replay their HTTP requests instead of making real ones.
+    """

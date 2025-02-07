@@ -24,8 +24,9 @@ mkdocs-minify-plugin = "^0.8.0"
 mkdocs-rss-plugin = "^1.13.1"
 mkdocs-git-committers-plugin-2 = "^2.3.0"
 mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
-markdown-include = "^0.8.1"
 markdown-callouts = "^0.4.0"
+markdown-exec = { git = "git+https://github.com/benjamincburns/markdown-exec.git@40f5e6ef5f7f5993a234e1c9b0601908d2954983" }
+markdown-include = "^0.8.1"
 mkdocs-exclude = "^1.0.2"
 vcrpy = "^6.0.1"
 click = "^8.1.7"
