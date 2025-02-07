@@ -12,6 +12,7 @@ below. These libraries can extend LangGraph's functionality in various ways.
 | Name | GitHub URL | Description | Weekly Downloads |
 | --- | --- | --- | --- |
 | **trustcall** | [hinthornw/trustcall](https://github.com/hinthornw/trustcall) | Tenacious tool calling built on LangGraph | 7081 |
+| **langgraph-supervisor** | [langchain-ai/langgraph-supervisor](https://github.com/langchain-ai/langgraph-supervisor) | Build supervisor multi-agent systems with LangGraph | - |
 
 ## ✨ Contributing Your Library
 
