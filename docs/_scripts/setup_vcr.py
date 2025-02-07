@@ -1,8 +1,13 @@
 # A list of patterns that, if found in a code block, will cause us to leave that block unchanged.
+import os
+
+
 BLOCKLIST_COMMANDS = (
     "WebBaseLoader",  # avoid caching web pages
     "draw_mermaid_png",  # avoid generating mermaid images via API
 )
+
+_assets_dir = os.path.join(os.path.dirname(__file__), "assets")
 
 
 def is_magic_command(line: str) -> bool:
@@ -31,38 +36,8 @@ def add_vcr_setup_to_markdown(content: str, session_id: str) -> str:
     call this function once on your Markdown file so that later Python code blocks
     (which are wrapped with a cassette context manager) can use the VCR setup.
     """
-    vcr_setup_lines = [
-        "import nest_asyncio",
-        "nest_asyncio.apply()",
-        "import vcr",
-        "import msgpack",
-        "import base64",
-        "import zlib",
-        "import os",
-        'os.environ.pop("LANGCHAIN_TRACING_V2", None)',
-        "custom_vcr = vcr.VCR()",
-        "",
-        "def compress_data(data, compression_level=9):",
-        "    packed = msgpack.packb(data, use_bin_type=True)",
-        "    compressed = zlib.compress(packed, level=compression_level)",
-        "    return base64.b64encode(compressed).decode('utf-8')",
-        "",
-        "def decompress_data(compressed_string):",
-        "    decoded = base64.b64decode(compressed_string)",
-        "    decompressed = zlib.decompress(decoded)",
-        "    return msgpack.unpackb(decompressed, raw=False)",
-        "",
-        "class AdvancedCompressedSerializer:",
-        "    def serialize(self, cassette_dict):",
-        "        return compress_data(cassette_dict)",
-        "",
-        "    def deserialize(self, cassette_string):",
-        "        return decompress_data(cassette_string)",
-        "",
-        "custom_vcr.register_serializer('advanced_compressed', AdvancedCompressedSerializer())",
-        "custom_vcr.serializer = 'advanced_compressed'",
-    ]
-    vcr_setup_code = "\n".join(vcr_setup_lines)
+    with open(os.path.join(_assets_dir, "vcr_setup_preamble.py"), "r") as f:
+        vcr_setup_code = f.read()
     # Wrap the setup code in a Python code block (using triple backticks)
     vcr_setup_block = (
         f'```python exec="on" session="{session_id}" \n{vcr_setup_code}\n```\n\n'
