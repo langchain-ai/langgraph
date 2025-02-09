@@ -354,7 +354,7 @@ nav:
             - tutorials/auth/resource_auth.md
             - tutorials/auth/add_auth_server.md
     - Resources:
-      - Prebuilt: prebuilt.md
+      - Prebuilt Agents: prebuilt.md
       - FAQ: concepts/faq.md
       - Troubleshooting:
           - Troubleshooting: troubleshooting/errors/index.md

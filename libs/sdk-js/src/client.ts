@@ -78,7 +78,7 @@ interface ClientConfig {
 class BaseClient {
   protected asyncCaller: AsyncCaller;
 
-  protected timeoutMs: number;
+  protected timeoutMs: number | undefined;
 
   protected apiUrl: string;
 
@@ -91,7 +91,7 @@ class BaseClient {
       ...config?.callerOptions,
     });
 
-    this.timeoutMs = config?.timeoutMs || 12_000;
+    this.timeoutMs = config?.timeoutMs;
 
     // default limit being capped by Chrome
     // https://github.com/nodejs/undici/issues/1373
@@ -131,7 +131,7 @@ class BaseClient {
       if (options.timeoutMs != null) {
         timeoutSignal = AbortSignal.timeout(options.timeoutMs);
       }
-    } else {
+    } else if (this.timeoutMs != null) {
       timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     }
 
