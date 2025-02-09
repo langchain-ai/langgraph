@@ -27,7 +27,7 @@ import {
   createParser,
 } from "./utils/eventsource-parser/index.js";
 import { IterableReadableStream } from "./utils/stream.js";
-import {
+import type {
   RunsCreatePayload,
   RunsStreamPayload,
   RunsWaitPayload,
@@ -38,6 +38,7 @@ import {
 import { mergeSignals } from "./utils/signals.js";
 import { getEnvironmentVariable } from "./utils/env.js";
 import { _getFetchImplementation } from "./singletons/fetch.js";
+import type { TypedAsyncGenerator, StreamMode } from "./types.stream.js";
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -457,15 +458,17 @@ export class AssistantsClient extends BaseClient {
   }
 }
 
-export class ThreadsClient extends BaseClient {
+export class ThreadsClient<TStateType = DefaultValues> extends BaseClient {
   /**
    * Get a thread by ID.
    *
    * @param threadId ID of the thread.
    * @returns The thread.
    */
-  async get(threadId: string): Promise<Thread> {
-    return this.fetch<Thread>(`/threads/${threadId}`);
+  async get<ValuesType = TStateType>(
+    threadId: string,
+  ): Promise<Thread<ValuesType>> {
+    return this.fetch<Thread<ValuesType>>(`/threads/${threadId}`);
   }
 
   /**
@@ -481,8 +484,8 @@ export class ThreadsClient extends BaseClient {
     metadata?: Metadata;
     threadId?: string;
     ifExists?: OnConflictBehavior;
-  }): Promise<Thread> {
-    return this.fetch<Thread>(`/threads`, {
+  }): Promise<Thread<TStateType>> {
+    return this.fetch<Thread<TStateType>>(`/threads`, {
       method: "POST",
       json: {
         metadata: payload?.metadata,
@@ -497,8 +500,8 @@ export class ThreadsClient extends BaseClient {
    * @param threadId ID of the thread to be copied
    * @returns Newly copied thread
    */
-  async copy(threadId: string): Promise<Thread> {
-    return this.fetch<Thread>(`/threads/${threadId}/copy`, {
+  async copy(threadId: string): Promise<Thread<TStateType>> {
+    return this.fetch<Thread<TStateType>>(`/threads/${threadId}/copy`, {
       method: "POST",
     });
   }
@@ -542,7 +545,7 @@ export class ThreadsClient extends BaseClient {
    * @param query Query options
    * @returns List of threads
    */
-  async search(query?: {
+  async search<ValuesType = TStateType>(query?: {
     /**
      * Metadata to filter threads by.
      */
@@ -561,8 +564,8 @@ export class ThreadsClient extends BaseClient {
      * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
      */
     status?: ThreadStatus;
-  }): Promise<Thread[]> {
-    return this.fetch<Thread[]>("/threads/search", {
+  }): Promise<Thread<ValuesType>[]> {
+    return this.fetch<Thread<ValuesType>[]>("/threads/search", {
       method: "POST",
       json: {
         metadata: query?.metadata ?? undefined,
@@ -579,7 +582,7 @@ export class ThreadsClient extends BaseClient {
    * @param threadId ID of the thread.
    * @returns Thread state.
    */
-  async getState<ValuesType = DefaultValues>(
+  async getState<ValuesType = TStateType>(
     threadId: string,
     checkpoint?: Checkpoint | string,
     options?: { subgraphs?: boolean },
@@ -613,7 +616,7 @@ export class ThreadsClient extends BaseClient {
    * @param threadId The ID of the thread.
    * @returns
    */
-  async updateState<ValuesType = DefaultValues>(
+  async updateState<ValuesType = TStateType>(
     threadId: string,
     options: {
       values: ValuesType;
@@ -672,7 +675,7 @@ export class ThreadsClient extends BaseClient {
    * @param options Additional options.
    * @returns List of thread states.
    */
-  async getHistory<ValuesType = DefaultValues>(
+  async getHistory<ValuesType = TStateType>(
     threadId: string,
     options?: {
       limit?: number;
@@ -696,24 +699,43 @@ export class ThreadsClient extends BaseClient {
   }
 }
 
-export class RunsClient extends BaseClient {
-  stream(
+export class RunsClient<
+  TStateType = DefaultValues,
+  TUpdateType = TStateType,
+  TCustomEventType = unknown,
+> extends BaseClient {
+  stream<
+    TStreamMode extends StreamMode | StreamMode[] = [],
+    TSubgraphs extends boolean = false,
+  >(
     threadId: null,
     assistantId: string,
-    payload?: Omit<RunsStreamPayload, "multitaskStrategy" | "onCompletion">,
-  ): AsyncGenerator<{
-    event: StreamEvent;
-    data: any;
-  }>;
+    payload?: Omit<
+      RunsStreamPayload<TStreamMode, TSubgraphs>,
+      "multitaskStrategy" | "onCompletion"
+    >,
+  ): TypedAsyncGenerator<
+    TStreamMode,
+    TSubgraphs,
+    TStateType,
+    TUpdateType,
+    TCustomEventType
+  >;
 
-  stream(
+  stream<
+    TStreamMode extends StreamMode | StreamMode[] = [],
+    TSubgraphs extends boolean = false,
+  >(
     threadId: string,
     assistantId: string,
-    payload?: RunsStreamPayload,
-  ): AsyncGenerator<{
-    event: StreamEvent;
-    data: any;
-  }>;
+    payload?: RunsStreamPayload<TStreamMode, TSubgraphs>,
+  ): TypedAsyncGenerator<
+    TStreamMode,
+    TSubgraphs,
+    TStateType,
+    TUpdateType,
+    TCustomEventType
+  >;
 
   /**
    * Create a run and stream the results.
@@ -722,14 +744,20 @@ export class RunsClient extends BaseClient {
    * @param assistantId Assistant ID to use for this run.
    * @param payload Payload for creating a run.
    */
-  async *stream(
+  async *stream<
+    TStreamMode extends StreamMode | StreamMode[] = [],
+    TSubgraphs extends boolean = false,
+  >(
     threadId: string | null,
     assistantId: string,
-    payload?: RunsStreamPayload,
-  ): AsyncGenerator<{
-    event: StreamEvent;
-    data: any;
-  }> {
+    payload?: RunsStreamPayload<TStreamMode, TSubgraphs>,
+  ): TypedAsyncGenerator<
+    TStreamMode,
+    TSubgraphs,
+    TStateType,
+    TUpdateType,
+    TCustomEventType
+  > {
     const json: Record<string, any> = {
       input: payload?.input,
       command: payload?.command,
@@ -767,7 +795,7 @@ export class RunsClient extends BaseClient {
     let onEndEvent: () => void;
     const textDecoder = new TextDecoder();
 
-    const stream: ReadableStream<{ event: string; data: any }> = (
+    const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
     ).pipeThrough(
       new TransformStream({
@@ -1284,7 +1312,11 @@ export class StoreClient extends BaseClient {
   }
 }
 
-export class Client {
+export class Client<
+  TStateType = DefaultValues,
+  TUpdateType = TStateType,
+  TCustomEventType = unknown,
+> {
   /**
    * The client for interacting with assistants.
    */
@@ -1293,12 +1325,12 @@ export class Client {
   /**
    * The client for interacting with threads.
    */
-  public threads: ThreadsClient;
+  public threads: ThreadsClient<TStateType>;
 
   /**
    * The client for interacting with runs.
    */
-  public runs: RunsClient;
+  public runs: RunsClient<TStateType, TUpdateType, TCustomEventType>;
 
   /**
    * The client for interacting with cron runs.
