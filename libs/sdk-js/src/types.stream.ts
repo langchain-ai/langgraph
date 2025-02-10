@@ -29,14 +29,20 @@ type AsSubgraph<TEvent extends { event: string; data: unknown }> = {
   data: TEvent["data"];
 };
 
-export type ValuesPayload<StateType> = { event: "values"; data: StateType };
+/**
+ * Stream event with values after completion of each step.
+ */
+export type ValuesStreamEvent<StateType> = { event: "values"; data: StateType };
 
 /** @internal */
-export type ValuesPayloadSubgraphs<StateType> = AsSubgraph<
-  ValuesPayload<StateType>
+export type SubgraphValuesStreamEvent<StateType> = AsSubgraph<
+  ValuesStreamEvent<StateType>
 >;
 
-export type MessagesTuplePayload = {
+/**
+ * Stream event with message chunks coming from LLM invocations inside nodes.
+ */
+export type MessagesTupleStreamEvent = {
   event: "messages";
   // TODO: add types for message and config, which do not depend on LangChain
   // while making sure it's easy to keep them in sync.
@@ -44,64 +50,86 @@ export type MessagesTuplePayload = {
 };
 
 /** @internal */
-export type MessagesTuplePayloadSubgraphs = AsSubgraph<MessagesTuplePayload>;
+export type SubgraphMessagesTupleStreamEvent =
+  AsSubgraph<MessagesTupleStreamEvent>;
 
-export type MetadataPayload = {
+/**
+ * Metadata stream event with information about the run and thread
+ */
+export type MetadataStreamEvent = {
   event: "metadata";
   data: { run_id: string; thread_id: string };
 };
 
 /** @internal */
-export type MetadataPayloadSubgraphs = AsSubgraph<MetadataPayload>;
+export type SubgraphMetadataStreamEvent = AsSubgraph<MetadataStreamEvent>;
 
-export type UpdatesPayload<UpdateType> = {
+/**
+ * Stream event with updates to the state after each step.
+ * The streamed outputs include the name of the node that
+ * produced the update as well as the update.
+ */
+export type UpdatesStreamEvent<UpdateType> = {
   event: "updates";
   data: { [node: string]: UpdateType };
 };
 
 /** @internal */
-export type UpdatesPayloadSubgraphs<UpdateType> = AsSubgraph<
-  UpdatesPayload<UpdateType>
+export type SubgraphUpdatesStreamEvent<UpdateType> = AsSubgraph<
+  UpdatesStreamEvent<UpdateType>
 >;
 
-export type CustomPayload<T> = { event: "custom"; data: T };
+/**
+ * Streaming custom data from inside the nodes.
+ */
+export type CustomStreamEvent<T> = { event: "custom"; data: T };
 
 /** @internal */
-export type CustomPayloadSubgraphs<T> = AsSubgraph<CustomPayload<T>>;
+export type SubgraphCustomStreamEvent<T> = AsSubgraph<CustomStreamEvent<T>>;
 
-type MessagesMetadataPayload = {
+type MessagesMetadataStreamEvent = {
   event: "messages/metadata";
   data: { [messageId: string]: { metadata: unknown } };
 };
-type MessagesCompletePayload = {
+type MessagesCompleteStreamEvent = {
   event: "messages/complete";
   data: Message[];
 };
-type MessagesPartialPayload = {
+type MessagesPartialStreamEvent = {
   event: "messages/partial";
   data: Message[];
 };
 
-export type MessagesPayload =
-  | MessagesMetadataPayload
-  | MessagesCompletePayload
-  | MessagesPartialPayload;
+/**
+ * Message stream event specific to LangGraph Server.
+ * @deprecated Use `streamMode: "messages-tuple"` instead.
+ */
+export type MessagesStreamEvent =
+  | MessagesMetadataStreamEvent
+  | MessagesCompleteStreamEvent
+  | MessagesPartialStreamEvent;
 
 /** @internal */
-export type MessagesPayloadSubgraphs =
-  | AsSubgraph<MessagesMetadataPayload>
-  | AsSubgraph<MessagesCompletePayload>
-  | AsSubgraph<MessagesPartialPayload>;
+export type SubgraphMessagesStreamEvent =
+  | AsSubgraph<MessagesMetadataStreamEvent>
+  | AsSubgraph<MessagesCompleteStreamEvent>
+  | AsSubgraph<MessagesPartialStreamEvent>;
 
-export type DebugPayload = { event: "debug"; data: unknown };
-
-/** @internal */
-export type DebugPayloadSubgraphs = AsSubgraph<DebugPayload>;
-
-export type EventsPayload = { event: "events"; data: unknown };
+/**
+ * Stream event with detailed debug information.
+ */
+export type DebugStreamEvent = { event: "debug"; data: unknown };
 
 /** @internal */
-export type EventsPayloadSubgraphs = AsSubgraph<EventsPayload>;
+export type SubgraphDebugStreamEvent = AsSubgraph<DebugStreamEvent>;
+
+/**
+ * Stream event with events occurring during execution.
+ */
+export type EventsStreamEvent = { event: "events"; data: unknown };
+
+/** @internal */
+export type SubgraphEventsStreamEvent = AsSubgraph<EventsStreamEvent>;
 
 type GetStreamModeMap<
   TStreamMode extends StreamMode | StreamMode[],
@@ -110,15 +138,15 @@ type GetStreamModeMap<
   TCustomType = unknown,
 > =
   | {
-      values: ValuesPayload<TStateType>;
-      updates: UpdatesPayload<TUpdateType>;
-      custom: CustomPayload<TCustomType>;
-      debug: DebugPayload;
-      messages: MessagesPayload;
-      "messages-tuple": MessagesTuplePayload;
-      events: EventsPayload;
+      values: ValuesStreamEvent<TStateType>;
+      updates: UpdatesStreamEvent<TUpdateType>;
+      custom: CustomStreamEvent<TCustomType>;
+      debug: DebugStreamEvent;
+      messages: MessagesStreamEvent;
+      "messages-tuple": MessagesTupleStreamEvent;
+      events: EventsStreamEvent;
     }[TStreamMode extends StreamMode[] ? TStreamMode[number] : TStreamMode]
-  | MetadataPayload;
+  | MetadataStreamEvent;
 
 type GetSubgraphsStreamModeMap<
   TStreamMode extends StreamMode | StreamMode[],
@@ -127,15 +155,15 @@ type GetSubgraphsStreamModeMap<
   TCustomType = unknown,
 > =
   | {
-      values: ValuesPayloadSubgraphs<TStateType>;
-      updates: UpdatesPayloadSubgraphs<TUpdateType>;
-      custom: CustomPayloadSubgraphs<TCustomType>;
-      debug: DebugPayloadSubgraphs;
-      messages: MessagesPayloadSubgraphs;
-      "messages-tuple": MessagesTuplePayloadSubgraphs;
-      events: EventsPayloadSubgraphs;
+      values: SubgraphValuesStreamEvent<TStateType>;
+      updates: SubgraphUpdatesStreamEvent<TUpdateType>;
+      custom: SubgraphCustomStreamEvent<TCustomType>;
+      debug: SubgraphDebugStreamEvent;
+      messages: SubgraphMessagesStreamEvent;
+      "messages-tuple": SubgraphMessagesTupleStreamEvent;
+      events: SubgraphEventsStreamEvent;
     }[TStreamMode extends StreamMode[] ? TStreamMode[number] : TStreamMode]
-  | MetadataPayloadSubgraphs;
+  | SubgraphMetadataStreamEvent;
 
 export type TypedAsyncGenerator<
   TStreamMode extends StreamMode | StreamMode[] = [],
