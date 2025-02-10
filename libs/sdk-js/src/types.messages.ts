@@ -6,6 +6,7 @@ type MessageContentImageUrl = {
 
 type MessageContentText = { type: "text"; text: string };
 type MessageContentComplex = MessageContentText | MessageContentImageUrl;
+type MessageContent = string | MessageContentComplex[];
 
 type MessageAdditionalKwargs = {
   [x: string]: unknown;
@@ -24,13 +25,13 @@ type MessageAdditionalKwargs = {
 export type HumanMessage = {
   type: "human";
   id?: string | undefined;
-  content: string | MessageContentComplex[];
+  content: MessageContent;
 };
 
 export type AIMessage = {
   type: "ai";
   id?: string | undefined;
-  content: string | MessageContentComplex[];
+  content: MessageContent;
   tool_calls?:
     | {
         name: string;
@@ -73,9 +74,8 @@ export type ToolMessage = {
   type: "tool";
   name?: string | undefined;
   id?: string | undefined;
-  content: string | MessageContentComplex[];
+  content: MessageContent;
   status?: "error" | "success" | undefined;
-  lc_direct_tool_output: boolean;
   tool_call_id: string;
   additional_kwargs?: MessageAdditionalKwargs | undefined;
   response_metadata?: Record<string, unknown> | undefined;
@@ -84,19 +84,19 @@ export type ToolMessage = {
 export type SystemMessage = {
   type: "system";
   id?: string | undefined;
-  content: string | MessageContentComplex[];
+  content: MessageContent;
 };
 
 export type FunctionMessage = {
   type: "function";
   id?: string | undefined;
-  content: string | MessageContentComplex[];
+  content: MessageContent;
 };
 
 export type RemoveMessage = {
   type: "remove";
   id: string;
-  content: string | MessageContentComplex[];
+  content: MessageContent;
 };
 
 export type Message =
