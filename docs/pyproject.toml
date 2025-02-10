@@ -77,3 +77,7 @@ extend-include = ["*.ipynb"]
     "E722", # allow base imports in notebooks
 ]
 
+[tool.codespell]
+# https://mypy.readthedocs.io/en/stable/config_file.html
+# comma-separated list
+ignore-words-list = "infor"
