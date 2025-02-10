@@ -29,14 +29,14 @@ export type { OnConflictBehavior, Command } from "./types.js";
 
 export type { StreamMode } from "./types.stream.js";
 export type {
-  ValuesPayload,
-  MessagesTuplePayload,
-  MetadataPayload,
-  UpdatesPayload,
-  CustomPayload,
-  MessagesPayload,
-  DebugPayload,
-  EventsPayload,
+  ValuesStreamEvent,
+  MessagesTupleStreamEvent,
+  MetadataStreamEvent,
+  UpdatesStreamEvent,
+  CustomStreamEvent,
+  MessagesStreamEvent,
+  DebugStreamEvent,
+  EventsStreamEvent,
 } from "./types.stream.js";
 export type {
   Message,
