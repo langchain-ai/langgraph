@@ -16,7 +16,7 @@ type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 
 export type CancelAction = "interrupt" | "rollback";
 
-export interface Config {
+export type Config = {
   /**
    * Tags for this call and any sub-calls (eg. a Chain calling an LLM).
    * You can use these to filter calls.
@@ -32,19 +32,20 @@ export interface Config {
   /**
    * Runtime values for attributes previously made configurable on this Runnable.
    */
-  configurable: {
+  configurable?: {
     /**
      * ID of the thread
      */
-    thread_id?: string;
+    thread_id?: Optional<string>;
 
     /**
      * Timestamp of the state checkpoint
      */
-    checkpoint_id?: string;
+    checkpoint_id?: Optional<string>;
+
     [key: string]: unknown;
   };
-}
+};
 
 export interface GraphSchema {
   /**
@@ -254,12 +255,12 @@ export interface Run {
   multitask_strategy: Optional<MultitaskStrategy>;
 }
 
-export interface Checkpoint {
+export type Checkpoint = {
   thread_id: string;
   checkpoint_ns: string;
   checkpoint_id: Optional<string>;
   checkpoint_map: Optional<Record<string, unknown>>;
-}
+};
 
 export interface ListNamespaceResponse {
   namespaces: string[][];

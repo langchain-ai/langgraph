@@ -649,7 +649,7 @@ export class ThreadsClient extends BaseClient {
     let threadId: string;
 
     if (typeof threadIdOrConfig !== "string") {
-      if (typeof threadIdOrConfig.configurable.thread_id !== "string") {
+      if (typeof threadIdOrConfig.configurable?.thread_id !== "string") {
         throw new Error(
           "Thread ID is required when updating state with a config.",
         );
