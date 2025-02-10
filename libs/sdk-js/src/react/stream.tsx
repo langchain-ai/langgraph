@@ -6,13 +6,13 @@ import type { Command } from "../types.js";
 import type { Message } from "../types.messages.js";
 import type { Config, ThreadState } from "../schema.js";
 import type {
-  CustomPayload,
-  DebugPayload,
-  EventsPayload,
-  MessagesPayload,
-  MessagesTuplePayload,
-  UpdatesPayload,
-  ValuesPayload,
+  CustomStreamEvent,
+  DebugStreamEvent,
+  EventsStreamEvent,
+  MessagesStreamEvent,
+  MessagesTupleStreamEvent,
+  UpdatesStreamEvent,
+  ValuesStreamEvent,
 } from "../types.stream.js";
 
 import {
@@ -114,18 +114,6 @@ export type MessageBranch = {
   options: CheckpointBranchPath[];
 };
 
-const mergeConfig = (...configs: (Config | undefined)[]) => {
-  const result: Config = { configurable: {} };
-
-  for (const config of configs) {
-    if (config == null) continue;
-    // TODO: Just assigning the latest configurable is iffy.
-    result.configurable = config.configurable;
-  }
-
-  return result;
-};
-
 function fetchHistory<StateType extends Record<string, unknown>>(
   client: Client,
   threadId: string,
@@ -197,14 +185,14 @@ export function useStream<
   threadId?: string | null;
   onThreadId?: (threadId: string) => void;
 }) {
-  type EventPayload =
-    | ValuesPayload<StateType>
-    | UpdatesPayload<UpdateType>
-    | CustomPayload<CustomType>
-    | DebugPayload
-    | MessagesPayload
-    | MessagesTuplePayload
-    | EventsPayload;
+  type EventStreamEvent =
+    | ValuesStreamEvent<StateType>
+    | UpdatesStreamEvent<UpdateType>
+    | CustomStreamEvent<CustomType>
+    | DebugStreamEvent
+    | MessagesStreamEvent
+    | MessagesTupleStreamEvent
+    | EventsStreamEvent;
 
   const contextConfig = useContext(ConfigProvider);
   const { withMessages, onError, threadId, client } = Object.assign(
@@ -222,7 +210,7 @@ export function useStream<
   const [branchPath, setBranchPath] = useState<CheckpointBranchPath>([]);
 
   const [error, setError] = useState<unknown | undefined>(undefined);
-  const [events, setEvents] = useState<EventPayload[]>([]);
+  const [events, setEvents] = useState<EventStreamEvent[]>([]);
 
   const [streamValues, setStreamValues] = useState<StateType | null>(null);
 
@@ -411,12 +399,15 @@ export function useStream<
       // TODO: why non-existent assistant ID does not throw an error here?
       const run = (await client.runs.stream(usableThreadId, "agent", {
         input: values as Record<string, unknown>,
-        config: mergeConfig(
-          { configurable: lastSeenValue?.checkpoint },
-          submitOptions?.config,
-        ),
+        config: {
+          ...submitOptions?.config,
+          configurable: {
+            ...lastSeenValue?.checkpoint,
+            ...submitOptions?.config?.configurable,
+          },
+        },
         streamMode,
-      })) as AsyncGenerator<EventPayload>;
+      })) as AsyncGenerator<EventStreamEvent>;
 
       // Assumption: we're setting the initial value
       // Used for instant feedback
@@ -433,7 +424,7 @@ export function useStream<
       }
 
       for await (const { event, data } of run) {
-        setEvents((events) => [...events, { event, data } as EventPayload]);
+        setEvents((events) => [...events, { event, data } as EventStreamEvent]);
 
         if (event === "values") {
           setStreamValues(data);
@@ -505,7 +496,7 @@ export function useStream<
 
       return events
         .filter(
-          (item): item is UpdatesPayload<UpdateType> =>
+          (item): item is UpdatesStreamEvent<UpdateType> =>
             item.event === "updates",
         )
         .map(({ data }) => data);
