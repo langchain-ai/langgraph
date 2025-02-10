@@ -100,7 +100,7 @@ jobs:
               --check-links-ignore "/.*\.(ipynb|html)$" \
               --check-links-ignore "https://python\.langchain\.com/.*" \
               --check-links-ignore "https://openai\.com/.*" \
-              --check-links-ignore "https://uber\.com/.*" \
+              --check-links-ignore "https://www\.uber\.com/.*" \
               --check-links-ignore "https://pepy\.tech/.*" \
               --check-links $(find site -name "index.html" | grep -v 'storm/index.html')
               
