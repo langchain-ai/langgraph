@@ -458,7 +458,10 @@ export class AssistantsClient extends BaseClient {
   }
 }
 
-export class ThreadsClient<TStateType = DefaultValues> extends BaseClient {
+export class ThreadsClient<
+  TStateType = DefaultValues,
+  TUpdateType = TStateType,
+> extends BaseClient {
   /**
    * Get a thread by ID.
    *
@@ -616,7 +619,7 @@ export class ThreadsClient<TStateType = DefaultValues> extends BaseClient {
    * @param threadId The ID of the thread.
    * @returns
    */
-  async updateState<ValuesType = TStateType>(
+  async updateState<ValuesType = TUpdateType>(
     threadId: string,
     options: {
       values: ValuesType;
@@ -705,7 +708,7 @@ export class RunsClient<
   TCustomEventType = unknown,
 > extends BaseClient {
   stream<
-    TStreamMode extends StreamMode | StreamMode[] = [],
+    TStreamMode extends StreamMode | StreamMode[] = StreamMode,
     TSubgraphs extends boolean = false,
   >(
     threadId: null,
@@ -723,7 +726,7 @@ export class RunsClient<
   >;
 
   stream<
-    TStreamMode extends StreamMode | StreamMode[] = [],
+    TStreamMode extends StreamMode | StreamMode[] = StreamMode,
     TSubgraphs extends boolean = false,
   >(
     threadId: string,
@@ -745,7 +748,7 @@ export class RunsClient<
    * @param payload Payload for creating a run.
    */
   async *stream<
-    TStreamMode extends StreamMode | StreamMode[] = [],
+    TStreamMode extends StreamMode | StreamMode[] = StreamMode,
     TSubgraphs extends boolean = false,
   >(
     threadId: string | null,
@@ -1325,7 +1328,7 @@ export class Client<
   /**
    * The client for interacting with threads.
    */
-  public threads: ThreadsClient<TStateType>;
+  public threads: ThreadsClient<TStateType, TUpdateType>;
 
   /**
    * The client for interacting with runs.
