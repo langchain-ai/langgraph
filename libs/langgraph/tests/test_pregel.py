@@ -52,7 +52,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.func import entrypoint, task
@@ -222,7 +222,7 @@ def test_graph_validation_with_command() -> None:
 
 
 def test_checkpoint_errors() -> None:
-    class FaultyGetCheckpointer(MemorySaver):
+    class FaultyGetCheckpointer(InMemorySaver):
         def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
@@ -236,13 +236,13 @@ def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
-    class FaultyPutWritesCheckpointer(MemorySaver):
+    class FaultyPutWritesCheckpointer(InMemorySaver):
         def put_writes(
             self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
-    class FaultyVersionCheckpointer(MemorySaver):
+    class FaultyVersionCheckpointer(InMemorySaver):
         def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
             raise ValueError("Faulty get_next_version")
 
@@ -4060,7 +4060,7 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     interview_builder.add_conditional_edges("answer_question", route_messages)
 
     # Set up memory
-    memory = MemorySaver()
+    memory = InMemorySaver()
 
     # Interview
     interview_graph = interview_builder.compile(checkpointer=memory).with_config(
@@ -4288,7 +4288,7 @@ def test_subgraph_retries():
     parent.add_edge("parent_node", "child_graph")
     parent.set_entry_point("parent_node")
 
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     app = parent.compile(checkpointer=checkpointer)
     with pytest.raises(RandomError):
         app.invoke({"count": 0}, {"configurable": {"thread_id": "foo"}})
@@ -4411,7 +4411,7 @@ def test_debug_retry():
     builder.add_edge("one", "two")
     builder.add_edge("two", END)
 
-    saver = MemorySaver()
+    saver = InMemorySaver()
 
     graph = builder.compile(checkpointer=saver)
 
@@ -4479,7 +4479,7 @@ def test_debug_subgraphs():
     parent.add_edge("p_one", "p_two")
     parent.add_edge("p_two", END)
 
-    graph = parent.compile(checkpointer=MemorySaver())
+    graph = parent.compile(checkpointer=InMemorySaver())
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
@@ -4555,7 +4555,7 @@ def test_debug_nested_subgraphs():
     grand_parent.add_edge("gp_one", "gp_two")
     grand_parent.add_edge("gp_two", END)
 
-    graph = grand_parent.compile(checkpointer=MemorySaver())
+    graph = grand_parent.compile(checkpointer=InMemorySaver())
 
     config = {"configurable": {"thread_id": "1"}}
     events = [

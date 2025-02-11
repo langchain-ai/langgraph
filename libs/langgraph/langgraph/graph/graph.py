@@ -417,6 +417,7 @@ class Graph:
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
+        name: Optional[str] = None,
     ) -> "CompiledGraph":
         # assign default values
         interrupt_before = interrupt_before or []
@@ -445,6 +446,7 @@ class Graph:
             interrupt_after_nodes=interrupt_after,
             auto_validate=False,
             debug=debug,
+            name=name or "LangGraph",
         )
 
         # attach nodes, edges, and branches

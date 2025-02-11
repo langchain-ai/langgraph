@@ -9,13 +9,13 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class TestMemorySaver:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
-        self.memory_saver = MemorySaver()
+        self.memory_saver = InMemorySaver()
 
         # objects for test setup
         self.config_1: RunnableConfig = {
@@ -138,3 +138,9 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+
+def test_memory_saver() -> None:
+    from langgraph.checkpoint.memory import MemorySaver
+
+    assert isinstance(MemorySaver(), InMemorySaver)
