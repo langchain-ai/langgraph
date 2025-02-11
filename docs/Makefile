@@ -18,7 +18,9 @@ install-vercel-deps:
 
 vercel-build-docs: install-vercel-deps
 	poetry install
+	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@2f702799f39bc32f594733b6df03c39ff81a7a17"
 	make build-docs
+
 
 serve-clean-docs: clean-docs
 	poetry run python -m mkdocs serve -c -f mkdocs.yml --strict -w ../libs/langgraph
