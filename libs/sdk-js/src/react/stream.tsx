@@ -40,7 +40,8 @@ import {
 
 class StreamError extends Error {
   constructor(data: { error?: string; name?: string; message: string }) {
-    super([data.error ?? data.name, data.message].filter(Boolean).join(": "));
+    super(data.message);
+    this.name = data.name ?? data.error ?? "StreamError";
   }
 
   static isStructuredError(error: unknown): error is {
