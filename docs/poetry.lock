@@ -3496,7 +3496,7 @@ ansi = ["pygments-ansi-color (>=0.3)"]
 type = "git"
 url = "https://github.com/benjamincburns/markdown-exec.git"
 reference = "HEAD"
-resolved_reference = "cee094f9b2c9b41c06e21d620d19df17f4678555"
+resolved_reference = "2f702799f39bc32f594733b6df03c39ff81a7a17"
 
 [[package]]
 name = "markdown-include"
@@ -8089,4 +8089,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "176e83a71c79d349fbe8862819988301710d2b65bab6900f5a413d377638125e"
+content-hash = "c2a74df60862532b9d4fe71bb0d83cfde238637998181645c0ffea3ebd3f320e"

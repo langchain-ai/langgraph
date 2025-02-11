@@ -13,6 +13,8 @@
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.8",
-    "@types/nock": "^11.1.0"
+    "@types/msgpack-lite": "^0.1.11",
+    "@types/nock": "^11.1.0",
+    "@types/node": "^22.13.1"
   }
 }

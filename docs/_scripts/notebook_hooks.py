@@ -1,15 +1,20 @@
 import logging
 import os
 import re
-from typing import Any, Dict
+import traceback
+from typing import Any, Callable, Dict
 
+from markdown import Markdown
+from pymdownx.superfences import SuperFencesException
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 import posixpath
 
+from markdown_exec.hooks import SessionHistoryEntry
+
 from generate_api_reference_links import update_markdown_with_imports
 from notebook_convert import convert_notebook
-from setup_vcr import add_vcr_setup_to_markdown, wrap_python_code_block_with_vcr
+from setup_vcr import load_postamble, load_preamble, _hash_string
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -46,6 +51,7 @@ def on_files(files: Files, **kwargs: Dict[str, Any]):
     new_files = Files([])
     for file in files:
         if file.src_path.endswith(".ipynb"):
+            continue
             new_file = NotebookFile(
                 path=file.src_path,
                 src_dir=file.src_dir,
@@ -58,7 +64,25 @@ def on_files(files: Files, **kwargs: Dict[str, Any]):
     return new_files
 
 
-def _highlight_code_blocks(markdown: str) -> str:
+def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
+    """Add the path to the code blocks."""
+    code_block_pattern = re.compile(
+        r"(?P<indent>[ \t]*)```(?P<language>\w+)[ ]*(?P<attributes>[^\n]*)\n"
+        r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
+        r"(?P=indent)```"  # Match closing backticks with the same indentation
+    )
+
+    def replace_code_block_header(match: re.Match) -> str:
+        indent = match.group("indent")
+        language = match.group("language")
+        attributes = match.group("attributes").rstrip()
+        code = match.group("code")
+        return f'{indent}```{language} {attributes} path="{page.file.src_path}"\n{code}{indent}```'
+
+    return code_block_pattern.sub(replace_code_block_header, markdown)
+
+
+def _highlight_code_blocks(markdown: str, page: Page) -> str:
     """Find code blocks with highlight comments and add hl_lines attribute.
 
     Args:
@@ -78,6 +102,7 @@ def _highlight_code_blocks(markdown: str) -> str:
     )
 
     def replace_highlight_comments(match: re.Match) -> str:
+        nonlocal page
         indent = match.group("indent")
         language = match.group("language")
         code_block = match.group("code")
@@ -110,8 +135,8 @@ def _highlight_code_blocks(markdown: str) -> str:
             return (
                 f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"\n'
                 # The indent and terminating \n is already included in the code block
-                f'{new_code_block}'
-                f'{indent}```'
+                f"{new_code_block}"
+                f"{indent}```"
             )
         else:
             return (
@@ -125,55 +150,89 @@ def _highlight_code_blocks(markdown: str) -> str:
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
     return markdown
 
-def handle_vcr_setup(markdown: str, cassette_prefix: str) -> str:
+
+def handle_vcr_setup(
+    *,
+    formatter: Callable,
+    language: str,
+    code: str,
+    session: str,
+    id: str,
+    md: Markdown,
+    **kwargs: Dict[str, Any],
+) -> str:
     """Handle VCR setup in markdown content if necessary."""
-    # Check if the markdown as any executable markdown code blocks.
-    # Looking for code blocks that look like this:
-    # ```python exec="on"
-    has_executable_code_blocks = re.search(r"```python\s+exec=\"on\"", markdown)
+    try:
+        if kwargs.get("extra", None) is None:
+            raise ValueError(
+                f"error while processing {language} block: extra dict is required"
+            )
 
-    # Use the cassette prefix to generate a unique session ID
-    session_id = cassette_prefix.replace("/", "_")
+        if kwargs["extra"].get("path", None) is None:
+            raise ValueError(
+                f"error while processing {language} block: path is required"
+            )
 
-    if has_executable_code_blocks:
-        # Then let's wrap each executable code block with a VCR cassette context manager
-        cell_counter: int = 0
+        document_filename = kwargs["extra"]["path"]
 
-        # Regex pattern explanation:
-        # - It looks for a code block starting with "```python exec="on"" or similar
-        # e.g., ```pycon exec="1" source="console"
-        pattern = re.compile(
-            # Opening fence must include exec="on"
-            r"(?P<open>^```(?:python|pycon)(?=[^\n]*exec=\"on\")[^\n]*\n)"
-            r"(?P<code>.*?)(?<=\n)"  # Lazily capture the code block (ending with a newline)
-            r"(?P<close>^```$)",  # Closing fence (a line with only three backticks)
-            re.DOTALL | re.MULTILINE,
+        logger.info("document_filename: %s", document_filename)
+
+        if session is None or session == "" and id is None or id == "":
+            id = _hash_string(code)
+
+        cassette_prefix = document_filename.replace(".md", "").replace(os.path.sep, "_")
+
+        cassette_dir = os.path.abspath(
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "cassettes")
+        )
+        os.makedirs(cassette_dir, exist_ok=True)
+
+        # Build a unique cassette name.
+        cassette_name = os.path.join(
+            cassette_dir,
+            f"{cassette_prefix}_{session if session else id}_{language}.msgpack.zlib",
         )
 
-        def replace_executable_block(match: re.Match) -> str:
-            nonlocal cell_counter
-            cell_counter += 1
-            # Extract the inner code (the code inside the fenced block).
-            code = match.group("code")
-            # Wrap the code using your helper function. You can adjust the cassette prefix
-            # as needed (here "my_cassette" is used as an example).
-            wrapped_code = wrap_python_code_block_with_vcr(
-                code, cassette_prefix=cassette_prefix, block_id=cell_counter
-            )
-            # Return the modified code block. Note that we keep the original
-            # code fence and exec="on" marker.
-            # Add a session attribute to the code block
-            open = match.group("open").rstrip("\n")
-            return f"{open} session=\"{session_id}\"\n{wrapped_code}\n{match.group('close')}"
+        # Add context manager at start with explicit __enter__ and __exit__ calls
 
-        # Replace all matching executable code blocks in the markdown.
-        markdown = pattern.sub(replace_executable_block, markdown)
+        wrapped_lines = [
+            load_preamble(language, code, cassette_name),
+            code,
+        ]
 
-        # And add the VCR setup code block at the beginning of the markdown content.
-        markdown = add_vcr_setup_to_markdown(markdown, session_id)
+        if session is None or session == "":
+            wrapped_lines.append(load_postamble(language))
 
-    return markdown
+        transformed_source = "\n".join(wrapped_lines)
+        return dict(
+            transform_source=lambda code: (transformed_source, code),
+            id=id,
+            extra={},
+        )
+    except Exception as e:
+        raise SuperFencesException(traceback.format_exc()) from e
 
+
+def handle_vcr_teardown(
+    *,
+    formatter: Callable,
+    language: str,
+    session: str,
+    history: list[SessionHistoryEntry],
+):
+    session = history[-1].inputs["session"]
+    inputs = dict(history[-1].inputs)
+    del inputs["session"]
+    del inputs["code"]
+    del inputs["language"]
+    del inputs["id"]
+    formatter(
+        code="_cassette.__exit__() # markdown-exec: hide",
+        language="python",
+        session=session,
+        id=f"{id}_vcr_end",
+        **inputs,
+    )
 
 
 def _on_page_markdown_with_config(
@@ -184,22 +243,19 @@ def _on_page_markdown_with_config(
     remove_base64_images: bool = False,
     **kwargs: Any,
 ) -> str:
+    markdown = _add_path_to_code_blocks(markdown, page)
     if DISABLED:
         return markdown
+
     if page.file.src_path.endswith(".ipynb"):
         logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
-
-    # Get filename
-    filename = os.path.basename(page.file.src_path)
-    cassette_prefix = os.path.join("cassettes", os.path.splitext(filename)[0])
-    markdown = handle_vcr_setup(markdown, cassette_prefix)
 
     # Append API reference links to code blocks
     if add_api_references:
         markdown = update_markdown_with_imports(markdown)
     # Apply highlight comments to code blocks
-    markdown = _highlight_code_blocks(markdown)
+    markdown = _highlight_code_blocks(markdown, page)
 
     if remove_base64_images:
         # Remove base64 encoded images from markdown
@@ -215,6 +271,7 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         add_api_references=True,
         **kwargs,
     )
+
 
 # redirects
 

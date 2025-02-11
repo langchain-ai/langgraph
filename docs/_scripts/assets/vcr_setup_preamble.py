@@ -75,7 +75,7 @@ class HashedCassette:
         # Now enter the VCR cassette context.
         self.cassette_context = custom_vcr.use_cassette(
             self.cassette_path,
-            filter_headers=["x-api-key, authorization"],
+            filter_headers=["x-api-key", "authorization"],
             record_mode="once",
             serializer="advanced_compressed",
         )
