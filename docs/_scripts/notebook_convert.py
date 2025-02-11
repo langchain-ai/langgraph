@@ -181,7 +181,9 @@ def _convert_notebooks(
         raise ValueError("Either --output_dir or --replace must be specified")
 
     output_dir_path = DOCS if replace else Path(output_dir)
-    notebooks = DOCS.rglob(pattern)
+    notebooks = list(DOCS.rglob(pattern))
+
+    file_names = [notebook.name for notebook in notebooks]
 
     for notebook in notebooks:
         markdown = convert_notebook(notebook, mode="exec")
@@ -193,21 +195,32 @@ def _convert_notebooks(
             notebook.unlink(missing_ok=False)
 
     if replace:
-        # Update links in markdown files from ipynb to md files
-        for path in output_dir_path.rglob("*.md"):
-            with open(path, "r") as f:
-                content = f.read()
-            # Keep format but replace the .ipynb extension with .md
-            pattern = r"(?<!!)\[([^\]]*)\]\((?![^)]*//)([^)]*)\.ipynb\)"
-            replacement = r"[\1](\2.md)"
+        # The regex will match markdown links that point to *.ipynb files.
+        # It captures:
+        #   group(1): the link text (inside the square brackets)
+        #   group(2): the file path (without the trailing .ipynb)
+        link_pattern = r"(?<!!)\[([^\]]+)\]\((?![^)]*//)([^)]+)\.ipynb\)"
 
-            source = re.sub(
-                pattern,
-                replacement,
-                content,
-            )
-            with open(path, "w") as f:
-                f.write(source)
+        def replace_link(match: re.Match) -> str:
+            link_text = match.group(1)
+            link_target = match.group(2)
+            # Reconstruct the file name with the .ipynb extension.
+            # For example, if link_target is "foo/bar", then linked_file becomes "bar.ipynb".
+            linked_file = Path(link_target).name + ".ipynb"
+            # Only update if the notebook was among those converted.
+            if linked_file in file_names:
+                # Change the extension from .ipynb to .md
+                return f"[{link_text}]({link_target}.md)"
+            # Otherwise, leave the original link intact.
+            return match.group(0)
+
+        # Process all markdown files in the output directory.
+        for path in output_dir_path.rglob("*.md"):
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            new_content = re.sub(link_pattern, replace_link, content)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(new_content)
 
 
 if __name__ == "__main__":
