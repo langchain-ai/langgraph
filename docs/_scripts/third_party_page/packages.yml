@@ -3,7 +3,7 @@ packages:
   - name: "trustcall"
     repo: "hinthornw/trustcall"
     description: "Tenacious tool calling built on LangGraph"
-  - name: "breeze"
+  - name: "breeze-agent"
     repo: "andrestorres123/breeze-agent"
     description: "A streamlined research system built inspired on STORM and built on LangGraph"
   - name: "langgraph-supervisor"
