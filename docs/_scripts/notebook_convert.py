@@ -174,19 +174,14 @@ def _convert_notebooks(
     *,
     output_dir: Optional[Path] = None,
     replace: bool = False,
-    glob_pattern: str = "*.ipynb",
-    specific_file: Optional[Path] = None,
+    pattern: str = "*.ipynb",
 ) -> None:
     """Converting notebooks."""
     if not output_dir and not replace:
         raise ValueError("Either --output_dir or --replace must be specified")
 
     output_dir_path = DOCS if replace else Path(output_dir)
-
-    if specific_file:
-        notebooks = [specific_file]
-    else:
-        notebooks = DOCS.rglob(glob_pattern)
+    notebooks = DOCS.rglob(pattern)
 
     for notebook in notebooks:
         markdown = convert_notebook(notebook, mode="exec")
@@ -228,20 +223,13 @@ if __name__ == "__main__":
         help="Replace original notebooks with markdown files",
     )
     parser.add_argument(
-        "--glob_pattern",
+        "--pattern",
         default="*.ipynb",
         help="Glob pattern to match notebooks to convert",
-    )
-    parser.add_argument(
-        "--specific_file",
-        type=Path,
-        default=None,
-        help="Specific notebook file to convert",
     )
     args = parser.parse_args()
     _convert_notebooks(
         replace=args.replace,
         output_dir=args.output_dir,
-        glob_pattern=args.glob_pattern,
-        specific_file=args.specific_file,
+        pattern=args.pattern,
     )
