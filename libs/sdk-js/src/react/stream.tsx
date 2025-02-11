@@ -2,9 +2,14 @@
 "use client";
 
 import { Client } from "../client.js";
-import type { Command } from "../types.js";
+import type {
+  Command,
+  DisconnectMode,
+  MultitaskStrategy,
+  OnCompletionBehavior,
+} from "../types.js";
 import type { Message } from "../types.messages.js";
-import type { Checkpoint, Config, ThreadState } from "../schema.js";
+import type { Checkpoint, Config, Metadata, ThreadState } from "../schema.js";
 import type {
   CustomStreamEvent,
   DebugStreamEvent,
@@ -34,8 +39,16 @@ import {
 } from "@langchain/core/messages";
 
 class StreamError extends Error {
-  constructor(data: { error: string; message: string }) {
-    super([data.error, data.message].filter(Boolean).join(": "));
+  constructor(data: { error?: string; name?: string; message: string }) {
+    super([data.error ?? data.name, data.message].filter(Boolean).join(": "));
+  }
+
+  static isStructuredError(error: unknown): error is {
+    error?: string;
+    name?: string;
+    message: string;
+  } {
+    return typeof error === "object" && error != null && "message" in error;
   }
 }
 
@@ -201,9 +214,9 @@ export function useStream<
 
   const [branchPath, setBranchPath] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<unknown | undefined>(undefined);
   const [events, setEvents] = useState<EventStreamEvent[]>([]);
 
+  const [streamError, setStreamError] = useState<unknown>(undefined);
   const [streamValues, setStreamValues] = useState<StateType | null>(null);
 
   const messageManagerRef = useRef(new MessageTupleManager());
@@ -340,6 +353,21 @@ export function useStream<
 
   const threadHead: ThreadState<StateType> | undefined = flatValues.at(-1);
   const historyValues = threadHead?.values ?? ({} as StateType);
+  const historyError = (() => {
+    const error = threadHead?.tasks?.at(-1)?.error;
+    if (error == null) return undefined;
+    try {
+      const parsed = JSON.parse(error) as unknown;
+      if (StreamError.isStructuredError(parsed)) {
+        return new StreamError(parsed);
+      }
+
+      return parsed;
+    } catch {
+      // do nothing
+    }
+    return error;
+  })();
 
   const messageMetadata = (() => {
     if (getMessages == null) return undefined;
@@ -387,6 +415,13 @@ export function useStream<
       config?: Config;
       checkpoint?: Omit<Checkpoint, "thread_id"> | null;
       command?: Command;
+      interruptBefore?: "*" | string[];
+      interruptAfter?: "*" | string[];
+      metadata?: Metadata;
+      multitaskStrategy?: MultitaskStrategy;
+      onCompletion?: OnCompletionBehavior;
+      onDisconnect?: DisconnectMode;
+      feedbackKeys?: string[];
       streamMode?: Array<StreamMode>;
       optimisticValues?:
         | Partial<StateType>
@@ -395,6 +430,8 @@ export function useStream<
   ) => {
     try {
       setIsLoading(true);
+      setStreamError(undefined);
+
       submittingRef.current = true;
 
       let usableThreadId = threadId;
@@ -418,6 +455,16 @@ export function useStream<
       const run = (await client.runs.stream(usableThreadId, assistantId, {
         input: values as Record<string, unknown>,
         config: submitOptions?.config,
+        command: submitOptions?.command,
+
+        interruptBefore: submitOptions?.interruptBefore,
+        interruptAfter: submitOptions?.interruptAfter,
+        metadata: submitOptions?.metadata,
+        multitaskStrategy: submitOptions?.multitaskStrategy,
+        onCompletion: submitOptions?.onCompletion,
+        onDisconnect: submitOptions?.onDisconnect,
+        feedbackKeys: submitOptions?.feedbackKeys,
+
         checkpoint,
         streamMode,
       })) as AsyncGenerator<EventStreamEvent>;
@@ -442,13 +489,7 @@ export function useStream<
       for await (const { event, data } of run) {
         setEvents((events) => [...events, { event, data } as EventStreamEvent]);
 
-        if (event === "error") {
-          const error = new StreamError(data);
-          setError(error);
-          onError?.(error);
-          break;
-        }
-
+        if (event === "error") throw new StreamError(data);
         if (event === "values") {
           setStreamValues(data);
         } else if (event === "messages") {
@@ -487,7 +528,7 @@ export function useStream<
       const lastHead = result.at(0);
       if (lastHead) onFinish?.(lastHead);
     } catch (error) {
-      setError(error);
+      setStreamError(error);
       onError?.(error);
     } finally {
       setIsLoading(false);
@@ -498,6 +539,7 @@ export function useStream<
     }
   };
 
+  const error = isLoading ? streamError : historyError;
   const values = streamValues ?? historyValues;
   const stream = {
     get custom() {
