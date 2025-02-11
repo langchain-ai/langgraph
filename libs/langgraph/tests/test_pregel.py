@@ -6419,7 +6419,7 @@ def test_tags_stream_mode_messages() -> None:
     ]
 
 
-def test_node_annotations() -> None:
+def test_node_destinations() -> None:
     class State(TypedDict):
         foo: Annotated[str, operator.add]
 
@@ -6444,10 +6444,10 @@ def test_node_annotations() -> None:
     def node_c(state: State):
         return {"foo": "c"}
 
-    # annotations w/ tuples
+    # destinations w/ tuples
     builder = StateGraph(State)
     builder.add_edge(START, "child")
-    builder.add_node("child", subgraph, annotations=("node_b", "node_c"))
+    builder.add_node("child", subgraph, destinations=("node_b", "node_c"))
     builder.add_node(node_b)
     builder.add_node(node_c)
     compiled_graph = builder.compile()
@@ -6460,10 +6460,10 @@ def test_node_annotations() -> None:
         Edge(source="child", target="node_c", data=None, conditional=True),
     ] == graph.edges
 
-    # annotations w/ dicts
+    # destinations w/ dicts
     builder = StateGraph(State)
     builder.add_edge(START, "child")
-    builder.add_node("child", subgraph, annotations={"node_b": "foo", "node_c": "bar"})
+    builder.add_node("child", subgraph, destinations={"node_b": "foo", "node_c": "bar"})
     builder.add_node(node_b)
     builder.add_node(node_c)
     compiled_graph = builder.compile()
