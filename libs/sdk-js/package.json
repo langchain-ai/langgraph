@@ -39,9 +39,8 @@
     "@types/react": "18.3.2"
   },
   "peerDependencies": {
-    "react": "*",
-    "@types/react": "*",
-    "@langchain/core": "*"
+    "react": "^18 || ^19",
+    "@langchain/core": ">=0.2.31 <0.4.0"
   },
   "exports": {
     ".": {
