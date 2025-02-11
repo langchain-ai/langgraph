@@ -1,1 +1,1 @@
-export { useStream, LangGraphConfig } from "./stream.js";
+export { useStream, type MessageMetadata } from "./stream.js";
