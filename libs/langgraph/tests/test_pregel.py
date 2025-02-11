@@ -35,6 +35,7 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnablePassthrough,
 )
+from langchain_core.runnables.graph import Edge
 from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
@@ -6416,3 +6417,68 @@ def test_tags_stream_mode_messages() -> None:
             },
         )
     ]
+
+
+def test_node_destinations() -> None:
+    class State(TypedDict):
+        foo: Annotated[str, operator.add]
+
+    def node_a(state: State):
+        value = state["foo"]
+        if value == "a":
+            goto = "node_b"
+        else:
+            goto = "node_c"
+
+        return Command(
+            update={"foo": value},
+            goto=goto,
+            graph=Command.PARENT,
+        )
+
+    subgraph = StateGraph(State).add_node(node_a).add_edge(START, "node_a").compile()
+
+    # test calling subgraph inside a node function
+    def call_subgraph(state: State):
+        return subgraph.invoke(state)
+
+    def node_b(state: State):
+        return {"foo": "b"}
+
+    def node_c(state: State):
+        return {"foo": "c"}
+
+    for subgraph_node in (subgraph, call_subgraph):
+        # destinations w/ tuples
+        builder = StateGraph(State)
+        builder.add_edge(START, "child")
+        builder.add_node("child", subgraph_node, destinations=("node_b", "node_c"))
+        builder.add_node(node_b)
+        builder.add_node(node_c)
+        compiled_graph = builder.compile()
+        assert compiled_graph.invoke({"foo": ""}) == {"foo": "c"}
+
+        graph = compiled_graph.get_graph()
+        assert [
+            Edge(source="__start__", target="child", data=None, conditional=False),
+            Edge(source="child", target="node_b", data=None, conditional=True),
+            Edge(source="child", target="node_c", data=None, conditional=True),
+        ] == graph.edges
+
+        # destinations w/ dicts
+        builder = StateGraph(State)
+        builder.add_edge(START, "child")
+        builder.add_node(
+            "child", subgraph_node, destinations={"node_b": "foo", "node_c": "bar"}
+        )
+        builder.add_node(node_b)
+        builder.add_node(node_c)
+        compiled_graph = builder.compile()
+        assert compiled_graph.invoke({"foo": ""}) == {"foo": "c"}
+
+        graph = compiled_graph.get_graph()
+        assert [
+            Edge(source="__start__", target="child", data=None, conditional=False),
+            Edge(source="child", target="node_b", data="foo", conditional=True),
+            Edge(source="child", target="node_c", data="bar", conditional=True),
+        ] == graph.edges
