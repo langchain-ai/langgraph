@@ -341,10 +341,10 @@ The most important thing when building multi-agent systems is figuring out how t
 
 A common, generic way for agents to communicate is with a list of messages. There are still a lot of questions:
 
-- Do agents communicate via [**via handoffs or via tool calls**](#graph-state-vs-tool-calls)?
-- What messages are [**passed from one agent to the next**](#shared-message-list)?
-- How are [**handoffs represented in the list of messages**](#handoffs-represented)?
-- Do you [**maintain state for subagents**](#subagents-state)
+- Do agents communicate via [**via handoffs or via tool calls**](#handoff-vs-tool-calls)?
+- What messages are [**passed from one agent to the next**](#what-messages-are-passed-from-one-agent-to-the-next)?
+- How are [**handoffs represented in the list of messages**](#how-are-handoffs-represented)?
+- Do you [**maintain state for subagents**](#maintain-state-for-subagents)
 
 If you are dealing with more complex agents, you may need to deal with communication between agents with different state schemas
 
