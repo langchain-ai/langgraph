@@ -1,23 +1,6 @@
 import { Checkpoint, Config, Metadata } from "./schema.js";
+import { StreamMode } from "./types.stream.js";
 
-/**
- * Stream modes
- * - "values": Stream only the state values.
- * - "messages": Stream complete messages.
- * - "messages-tuple": Stream (message chunk, metadata) tuples.
- * - "updates": Stream updates to the state.
- * - "events": Stream events occurring during execution.
- * - "debug": Stream detailed debug information.
- * - "custom": Stream custom events.
- */
-export type StreamMode =
-  | "values"
-  | "messages"
-  | "updates"
-  | "events"
-  | "debug"
-  | "custom"
-  | "messages-tuple";
 export type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 export type OnConflictBehavior = "raise" | "do_nothing";
 export type OnCompletionBehavior = "complete" | "continue";
@@ -31,6 +14,7 @@ export type StreamEvent =
   | "messages/partial"
   | "messages/metadata"
   | "messages/complete"
+  | "messages"
   | (string & {});
 
 export interface Send {
@@ -148,16 +132,19 @@ interface RunsInvokePayload {
   command?: Command;
 }
 
-export interface RunsStreamPayload extends RunsInvokePayload {
+export interface RunsStreamPayload<
+  TStreamMode extends StreamMode | StreamMode[] = [],
+  TSubgraphs extends boolean = false,
+> extends RunsInvokePayload {
   /**
    * One of `"values"`, `"messages"`, `"messages-tuple"`, `"updates"`, `"events"`, `"debug"`, `"custom"`.
    */
-  streamMode?: StreamMode | Array<StreamMode>;
+  streamMode?: TStreamMode;
 
   /**
    * Stream output from subgraphs. By default, streams only the top graph.
    */
-  streamSubgraphs?: boolean;
+  streamSubgraphs?: TSubgraphs;
 
   /**
    * Pass one or more feedbackKeys if you want to request short-lived signed URLs

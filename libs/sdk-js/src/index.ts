@@ -26,3 +26,25 @@ export type {
 export { overrideFetchImplementation } from "./singletons/fetch.js";
 
 export type { OnConflictBehavior, Command } from "./types.js";
+export type { StreamMode } from "./types.stream.js";
+export type {
+  ValuesStreamEvent,
+  MessagesTupleStreamEvent,
+  MetadataStreamEvent,
+  UpdatesStreamEvent,
+  CustomStreamEvent,
+  MessagesStreamEvent,
+  DebugStreamEvent,
+  EventsStreamEvent,
+  ErrorStreamEvent,
+  FeedbackStreamEvent,
+} from "./types.stream.js";
+export type {
+  Message,
+  HumanMessage,
+  AIMessage,
+  ToolMessage,
+  SystemMessage,
+  FunctionMessage,
+  RemoveMessage,
+} from "./types.messages.js";
