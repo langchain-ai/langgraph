@@ -145,6 +145,7 @@ function fetchHistory<StateType extends Record<string, unknown>>(
 function useThreadHistory<StateType extends Record<string, unknown>>(
   threadId: string | undefined | null,
   client: Client,
+  clearCallbackRef: MutableRefObject<(() => void) | undefined>,
   submittingRef: MutableRefObject<boolean>,
 ) {
   const [history, setHistory] = useState<ThreadState<StateType>[]>([]);
@@ -161,6 +162,7 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
       }
 
       setHistory([]);
+      clearCallbackRef.current?.();
       return Promise.resolve([]);
     },
     [],
@@ -238,9 +240,20 @@ export function useStream<
     [],
   );
 
+  const clearCallbackRef = useRef<() => void>(null!);
+  clearCallbackRef.current = () => {
+    setStreamError(undefined);
+    setStreamValues(null);
+  };
+
   // TODO: this should be done on the server to avoid pagination
   // TODO: should we permit adapter? SWR / React Query?
-  const history = useThreadHistory<StateType>(threadId, client, submittingRef);
+  const history = useThreadHistory<StateType>(
+    threadId,
+    client,
+    clearCallbackRef,
+    submittingRef,
+  );
 
   const getMessages = useMemo(() => {
     if (withMessages == null) return undefined;
