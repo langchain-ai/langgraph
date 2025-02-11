@@ -542,7 +542,7 @@ export function useStream<
           setStreamValues((streamValues) => {
             const values = { ...historyValues, ...streamValues };
 
-            // Assumption: we're concating the message
+            // Assumption: we're concatenating the message
             const messages = getMessages(values).slice();
             const { chunk, index } =
               messageManagerRef.current.get(messageId, messages.length) ?? {};
