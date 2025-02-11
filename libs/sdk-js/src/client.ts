@@ -165,8 +165,7 @@ class BaseClient {
       signal?: AbortSignal;
     },
   ): Promise<T> {
-    const response = await this.asyncCaller.call(
-      _getFetchImplementation(),
+    const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(path, options),
     );
     if (response.status === 202 || response.status === 204) {
@@ -784,8 +783,7 @@ export class RunsClient<
 
     const endpoint =
       threadId == null ? `/runs/stream` : `/threads/${threadId}/runs/stream`;
-    const response = await this.asyncCaller.call(
-      _getFetchImplementation(),
+    const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(endpoint, {
         method: "POST",
         json,
@@ -1077,8 +1075,7 @@ export class RunsClient<
         ? { signal: options }
         : options;
 
-    const response = await this.asyncCaller.call(
-      _getFetchImplementation(),
+    const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
         method: "GET",
         timeoutMs: null,
