@@ -56,6 +56,29 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
+  - markdown-exec:
+      ansi: required
+      hooks:
+        python:
+          pre_session:
+            - _scripts.notebook_hooks:handle_vcr_setup
+          post_session:
+            - _scripts.notebook_hooks:handle_vcr_teardown
+        py:
+          pre_session:
+            - _scripts.notebook_hooks:handle_vcr_setup
+          post_session:
+            - _scripts.notebook_hooks:handle_vcr_teardown
+        typescript:
+          pre_session:
+            - _scripts.notebook_hooks:handle_vcr_setup
+          post_session:
+            - _scripts.notebook_hooks:handle_vcr_teardown
+        ts:
+          pre_session:
+            - _scripts.notebook_hooks:handle_vcr_setup
+          post_session:
+            - _scripts.notebook_hooks:handle_vcr_teardown
   - mkdocstrings:
       handlers:
         python:
@@ -355,6 +378,7 @@ nav:
             - tutorials/auth/add_auth_server.md
     - Resources:
       - Prebuilt Agents: prebuilt.md
+      - Adopters: adopters.md
       - FAQ: concepts/faq.md
       - Troubleshooting:
           - Troubleshooting: troubleshooting/errors/index.md

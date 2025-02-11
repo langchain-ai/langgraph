@@ -1,14 +1,20 @@
 import logging
 import os
 import re
-from typing import Any, Dict
+import traceback
+from typing import Any, Callable, Dict
 
+from markdown import Markdown
+from pymdownx.superfences import SuperFencesException
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 import posixpath
 
+from markdown_exec.hooks import SessionHistoryEntry
+
 from generate_api_reference_links import update_markdown_with_imports
 from notebook_convert import convert_notebook
+from setup_vcr import load_postamble, load_preamble, _hash_string
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -55,6 +61,29 @@ def on_files(files: Files, **kwargs: Dict[str, Any]):
         else:
             new_files.append(file)
     return new_files
+
+
+def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
+    """Add the path to the code blocks."""
+    code_block_pattern = re.compile(
+        r"(?P<indent>[ \t]*)```(?P<language>\w+)[ ]*(?P<attributes>[^\n]*)\n"
+        r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
+        r"(?P=indent)```"  # Match closing backticks with the same indentation
+    )
+
+    def replace_code_block_header(match: re.Match) -> str:
+        indent = match.group("indent")
+        language = match.group("language")
+        attributes = match.group("attributes").rstrip()
+
+        if 'exec="on"' not in attributes:
+            # Return original code block
+            return match.group(0)
+
+        code = match.group("code")
+        return f'{indent}```{language} {attributes} path="{page.file.src_path}"\n{code}{indent}```'
+
+    return code_block_pattern.sub(replace_code_block_header, markdown)
 
 
 def _highlight_code_blocks(markdown: str) -> str:
@@ -109,8 +138,8 @@ def _highlight_code_blocks(markdown: str) -> str:
             return (
                 f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"\n'
                 # The indent and terminating \n is already included in the code block
-                f'{new_code_block}'
-                f'{indent}```'
+                f"{new_code_block}"
+                f"{indent}```"
             )
         else:
             return (
@@ -125,6 +154,90 @@ def _highlight_code_blocks(markdown: str) -> str:
     return markdown
 
 
+def handle_vcr_setup(
+    *,
+    formatter: Callable,
+    language: str,
+    code: str,
+    session: str,
+    id: str,
+    md: Markdown,
+    **kwargs: Dict[str, Any],
+) -> str:
+    """Handle VCR setup in markdown content if necessary."""
+    try:
+        if kwargs.get("extra", None) is None:
+            raise ValueError(
+                f"error while processing {language} block: extra dict is required"
+            )
+
+        if kwargs["extra"].get("path", None) is None:
+            raise ValueError(
+                f"error while processing {language} block: path is required"
+            )
+
+        document_filename = kwargs["extra"]["path"]
+
+        logger.info("document_filename: %s", document_filename)
+
+        if session is None or session == "" and id is None or id == "":
+            id = _hash_string(code)
+
+        cassette_prefix = document_filename.replace(".md", "").replace(os.path.sep, "_")
+
+        cassette_dir = os.path.abspath(
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "cassettes")
+        )
+        os.makedirs(cassette_dir, exist_ok=True)
+
+        # Build a unique cassette name.
+        cassette_name = os.path.join(
+            cassette_dir,
+            f"{cassette_prefix}_{session if session else id}_{language}.msgpack.zlib",
+        )
+
+        # Add context manager at start with explicit __enter__ and __exit__ calls
+
+        wrapped_lines = [
+            load_preamble(language, code, cassette_name),
+            code,
+        ]
+
+        if session is None or session == "":
+            wrapped_lines.append(load_postamble(language))
+
+        transformed_source = "\n".join(wrapped_lines)
+        return dict(
+            transform_source=lambda code: (transformed_source, code),
+            id=id,
+            extra={},
+        )
+    except Exception as e:
+        raise SuperFencesException(traceback.format_exc()) from e
+
+
+def handle_vcr_teardown(
+    *,
+    formatter: Callable,
+    language: str,
+    session: str,
+    history: list[SessionHistoryEntry],
+):
+    session = history[-1].inputs["session"]
+    inputs = dict(history[-1].inputs)
+    del inputs["session"]
+    del inputs["code"]
+    del inputs["language"]
+    del inputs["id"]
+    formatter(
+        code="_cassette.__exit__() # markdown-exec: hide",
+        language="python",
+        session=session,
+        id=f"{id}_vcr_end",
+        **inputs,
+    )
+
+
 def _on_page_markdown_with_config(
     markdown: str,
     page: Page,
@@ -135,6 +248,7 @@ def _on_page_markdown_with_config(
 ) -> str:
     if DISABLED:
         return markdown
+
     if page.file.src_path.endswith(".ipynb"):
         logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
@@ -144,6 +258,11 @@ def _on_page_markdown_with_config(
         markdown = update_markdown_with_imports(markdown)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
+
+    # Add file path as an attribute to code blocks that are executable.
+    # This file path is used to associate fixtures with the executable code
+    # which can be used in CI to test the docs without making network requests.
+    markdown = _add_path_to_code_blocks(markdown, page)
 
     if remove_base64_images:
         # Remove base64 encoded images from markdown
@@ -159,6 +278,7 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         add_api_references=True,
         **kwargs,
     )
+
 
 # redirects
 
