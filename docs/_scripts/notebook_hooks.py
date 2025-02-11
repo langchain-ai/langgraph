@@ -231,7 +231,6 @@ def handle_vcr_teardown(
     del inputs["id"]
     formatter(
         code="_cassette.__exit__() # markdown-exec: hide",
-        language="python",
         session=session,
         id=f"{id}_vcr_end",
         **inputs,
