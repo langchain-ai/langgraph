@@ -295,6 +295,7 @@ class StateGraph(Graph):
                 This is useful for edgeless graphs with nodes that return `Command` objects.
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
+                NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
         Raises:
             ValueError: If the key is already being used as a state key.
 
