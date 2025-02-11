@@ -15,6 +15,7 @@ import type {
   DebugStreamEvent,
   ErrorStreamEvent,
   EventsStreamEvent,
+  FeedbackStreamEvent,
   MessagesStreamEvent,
   MessagesTupleStreamEvent,
   MetadataStreamEvent,
@@ -202,7 +203,8 @@ export function useStream<
     | MessagesTupleStreamEvent
     | EventsStreamEvent
     | MetadataStreamEvent
-    | ErrorStreamEvent;
+    | ErrorStreamEvent
+    | FeedbackStreamEvent;
 
   const { assistantId, threadId, client, withMessages, onError, onFinish } =
     options;
@@ -222,6 +224,8 @@ export function useStream<
 
   const messageManagerRef = useRef(new MessageTupleManager());
   const submittingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
   const trackStreamModeRef = useRef<
     Array<"values" | "updates" | "events" | "custom" | "messages-tuple">
   >(["values", "messages-tuple"]);
@@ -410,7 +414,12 @@ export function useStream<
     );
   })();
 
-  const handleSubmit = async (
+  const stop = useCallback(() => {
+    if (abortRef.current != null) abortRef.current.abort();
+    abortRef.current = null;
+  }, []);
+
+  const submit = async (
     values: UpdateType | undefined,
     submitOptions?: {
       config?: Config;
@@ -434,6 +443,7 @@ export function useStream<
       setStreamError(undefined);
 
       submittingRef.current = true;
+      abortRef.current = new AbortController();
 
       let usableThreadId = threadId;
       if (!usableThreadId) {
@@ -463,8 +473,11 @@ export function useStream<
         metadata: submitOptions?.metadata,
         multitaskStrategy: submitOptions?.multitaskStrategy,
         onCompletion: submitOptions?.onCompletion,
-        onDisconnect: submitOptions?.onDisconnect,
+        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
+
+        // TODO: check if integration on FE would work nice
         feedbackKeys: submitOptions?.feedbackKeys,
+        signal: abortRef.current.signal,
 
         checkpoint,
         streamMode,
@@ -487,13 +500,20 @@ export function useStream<
         return values;
       });
 
+      let streamError: StreamError | undefined;
       for await (const { event, data } of run) {
         setEvents((events) => [...events, { event, data } as EventStreamEvent]);
 
-        if (event === "error") throw new StreamError(data);
+        if (event === "error") {
+          streamError = new StreamError(data);
+          break;
+        }
+
         if (event === "values") {
           setStreamValues(data);
-        } else if (event === "messages") {
+        }
+
+        if (event === "messages") {
           if (!getMessages) continue;
 
           const [serialized] = data;
@@ -524,19 +544,31 @@ export function useStream<
 
       // TODO: stream created checkpoints to avoid an unnecessary network request
       const result = await history.mutate(usableThreadId);
+
+      // TODO: write tests verifying that stream values are properly handled lifecycle-wise
       setStreamValues(null);
+
+      if (streamError != null) throw streamError;
 
       const lastHead = result.at(0);
       if (lastHead) onFinish?.(lastHead);
     } catch (error) {
-      setStreamError(error);
-      onError?.(error);
+      if (
+        !(
+          error instanceof Error &&
+          (error.name === "AbortError" || error.name === "TimeoutError")
+        )
+      ) {
+        setStreamError(error);
+        onError?.(error);
+      }
     } finally {
       setIsLoading(false);
 
       // Assumption: messages are already handled, we can clear the manager
       messageManagerRef.current.clear();
       submittingRef.current = false;
+      abortRef.current = null;
     }
   };
 
@@ -581,7 +613,8 @@ export function useStream<
     error,
     isLoading,
 
-    handleSubmit,
+    stop,
+    submit,
     setBranch,
 
     stream,
