@@ -37,6 +37,7 @@ export type {
   DebugStreamEvent,
   EventsStreamEvent,
   ErrorStreamEvent,
+  FeedbackStreamEvent,
 } from "./types.stream.js";
 export type {
   Message,

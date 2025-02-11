@@ -61,9 +61,6 @@ export type MetadataStreamEvent = {
   data: { run_id: string; thread_id: string };
 };
 
-/** @internal */
-export type SubgraphMetadataStreamEvent = AsSubgraph<MetadataStreamEvent>;
-
 /**
  * Stream event with error information.
  */
@@ -142,6 +139,15 @@ export type EventsStreamEvent = { event: "events"; data: unknown };
 /** @internal */
 export type SubgraphEventsStreamEvent = AsSubgraph<EventsStreamEvent>;
 
+/**
+ * Stream event with a feedback key to signed URL map. Set `feedbackKeys` in
+ * the `RunsStreamPayload` to receive this event.
+ */
+export type FeedbackStreamEvent = {
+  event: "feedback";
+  data: { [feedbackKey: string]: string };
+};
+
 type GetStreamModeMap<
   TStreamMode extends StreamMode | StreamMode[],
   TStateType = unknown,
@@ -157,8 +163,9 @@ type GetStreamModeMap<
       "messages-tuple": MessagesTupleStreamEvent;
       events: EventsStreamEvent;
     }[TStreamMode extends StreamMode[] ? TStreamMode[number] : TStreamMode]
+  | ErrorStreamEvent
   | MetadataStreamEvent
-  | ErrorStreamEvent;
+  | FeedbackStreamEvent;
 
 type GetSubgraphsStreamModeMap<
   TStreamMode extends StreamMode | StreamMode[],
@@ -175,8 +182,9 @@ type GetSubgraphsStreamModeMap<
       "messages-tuple": SubgraphMessagesTupleStreamEvent;
       events: SubgraphEventsStreamEvent;
     }[TStreamMode extends StreamMode[] ? TStreamMode[number] : TStreamMode]
-  | SubgraphMetadataStreamEvent
-  | SubgraphErrorStreamEvent;
+  | SubgraphErrorStreamEvent
+  | MetadataStreamEvent
+  | FeedbackStreamEvent;
 
 export type TypedAsyncGenerator<
   TStreamMode extends StreamMode | StreamMode[] = [],
