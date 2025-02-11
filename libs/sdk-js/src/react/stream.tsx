@@ -329,8 +329,6 @@ export function useStream<
 
   const [flatValues, flatPaths] = (() => {
     const result: ThreadState<StateType>[] = [];
-
-    // TODO: this is kinda ugly
     const flatPaths: Record<
       string,
       { current: string[] | undefined; branches: string[][] | undefined }
@@ -475,7 +473,6 @@ export function useStream<
       // @ts-expect-error
       if (checkpoint != null) delete checkpoint.thread_id;
 
-      // TODO: why non-existent assistant ID does not throw an error here?
       const run = (await client.runs.stream(usableThreadId, assistantId, {
         input: values as Record<string, unknown>,
         config: submitOptions?.config,
@@ -495,6 +492,12 @@ export function useStream<
         checkpoint,
         streamMode,
       })) as AsyncGenerator<EventStreamEvent>;
+
+      // Unbranch things
+      const newPath = submitOptions?.checkpoint?.checkpoint_id
+        ? flatPaths[submitOptions?.checkpoint?.checkpoint_id]?.current
+        : undefined;
+      if (newPath != null) setBranchPath(newPath ?? []);
 
       // Assumption: we're setting the initial value
       // Used for instant feedback
