@@ -82,7 +82,7 @@ class EscapePreprocessor(Preprocessor):
 
 class ExtractAttachmentsPreprocessor(Preprocessor):
     """
-    Extracts all the outputs from the notebook file.  The extracted
+    Extracts all of the outputs from the notebook file.  The extracted
     outputs are returned in the 'resources' dictionary.
     """
 
@@ -106,7 +106,7 @@ class ExtractAttachmentsPreprocessor(Preprocessor):
         if not isinstance(resources["outputs"], dict):
             resources["outputs"] = {}
 
-        # Loop through all the attachments in the cell
+        # Loop through all of the attachments in the cell
         for name, attach in cell.get("attachments", {}).items():
             for mime, data in attach.items():
                 if mime not in {
@@ -171,14 +171,24 @@ DOCS = HERE.parent / "docs"
 
 # Convert notebooks to markdown
 def _convert_notebooks(
-    *, output_dir: Optional[Path] = None, replace: bool = False
+    *,
+    output_dir: Optional[Path] = None,
+    replace: bool = False,
+    glob_pattern: str = "*.ipynb",
+    specific_file: Optional[Path] = None,
 ) -> None:
     """Converting notebooks."""
     if not output_dir and not replace:
         raise ValueError("Either --output_dir or --replace must be specified")
 
     output_dir_path = DOCS if replace else Path(output_dir)
-    for notebook in DOCS.rglob("*.ipynb"):
+
+    if specific_file:
+        notebooks = [specific_file]
+    else:
+        notebooks = DOCS.rglob(glob_pattern)
+
+    for notebook in notebooks:
         markdown = convert_notebook(notebook, mode="exec")
         markdown_path = output_dir_path / notebook.relative_to(DOCS).with_suffix(".md")
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
@@ -217,5 +227,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Replace original notebooks with markdown files",
     )
+    parser.add_argument(
+        "--glob_pattern",
+        default="*.ipynb",
+        help="Glob pattern to match notebooks to convert",
+    )
+    parser.add_argument(
+        "--specific_file",
+        type=Path,
+        default=None,
+        help="Specific notebook file to convert",
+    )
     args = parser.parse_args()
-    _convert_notebooks(replace=args.replace, output_dir=args.output_dir)
+    _convert_notebooks(
+        replace=args.replace,
+        output_dir=args.output_dir,
+        glob_pattern=args.glob_pattern,
+        specific_file=args.specific_file,
+    )
