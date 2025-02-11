@@ -65,6 +65,17 @@ export type MetadataStreamEvent = {
 export type SubgraphMetadataStreamEvent = AsSubgraph<MetadataStreamEvent>;
 
 /**
+ * Stream event with error information.
+ */
+export type ErrorStreamEvent = {
+  event: "error";
+  data: { error: string; message: string };
+};
+
+/** @internal */
+export type SubgraphErrorStreamEvent = AsSubgraph<ErrorStreamEvent>;
+
+/**
  * Stream event with updates to the state after each step.
  * The streamed outputs include the name of the node that
  * produced the update as well as the update.
@@ -146,7 +157,8 @@ type GetStreamModeMap<
       "messages-tuple": MessagesTupleStreamEvent;
       events: EventsStreamEvent;
     }[TStreamMode extends StreamMode[] ? TStreamMode[number] : TStreamMode]
-  | MetadataStreamEvent;
+  | MetadataStreamEvent
+  | ErrorStreamEvent;
 
 type GetSubgraphsStreamModeMap<
   TStreamMode extends StreamMode | StreamMode[],
@@ -163,7 +175,8 @@ type GetSubgraphsStreamModeMap<
       "messages-tuple": SubgraphMessagesTupleStreamEvent;
       events: SubgraphEventsStreamEvent;
     }[TStreamMode extends StreamMode[] ? TStreamMode[number] : TStreamMode]
-  | SubgraphMetadataStreamEvent;
+  | SubgraphMetadataStreamEvent
+  | SubgraphErrorStreamEvent;
 
 export type TypedAsyncGenerator<
   TStreamMode extends StreamMode | StreamMode[] = [],
