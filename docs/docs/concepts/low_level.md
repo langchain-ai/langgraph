@@ -280,7 +280,7 @@ graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: 
 ```
 
 !!! tip
-    Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
+Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
 
 ### Entry Point
 
@@ -398,7 +398,7 @@ def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: R
 ```
 
 !!! important
-    You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
+You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
 
 If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
 
@@ -534,7 +534,7 @@ Let's take a look at examples for each.
 The simplest way to create subgraph nodes is by using a [compiled subgraph](#compiling-your-graph) directly. When doing so, it is **important** that the parent graph and the subgraph [state schemas](#state) share at least one key which they can use to communicate. If your graph and subgraph do not share any keys, you should use write a function [invoking the subgraph](#as-a-function) instead.
 
 !!! Note
-    If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
+If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
 
 ```python
 from langgraph.graph import StateGraph
