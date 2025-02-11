@@ -1,41 +1,5 @@
 # LangGraph Glossary
 
-=== "Python"
-
-    ```python exec="on" source="above"
-    from langchain_openai import ChatOpenAI
-    import time
-
-    model = ChatOpenAI()
-
-    tic = time.time()
-    print(model.invoke([{"role": "user", "content": "What is the capital of France?"}]).content)
-    toc = time.time()
-    print()
-    print('hello')
-    print()
-    print(toc-tic)
-    ```
-
-=== "Typescript"
-
-    ```typescript exec="on" source="above" result="ansi"
-    import { ChatOpenAI } from "npm:@langchain/openai";
-
-    const model = new ChatOpenAI({
-      model: "gpt-4o",
-    });
-    const tic = Date.now();
-    const result = await model.invoke([
-      { role: "user", content: "What is the capital of France?" },
-    ]);
-    const toc = Date.now();
-    console.log(result.content);
-    console.log(toc - tic);
-    ```
-
----
-
 ## Graphs
 
 At its core, LangGraph models agent workflows as graphs. You define the behavior of your agents using three key components:
