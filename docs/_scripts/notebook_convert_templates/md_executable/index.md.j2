@@ -5,11 +5,9 @@
 ```
 {%- if 'magics_language' in cell.metadata  -%}
     {{ cell.metadata.magics_language}}
-{%- elif 'name' in cell.metadata.get('language_info', {}) -%}
-    {%- if cell.metadata['language_info']['name'] == "python" -%}
-        {{ cell.metadata.language_info.name }}
-    {%- endif -%}
-{%- elif 'name' in nb.metadata.get('language_info', {}) -%}{{ nb.metadata.language_info.name }}{%- endif %}
+{%- elif 'name' in nb.metadata.get('language_info', {}) -%}
+    {{ nb.metadata.language_info.name }} exec="on" source="above"
+{%- endif %}
 {{ cell.source}}
 ```
 {% endblock input %}
