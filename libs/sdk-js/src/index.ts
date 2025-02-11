@@ -16,6 +16,12 @@ export type {
   Cron,
   Checkpoint,
   Interrupt,
+  ListNamespaceResponse,
+  Item,
+  SearchItem,
+  SearchItemsResponse,
+  CronCreateResponse,
+  CronCreateForThreadResponse,
 } from "./schema.js";
 export { overrideFetchImplementation } from "./singletons/fetch.js";
 
