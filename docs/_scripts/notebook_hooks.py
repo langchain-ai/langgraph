@@ -51,7 +51,6 @@ def on_files(files: Files, **kwargs: Dict[str, Any]):
     new_files = Files([])
     for file in files:
         if file.src_path.endswith(".ipynb"):
-            continue
             new_file = NotebookFile(
                 path=file.src_path,
                 src_dir=file.src_dir,
@@ -76,13 +75,18 @@ def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
         indent = match.group("indent")
         language = match.group("language")
         attributes = match.group("attributes").rstrip()
+
+        if 'exec="on"' not in attributes:
+            # Return original code block
+            return match.group(0)
+
         code = match.group("code")
         return f'{indent}```{language} {attributes} path="{page.file.src_path}"\n{code}{indent}```'
 
     return code_block_pattern.sub(replace_code_block_header, markdown)
 
 
-def _highlight_code_blocks(markdown: str, page: Page) -> str:
+def _highlight_code_blocks(markdown: str) -> str:
     """Find code blocks with highlight comments and add hl_lines attribute.
 
     Args:
@@ -102,7 +106,6 @@ def _highlight_code_blocks(markdown: str, page: Page) -> str:
     )
 
     def replace_highlight_comments(match: re.Match) -> str:
-        nonlocal page
         indent = match.group("indent")
         language = match.group("language")
         code_block = match.group("code")
@@ -243,7 +246,6 @@ def _on_page_markdown_with_config(
     remove_base64_images: bool = False,
     **kwargs: Any,
 ) -> str:
-    markdown = _add_path_to_code_blocks(markdown, page)
     if DISABLED:
         return markdown
 
@@ -255,7 +257,12 @@ def _on_page_markdown_with_config(
     if add_api_references:
         markdown = update_markdown_with_imports(markdown)
     # Apply highlight comments to code blocks
-    markdown = _highlight_code_blocks(markdown, page)
+    markdown = _highlight_code_blocks(markdown)
+
+    # Add file path as an attribute to code blocks that are executable.
+    # This file path is used to associate fixtures with the executable code
+    # which can be used in CI to test the docs without making network requests.
+    markdown = _add_path_to_code_blocks(markdown, page)
 
     if remove_base64_images:
         # Remove base64 encoded images from markdown
