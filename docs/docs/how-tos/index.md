@@ -11,7 +11,7 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 
 ### Graph API Basics
 
-- [How to update graph state from nodes](state-reducers.ipynb)
+- [How to update graph state from nodes](state-reducers.md)
 - [How to create a sequence of steps](sequence.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create and control loops with recursion limits](recursion-limit.ipynb)

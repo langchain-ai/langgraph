@@ -7,6 +7,7 @@ from typing import Literal, Optional
 import nbformat
 from nbconvert.exporters import MarkdownExporter
 from nbconvert.preprocessors import Preprocessor
+import glob
 
 
 class EscapePreprocessor(Preprocessor):
@@ -181,11 +182,19 @@ def _convert_notebooks(
         raise ValueError("Either --output_dir or --replace must be specified")
 
     output_dir_path = DOCS if replace else Path(output_dir)
-    notebooks = list(DOCS.rglob(pattern))
 
-    file_names = [notebook.name for notebook in notebooks]
+    # Get the directory where the script was executed
+    base_dir = os.getcwd()
+    # Build the full search pattern using the current working directory as the base
+    full_pattern = os.path.join(base_dir, args.pattern)
 
-    for notebook in notebooks:
+    # Use glob with recursive search enabled
+    matching_files = glob.glob(full_pattern, recursive=True)
+    paths = [Path(file) for file in matching_files]
+
+    file_names = [notebook.name for notebook in paths]
+
+    for notebook in paths:
         markdown = convert_notebook(notebook, mode="exec")
         markdown_path = output_dir_path / notebook.relative_to(DOCS).with_suffix(".md")
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
@@ -215,7 +224,7 @@ def _convert_notebooks(
             return match.group(0)
 
         # Process all markdown files in the output directory.
-        for path in output_dir_path.rglob("*.md"):
+        for path in output_dir_path.rglob("**/*.md"):
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
             new_content = re.sub(link_pattern, replace_link, content)
