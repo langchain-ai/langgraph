@@ -203,7 +203,7 @@ nav:
               - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
               - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
-              - how-tos/create-react-agent.ipynb
+              - how-tos/create-react-agent.md
               - how-tos/create-react-agent-memory.ipynb
               - how-tos/create-react-agent-system-prompt.ipynb
               - how-tos/create-react-agent-hitl.ipynb
