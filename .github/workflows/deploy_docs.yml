@@ -72,9 +72,7 @@ jobs:
             langchain \
             GitPython \
             "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git" \
-==== BASE ====
             "git+https://github.com/benjamincburns/markdown-exec.git@langgraph"
-==== BASE ====
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
