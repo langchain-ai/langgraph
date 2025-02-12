@@ -16,10 +16,12 @@ install-vercel-deps:
 	dnf install -y sqlite-devel python3.11
 	rm /usr/bin/python3
 	ln -s /usr/bin/python3.11 /usr/bin/python3
+	echo 'python3 path:' $(which python3)
+	echo 'python path:' $(which python)
 	
 	curl -sSL https://install.python-poetry.org | python3 -
 	poetry self update 1.8.5
-	poetry run python --version
+	poetry run python3 --version
 	poetry run bash -c 'echo $$PATH'
 	poetry run bash -c 'echo $$PYTHONPATH'
 
@@ -27,7 +29,7 @@ vercel-build-docs: install-vercel-deps
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
 	poetry run pip install jupyter ipykernel
-	poetry run python -m ipykernel install --user --name=python3
+	poetry run python3 -m ipykernel install --user --name=python3
 	poetry run jupyter kernelspec list
 	npm install -g tslab
 	poetry run tslab install --python=python3
