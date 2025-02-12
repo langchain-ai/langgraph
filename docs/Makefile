@@ -17,8 +17,8 @@ install-vercel-deps:
 	curl -sSL https://install.python-poetry.org | python3 -
 	poetry self update 1.8.5
 	poetry run python --version
-	poetry run bash -c 'echo $PATH'
-	poetry run bash -c 'echo $PYTHONPATH'
+	poetry run bash -c 'echo \$$PATH'
+	poetry run bash -c 'echo \$$PYTHONPATH'
 
 vercel-build-docs: install-vercel-deps
 	poetry install
