@@ -13,11 +13,14 @@ llms-text:
 	poetry run python _scripts/generate_llms_text.py docs/llms-full.txt
 
 install-vercel-deps:
+	dnf install -y sqlite-devel 
 	curl -sSL https://install.python-poetry.org | python3 -
 	poetry self update 1.8.5
+	poetry run python --version
+	poetry run bash -c 'echo $PATH'
+	poetry run bash -c 'echo $PYTHONPATH'
 
 vercel-build-docs: install-vercel-deps
-	dnf install -y sqlite-devel 
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
 	poetry run pip install jupyter ipykernel
