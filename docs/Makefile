@@ -22,7 +22,7 @@ install-vercel-deps:
 	
 	curl -sSL https://install.python-poetry.org | python3 -
 	poetry self update 1.8.5
-	export POETRY_VIRTUALENVS_USE_POETRY_PYTHON="true"
+	poetry env use "$$(which python3)"
 	poetry run python3 --version
 	poetry run bash -c 'echo "poetry python3 path: $$(which python3)"'
 	poetry run bash -c 'echo "poetry python path: $$(which python)"'
