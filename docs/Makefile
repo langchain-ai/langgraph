@@ -16,12 +16,15 @@ install-vercel-deps:
 	dnf install -y sqlite-devel python3.11
 	rm /usr/bin/python3
 	ln -s /usr/bin/python3.11 /usr/bin/python3
-	echo 'python3 path:' $(which python3)
-	echo 'python path:' $(which python)
+
+	echo "python3 path: $$(which python3)"
+	echo "python path:' $$(which python)"
 	
 	curl -sSL https://install.python-poetry.org | python3 -
 	poetry self update 1.8.5
 	poetry run python3 --version
+	poetry run bash -c 'echo "poetry python3 path: $$(which python3)"'
+	poetry run bash -c 'echo "poetry python path: $$(which python)"'
 	poetry run bash -c 'echo $$PATH'
 	poetry run bash -c 'echo $$PYTHONPATH'
 
