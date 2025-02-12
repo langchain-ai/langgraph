@@ -1,5 +1,5 @@
 {
   "buildCommand": "yarn build",
   "outputDirectory": "site",
-  "installCommand": "dnf install sqlite-devel && yarn install"
+  "installCommand": "dnf install sqlite-devel && npm install"
 }
