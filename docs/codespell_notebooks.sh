@@ -1,6 +1,7 @@
 ERROR_FOUND=0
 for file in $(find $1 -name "*.ipynb" | grep -v ".ipynb_checkpoints"); do
-    OUTPUT=$(cat "$file" | jupytext --from ipynb --to py:percent | codespell -)
+    # Adding regexp to ignore base64 strings
+    OUTPUT=$(cat "$file" | jupytext --from ipynb --to py:percent | codespell --ignore-regex='[A-Za-z0-9+/=]{25,}' -)
     if [ -n "$OUTPUT" ]; then
         echo "Errors found in $file"
         echo "$OUTPUT"
