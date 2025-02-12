@@ -6,6 +6,10 @@ client.cjs
 client.js
 client.d.ts
 client.d.cts
+react.cjs
+react.js
+react.d.ts
+react.d.cts
 node_modules
 dist
 .yarn
