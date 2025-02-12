@@ -44,25 +44,26 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
         const trailingNewline = TRAILING_NEWLINE.includes(text.at(-1)!);
 
         const lastIdx = text.length - 1;
-        const { lines } = text.reduce(
+        const { lines } = text.reduce<{ lines: Uint8Array[]; from: number }>(
           (acc, cur, idx) => {
             if (acc.from > idx) return acc;
 
-            if (cur === CR && text[idx + 1] === LF) {
+            if (cur === CR || cur === LF) {
               acc.lines.push(text.subarray(acc.from, idx));
-              acc.from = idx + 2;
-            } else if (cur === CR || cur === LF) {
-              acc.lines.push(text.subarray(acc.from, idx));
-              acc.from = idx + 1;
+              if (cur === CR && text[idx + 1] === LF) {
+                acc.from = idx + 2;
+              } else {
+                acc.from = idx + 1;
+              }
             }
 
-            if (idx === lastIdx && acc.from < lastIdx) {
+            if (idx === lastIdx && acc.from <= lastIdx) {
               acc.lines.push(text.subarray(acc.from));
             }
 
             return acc;
           },
-          { lines: [], from: 0 } as { lines: Uint8Array[]; from: number },
+          { lines: [], from: 0 },
         );
 
         if (lines.length === 1 && !trailingNewline) {
