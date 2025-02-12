@@ -14,7 +14,8 @@ llms-text:
 
 install-vercel-deps:
 	dnf install -y sqlite-devel 
-	curl -sSL https://install.python-poetry.org | python3 -
+	dnf install -y python3.11
+	curl -sSL https://install.python-poetry.org | python3.11 -
 	poetry self update 1.8.5
 	poetry run python --version
 	poetry run bash -c 'echo $$PATH'
@@ -24,7 +25,7 @@ vercel-build-docs: install-vercel-deps
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
 	poetry run pip install jupyter ipykernel
-	poetry run python -m ipykernel install
+	poetry run python -m ipykernel install --user --name=python3.11
 	poetry run jupyter kernelspec list
 	npm install -g tslab
 	poetry run tslab install
