@@ -68,7 +68,7 @@ export function getApiKey(apiKey?: string): string | undefined {
   return undefined;
 }
 
-interface ClientConfig {
+export interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
   callerOptions?: AsyncCallerParams;

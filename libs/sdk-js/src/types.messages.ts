@@ -8,19 +8,10 @@ type MessageContentText = { type: "text"; text: string };
 type MessageContentComplex = MessageContentText | MessageContentImageUrl;
 type MessageContent = string | MessageContentComplex[];
 
-type MessageAdditionalKwargs = {
-  [x: string]: unknown;
-
-  function_call?: { arguments: string; name: string } | undefined;
-  tool_calls?:
-    | {
-        id: string;
-        function: { arguments: string; name: string };
-        type: "function";
-        index?: number | undefined;
-      }[]
-    | undefined;
-};
+/**
+ * Model-specific additional kwargs, which is passed back to the underlying LLM.
+ */
+type MessageAdditionalKwargs = Record<string, unknown>;
 
 export type HumanMessage = {
   type: "human";
