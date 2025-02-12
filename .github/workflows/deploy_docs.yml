@@ -72,7 +72,7 @@ jobs:
             langchain \
             GitPython \
             "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git" \
-            "git+https://github.com/benjamincburns/markdown-exec.git@fec7286a31bb3291707d82011624e513035a10fd"
+            "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
