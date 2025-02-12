@@ -1,4 +1,4 @@
-"""Translate Python code to TypeScript using Langchain."""
+"""Add typescript translation to a given markdown file."""
 
 import argparse
 import re
@@ -14,56 +14,21 @@ reference_snippets = response.text
 model = ChatAnthropic(model="claude-3-5-sonnet-latest")
 
 
-def _extract_python_snippets(source: str) -> list[str]:
-    """Extracts TypeScript code blocks (including their fence lines) from a Markdown string.
+def _get_tqdm():
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        # If not available return a simple identity function
+        def tqdm(iterable, *args, **kwargs):
+            return iterable
 
-    A TypeScript block is defined as any block that starts with a line containing an
-    opening fence with "```typescript" (allowing extra parameters after it) and ends
-    with a closing fence "```" (allowing preceding whitespace).
-
-    Args:
-        source (str): The Markdown content as a single string.
-
-    Returns:
-        List[str]: A list of strings, where each string is a fenced TypeScript code block
-                   (including the opening and closing fence lines).
-    """
-    snippets = []
-    inside_ts_block = False
-    current_snippet = []
-
-    # Regex for opening fence: allows for extra parameters (e.g., "```typescript exec={on}")
-    opening_pattern = re.compile(r"^\s*```python(?:\s+.*)?\s*$")
-    # Regex for closing fence: matches lines that consist of only whitespace and ```
-    closing_pattern = re.compile(r"^\s*```\s*$")
-
-    # Process the source string line by line.
-    for line in source.splitlines(keepends=True):
-        if not inside_ts_block:
-            if opening_pattern.match(line):
-                inside_ts_block = True
-                current_snippet = [line]  # Include the opening fence.
-        else:
-            current_snippet.append(line)
-            if closing_pattern.match(line):
-                inside_ts_block = False
-                snippets.append("".join(current_snippet))
-                current_snippet = []
-    return snippets
+    return tqdm
 
 
-def _translate_snippet(snippet: str) -> str:
-    """Translate a python code block to typescript code block."""
-    ai_message = model.invoke(
-        [
-            {
-                "role": "system",
-                "content": f"You have access to the following example typescript code that shows examples of building with langgraph and langchain that are up to date. Snippets: \n\n{snippets}. Use it to translate the user's python example, into equivalent typescript.",
-            },
-            {"role": "user", "content": "Help me create a simpe state graph."},
-        ]
-    )
-    return ai_message.content
+_tqdm = _get_tqdm()
+
+opening_pattern = re.compile(r"^\s*```python(?:\s+.*)?\s*$")
+closing_pattern = re.compile(r"^\s*```\s*$")
 
 
 def extract_python_snippets(markdown: str) -> list[str]:
@@ -75,8 +40,6 @@ def extract_python_snippets(markdown: str) -> list[str]:
     snippets = []
     inside_block = False
     current_snippet = []
-    opening_pattern = re.compile(r"^\s*```python(?:\s+.*)?\s*$")
-    closing_pattern = re.compile(r"^\s*```\s*$")
 
     for line in markdown.splitlines(keepends=True):
         if not inside_block:
@@ -93,8 +56,7 @@ def extract_python_snippets(markdown: str) -> list[str]:
 
 
 def translate_snippet(python_snippet: str) -> str:
-    """
-    Translate a python code block into a TypeScript code block using Langchain.
+    """Translate a python code block into a TypeScript code block using Langchain.
     The response is expected to be a properly fenced TypeScript code block (i.e.
     starting with ```typescript and ending with ```).
     """
@@ -140,8 +102,6 @@ def insert_translations_into_markdown(
     output_lines = []
     lines = markdown.splitlines(keepends=True)
     inside_block = False
-    opening_pattern = re.compile(r"^\s*```python(?:\s+.*)?\s*$")
-    closing_pattern = re.compile(r"^\s*```\s*$")
     snippet_index = 0
 
     for line in lines:
@@ -168,18 +128,18 @@ def main(file_path: str) -> None:
         markdown_content = f.read()
 
     # 1. Extract all Python snippets.
-    python_snippets = extract_python_snippets(markdown_content)
+    python_snippets = extract_python_snippets(markdown_content)[:1]
 
     # 2. Translate each Python snippet to TypeScript.
     typescript_snippets = []
     # Replace with .batch() for faster translation
-    for python_snippet in python_snippets:
+    for python_snippet in _tqdm(python_snippets):
         ts_snippet = translate_snippet(python_snippet)
         typescript_snippets.append(ts_snippet)
 
     # 3. Insert the TypeScript translations after their respective Python snippets.
     updated_markdown = insert_translations_into_markdown(
-        markdown_content, python_snippets
+        markdown_content, typescript_snippets
     )
 
     # Overwrite the original markdown file with the updated content.
