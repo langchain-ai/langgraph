@@ -1,7 +1,7 @@
 /* __LC_ALLOW_ENTRYPOINT_SIDE_EFFECTS__ */
 "use client";
 
-import { Client } from "../client.js";
+import { Client, ClientConfig } from "../client.js";
 import type {
   Command,
   DisconnectMode,
@@ -185,7 +185,12 @@ export function useStream<
   CustomType = unknown,
 >(options: {
   assistantId: string;
-  client: Client<StateType, UpdateType, CustomType>;
+
+  apiUrl: ClientConfig["apiUrl"];
+  apiKey?: ClientConfig["apiKey"];
+  callerOptions?: ClientConfig["callerOptions"];
+  timeoutMs?: ClientConfig["timeoutMs"];
+  defaultHeaders?: ClientConfig["defaultHeaders"];
 
   withMessages?: string;
 
@@ -208,8 +213,17 @@ export function useStream<
     | ErrorStreamEvent
     | FeedbackStreamEvent;
 
-  const { assistantId, threadId, client, withMessages, onError, onFinish } =
-    options;
+  const { assistantId, threadId, withMessages, onError, onFinish } = options;
+  const [client] = useState<Client>(
+    () =>
+      new Client({
+        apiUrl: options.apiUrl,
+        apiKey: options.apiKey,
+        callerOptions: options.callerOptions,
+        timeoutMs: options.timeoutMs,
+        defaultHeaders: options.defaultHeaders,
+      }),
+  );
 
   if (client == null) {
     throw new Error(
