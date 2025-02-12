@@ -163,16 +163,16 @@ def handle_vcr_setup(
     id: str,
     md: Markdown,
     **kwargs: Dict[str, Any],
-) -> str:
+) -> Dict[str, Any]:
     """Handle VCR setup in markdown content if necessary."""
     try:
         if kwargs.get("extra", None) is None:
-            raise ValueError(
+            raise SuperFencesException(
                 f"error while processing {language} block: extra dict is required"
             )
 
         if kwargs["extra"].get("path", None) is None:
-            raise ValueError(
+            raise SuperFencesException(
                 f"error while processing {language} block: path is required"
             )
 
@@ -227,13 +227,11 @@ def handle_vcr_teardown(
     session: str,
     history: list[SessionHistoryEntry],
 ):
-    session = history[-1].inputs["session"]
     last_inputs = dict(history[-1].inputs)
     code = load_postamble(language)
     md = last_inputs["md"]
     html = False
     update_toc = False
-    session = last_inputs.get("session", None)
 
     document_filename = last_inputs.get("extra", {}).get("path", None)
 
@@ -286,7 +284,7 @@ def _on_page_markdown_with_config(
 
     if remove_base64_images:
         # Remove base64 encoded images from markdown
-        markdown = re.sub(r"!\[.*?\]\(data:image/[^;]+;base64,[^\)]+\)", "", markdown)
+        markdown = re.sub(r"!\[.*?\]\(data:image/+;base64,[^\)]+\)", "", markdown)
 
     return markdown
 
