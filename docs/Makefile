@@ -17,7 +17,6 @@ install-vercel-deps:
 	poetry self update 1.8.5
 
 vercel-build-docs: install-vercel-deps
-	sudo dnf install sqlite-devel
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
 	poetry run pip install jupyter ipykernel
