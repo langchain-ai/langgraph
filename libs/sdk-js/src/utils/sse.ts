@@ -15,12 +15,12 @@ const TRAILING_NEWLINE = [CR, LF];
 
 export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
   constructor() {
-    let buffer = new Uint8Array();
+    let buffer: Uint8Array[] = [];
     let trailingCr = false;
 
     super({
       start() {
-        buffer = new Uint8Array();
+        buffer = [];
         trailingCr = false;
       },
 
@@ -43,44 +43,47 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
         if (!text.length) return;
         const trailingNewline = TRAILING_NEWLINE.includes(text.at(-1)!);
 
-        // Pre-allocate lines array with estimated capacity
-        let lines: Uint8Array[] = [];
-
-        for (let offset = 0; offset < text.byteLength; ) {
-          let idx = text.indexOf(CR, offset);
-          if (idx === -1) idx = text.indexOf(LF, offset);
-          if (idx === -1) {
-            lines.push(text.subarray(offset));
-            break;
-          }
-
-          lines.push(text.subarray(offset, idx));
-          if (text[idx] === CR && text[idx + 1] === LF) {
-            offset = idx + 2;
-          } else {
-            offset = idx + 1;
-          }
-        }
+        const lastIdx = text.length - 1;
+        const [lines] = text.reduce(
+          (acc, cur, idx) => {
+            if (cur === CR) {
+              if (text[idx + 1] === LF) {
+                acc[0].push(text.subarray(acc[1], idx));
+                acc[1] = idx + 2;
+              } else {
+                acc[0].push(text.subarray(acc[1], idx));
+                acc[1] = idx + 1;
+              }
+            } else if (cur === LF && text[idx - 1] !== CR) {
+              acc[0].push(text.subarray(acc[1], idx));
+              acc[1] = idx + 1;
+            }
+            if (idx === lastIdx && acc[1] < lastIdx) {
+              acc[0].push(text.subarray(acc[1]));
+            }
+            return acc;
+          },
+          [[], 0] as [Uint8Array[], number],
+        );
 
         if (lines.length === 1 && !trailingNewline) {
-          buffer = mergeArrays(buffer, lines[0]);
+          buffer.push(lines[0]);
           return;
         }
 
         if (buffer.length) {
           // Include existing buffer in first line
-          buffer = mergeArrays(buffer, lines[0]);
+          buffer.push(lines[0]);
 
-          lines = lines.slice(1);
-          lines.unshift(buffer);
+          lines[0] = joinArrays(buffer);
 
-          buffer = new Uint8Array();
+          buffer = [];
         }
 
         if (!trailingNewline) {
           // If the last segment is not newline terminated,
           // buffer it for the next chunk
-          if (lines.length) buffer = lines.pop()!;
+          if (lines.length) buffer = [lines.pop()!];
         }
 
         // Enqueue complete lines
@@ -91,7 +94,7 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
 
       flush(controller) {
         if (buffer.length) {
-          controller.enqueue(buffer);
+          controller.enqueue(joinArrays(buffer));
         }
       },
     });
@@ -106,7 +109,7 @@ interface StreamPart {
 export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
   constructor() {
     let event = "";
-    let data: Uint8Array = new Uint8Array();
+    let data: Uint8Array[] = [];
     let lastEventId = "";
     let retry: number | null = null;
 
@@ -120,12 +123,12 @@ export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
 
           const sse = {
             event,
-            data: data.length ? JSON.parse(decoder.decode(data)) : null,
+            data: data.length ? decodeArraysToJson(decoder, data) : null,
           };
 
           // NOTE: as per the SSE spec, do not reset lastEventId
           event = "";
-          data = new Uint8Array();
+          data = [];
           retry = null;
 
           controller.enqueue(sse);
@@ -145,7 +148,7 @@ export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
         if (fieldName === "event") {
           event = decoder.decode(value);
         } else if (fieldName === "data") {
-          data = mergeArrays(data, value);
+          data.push(value);
         } else if (fieldName === "id") {
           if (value.indexOf(NULL) === -1) lastEventId = decoder.decode(value);
         } else if (fieldName === "retry") {
@@ -158,10 +161,32 @@ export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
         if (event) {
           controller.enqueue({
             event,
-            data: data.length ? JSON.parse(decoder.decode(data)) : null,
+            data: data.length ? decodeArraysToJson(decoder, data) : null,
           });
         }
       },
     });
   }
+}
+
+function decodeArraysToJson(decoder: TextDecoder, arrays: Uint8Array[]) {
+  const totalLength = arrays.reduce((acc, curr) => acc + curr.length, 0);
+  let merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const c of arrays) {
+    merged.set(c, offset);
+    offset += c.length;
+  }
+  return JSON.parse(decoder.decode(merged));
+}
+
+function joinArrays(arrays: Uint8Array[]) {
+  const totalLength = arrays.reduce((acc, curr) => acc + curr.length, 0);
+  let merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const c of arrays) {
+    merged.set(c, offset);
+    offset += c.length;
+  }
+  return merged;
 }
