@@ -44,26 +44,25 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
         const trailingNewline = TRAILING_NEWLINE.includes(text.at(-1)!);
 
         const lastIdx = text.length - 1;
-        const [lines] = text.reduce(
+        const { lines } = text.reduce(
           (acc, cur, idx) => {
-            if (cur === CR) {
-              if (text[idx + 1] === LF) {
-                acc[0].push(text.subarray(acc[1], idx));
-                acc[1] = idx + 2;
-              } else {
-                acc[0].push(text.subarray(acc[1], idx));
-                acc[1] = idx + 1;
-              }
-            } else if (cur === LF && text[idx - 1] !== CR) {
-              acc[0].push(text.subarray(acc[1], idx));
-              acc[1] = idx + 1;
+            if (acc.from > idx) return acc;
+
+            if (cur === CR && text[idx + 1] === LF) {
+              acc.lines.push(text.subarray(acc.from, idx));
+              acc.from = idx + 2;
+            } else if (cur === CR || cur === LF) {
+              acc.lines.push(text.subarray(acc.from, idx));
+              acc.from = idx + 1;
             }
-            if (idx === lastIdx && acc[1] < lastIdx) {
-              acc[0].push(text.subarray(acc[1]));
+
+            if (idx === lastIdx && acc.from < lastIdx) {
+              acc.lines.push(text.subarray(acc.from));
             }
+
             return acc;
           },
-          [[], 0] as [Uint8Array[], number],
+          { lines: [], from: 0 } as { lines: Uint8Array[]; from: number },
         );
 
         if (lines.length === 1 && !trailingNewline) {
