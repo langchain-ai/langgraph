@@ -70,6 +70,7 @@ from tests.conftest import (
     awith_checkpointer,
 )
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
+from tests.any_str import AnyStr
 
 pytestmark = pytest.mark.anyio
 
@@ -182,6 +183,8 @@ def test_no_prompt(
             "agent": "agent",
         }
         assert saved.metadata == {
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
@@ -214,6 +217,8 @@ async def test_no_prompt_async(checkpointer_name: str) -> None:
                 "agent": "agent",
             }
             assert saved.metadata == {
+                "checkpoint_id": AnyStr(),
+                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
