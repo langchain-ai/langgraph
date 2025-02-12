@@ -1,10 +1,3 @@
-const mergeArrays = (a: ArrayLike<number>, b: ArrayLike<number>) => {
-  const mergedArray = new Uint8Array(a.length + b.length);
-  mergedArray.set(a);
-  mergedArray.set(b, a.length);
-  return mergedArray;
-};
-
 const CR = "\r".charCodeAt(0);
 const LF = "\n".charCodeAt(0);
 const NULL = "\0".charCodeAt(0);
@@ -30,7 +23,7 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
 
         // Handle trailing CR from previous chunk
         if (trailingCr) {
-          text = mergeArrays([CR], text);
+          text = joinArrays([[CR], text]);
           trailingCr = false;
         }
 
@@ -74,9 +67,7 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
         if (buffer.length) {
           // Include existing buffer in first line
           buffer.push(lines[0]);
-
           lines[0] = joinArrays(buffer);
-
           buffer = [];
         }
 
@@ -169,24 +160,17 @@ export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
   }
 }
 
-function decodeArraysToJson(decoder: TextDecoder, arrays: Uint8Array[]) {
-  const totalLength = arrays.reduce((acc, curr) => acc + curr.length, 0);
+function joinArrays(data: ArrayLike<number>[]) {
+  const totalLength = data.reduce((acc, curr) => acc + curr.length, 0);
   let merged = new Uint8Array(totalLength);
   let offset = 0;
-  for (const c of arrays) {
-    merged.set(c, offset);
-    offset += c.length;
-  }
-  return JSON.parse(decoder.decode(merged));
-}
-
-function joinArrays(arrays: Uint8Array[]) {
-  const totalLength = arrays.reduce((acc, curr) => acc + curr.length, 0);
-  let merged = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const c of arrays) {
+  for (const c of data) {
     merged.set(c, offset);
     offset += c.length;
   }
   return merged;
+}
+
+function decodeArraysToJson(decoder: TextDecoder, data: ArrayLike<number>[]) {
+  return JSON.parse(decoder.decode(joinArrays(data)));
 }
