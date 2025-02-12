@@ -1,7 +1,7 @@
 /* __LC_ALLOW_ENTRYPOINT_SIDE_EFFECTS__ */
 "use client";
 
-import { Client, ClientConfig } from "../client.js";
+import { Client, type ClientConfig } from "../client.js";
 import type {
   Command,
   DisconnectMode,
@@ -188,14 +188,15 @@ export function useStream<
 
   apiUrl: ClientConfig["apiUrl"];
   apiKey?: ClientConfig["apiKey"];
-  callerOptions?: ClientConfig["callerOptions"];
-  timeoutMs?: ClientConfig["timeoutMs"];
-  defaultHeaders?: ClientConfig["defaultHeaders"];
 
   withMessages?: string;
 
   onError?: (error: unknown) => void;
   onFinish?: (state: ThreadState<StateType>) => void;
+
+  onUpdateEvent?: (data: UpdatesStreamEvent<UpdateType>["data"]) => void;
+  onCustomEvent?: (data: CustomStreamEvent<CustomType>["data"]) => void;
+  onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
 
   // TODO: can we make threadId uncontrollable / controllable?
   threadId?: string | null;
@@ -214,26 +215,14 @@ export function useStream<
     | FeedbackStreamEvent;
 
   const { assistantId, threadId, withMessages, onError, onFinish } = options;
-  const [client] = useState<Client>(
-    () =>
-      new Client({
-        apiUrl: options.apiUrl,
-        apiKey: options.apiKey,
-        callerOptions: options.callerOptions,
-        timeoutMs: options.timeoutMs,
-        defaultHeaders: options.defaultHeaders,
-      }),
+  const client = useMemo(
+    () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
+    [options.apiKey, options.apiUrl],
   );
-
-  if (client == null) {
-    throw new Error(
-      "LangGraph SDK not provided. Either pass a client to `useStream` or wrap your app in a `LangGraphConfig` provider and pass the client there.",
-    );
-  }
 
   const [branchPath, setBranchPath] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [events, setEvents] = useState<EventStreamEvent[]>([]);
+  const [_, setEvents] = useState<EventStreamEvent[]>([]);
 
   const [streamError, setStreamError] = useState<unknown>(undefined);
   const [streamValues, setStreamValues] = useState<StateType | null>(null);
@@ -253,6 +242,16 @@ export function useStream<
     },
     [],
   );
+
+  const hasUpdateListener = options.onUpdateEvent != null;
+  const hasCustomListener = options.onCustomEvent != null;
+
+  const callbackStreamMode = useMemo(() => {
+    const modes: Exclude<StreamMode, "debug" | "messages">[] = [];
+    if (hasUpdateListener) modes.push("updates");
+    if (hasCustomListener) modes.push("custom");
+    return modes;
+  }, [hasUpdateListener, hasCustomListener]);
 
   const clearCallbackRef = useRef<() => void>(null!);
   clearCallbackRef.current = () => {
@@ -480,6 +479,7 @@ export function useStream<
       const streamMode = unique([
         ...(submitOptions?.streamMode ?? []),
         ...trackStreamModeRef.current,
+        ...callbackStreamMode,
       ]);
 
       const checkpoint =
@@ -499,8 +499,6 @@ export function useStream<
         onCompletion: submitOptions?.onCompletion,
         onDisconnect: submitOptions?.onDisconnect ?? "cancel",
 
-        // TODO: check if integration on FE would work nice
-        feedbackKeys: submitOptions?.feedbackKeys,
         signal: abortRef.current.signal,
 
         checkpoint,
@@ -537,6 +535,18 @@ export function useStream<
         if (event === "error") {
           streamError = new StreamError(data);
           break;
+        }
+
+        if (event === "updates") {
+          options.onUpdateEvent?.(data);
+        }
+
+        if (event === "custom") {
+          options.onCustomEvent?.(data);
+        }
+
+        if (event === "metadata") {
+          options.onMetadataEvent?.(data);
         }
 
         if (event === "values") {
@@ -604,30 +614,6 @@ export function useStream<
 
   const error = isLoading ? streamError : historyError;
   const values = streamValues ?? historyValues;
-  const stream = {
-    get custom() {
-      trackStreamMode("custom");
-
-      return events
-        .filter((item) => item.event === "custom")
-        .map(({ data }) => data as CustomType);
-    },
-
-    get events() {
-      trackStreamMode("events");
-      return events;
-    },
-
-    get updates() {
-      trackStreamMode("updates");
-      return events
-        .filter(
-          (item): item is UpdatesStreamEvent<UpdateType> =>
-            item.event === "updates",
-        )
-        .map(({ data }) => data);
-    },
-  };
 
   const setBranch = useCallback(
     (path: string) => setBranchPath(path.split(">")),
@@ -646,8 +632,6 @@ export function useStream<
     stop,
     submit,
     setBranch,
-
-    stream,
 
     get messages() {
       trackStreamMode("messages-tuple");
