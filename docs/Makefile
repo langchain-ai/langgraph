@@ -19,8 +19,9 @@ install-vercel-deps:
 vercel-build-docs: install-vercel-deps
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
+	poetry run pip install pip install jupyter_core jupyter_client ipykernel
 	npm install -g tslab
-	tslab install --python=python
+	tslab install
 	make build-docs
 
 
