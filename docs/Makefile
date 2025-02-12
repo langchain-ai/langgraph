@@ -19,11 +19,12 @@ install-vercel-deps:
 vercel-build-docs: install-vercel-deps
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
-	poetry run pip install jupyter
+	poetry run pip install jupyter ipykernel
+	poetry run pip freeze
+	poetry run python -m ipykernel install
+	poetry run jupyter kernelspec list
 	npm install -g tslab
-	source /vercel/.cache/pypoetry/virtualenvs/bin/activate
-	tslab install
-	deactivate
+	poetry run tslab install
 	make build-docs
 
 
