@@ -18,7 +18,7 @@ install-vercel-deps:
 
 vercel-build-docs: install-vercel-deps
 	poetry install
-	poetry run pip install --upgrade "git+https://github.com/benjamincburns/markdown-exec.git@langgraph"
+	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@fec7286a31bb3291707d82011624e513035a10fd"
 	make build-docs
 
 
