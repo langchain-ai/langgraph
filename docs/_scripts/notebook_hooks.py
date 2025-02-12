@@ -178,10 +178,11 @@ def handle_vcr_setup(
 
         document_filename = kwargs["extra"]["path"]
 
-        logger.info("document_filename: %s", document_filename)
-
         if session is None or session == "" and id is None or id == "":
             id = _hash_string(code)
+
+        if session is not None and session != "":
+            logger.info(f"new session {session} on page {document_filename}")
 
         cassette_prefix = document_filename.replace(".md", "").replace(os.path.sep, "_")
 
@@ -204,6 +205,9 @@ def handle_vcr_setup(
         ]
 
         if session is None or session == "":
+            logger.info(
+                f"no session, adding postamble for {language} in {document_filename}"
+            )
             wrapped_lines.append(load_postamble(language))
 
         transformed_source = "\n".join(wrapped_lines)
@@ -224,17 +228,34 @@ def handle_vcr_teardown(
     history: list[SessionHistoryEntry],
 ):
     session = history[-1].inputs["session"]
-    inputs = dict(history[-1].inputs)
-    del inputs["session"]
-    del inputs["code"]
-    del inputs["language"]
-    del inputs["id"]
-    formatter(
-        code="_cassette.__exit__() # markdown-exec: hide",
+    last_inputs = dict(history[-1].inputs)
+    code = load_postamble(language)
+    md = last_inputs["md"]
+    html = False
+    update_toc = False
+    session = last_inputs.get("session", None)
+
+    document_filename = last_inputs.get("extra", {}).get("path", None)
+
+    if document_filename is None:
+        logger.warning(f"no document filename found while tearing down {session}!")
+    else:
+        logger.info(f"tearing down {session} on {document_filename}")
+        logger.info(traceback.format_stack())
+
+    kwargs = dict(
+        code=code,
         session=session,
         id=f"{id}_vcr_end",
-        **inputs,
+        md=md,
+        html=html,
+        update_toc=update_toc,
+        extra={},
     )
+
+    # This doesn't actually render anything, we just call the formatter so it
+    # executes in the same context as the session of which we're disposing.
+    formatter(**kwargs)
 
 
 def _on_page_markdown_with_config(
@@ -249,7 +270,7 @@ def _on_page_markdown_with_config(
         return markdown
 
     if page.file.src_path.endswith(".ipynb"):
-        logger.info("Processing Jupyter notebook: %s", page.file.src_path)
+        # logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
 
     # Append API reference links to code blocks

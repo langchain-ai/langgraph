@@ -37,12 +37,16 @@ def _get_typescript_cassette_cleanup() -> str:
 
 preamble_inits = {
     "python": _get_python_cassette_init,
+    "py": _get_python_cassette_init,
     "typescript": _get_typescript_cassette_init,
+    "ts": _get_typescript_cassette_init,
 }
 
 preamble_cleanups = {
     "python": _get_python_cassette_cleanup,
+    "py": _get_python_cassette_cleanup,
     "typescript": _get_typescript_cassette_cleanup,
+    "ts": _get_typescript_cassette_cleanup,
 }
 
 

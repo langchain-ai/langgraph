@@ -54,8 +54,10 @@ class HashedCassette:
         self.hash_value: str = hash_value
         self.vcr: vcr.VCR = custom_vcr
         self.cassette_context: Optional[Any] = None
+        self.exited: bool = False
 
     def __enter__(self) -> Any:
+        self.exited: bool = False
         # Get the serializer instance from the VCR instance.
         serializer = self.vcr.serializers[self.vcr.serializer]
         # If the cassette file exists, check its embedded hash.
@@ -87,6 +89,9 @@ class HashedCassette:
         exc_val: Optional[BaseException] = None,
         exc_tb: Optional[TracebackType] = None,
     ) -> Optional[bool]:
+        if self.exited:
+            return
+        self.exited = True
         # Exit the VCR cassette context.
         result = self.cassette_context.__exit__(exc_type, exc_val, exc_tb)
         serializer = self.vcr.serializers[self.vcr.serializer]

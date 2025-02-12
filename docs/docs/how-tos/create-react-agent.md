@@ -132,7 +132,7 @@ def print_stream(stream):
 Let's run the app with an input that needs a tool call
 
 
-```python exec="on" source="above" session="1"
+```python exec="on" source="above" session="1" result="ansi"
 inputs = {"messages": [("user", "what is the weather in sf")]}
 print_stream(graph.stream(inputs, stream_mode="values"))
 ```
@@ -140,7 +140,7 @@ print_stream(graph.stream(inputs, stream_mode="values"))
 Now let's try a question that doesn't need tools
 
 
-```python exec="on" source="above" session="1"
+```python exec="on" source="above" session="1" result="ansi"
 inputs = {"messages": [("user", "who built you?")]}
 print_stream(graph.stream(inputs, stream_mode="values"))
 ```
