@@ -183,6 +183,34 @@ def test_data():
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+def test_combined_metadata(saver_name: str, test_data) -> None:
+    with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_ns": "",
+                "__super_private_key": "super_private_value",
+            },
+            "metadata": {"run_id": "my_run_id"},
+        }
+        chkpnt: Checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+        metadata: CheckpointMetadata = {
+            "source": "loop",
+            "step": 1,
+            "writes": {"foo": "bar"},
+            "score": None,
+        }
+        saver.put(config, chkpnt, metadata, {})
+        checkpoint = saver.get_tuple(config)
+        assert checkpoint.metadata == {
+            **metadata,
+            "thread_id": "thread-2",
+            "checkpoint_ns": "",
+            "run_id": "my_run_id",
+        }
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
 def test_search(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         configs = test_data["configs"]
@@ -204,11 +232,17 @@ def test_search(saver_name: str, test_data) -> None:
 
         search_results_1 = list(saver.list(None, filter=query_1))
         assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == metadata[0]
+        assert search_results_1[0].metadata == {
+            **configs[0]["configurable"],
+            **metadata[0],
+        }
 
         search_results_2 = list(saver.list(None, filter=query_2))
         assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == metadata[1]
+        assert search_results_2[0].metadata == {
+            **configs[1]["configurable"],
+            **metadata[1],
+        }
 
         search_results_3 = list(saver.list(None, filter=query_3))
         assert len(search_results_3) == 3

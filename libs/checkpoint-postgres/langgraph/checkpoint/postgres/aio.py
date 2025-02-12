@@ -275,7 +275,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(metadata),
+                    self._dump_metadata(
+                        {
+                            **{
+                                k: v
+                                for k, v in config["configurable"].items()
+                                if not k.startswith("__")
+                            },
+                            **config.get("metadata", {}),
+                            **metadata,
+                        }
+                    ),
                 ),
             )
         return next_config
