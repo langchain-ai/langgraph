@@ -30,7 +30,7 @@ install-vercel-deps:
 	poetry run bash -c 'echo $$PYTHONPATH'
 
 vercel-build-docs: install-vercel-deps
-	export POETRY_VIRTUALENVS_USE_POETRY_PYTHON="true"
+	poetry env use "$$(which python3)"
 	poetry install
 	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
 	poetry run pip install jupyter ipykernel
