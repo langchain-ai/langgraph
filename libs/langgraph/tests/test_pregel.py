@@ -1112,6 +1112,8 @@ def test_pending_writes_resume(
         PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
     )
     assert state.metadata == {
+        "checkpoint_id": AnyStr(),
+        "checkpoint_ns": "",
         "parents": {},
         "source": "loop",
         "step": 0,
@@ -1210,6 +1212,8 @@ def test_pending_writes_resume(
             "channel_values": {"one": "one", "two": "two", "value": 6},
         },
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "step": 1,
             "source": "loop",
@@ -1260,6 +1264,8 @@ def test_pending_writes_resume(
             },
         },
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "step": 0,
             "source": "loop",
@@ -1301,6 +1307,7 @@ def test_pending_writes_resume(
             "channel_values": {"__start__": {"value": 1}},
         },
         metadata={
+            "checkpoint_ns": "",
             "parents": {},
             "step": -1,
             "source": "input",
@@ -2391,6 +2398,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         },
         created_at=AnyStr(),
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 4,
@@ -4826,6 +4835,8 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             }
         },
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "source": "loop",
             "writes": {
                 "alice": {

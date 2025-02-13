@@ -356,7 +356,17 @@ class InMemorySaver(
             {
                 checkpoint["id"]: (
                     self.serde.dumps_typed(c),
-                    self.serde.dumps_typed(metadata),
+                    self.serde.dumps_typed(
+                        {
+                            **{
+                                k: v
+                                for k, v in config["configurable"].items()
+                                if not k.startswith("__")
+                            },
+                            **config.get("metadata", {}),
+                            **metadata,
+                        }
+                    ),
                     config["configurable"].get("checkpoint_id"),  # parent
                 )
             }
