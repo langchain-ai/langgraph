@@ -1,21 +1,19 @@
 import logging
 import os
+import posixpath
 import re
 import traceback
 from typing import Any, Callable, Dict
 
 from markdown import Markdown
-from pymdownx.superfences import SuperFencesException
+from markdown_exec.hooks import SessionHistoryEntry
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
-import posixpath
+from pymdownx.superfences import SuperFencesException
 
-from markdown_exec.hooks import SessionHistoryEntry
-
-from generate_api_reference_links import update_markdown_with_imports
-from notebook_convert import convert_notebook
-from setup_vcr import load_postamble, load_preamble, _hash_string
-
+from _scripts.generate_api_reference_links import update_markdown_with_imports
+from _scripts.notebook_convert import convert_notebook
+from _scripts.setup_vcr import load_postamble, load_preamble, _hash_string
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
