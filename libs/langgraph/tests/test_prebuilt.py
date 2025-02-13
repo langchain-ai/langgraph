@@ -63,6 +63,7 @@ from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
 from langgraph.utils.config import get_stream_writer
+from tests.any_str import AnyStr
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
@@ -70,7 +71,6 @@ from tests.conftest import (
     awith_checkpointer,
 )
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
-from tests.any_str import AnyStr
 
 pytestmark = pytest.mark.anyio
 

@@ -7000,7 +7000,9 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 metadata={
                     "checkpoint_id": None,
                     "checkpoint_ns": "",
-                    "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child:"): AnyStr()}),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                     "source": "input",
                     "writes": {"__start__": {"my_key": "hi my value"}},
                     "step": -1,
@@ -7426,9 +7428,7 @@ async def test_weather_subgraph(
                         metadata={
                             "checkpoint_id": AnyStr(),
                             "checkpoint_ns": "",
-                            "checkpoint_map": AnyDict(
-                                {"": AnyStr()}
-                            ),
+                            "checkpoint_map": AnyDict({"": AnyStr()}),
                             "source": "loop",
                             "writes": {"model_node": {"city": "San Francisco"}},
                             "step": 1,
@@ -7542,9 +7542,7 @@ async def test_weather_subgraph(
                         metadata={
                             "checkpoint_id": AnyStr(),
                             "checkpoint_ns": "",
-                            "checkpoint_map": AnyDict(
-                                {"": AnyStr()}
-                            ),
+                            "checkpoint_map": AnyDict({"": AnyStr()}),
                             "step": 2,
                             "source": "update",
                             "writes": {
