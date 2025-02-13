@@ -1,7 +1,6 @@
 import base64
 import os
 import zlib
-from logging import getLogger
 from types import TracebackType
 from typing import Optional, Any, Type
 
