@@ -11,14 +11,11 @@ We will use [messages](../concepts/low_level.md/#messagesstate) in our examples.
 
 First, let's install langgraph:
 
-=== "Python"
-    ```shell
-    pip install -U langgraph
-    ```
-=== "TypeScript"
-    ```shell
-    npm install @langchain/langgraph
-    ```
+
+```python
+%%capture --no-stderr
+%pip install -U langgraph
+```
 
 <div class="admonition tip">
      <p class="admonition-title">Set up <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
@@ -27,37 +24,25 @@ First, let's install langgraph:
      </p>
  </div>
 
-
 ## Example graph
 
 ### Define state
-
 [State](../concepts/low_level.md/#state) in LangGraph can be a `TypedDict`, `Pydantic` model, or dataclass. Below we will use `TypedDict`. See [this guide](../how-tos/state-model.ipynb) for detail on using Pydantic.
 
 By default, graphs will have the same input and output schema, and the state determines that schema. See [this guide](../how-tos/input_output_schema.ipynb) for how to define distinct input and output schemas.
 
 Let's consider a simple example:
 
-=== "Python"
-    ```python exec="on" source="above" session="1"
-    from langchain_core.messages import AnyMessage
-    from typing_extensions import TypedDict
-    
-    
-    class State(TypedDict):
-        messages: list[AnyMessage]
-        extra_field: int
-    ```
-=== "TypeScript"
-    ```typescript exec="1" source="above" session="1"
-    import { BaseMessage } from "@langchain/core/messages";
-    import { Annotation } from "@langchain/langgraph";
-    
-    const StateAnnotation = Annotation.Root({
-      messages: Annotation<BaseMessage[]>(),
-      extraField: Annotation<number>(),
-    });
-    ```
+
+```python exec="on" source="above" session="1"
+from langchain_core.messages import AnyMessage
+from typing_extensions import TypedDict
+
+
+class State(TypedDict):
+    messages: list[AnyMessage]
+    extra_field: int
+```
 
 This state tracks a list of [message](https://python.langchain.com/docs/concepts/messages/) objects, as well as an extra integer field.
 
@@ -80,11 +65,10 @@ This node simply appends a message to our message list, and populates an extra f
 
 !!! important
 
-```
-Nodes should return updates to the state directly, instead of mutating the state.
-```
+    Nodes should return updates to the state directly, instead of mutating the state.
 
 Let's next define a simple graph containing this node. We use [StateGraph](../concepts/low_level.md#stategraph) to define a graph that operates on this state. We then use [add_node](../concepts/low_level.md#messagesstate) populate our graph.
+
 
 ```python exec="on" source="above" session="1"
 from langgraph.graph import StateGraph
@@ -96,6 +80,7 @@ graph = graph_builder.compile()
 ```
 
 LangGraph provides built-in utilities for visualizing your graph. Let's inspect our graph. See [this guide](../how-tos/visualization.ipynb) for detail on visualization.
+
 
 ```python
 from IPython.display import Image, display
@@ -111,6 +96,7 @@ In this case, our graph just executes a single node.
 
 Let's proceed with a simple invocation:
 
+
 ```python exec="on" source="above" session="1" result="ansi"
 from langchain_core.messages import HumanMessage
 
@@ -125,6 +111,7 @@ Note that:
 
 For convenience, we frequently inspect the content of [message objects](https://python.langchain.com/docs/concepts/messages/) via pretty-print:
 
+
 ```python exec="on" source="above" session="1" result="ansi"
 for message in result["messages"]:
     message.pretty_print()
@@ -137,6 +124,7 @@ Each key in the state can have its own independent [reducer](../concepts/low_lev
 For `TypedDict` state schemas, we can define reducers by annotating the corresponding field of the state with a reducer function.
 
 In the earlier example, our node updated the `"messages"` key in the state by appending a message to it. Below, we add a reducer to this key, such that updates are automatically appended:
+
 
 ```python exec="on" source="above" session="1"
 from typing_extensions import Annotated
@@ -155,12 +143,14 @@ class State(TypedDict):
 
 Now our node can be simplified:
 
+
 ```python exec="on" source="above" session="1"
 def node(state: State):
     new_message = AIMessage("Hello!")
     # highlight-next-line
     return {"messages": [new_message], "extra_field": 10}
 ```
+
 
 ```python exec="on" source="above" session="1" result="ansi"
 from langgraph.graph import START
@@ -183,6 +173,7 @@ In practice, there are additional considerations for updating lists of messages:
 
 LangGraph includes a built-in reducer `add_messages` that handles these considerations:
 
+
 ```python exec="on" source="above" session="1"
 from langgraph.graph.message import add_messages
 
@@ -201,6 +192,7 @@ def node(state: State):
 graph = StateGraph(State).add_node(node).set_entry_point("node").compile()
 ```
 
+
 ```python exec="on" source="above" session="1" result="ansi"
 # highlight-next-line
 input_message = {"role": "user", "content": "Hi"}
@@ -212,6 +204,7 @@ for message in result["messages"]:
 ```
 
 This is a versatile representation of state for applications involving [chat models](https://python.langchain.com/docs/concepts/chat_models/). LangGraph includes a pre-built `MessagesState` for convenience, so that we can have:
+
 
 ```python exec="on" source="above" session="1"
 from langgraph.graph import MessagesState
