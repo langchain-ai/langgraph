@@ -8169,7 +8169,6 @@ def test_nested_graph_state(
             metadata={
                 "checkpoint_id": AnyStr(),
                 "checkpoint_map": AnyDict({"": AnyStr()}),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {
                     "inner_1": {
@@ -8220,7 +8219,6 @@ def test_nested_graph_state(
             metadata={
                 "checkpoint_id": AnyStr(),
                 "checkpoint_map": AnyDict({"": AnyStr()}),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": None,
                 "step": 0,
@@ -8272,7 +8270,6 @@ def test_nested_graph_state(
             metadata={
                 "checkpoint_id": None,
                 "checkpoint_map": AnyDict({"": AnyStr()}),
-                "checkpoint_ns": "",
                 "source": "input",
                 "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
@@ -8717,7 +8714,6 @@ def test_doubly_nested_graph_state(
         },
         metadata={
             "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child:"): AnyStr()}),
             "parents": AnyDict(
                 {
@@ -9172,7 +9168,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "loop",
                 "writes": {"child_1": {"my_key": "hi my value here and there"}},
@@ -9214,7 +9209,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "loop",
                 "writes": None,
@@ -9269,7 +9263,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": None,
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "input",
                 "writes": {"__start__": {"my_key": "hi my value"}},
@@ -9317,7 +9310,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "loop",
                 "writes": {"grandchild_2": {"my_key": "hi my value here and there"}},
@@ -9375,7 +9367,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "loop",
                 "writes": {"grandchild_1": {"my_key": "hi my value here"}},
@@ -9440,7 +9431,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "loop",
                 "writes": None,
@@ -9505,7 +9495,6 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "checkpoint_id": None,
-                "checkpoint_ns": "",
                 "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "input",
                 "writes": {"__start__": {"my_key": "hi my value"}},
@@ -10656,7 +10645,6 @@ def test_weather_subgraph(
                     },
                     metadata={
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_ns": "",
                         "checkpoint_map": AnyDict({"": AnyStr()}),
                         "source": "loop",
                         "writes": {"model_node": {"city": "San Francisco"}},
@@ -10769,8 +10757,6 @@ def test_weather_subgraph(
                         }
                     },
                     metadata={
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_ns": "",
                         "checkpoint_map": AnyDict({"": AnyStr()}),
                         "step": 2,
                         "source": "update",
