@@ -204,6 +204,7 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
 - [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
+- [How to stream runs in your React frontend](../cloud/how-tos/use_stream_react.md)
 
 ### Deployment
 

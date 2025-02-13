@@ -1,4 +1,4 @@
-# How to Stream LangGraph Runs in Your React App
+# How to stream runs in your React frontend
 
 !!! info "Prerequisites"
     - [LangGraph Platform](../concepts/langgraph_platform.md)
