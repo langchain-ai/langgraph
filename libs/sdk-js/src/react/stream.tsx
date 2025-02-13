@@ -224,6 +224,9 @@ export function useStream<
 
   /**
    * Specify the key within the state that contains messages.
+   * Defaults to "messages".
+   *
+   * @default "messages"
    */
   messagesKey?: string;
 
@@ -267,7 +270,9 @@ export function useStream<
     | ErrorStreamEvent
     | FeedbackStreamEvent;
 
-  const { assistantId, messagesKey, onError, onFinish } = options;
+  let { assistantId, messagesKey, onError, onFinish } = options;
+  messagesKey ??= "messages";
+
   const client = useMemo(
     () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
     [options.apiKey, options.apiUrl],
@@ -323,7 +328,6 @@ export function useStream<
   );
 
   const getMessages = useMemo(() => {
-    if (messagesKey == null) return undefined;
     return (value: StateType) =>
       Array.isArray(value[messagesKey])
         ? (value[messagesKey] as Message[])
@@ -453,8 +457,6 @@ export function useStream<
   })();
 
   const messageMetadata = (() => {
-    if (getMessages == null) return undefined;
-
     const alreadyShown = new Set<string>();
     return getMessages(historyValues).map(
       (message, idx): MessageMetadata<StateType> => {
@@ -597,8 +599,6 @@ export function useStream<
 
         if (event === "values") setStreamValues(data);
         if (event === "messages") {
-          if (!getMessages) continue;
-
           const [serialized] = data;
 
           const messageId = messageManagerRef.current.add(serialized);
@@ -676,13 +676,6 @@ export function useStream<
 
     get messages() {
       trackStreamMode("messages-tuple");
-
-      if (getMessages == null) {
-        throw new Error(
-          "No messages key provided. Make sure that `useStream` contains the `messagesKey` property.",
-        );
-      }
-
       return getMessages(values);
     },
 
@@ -691,13 +684,6 @@ export function useStream<
       index?: number,
     ): MessageMetadata<StateType> | undefined {
       trackStreamMode("messages-tuple");
-
-      if (getMessages == null) {
-        throw new Error(
-          "No messages key provided. Make sure that `useStream` contains the `messagesKey` property.",
-        );
-      }
-
       return messageMetadata?.find(
         (m) => m.messageId === (message.id ?? index),
       );
