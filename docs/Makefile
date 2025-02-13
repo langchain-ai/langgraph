@@ -32,7 +32,7 @@ install-vercel-deps:
 
 vercel-build-docs: install-vercel-deps
 	poetry install
-	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
+	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
 	poetry run pip install jupyter ipykernel
 	poetry run python3 -m ipykernel install --user --name=python3
 	poetry run jupyter kernelspec list
