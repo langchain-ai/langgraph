@@ -6488,7 +6488,7 @@ def test_pydantic_none_state_update() -> None:
     from pydantic import BaseModel
 
     class State(BaseModel):
-        foo: str | None
+        foo: Optional[str]
 
     def node_a(state: State) -> State:
         return State(foo=None)
