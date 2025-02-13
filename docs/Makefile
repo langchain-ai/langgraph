@@ -13,7 +13,17 @@ build-prebuilt:
 	poetry run python -m _scripts.third_party_page.get_download_stats stats.yml
 	poetry run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/prebuilt.md --language python
 
-build-docs: build-typedoc build-prebuilt
+grab-langgraphjs:
+	if [ ! -d "langgraphjs" ]; then \
+		git clone https://github.com/langchain-ai/langgraphjs.git; \
+	else \
+		cd langgraphjs && git checkout main && git pull; \
+	fi
+	cd langgraphjs && yarn
+	cd langgraphjs && yarn build
+	yarn
+
+build-docs: build-typedoc build-prebuilt grab-langgraphjs
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
@@ -32,7 +42,6 @@ install-vercel-deps:
 	poetry run tslab install --python=python3
 	poetry run jupyter kernelspec list
 
-
 tests:
 	# RUn unit tests
 	poetry run pytest tests/unit_tests
@@ -45,7 +54,7 @@ vercel-build-docs: install-vercel-deps
 serve-clean-docs: clean-docs
 	poetry run python -m mkdocs serve -c -f mkdocs.yml --strict -w ../libs/langgraph
 
-serve-docs: build-typedoc
+serve-docs: build-typedoc grab-langgraphjs
 	poetry run python -m mkdocs serve -f mkdocs.yml -w ../libs/langgraph  -w ../libs/checkpoint -w ../libs/sdk-py --dirty
 
 clean-docs:

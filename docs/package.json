@@ -2,11 +2,18 @@
   "name": "docs",
   "version": "1.0.0",
   "license": "MIT",
+  "packageManager": "yarn@3.5.1",
   "scripts": {
-    "build": "echo 'export OPENAI_API_KEY=\"sk-proj-1234567890\"' >> ~/.bashrc && echo 'export ANTHROPIC_API_KEY=\"sk-ant-api03-1234567890\"' >> ~/.bashrc && echo 'export PATH=$PATH:/vercel/.local/bin:$PATH' >> ~/.bashrc && source ~/.bashrc && make vercel-build-docs"
+    "build": "make build-docs"
   },
   "dependencies": {
     "@langchain/core": "^0.3.38",
+    "@langchain/langgraph": "portal:./langgraphjs/libs/langgraph",
+    "@langchain/langgraph-checkpoint": "portal:./langgraphjs/libs/checkpoint",
+    "@langchain/langgraph-checkpoint-mongodb": "portal:./langgraphjs/libs/checkpoint-mongodb",
+    "@langchain/langgraph-checkpoint-postgres": "portal:./langgraphjs/libs/checkpoint-postgres",
+    "@langchain/langgraph-checkpoint-sqlite": "portal:./langgraphjs/libs/checkpoint-sqlite",
+    "@langchain/langgraph-checkpoint-validation": "portal:./langgraphjs/libs/checkpoint-validation",
     "@langchain/openai": "^0.4.2",
     "msgpack-lite": "^0.1.26",
     "nock": "^14.0.1"

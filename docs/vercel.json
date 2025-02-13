@@ -1,4 +1,5 @@
 {
-  "buildCommand": "yarn build",
-  "outputDirectory": "site"
+  "buildCommand": "echo 'export OPENAI_API_KEY=\"sk-proj-1234567890\"' >> ~/.bashrc && echo 'export ANTHROPIC_API_KEY=\"sk-ant-api03-1234567890\"' >> ~/.bashrc && echo 'export PATH=$PATH:/vercel/.local/bin:$PATH' >> ~/.bashrc && source ~/.bashrc && make vercel-build-docs",
+  "outputDirectory": "site",
+  "installCommand": "echo done"
 }
