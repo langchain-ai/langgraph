@@ -33,7 +33,7 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.constants import EMPTY_SEQ, NS_END, NS_SEP, SELF, TAG_HIDDEN
+from langgraph.constants import EMPTY_SEQ, MISSING, NS_END, NS_SEP, SELF, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
     InvalidUpdateError,
@@ -691,10 +691,23 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
+                # if input is a Pydantic model, only update values
+                # for the keys that have been explicitly set by the users
+                # (this is needed to avoid sending updates for fields with None defaults)
+                output_keys_ = output_keys
+                # Pydantic v2
+                if hasattr(input, "model_fields_set"):
+                    output_keys_ = [
+                        k for k in output_keys if k in input.model_fields_set
+                    ]
+                # Pydantic v1
+                elif hasattr(input, "__fields_set__"):
+                    output_keys_ = [k for k in output_keys if k in input.__fields_set__]
+
                 return [
                     (k, getattr(input, k))
-                    for k in output_keys
-                    if getattr(input, k, None) is not None
+                    for k in output_keys_
+                    if getattr(input, k, MISSING) is not MISSING
                 ]
             else:
                 msg = create_error_message(
