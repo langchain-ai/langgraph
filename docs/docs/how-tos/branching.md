@@ -120,7 +120,7 @@ graph.invoke({"aggregate": []}, {"configurable": {"thread_id": "foo"}})
 
 !!! note
 
-    In the above example, nodes `"b"` and `"c"` are executed concurrently in the same [superstep](../concepts/low_level/.md#graphs). Because they are in the same step, node `"d"` executes after both `"b"` and `"c"` are finished.
+    In the above example, nodes `"b"` and `"c"` are executed concurrently in the same [superstep](../concepts/low_level.md#graphs). Because they are in the same step, node `"d"` executes after both `"b"` and `"c"` are finished.
 
     Importantly, updates from a parallel superstep may not be ordered consistently. If you need a consistent, predetermined ordering of updates from a parallel superstep, you should write the outputs to a separate field in the state together with a value with which to order them.
 
@@ -183,7 +183,7 @@ graph.invoke({"aggregate": []})
 
 !!! note
 
-    <p>In the above example, nodes `"b"` and `"c"` are executed concurrently in the same [superstep](../concepts/low_level/.md#graphs). What happens in the next step?</p>
+    <p>In the above example, nodes `"b"` and `"c"` are executed concurrently in the same [superstep](../concepts/low_level.md#graphs). What happens in the next step?</p>
     <p>We use `add_edge(["b_2", "c"], "d")` here to force node `"d"` to only run when both nodes `"b_2"` and `"c"` have finished execution. If we added two separate edges,
     node `"d"` would run twice: after node `b2` finishes and once again after node `c` (in whichever order those nodes finish).</p>
 
@@ -282,5 +282,5 @@ graph.invoke({"aggregate": [], "which": "cd"})
 
 ## Next steps
 
-- Continue with the [Graph API Basics](../how-tos/.md#graph-api-basics) guides.
-- Learn how to create [map-reduce](../how-tos/map-reduce.md) branches in which different states can be distributed to multiple instances of a node.
+- Continue with the [Graph API Basics](../how-tos/index.md#graph-api-basics) guides.
+- Learn how to create [map-reduce](../how-tos/map-reduce.ipynb) branches in which different states can be distributed to multiple instances of a node.
