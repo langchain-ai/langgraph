@@ -6482,3 +6482,16 @@ def test_node_destinations() -> None:
             Edge(source="child", target="node_b", data="foo", conditional=True),
             Edge(source="child", target="node_c", data="bar", conditional=True),
         ] == graph.edges
+
+
+def test_pydantic_none_state_update() -> None:
+    from pydantic import BaseModel
+
+    class State(BaseModel):
+        foo: str | None
+
+    def node_a(state: State) -> State:
+        return State(foo=None)
+
+    graph = StateGraph(State).add_node(node_a).add_edge(START, "node_a").compile()
+    assert graph.invoke({"foo": ""}) == {"foo": None}

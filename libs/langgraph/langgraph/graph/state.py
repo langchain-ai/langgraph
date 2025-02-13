@@ -33,7 +33,7 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.constants import EMPTY_SEQ, NS_END, NS_SEP, SELF, TAG_HIDDEN
+from langgraph.constants import EMPTY_SEQ, MISSING, NS_END, NS_SEP, SELF, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
     InvalidUpdateError,
@@ -694,7 +694,7 @@ class CompiledStateGraph(CompiledGraph):
                 return [
                     (k, getattr(input, k))
                     for k in output_keys
-                    if getattr(input, k, None) is not None
+                    if getattr(input, k, MISSING) is not MISSING
                 ]
             else:
                 msg = create_error_message(
