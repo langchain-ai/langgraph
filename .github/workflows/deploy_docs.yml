@@ -63,6 +63,13 @@ jobs:
           poetry-version: ${{ env.POETRY_VERSION }}
           cache-key: docs
 
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+          cache: "yarn"
+          cache-dependency-path: yarn.lock
+
       - name: Install dependencies
         run: |
           poetry install --with test --with docs --no-root
@@ -72,6 +79,12 @@ jobs:
             GitPython \
             "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git" \
             "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
+
+          jupyter kernelspec list
+          python3 -m ipykernel install --user --name=python3
+          npm install -g tslab
+          poetry run tslab install --python=python3
+          jupyter kernelspec list
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
