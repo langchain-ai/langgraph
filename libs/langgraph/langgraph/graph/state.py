@@ -691,9 +691,17 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
+                # if input is a Pydantic model, only update values
+                # for the keys that have been explicitly set by the users
+                # (this is needed to avoid sending updates for fields with None defaults)
+                output_keys_ = (
+                    [k for k in output_keys if k in input.model_fields_set]
+                    if hasattr(input, "model_fields_set")
+                    else output_keys
+                )
                 return [
                     (k, getattr(input, k))
-                    for k in output_keys
+                    for k in output_keys_
                     if getattr(input, k, MISSING) is not MISSING
                 ]
             else:
