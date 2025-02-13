@@ -64,6 +64,67 @@ def _rewrite_cell_magic(code: str) -> str:
     return "\n".join(rewritten_lines)
 
 
+def _convert_links_in_markdown(markdown: str) -> str:
+    """Convert links present in notebook markdown cells to standardized format.
+
+    We want to update markdown links code cells by linking to markdown
+    files rather than assuming that the link is to the finalized HTML.
+
+    This code is needed temporarily since the markdown links that are present
+    in ipython notebooks do not follow the same conventions as regular markdown
+    files in mkdocs (which should link to a .md file).
+    """
+
+    # Define the regex pattern in parts for clarity:
+    pattern = (
+        r"(?<!!)"  # Negative lookbehind: ensure the link is not an image (i.e., doesn't start with "!")
+        r"\["  # Literal '[' indicating the start of the link text.
+        r"(?P<text>[^\]]*)"  # Named group 'text': match any characters except ']', representing the link text.
+        r"\]"  # Literal ']' indicating the end of the link text.
+        r"\("  # Literal '(' indicating the start of the URL.
+        r"(?![^\)]*//)"  # Negative lookahead: ensure that the URL does not contain '//' (skip absolute URLs).
+        r"(?P<url>[^)]*)"  # Named group 'url': match any characters except ')', representing the URL.
+        r"\)"  # Literal ')' indicating the end of the URL.
+    )
+
+    def custom_replacement(match):
+        """logic will correct the link format used in ipython notebooks
+
+        Ipython notebooks were being converted directly into HTML links
+        instead of markdown links that retain the markdown extension.
+
+        It needs to handle the following cases:
+        - optional fragments (e.g., `#section`)
+            e.g., `[text](url/#section)` -> `[text](url.md#section)`
+            e.g., `[text](url#section)` -> `[text](url.md#section)`
+        - relative paths (e.g., `../path/to/file`) need to be denested by 1 level
+        """
+        text = match.group("text")
+        url = match.group("url")
+
+        if url.startswith("../"):
+            # we strip the "../" from the start of the URL
+            # We only need to denest one level.
+            url = url[3:]
+
+        url = url.rstrip("/")  # Strip `/` from the end of the URL
+
+        # if url has a fragment
+        if "#" in url:
+            url, fragment = url.split("#")
+            url = url.rstrip("/")
+            # Strip `/` from the end of the URL
+            return f"[{text}]({url}.md#{fragment})"
+        # Otherwise add the .md extension
+        return f"[{text}]({url}.md)"
+
+    return re.sub(
+        pattern,
+        custom_replacement,
+        markdown,
+    )
+
+
 class EscapePreprocessor(Preprocessor):
     def __init__(self, markdown_exec_migration: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -79,59 +140,7 @@ class EscapePreprocessor(Preprocessor):
                     cell.source,
                 )
             else:
-                # We want to update markdown links in cell.source by replacing a '.ipynb'
-                # extension with '.md', but only for links that:
-                #   - are not image links (i.e. not preceded by '!')
-                #   - do not contain '//' in the URL (to avoid external links)
-
-                # Define the regex pattern in parts for clarity:
-                pattern = (
-                    r"(?<!!)"  # Negative lookbehind: ensure the link is not an image (i.e., doesn't start with "!")
-                    r"\["  # Literal '[' indicating the start of the link text.
-                    r"(?P<text>[^\]]*)"  # Named group 'text': match any characters except ']', representing the link text.
-                    r"\]"  # Literal ']' indicating the end of the link text.
-                    r"\("  # Literal '(' indicating the start of the URL.
-                    r"(?![^\)]*//)"  # Negative lookahead: ensure that the URL does not contain '//' (skip absolute URLs).
-                    r"(?P<url>[^)]*)"  # Named group 'url': match any characters except ')', representing the URL.
-                    r"\)"  # Literal ')' indicating the end of the URL.
-                )
-
-                def custom_replacement(match):
-                    """logic will correct the link format used in ipython notebooks
-
-                    Ipython notebooks were being converted directly into HTML links
-                    instead of markdown links that retain the markdown extension.
-
-                    It needs to handle the following cases:
-                    - optional fragments (e.g., `#section`)
-                        e.g., `[text](url/#section)` -> `[text](url.md#section)`
-                        e.g., `[text](url#section)` -> `[text](url.md#section)`
-                    - relative paths (e.g., `../path/to/file`) need to be
-                      denested by 1 level
-                    """
-                    text = match.group("text")
-                    url = match.group("url")
-
-                    if url.startswith("../"):
-                        # we strip the "../" from the start of the URL
-                        # We only need to denest one level.
-                        url = url[3:]
-
-                    url = url.rstrip("/")  # Strip `/` from the end of the URL
-
-                    # if url has a fragment
-                    if "#" in url:
-                        url, fragment = url.split("#")
-                        # Strip `/` from the end of the URL
-                        return f"[{text}]({url}.md#{fragment})"
-                    # Otherwise add the .md extension
-                    return f"[{text}]({url}.md)"
-
-                cell.source = re.sub(
-                    pattern,
-                    custom_replacement,
-                    cell.source,
-                )
+                cell.source = _convert_links_in_markdown(cell.source)
 
             # Fix image paths in <img> tags
             cell.source = re.sub(

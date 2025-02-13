@@ -1,6 +1,7 @@
 import nbformat
 
-from _scripts.notebook_convert import md_executable
+from _scripts.notebook_convert import md_executable, _convert_links_in_markdown
+import pytest
 
 
 EXPECTED_OUTPUT = """\
@@ -56,3 +57,20 @@ def test_convert_input_cell() -> None:
     notebook.cells.append(nbformat.v4.new_code_cell(STDIN_INPUT))
     markdown, _ = md_executable.from_notebook_node(notebook)
     assert markdown == STDIN_OUTPUT
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        (
+            "This is a [link](https://example.com).",
+            "This is a [link](https://example.com).",
+        ),
+        ("This is a [link](../foo).", "This is a [link](foo.md)."),
+        ("This is a [link](../foo#hello).", "This is a [link](foo.md#hello)."),
+        ("This is a [link](../foo/#hello).", "This is a [link](foo.md#hello)."),
+    ],
+)
+def test_link_conversion(source: str, expected: str) -> None:
+    """Test logic to convert links in markdown cells."""
+    assert _convert_links_in_markdown(source) == expected
