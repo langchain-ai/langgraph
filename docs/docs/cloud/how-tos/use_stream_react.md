@@ -1,10 +1,10 @@
-# How to stream runs in your React frontend
+# How to integrate LangGraph into your React application
 
 !!! info "Prerequisites"
     - [LangGraph Platform](../../concepts/langgraph_platform.md)
     - [LangGraph Server](../../concepts/langgraph_server.md)
 
-The `useStream()` React hook provides a seamless way to integrate LangGraph runs into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
+The `useStream()` React hook provides a seamless way to integrate LangGraph into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
 
 Key features:
 
@@ -14,6 +14,8 @@ Key features:
 - UI-agnostic design - bring your own components and styling
 
 Let's explore how to use `useStream()` in your React application.
+
+The `useStream()` provides a solid foundation for creating bespoke chat experiences. For pre-built chat components and interfaces, we recommend checking out [CopilotKit](https://docs.copilotkit.ai/coagents/quickstart/langgraph) and [assistant-ui](https://github.com/langchain-ai/assistant-ui).
 
 ## Example
 
