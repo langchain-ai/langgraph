@@ -1,15 +1,19 @@
-# How to stream runs into an React app
+# How to Stream LangGraph Runs in Your React App
 
-!!! info "Prerequisites" - [LangGraph Platform](../concepts/langgraph_platform.md) - [LangGraph Server](../concepts/langgraph_server.md)
+!!! info "Prerequisites"
+    - [LangGraph Platform](../concepts/langgraph_platform.md)
+    - [LangGraph Server](../concepts/langgraph_server.md)
 
-The `useStream()` hook allows you to easily stream values from a LangGraph run. It enables the following features:
+The `useStream()` React hook provides a seamless way to integrate LangGraph runs into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
 
-- Streaming messages: Streams messages from the run as they are generated.
-- State management: Thread state is managed for you, including messages, loading and error states.
-- Branching support: We handle checkpoint branching for you, so you can focus on building your chat interface.
-- Headless: Bring your own chat UI and implement streaming into any design or layout.
+Key features:
 
-This guide will show you how you can use `useStream()` to stream values within your React application.
+- Messages streaming: Handle a stream of message chunks to form a complete message
+- Automatic state management for messages, loading states, and errors
+- Conversation branching: Create alternate conversation paths from any point in the chat history
+- UI-agnostic design - bring your own components and styling
+
+Let's explore how to use `useStream()` in your React application.
 
 ## Example
 
@@ -62,24 +66,24 @@ export default function App() {
 }
 ```
 
-## Customise UI
+## Customizing Your UI
 
-The `useStream()` hook provides built-in state management capabilities to simplify your application development. It handles:
+The `useStream()` hook takes care of all the complex state management behind the scenes, providing you with simple interfaces to build your UI. Here's what you get out of the box:
 
 - Thread state management
-- Loading states during stream operations
-- Error handling and error states
-- Message management
+- Loading and error states
+- Message handling and updates
+- Branching support
 
-This allows you to focus on building your UI while the `useStream()` hook takes care of the underlying state complexity.
+Here are some examples on how to use these features effectively:
 
-### Loading state
+### Loading States
 
-The `isLoading` property is set to `true` whenever the stream is running. This is useful for:
+The `isLoading` property tells you when a stream is active, enabling you to:
 
-1. Showing a loading spinner to indicate that the stream is running.
-2. Disabling the input box to prevent multiple submissions.
-3. Showing a cancellation button to cancel a run.
+- Show a loading indicator
+- Disable input fields during processing
+- Display a cancel button
 
 ```tsx
 export default function App() {
@@ -101,9 +105,9 @@ export default function App() {
 }
 ```
 
-### Thread management
+### Thread Management
 
-The `useStream()` hook manages a thread for you. You can use the `threadId` property to get the thread ID. Pass in the `onThreadId` callback to get notified when the new thread is created.
+Keep track of conversations with built-in thread management. You can access the current thread ID and get notified when new threads are created:
 
 ```tsx
 const [threadId, setThreadId] = useState<string | null>(null);
@@ -117,11 +121,13 @@ const thread = useStream<{ messages: Message[] }>({
 });
 ```
 
-We recommend setting the `threadId` as a query parameter in the URL, so that you can resume the conversation from the same thread even when the page is refreshed.
+We recommend storing the `threadId` in your URL's query parameters to let users resume conversations after page refreshes.
 
-### Messages handling
+### Messages Handling
 
-To enable messages handling, you need to pass the `messagesKey` option to the `useStream()` hook. When enabled, the `useStream()` hook will keep track of the message chunks received from the server and concatenate them together to form a complete message. The completed message chunks can be retrieved via the `messages` property.
+To enable messages handling, you need to pass the `messagesKey` option to the `useStream()` hook. 
+
+When enabled, the `useStream()` hook will keep track of the message chunks received from the server and concatenate them together to form a complete message. The completed message chunks can be retrieved via the `messages` property.
 
 ```tsx
 import type { Message } from "@langchain/langgraph-sdk";
@@ -144,7 +150,7 @@ export default function HomePage() {
 }
 ```
 
-### Branching
+### Branching Support
 
 To enable branching, you need to enable messages handling. Pass the `messagesKey` option to the `useStream()` hook. For each message, you can use `getMessagesMetadata()` to get the first checkpoint from which the message has been first seen. You can then create a new run from the checkpoint preceding the first seen checkpoint to create a new branch in a thread.
 
@@ -274,7 +280,7 @@ export default function App() {
                   onEdit={(message) =>
                     thread.submit(
                       { messages: [message] },
-                      { checkpoint: parentCheckpoint },
+                      { checkpoint: parentCheckpoint }
                     )
                   }
                 />
@@ -329,37 +335,42 @@ export default function App() {
 }
 ```
 
-### TypeScript and Type safety
+### TypeScript
 
-The `useStream()` hook accepts generic parameters that can be used to specify the thread state and update type as well as the custom event type, avoiding the need to manually type-cast.
+The `useStream()` hook is fully typed to help catch errors early and provide better IDE support. You can specify types for:
+
+- State shape
+- Update format
+- Custom events
 
 ```tsx
-// Type definition of the state
-type StateType = { messages: Message[] };
+// Define your types
+type State = {
+  messages: Message[];
+  context?: Record<string, unknown>;
+};
 
-// Type definition of the update
-type UpdateType = { messages: Message[] | Message };
+type Update = {
+  messages: Message[] | Message;
+  context?: Record<string, unknown>;
+};
 
-// Type definition of the custom event
-type CustomEventType = { counter: number };
+type CustomEvent = {
+  type: "progress" | "debug";
+  payload: unknown;
+};
 
-const thread = useStream<StateType, UpdateType, CustomEventType>({
+// Use them with the hook
+const thread = useStream<State, Update, CustomEvent>({
   apiUrl: "http://localhost:2024",
   assistantId: "agent",
   messagesKey: "messages",
 });
 ```
 
-If you use `LangGraph.js`, you can re-use the same `Annotation` as the one used within `StateGraph`.
-
-!!! warning "Importing from @langchain/langgraph/web"
-
-    Make sure to import from `@langchain/langgraph/web` and not from `@langchain/langgraph`, as the default entrypoint will attempt to initialize `AsyncLocalStorage`, which is not available in the browser.
+If you're using LangGraph.js, you can reuse your graph's annotation types:
 
 ```tsx
-"use client";
-
-import { useStream } from "@langchain/langgraph-sdk/react";
 import {
   Annotation,
   MessagesAnnotation,
@@ -369,57 +380,22 @@ import {
 
 const AgentState = Annotation.Root({
   ...MessagesAnnotation.spec,
+  context: Annotation.Optional(Annotation.Any()),
 });
 
-export default function HomePage() {
-  const thread = useStream<
-    StateType<typeof AgentState.spec>,
-    UpdateType<typeof AgentState.spec>
-  >({
-    apiUrl: "http://localhost:2024",
-    assistantId: "agent",
-    messagesKey: "messages",
-  });
-
-  return (
-    <div>
-      <div>
-        {thread.messages.map((message) => (
-          <div key={message.id}>{message.content as string}</div>
-        ))}
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-
-          const form = e.target as HTMLFormElement;
-          const message = new FormData(form).get("message") as string;
-
-          form.reset();
-          thread.submit({ messages: [message] });
-        }}
-      >
-        <input type="text" name="message" />
-
-        {thread.isLoading ? (
-          <button key="stop" type="button" onClick={() => thread.stop()}>
-            Stop
-          </button>
-        ) : (
-          <button key="submit" type="submit">
-            Send
-          </button>
-        )}
-      </form>
-    </div>
-  );
-}
+const thread = useStream<
+  StateType<typeof AgentState.spec>,
+  UpdateType<typeof AgentState.spec>
+>({
+  apiUrl: "http://localhost:2024",
+  assistantId: "agent",
+  messagesKey: "messages",
+});
 ```
 
-## Event callbacks
+## Event Handling
 
-The `useStream()` hook provides few event callbacks that you can use to react to specific events.
+The `useStream()` hook provides several callback options to help you respond to different events:
 
 - `onError`: Called when an error occurs.
 - `onFinish`: Called when the stream is finished.
@@ -427,6 +403,6 @@ The `useStream()` hook provides few event callbacks that you can use to react to
 - `onCustomEvent`: Called when a custom event is received. See [Custom events](../concepts/custom-events.md) to learn how to stream custom events.
 - `onMetadataEvent`: Called when a metadata event is received.
 
-## Learn more
+## Learn More
 
-TODO: add a link to the `useStream()` hook documentation.
+- [JS/TS SDK Reference](../reference/sdk/js_ts_sdk_ref.md)
