@@ -1,4 +1,6 @@
 import argparse
+import ast
+import glob
 import os
 import re
 from pathlib import Path
@@ -7,7 +9,22 @@ from typing import Literal, Optional
 import nbformat
 from nbconvert.exporters import MarkdownExporter
 from nbconvert.preprocessors import Preprocessor
-import glob
+
+
+def _uses_input(source: str) -> bool:
+    """Parse the source code to determine if it uses the input() function."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # If there's a syntax error, assume input() might be present to be safe.
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            # Check if the function called is named 'input'
+            if isinstance(node.func, ast.Name) and node.func.id == "input":
+                return True
+    return False
 
 
 class EscapePreprocessor(Preprocessor):
@@ -87,9 +104,11 @@ class EscapePreprocessor(Preprocessor):
 
         elif cell.cell_type == "code":
             # Determine if the cell has bash or cell magic
-            if cell.source.startswith("%") or cell.source.startswith("!"):
-                # update metadata to denote that it's not a python cell
-                cell.metadata["language_info"] = {"name": "unknown"}
+            source = cell.source
+            is_exec = not (
+                source.startswith("%") or source.startswith("!") or _uses_input(source)
+            )
+            cell.metadata["exec"] = is_exec
 
             # Remove noqa comments
             cell.source = re.sub(r"#\s*noqa.*$", "", cell.source, flags=re.MULTILINE)
