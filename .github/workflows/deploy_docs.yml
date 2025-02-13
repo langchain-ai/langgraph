@@ -72,6 +72,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          yarn
           poetry install --with test --with docs --no-root
           poetry run pip install -U \
             pytest \
