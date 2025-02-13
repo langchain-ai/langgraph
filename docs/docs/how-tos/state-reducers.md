@@ -29,7 +29,7 @@ First, let's install langgraph:
 ### Define state
 [State](../../concepts/low_level/#state.md) in LangGraph can be a `TypedDict`, `Pydantic` model, or dataclass. Below we will use `TypedDict`. See [this guide](../../how-tos/state-model.md) for detail on using Pydantic.
 
-By default, graphs will have the same input and output schema, and the state determines that schema. See [this guide](../../how-tos/input_output_schema/) for how to define distinct input and output schemas.
+By default, graphs will have the same input and output schema, and the state determines that schema. See [this guide](../../how-tos/input_output_schema.md) for how to define distinct input and output schemas.
 
 Let's consider a simple example:
 
@@ -67,7 +67,7 @@ This node simply appends a message to our message list, and populates an extra f
 
     Nodes should return updates to the state directly, instead of mutating the state.
 
-Let's next define a simple graph containing this node. We use [StateGraph](../concepts/low_level.md#stategraph.md) to define a graph that operates on this state. We then use [add_node](../concepts/low_level#messagesstate.md) populate our graph.
+Let's next define a simple graph containing this node. We use [StateGraph](../concepts/low_level.md#stategraph.md) to define a graph that operates on this state. We then use [add_node](../concepts/low_level.md#messagesstate.md) populate our graph.
 
 
 ```python exec="on" source="above" session="1"
