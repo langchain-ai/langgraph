@@ -38,8 +38,6 @@ vercel-build-docs: install-vercel-deps
 	poetry run jupyter kernelspec list
 	npm install -g tslab
 	poetry run tslab install --python=python3
-	export OPENAI_API_KEY="sk-proj-1234567890" # dummy key, won't actually be used
-	export ANTHROPIC_API_KEY="sk-ant-api03-1234567890" # dummy key, won't actually be used
 
 	make build-docs
 
