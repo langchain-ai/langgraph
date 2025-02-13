@@ -16,6 +16,7 @@ from generate_api_reference_links import update_markdown_with_imports
 from notebook_convert import convert_notebook
 from setup_vcr import load_postamble, load_preamble, _hash_string
 
+
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.INFO)

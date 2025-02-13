@@ -64,12 +64,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with test --no-root
+          poetry install --with test --with docs --no-root
           poetry run pip install -U \
             pytest \
             pytest-check-links \
-            langsmith \
-            langchain \
             GitPython \
             "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git" \
             "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
