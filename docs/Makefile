@@ -17,7 +17,7 @@ build-docs: build-typedoc build-prebuilt
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
-	poetry run python _scripts/generate_llms_text.py docs/llms-full.txt
+	poetry run python -m _scripts.generate_llms_text docs/llms-full.txt
 
 install-vercel-deps:
 	dnf install -y python3.11
