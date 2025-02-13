@@ -5,6 +5,8 @@
 ```
 {%- if 'magics_language' in cell.metadata  -%}
     {{ cell.metadata.magics_language}}
+{%- elif cell.metadata.get('language') == "shell" -%}
+    shell
 {%- elif 'name' in nb.metadata.get('language_info', {}) -%}
     {{ nb.metadata.language_info.name }}{% if cell.metadata.exec|default(false) %} exec="on" source="above" session="1" result="ansi"{% endif %}
 {%- endif %}

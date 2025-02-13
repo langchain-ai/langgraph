@@ -47,7 +47,7 @@ First let's install the required packages and set our API keys
 ```
 
 
-```python exec="on" source="above" session="1"
+```python
 import getpass
 import os
 

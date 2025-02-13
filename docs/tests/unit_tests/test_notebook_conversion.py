@@ -21,13 +21,12 @@ def test_convert_normal_code_block() -> None:
 # We treat cell magic as a non-executable code block.
 CELL_MAGIC_INPUT = """\
 %%capture
-print("Hello, world!")\
+%pip install numpy
 """
 
 CELL_MAGIC_OUTPUT = """\
-```python
-%%capture
-print("Hello, world!")
+```shell
+pip install numpy
 ```
 """
 

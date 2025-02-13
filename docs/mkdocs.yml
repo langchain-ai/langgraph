@@ -125,7 +125,7 @@ nav:
               - Graph API Basics: how-tos#graph-api-basics
               - how-tos/state-reducers.md
               - how-tos/sequence.md
-              - how-tos/branching.ipynb
+              - how-tos/branching.md
               - how-tos/recursion-limit.ipynb
               - how-tos/visualization.ipynb
           - Controllability:
