@@ -1,14 +1,11 @@
 import base64
 import os
 import zlib
-from logging import getLogger
 from types import TracebackType
 from typing import Optional, Any, Type
 
 import msgpack
 import vcr
-
-logger = getLogger(__name__)
 
 os.environ.pop("LANGCHAIN_TRACING_V2", None)
 custom_vcr = vcr.VCR()
@@ -54,8 +51,10 @@ class HashedCassette:
         self.hash_value: str = hash_value
         self.vcr: vcr.VCR = custom_vcr
         self.cassette_context: Optional[Any] = None
+        self.exited: bool = False
 
     def __enter__(self) -> Any:
+        self.exited: bool = False
         # Get the serializer instance from the VCR instance.
         serializer = self.vcr.serializers[self.vcr.serializer]
         # If the cassette file exists, check its embedded hash.
@@ -65,12 +64,10 @@ class HashedCassette:
             try:
                 cassette_data = serializer.deserialize(content)
             except Exception as e:
-                print(f"Error deserializing cassette, removing file: {e}")
                 os.remove(self.cassette_path)
             else:
                 existing_hash = cassette_data.get("cassette_hash")
                 if existing_hash != self.hash_value:
-                    print("Hash mismatch. Removing outdated cassette.")
                     os.remove(self.cassette_path)
         # Now enter the VCR cassette context.
         self.cassette_context = custom_vcr.use_cassette(
@@ -87,6 +84,9 @@ class HashedCassette:
         exc_val: Optional[BaseException] = None,
         exc_tb: Optional[TracebackType] = None,
     ) -> Optional[bool]:
+        if self.exited:
+            return
+        self.exited = True
         # Exit the VCR cassette context.
         result = self.cassette_context.__exit__(exc_type, exc_val, exc_tb)
         serializer = self.vcr.serializers[self.vcr.serializer]
@@ -97,7 +97,6 @@ class HashedCassette:
             try:
                 cassette_data = serializer.deserialize(content)
             except Exception as e:
-                logger.error(f"Error deserializing cassette during exit: {e}")
                 return result
             # Update the cassette data with the expected hash.
             if cassette_data.get("cassette_hash") != self.hash_value:

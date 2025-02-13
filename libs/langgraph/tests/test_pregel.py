@@ -1112,6 +1112,8 @@ def test_pending_writes_resume(
         PregelTask(AnyStr(), "two", (PULL, "two"), 'ConnectionError("I\'m not good")'),
     )
     assert state.metadata == {
+        "checkpoint_id": AnyStr(),
+        "checkpoint_ns": "",
         "parents": {},
         "source": "loop",
         "step": 0,
@@ -1210,6 +1212,8 @@ def test_pending_writes_resume(
             "channel_values": {"one": "one", "two": "two", "value": 6},
         },
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "step": 1,
             "source": "loop",
@@ -1260,6 +1264,8 @@ def test_pending_writes_resume(
             },
         },
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "step": 0,
             "source": "loop",
@@ -1301,6 +1307,7 @@ def test_pending_writes_resume(
             "channel_values": {"__start__": {"value": 1}},
         },
         metadata={
+            "checkpoint_ns": "",
             "parents": {},
             "step": -1,
             "source": "input",
@@ -2391,6 +2398,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(
         },
         created_at=AnyStr(),
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 4,
@@ -4826,6 +4835,8 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             }
         },
         metadata={
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
             "source": "loop",
             "writes": {
                 "alice": {
@@ -6482,3 +6493,16 @@ def test_node_destinations() -> None:
             Edge(source="child", target="node_b", data="foo", conditional=True),
             Edge(source="child", target="node_c", data="bar", conditional=True),
         ] == graph.edges
+
+
+def test_pydantic_none_state_update() -> None:
+    from pydantic import BaseModel
+
+    class State(BaseModel):
+        foo: Optional[str]
+
+    def node_a(state: State) -> State:
+        return State(foo=None)
+
+    graph = StateGraph(State).add_node(node_a).add_edge(START, "node_a").compile()
+    assert graph.invoke({"foo": ""}) == {"foo": None}

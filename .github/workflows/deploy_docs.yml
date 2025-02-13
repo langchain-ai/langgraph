@@ -48,7 +48,7 @@ jobs:
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Job will be cancelled if it runs for more than 10 minutes
+    timeout-minutes: 10 # Job will be cancelled if it runs for more than 10 minutes
     env:
       GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
@@ -63,17 +63,29 @@ jobs:
           poetry-version: ${{ env.POETRY_VERSION }}
           cache-key: docs
 
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+          cache: "yarn"
+          cache-dependency-path: docs/yarn.lock
+
       - name: Install dependencies
         run: |
-          poetry install --with test --no-root
+          yarn
+          poetry install --with test --with docs --no-root
           poetry run pip install -U \
             pytest \
             pytest-check-links \
-            langsmith \
-            langchain \
             GitPython \
             "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git" \
-            "git+https://github.com/benjamincburns/markdown-exec.git@10cdd338bfdb1f99705b3a4d06b244f7f185ecae"
+            "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
+
+          poetry run jupyter kernelspec list
+          poetry run python3 -m ipykernel install --user --name=python3
+          npm install -g tslab
+          poetry run tslab install --python=python3
+          poetry run jupyter kernelspec list
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
@@ -85,6 +97,8 @@ jobs:
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
+          OPENAI_API_KEY: sf-proj-1234567890 # fake placeholder, shouldn't actually be used
+          ANTHROPIC_API_KEY: sk-ant-api03-1234567890 # fake placeholder, shouldn't actually be used
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
@@ -135,7 +149,7 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Upload Pages Artifact
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./docs/site/

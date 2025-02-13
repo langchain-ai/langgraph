@@ -1,4 +1,4 @@
-.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc llms-text
+.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc llms-text build-prebuilt
 
 build-typedoc:
 	cd ../libs/sdk-js && yarn install --include-dev && yarn typedoc
@@ -6,19 +6,34 @@ build-typedoc:
 	#  Add links to the monorepo
 	sed -e '1,10s|@langchain/langgraph-sdk|[@langchain/langgraph-sdk](https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-js)|g' docs/cloud/reference/sdk/js_ts_sdk_ref.md > temp_file && mv temp_file docs/cloud/reference/sdk/js_ts_sdk_ref.md
 
-build-docs: build-typedoc
+build-prebuilt:
+	# Use to create an update to date prebuilt page.
+	# Looks up download stats for each of the prebuilt packages and
+	# generates the final prebuilt page.
+	poetry run python -m _scripts.third_party_page.get_download_stats stats.yml
+	poetry run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/prebuilt.md --language python
+
+build-docs: build-typedoc build-prebuilt
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
 	poetry run python _scripts/generate_llms_text.py docs/llms-full.txt
 
 install-vercel-deps:
+	dnf install -y python3.11
 	curl -sSL https://install.python-poetry.org | python3 -
 	poetry self update 1.8.5
+	# don't use vercel's python - it wasn't compiled with sqlite support, and it fails when installing ipython's kernel
+	poetry env use /usr/bin/python3.11
+	poetry install --with docs --with test --no-root
+	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
+	poetry run python3 -m ipykernel install --name=python3
+	npm install -g tslab
+	poetry run tslab install --python=python3
+	poetry run jupyter kernelspec list
+
 
 vercel-build-docs: install-vercel-deps
-	poetry install
-	poetry run pip install "git+https://github.com/benjamincburns/markdown-exec.git@26c64551340da6ffcc8cb4f53db99e8c239d9919"
 	make build-docs
 
 

@@ -463,7 +463,17 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.jsonplus_serde.dumps(metadata)
+        serialized_metadata = self.jsonplus_serde.dumps(
+            {
+                **{
+                    k: v
+                    for k, v in config["configurable"].items()
+                    if not k.startswith("__")
+                },
+                **config.get("metadata", {}),
+                **metadata,
+            }
+        )
         async with (
             self.lock,
             self.conn.execute(
