@@ -11,7 +11,6 @@ We will use [messages](../concepts/low_level.md/#messagesstate) in our examples.
 
 First, let's install langgraph:
 
-
 ```python
 %%capture --no-stderr
 %pip install -U langgraph
