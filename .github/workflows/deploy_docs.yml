@@ -48,6 +48,7 @@ jobs:
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Job will be cancelled if it runs for more than 10 minutes
     env:
       GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
@@ -70,7 +71,7 @@ jobs:
             pytest-check-links \
             GitPython \
             "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git" \
-            "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
+            "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8=
 
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.

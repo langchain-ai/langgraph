@@ -22,10 +22,6 @@ import {
   CronCreateForThreadResponse,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
-import {
-  EventSourceParser,
-  createParser,
-} from "./utils/eventsource-parser/index.js";
 import { IterableReadableStream } from "./utils/stream.js";
 import type {
   RunsCreatePayload,
@@ -39,6 +35,7 @@ import { mergeSignals } from "./utils/signals.js";
 import { getEnvironmentVariable } from "./utils/env.js";
 import { _getFetchImplementation } from "./singletons/fetch.js";
 import type { TypedAsyncGenerator, StreamMode } from "./types.stream.js";
+import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -68,7 +65,7 @@ export function getApiKey(apiKey?: string): string | undefined {
   return undefined;
 }
 
-interface ClientConfig {
+export interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
   callerOptions?: AsyncCallerParams;
@@ -792,45 +789,11 @@ export class RunsClient<
       }),
     );
 
-    let parser: EventSourceParser;
-    let onEndEvent: () => void;
-    const textDecoder = new TextDecoder();
-
     const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
-    ).pipeThrough(
-      new TransformStream({
-        async start(ctrl) {
-          parser = createParser((event) => {
-            if (
-              (payload?.signal && payload.signal.aborted) ||
-              (event.type === "event" && event.data === "[DONE]")
-            ) {
-              ctrl.terminate();
-              return;
-            }
-
-            if ("data" in event) {
-              ctrl.enqueue({
-                event: event.event ?? "message",
-                data: JSON.parse(event.data),
-              });
-            }
-          });
-          onEndEvent = () => {
-            ctrl.enqueue({ event: "end", data: undefined });
-          };
-        },
-        async transform(chunk) {
-          const payload = textDecoder.decode(chunk);
-          parser.feed(payload);
-
-          // eventsource-parser will ignore events
-          // that are not terminated by a newline
-          if (payload.trim() === "event: end") onEndEvent();
-        },
-      }),
-    );
+    )
+      .pipeThrough(new BytesLineDecoder())
+      .pipeThrough(new SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
@@ -1084,45 +1047,11 @@ export class RunsClient<
       }),
     );
 
-    let parser: EventSourceParser;
-    let onEndEvent: () => void;
-    const textDecoder = new TextDecoder();
-
     const stream: ReadableStream<{ event: string; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
-    ).pipeThrough(
-      new TransformStream({
-        async start(ctrl) {
-          parser = createParser((event) => {
-            if (
-              (opts?.signal && opts.signal.aborted) ||
-              (event.type === "event" && event.data === "[DONE]")
-            ) {
-              ctrl.terminate();
-              return;
-            }
-
-            if ("data" in event) {
-              ctrl.enqueue({
-                event: event.event ?? "message",
-                data: JSON.parse(event.data),
-              });
-            }
-          });
-          onEndEvent = () => {
-            ctrl.enqueue({ event: "end", data: undefined });
-          };
-        },
-        async transform(chunk) {
-          const payload = textDecoder.decode(chunk);
-          parser.feed(payload);
-
-          // eventsource-parser will ignore events
-          // that are not terminated by a newline
-          if (payload.trim() === "event: end") onEndEvent();
-        },
-      }),
-    );
+    )
+      .pipeThrough(new BytesLineDecoder())
+      .pipeThrough(new SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
