@@ -1,21 +1,19 @@
 import logging
 import os
+import posixpath
 import re
 import traceback
 from typing import Any, Callable, Dict
 
 from markdown import Markdown
-from pymdownx.superfences import SuperFencesException
+from markdown_exec.hooks import SessionHistoryEntry
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
-import posixpath
+from pymdownx.superfences import SuperFencesException
 
-from markdown_exec.hooks import SessionHistoryEntry
-
-from generate_api_reference_links import update_markdown_with_imports
-from notebook_convert import convert_notebook
-from setup_vcr import load_postamble, load_preamble, _hash_string
-
+from _scripts.generate_api_reference_links import update_markdown_with_imports
+from _scripts.notebook_convert import convert_notebook
+from _scripts.setup_vcr import load_postamble, load_preamble, _hash_string
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -101,7 +99,7 @@ def _highlight_code_blocks(markdown: str) -> str:
     # existing hl_lines for Python and JavaScript
     # Pattern to find code blocks with highlight comments, handling optional indentation
     code_block_pattern = re.compile(
-        r"(?P<indent>[ \t]*)```(?P<language>py|python|js|javascript)(?!\s+hl_lines=)\n"
+        r"(?P<indent>[ \t]*)```(?P<language>\w+)[ ]*(?P<attributes>[^\n]*)\n"
         r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
         r"(?P=indent)```"  # Match closing backticks with the same indentation
     )
@@ -110,6 +108,13 @@ def _highlight_code_blocks(markdown: str) -> str:
         indent = match.group("indent")
         language = match.group("language")
         code_block = match.group("code")
+        attributes = match.group("attributes").rstrip()
+
+        # Account for a case where hl_lines is manually specified
+        if "hl_lines" in attributes:
+            # Return original code block
+            return match.group(0)
+
         lines = code_block.split("\n")
         highlighted_lines = []
 
@@ -135,20 +140,23 @@ def _highlight_code_blocks(markdown: str) -> str:
         # Reconstruct the new code block
         new_code_block = "\n".join(lines_to_keep)
 
+        # Construct the full code block that also includes
+        # the fenced code block syntax.
+        opening_fence = f"```{language}"
+
+        if attributes:
+            opening_fence += f" {attributes}"
+
         if highlighted_lines:
-            return (
-                f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"\n'
-                # The indent and terminating \n is already included in the code block
-                f"{new_code_block}"
-                f"{indent}```"
-            )
-        else:
-            return (
-                f"{indent}```{language}\n"
-                # The indent and terminating \n is already included in the code block
-                f"{new_code_block}"
-                f"{indent}```"
-            )
+            opening_fence += f" hl_lines=\"{' '.join(highlighted_lines)}\""
+
+        return (
+            # The indent and opening fence
+            f"{indent}{opening_fence}\n"
+            # The indent and terminating \n is already included in the code block
+            f"{new_code_block}"
+            f"{indent}```"
+        )
 
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
@@ -212,10 +220,21 @@ def handle_vcr_setup(
             wrapped_lines.append(load_postamble(language))
 
         transformed_source = "\n".join(wrapped_lines)
+
+        # Propagate extras
+        keep_extras = {
+            key: value
+            for key, value in kwargs["extra"].items()
+            if key
+            in {
+                "hl_lines",
+            }
+        }
+
         return dict(
             transform_source=lambda code: (transformed_source, code),
             id=id,
-            extra={},
+            extra=keep_extras,
         )
     except Exception as e:
         raise SuperFencesException(traceback.format_exc()) from e

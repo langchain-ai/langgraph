@@ -1,4 +1,4 @@
-.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc llms-text build-prebuilt
+.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc llms-text build-prebuilt tests
 
 build-typedoc:
 	cd ../libs/sdk-js && yarn install --include-dev && yarn typedoc
@@ -17,7 +17,7 @@ build-docs: build-typedoc build-prebuilt
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
-	poetry run python _scripts/generate_llms_text.py docs/llms-full.txt
+	poetry run python -m _scripts.generate_llms_text docs/llms-full.txt
 
 install-vercel-deps:
 	dnf install -y python3.11
@@ -31,6 +31,11 @@ install-vercel-deps:
 	npm install -g tslab
 	poetry run tslab install --python=python3
 	poetry run jupyter kernelspec list
+
+
+tests:
+	# RUn unit tests
+	poetry run pytest tests/unit_tests
 
 
 vercel-build-docs: install-vercel-deps
