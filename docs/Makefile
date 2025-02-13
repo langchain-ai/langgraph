@@ -14,6 +14,11 @@ build-prebuilt:
 	poetry run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/prebuilt.md --language python
 
 grab-langgraphjs:
+	if [ -d "langgraphjs" ]; then \
+		if [ ! -d "langgraphjs/.git" ]; then \
+			rm -rf langgraphjs; \
+		fi \
+	fi
 	if [ ! -d "langgraphjs" ]; then \
 		git clone https://github.com/langchain-ai/langgraphjs.git; \
 	else \
