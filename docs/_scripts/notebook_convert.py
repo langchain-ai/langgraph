@@ -27,16 +27,52 @@ def _uses_input(source: str) -> bool:
     return False
 
 
+def _rewrite_cell_magic(code: str) -> str:
+    """Process a code block that uses cell magic.:w
+
+    - Lines starting with "%%capture" are ignored.
+    - Lines starting with "%pip" are rewritten by removing the leading "%" character.
+    - Any other non-empty line causes a NotImplementedError.
+
+    Args:
+        code (str): The original code block.
+
+    Returns:
+        str: The transformed code block.
+
+    Raises:
+        NotImplementedError: If a line doesn't start with either "%%capture" or "%pip".
+    """
+    rewritten_lines = []
+
+    for line in code.splitlines():
+        stripped = line.strip()
+        # Skip empty lines
+        if not stripped:
+            continue
+        # Ignore %%capture lines
+        if stripped.startswith("%%capture"):
+            continue
+        # Rewrite %pip lines by dropping the '%'
+        elif stripped.startswith("%pip"):
+            # Drop the leading '%' character
+            rewritten_lines.append(stripped[1:])
+        # Anything else is not supported
+        else:
+            raise NotImplementedError(f"Unhandled line: {line}")
+
+    return "\n".join(rewritten_lines)
+
+
 class EscapePreprocessor(Preprocessor):
-    def __init__(self, rewrite_links: bool = True, **kwargs) -> None:
+    def __init__(self, markdown_exec_migration: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.rewrite_links = rewrite_links
+        self.markdown_exec_migration = markdown_exec_migration
 
     def preprocess_cell(self, cell, resources, cell_index):
         if cell.cell_type == "markdown":
-            if self.rewrite_links:
-                # We'll need to adjust the logic for this to keep markdown format
-                # but link to markdown files rather than ipynb files.
+            if not self.markdown_exec_migration:
+                # Old logic is to convert ipynb links to HTML links
                 cell.source = re.sub(
                     r"(?<!!)\[([^\]]*)\]\((?![^\)]*//)([^)]*)(?:\.ipynb)?\)",
                     r'<a href="\2">\1</a>',
@@ -109,6 +145,12 @@ class EscapePreprocessor(Preprocessor):
                 source.startswith("%") or source.startswith("!") or _uses_input(source)
             )
             cell.metadata["exec"] = is_exec
+
+            if self.markdown_exec_migration:
+                # For markdown exec migration we'll re-write cell magic as bash commands
+                if source.startswith("%%"):
+                    cell.source = _rewrite_cell_magic(source)
+                    cell.metadata["language"] = "shell"
 
             # Remove noqa comments
             cell.source = re.sub(r"#\s*noqa.*$", "", cell.source, flags=re.MULTILINE)
@@ -208,7 +250,7 @@ exporter = MarkdownExporter(
 md_executable = MarkdownExporter(
     preprocessors=[
         ExtractAttachmentsPreprocessor,
-        EscapePreprocessor(rewrite_links=False),
+        EscapePreprocessor(markdown_exec_migration=True),
     ],
     template_name="md_executable",
     extra_template_basedirs=[
