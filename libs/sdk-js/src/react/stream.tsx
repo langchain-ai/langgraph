@@ -179,26 +179,79 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
   };
 }
 
+const useControllableThreadId = (options?: {
+  threadId?: string | null;
+  onThreadId?: (threadId: string) => void;
+}): [string | null, (threadId: string) => void] => {
+  const [localThreadId, _setLocalThreadId] = useState<string | null>(
+    options?.threadId ?? null,
+  );
+
+  const onThreadIdRef = useRef(options?.onThreadId);
+  onThreadIdRef.current = options?.onThreadId;
+
+  const onThreadId = useCallback((threadId: string) => {
+    _setLocalThreadId(threadId);
+    onThreadIdRef.current?.(threadId);
+  }, []);
+
+  if (typeof options?.threadId === "undefined") {
+    return [localThreadId, onThreadId];
+  }
+
+  return [options.threadId, onThreadId];
+};
+
 export function useStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   UpdateType extends Record<string, unknown> = Partial<StateType>,
   CustomType = unknown,
 >(options: {
+  /**
+   * The ID of the assistant to use.
+   */
   assistantId: string;
 
+  /**
+   * The URL of the API to use.
+   */
   apiUrl: ClientConfig["apiUrl"];
+
+  /**
+   * The API key to use.
+   */
   apiKey?: ClientConfig["apiKey"];
 
-  withMessages?: string;
+  /**
+   * Specify the key within the state that contains messages.
+   */
+  messagesKey?: string;
 
+  /**
+   * Callback that is called when an error occurs.
+   */
   onError?: (error: unknown) => void;
+
+  /**
+   * Callback that is called when the stream is finished.
+   */
   onFinish?: (state: ThreadState<StateType>) => void;
 
+  /**
+   * Callback that is called when an update event is received.
+   */
   onUpdateEvent?: (data: UpdatesStreamEvent<UpdateType>["data"]) => void;
+
+  /**
+   * Callback that is called when a custom event is received.
+   */
   onCustomEvent?: (data: CustomStreamEvent<CustomType>["data"]) => void;
+
+  /**
+   * Callback that is called when a metadata event is received.
+   */
   onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
 
-  // TODO: can we make threadId uncontrollable / controllable?
   threadId?: string | null;
   onThreadId?: (threadId: string) => void;
 }) {
@@ -214,11 +267,12 @@ export function useStream<
     | ErrorStreamEvent
     | FeedbackStreamEvent;
 
-  const { assistantId, threadId, withMessages, onError, onFinish } = options;
+  const { assistantId, messagesKey, onError, onFinish } = options;
   const client = useMemo(
     () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
     [options.apiKey, options.apiUrl],
   );
+  const [threadId, onThreadId] = useControllableThreadId(options);
 
   const [branchPath, setBranchPath] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -269,12 +323,12 @@ export function useStream<
   );
 
   const getMessages = useMemo(() => {
-    if (withMessages == null) return undefined;
+    if (messagesKey == null) return undefined;
     return (value: StateType) =>
-      Array.isArray(value[withMessages])
-        ? (value[withMessages] as Message[])
+      Array.isArray(value[messagesKey])
+        ? (value[messagesKey] as Message[])
         : [];
-  }, [withMessages]);
+  }, [messagesKey]);
 
   const [sequence, pathMap] = (() => {
     const childrenMap: Record<string, ThreadState<StateType>[]> = {};
@@ -472,7 +526,7 @@ export function useStream<
       let usableThreadId = threadId;
       if (!usableThreadId) {
         const thread = await client.threads.create();
-        options?.onThreadId?.(thread.thread_id);
+        onThreadId(thread.thread_id);
         usableThreadId = thread.thread_id;
       }
 
@@ -537,22 +591,11 @@ export function useStream<
           break;
         }
 
-        if (event === "updates") {
-          options.onUpdateEvent?.(data);
-        }
+        if (event === "updates") options.onUpdateEvent?.(data);
+        if (event === "custom") options.onCustomEvent?.(data);
+        if (event === "metadata") options.onMetadataEvent?.(data);
 
-        if (event === "custom") {
-          options.onCustomEvent?.(data);
-        }
-
-        if (event === "metadata") {
-          options.onMetadataEvent?.(data);
-        }
-
-        if (event === "values") {
-          setStreamValues(data);
-        }
-
+        if (event === "values") setStreamValues(data);
         if (event === "messages") {
           if (!getMessages) continue;
 
@@ -577,15 +620,13 @@ export function useStream<
             if (!chunk || index == null) return values;
             messages[index] = toMessageDict(chunk);
 
-            return { ...values, [withMessages!]: messages };
+            return { ...values, [messagesKey!]: messages };
           });
         }
       }
 
       // TODO: stream created checkpoints to avoid an unnecessary network request
       const result = await history.mutate(usableThreadId);
-
-      // TODO: write tests verifying that stream values are properly handled lifecycle-wise
       setStreamValues(null);
 
       if (streamError != null) throw streamError;
