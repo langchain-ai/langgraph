@@ -64,6 +64,94 @@ def _rewrite_cell_magic(code: str) -> str:
     return "\n".join(rewritten_lines)
 
 
+class PrintCallVisitor(ast.NodeVisitor):
+    """
+    This visitor sets self.has_print to True if it encounters a call
+    to a function whose name starts with "print" that is not inside any
+    function (i.e. is at module level or inside control structures).
+
+    This should catch calls to print(), print_stream(), etc.
+
+    May have some false positives, but it's not meant to be perfect.
+    """
+
+    def __init__(self):
+        self.has_print = False
+        self._in_function = 0  # counter to track whether we're inside a def/lambda
+
+    def visit_FunctionDef(self, node):
+        self._in_function += 1
+        self.generic_visit(node)
+        self._in_function -= 1
+
+    def visit_AsyncFunctionDef(self, node):
+        self._in_function += 1
+        self.generic_visit(node)
+        self._in_function -= 1
+
+    def visit_Lambda(self, node):
+        self._in_function += 1
+        self.generic_visit(node)
+        self._in_function -= 1
+
+    def visit_Call(self, node):
+        # Only consider calls when not inside a function definition.
+        if self._in_function == 0:
+            if isinstance(node.func, ast.Name) and node.func.id.startswith("print"):
+                self.has_print = True
+        self.generic_visit(node)
+
+
+def _has_output(source: str) -> bool:
+    """Determine if the code block is expected to produce output.
+
+    Args:
+        source (str): The source code of the code block.
+
+    Returns:
+        True if the code block is expected to produce output, False otherwise.
+
+        Must meet the following conditions:
+
+        1. There is a call to a printing function (name starts with "print")
+           that is not inside a function definition.
+        2. The last top-level statement is an expression that is valid if:
+         - It is any expression (including calls) AND
+         - It is NOT a call to `display(...)`.
+
+        `display` isn't handled currently by markdown-exec
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    # Condition (1): Check for a global print-like call.
+    visitor = PrintCallVisitor()
+    visitor.visit(tree)
+    condition_a = visitor.has_print
+
+    # Condition (2): Check the last top-level statement.
+    condition_b = False
+    if tree.body:
+        last_stmt = tree.body[-1]
+        if isinstance(last_stmt, ast.Expr):
+            # If the expression is a call, ensure it's not a call to "display"
+            if isinstance(last_stmt.value, ast.Call):
+                if (
+                    isinstance(last_stmt.value.func, ast.Name)
+                    and last_stmt.value.func.id == "display"
+                ):
+                    condition_b = False  # exclude display-wrapped expressions
+                else:
+                    condition_b = True
+            else:
+                # Any other expression qualifies.
+                condition_b = True
+
+    return condition_a or condition_b
+
+
 class EscapePreprocessor(Preprocessor):
     def __init__(self, markdown_exec_migration: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
