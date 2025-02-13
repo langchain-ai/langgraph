@@ -49,7 +49,7 @@ pip install -U langgraph
 In this example, we fan out from `Node A` to `B and C` and then fan in to `D`. With our state, [we specify the reducer add operation](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers). This will combine or accumulate values for the specific key in the State, rather than simply overwriting the existing value. For lists, this means concatenating the new list with the existing list. See [this guide](../how-tos/state-reducers.md) for more detail on updating state with reducers.
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 import operator
 from typing import Annotated, Any
 
@@ -140,7 +140,7 @@ Together, these let you perform parallel execution and fully control exception h
 The above example showed how to fan-out and fan-in when each path was only one step. But what if one path had more than one step? Let's add a node `b_2` in the "b" branch:
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 def b_2(state: State):
     print(f'Adding "B_2" to {state["aggregate"]}')
     return {"aggregate": ["B_2"]}
@@ -163,7 +163,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))
@@ -192,7 +192,7 @@ graph.invoke({"aggregate": []})
 If your fan-out is not deterministic, you can use [add_conditional_edges](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph.add_conditional_edges) directly.
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 import operator
 from typing import Annotated, Sequence
 
@@ -262,7 +262,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))
@@ -276,19 +276,9 @@ graph.invoke({"aggregate": [], "which": "bc"})
 ```
 
 
-
-
-
-
-
 ```python exec="on" source="above" session="1" result="ansi"
 graph.invoke({"aggregate": [], "which": "cd"})
 ```
-
-
-
-
-
 
 ## Next steps
 
