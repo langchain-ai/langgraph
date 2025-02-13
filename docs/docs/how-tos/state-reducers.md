@@ -29,7 +29,7 @@ First, let's install langgraph:
 ### Define state
 [State](../../concepts/low_level/#state.md) in LangGraph can be a `TypedDict`, `Pydantic` model, or dataclass. Below we will use `TypedDict`. See [this guide](../../how-tos/state-model.md) for detail on using Pydantic.
 
-By default, graphs will have the same input and output schema, and the state determines that schema. See [this guide](../../how-tos/input_output_schema/.md) for how to define distinct input and output schemas.
+By default, graphs will have the same input and output schema, and the state determines that schema. See [this guide](../../how-tos/input_output_schema/) for how to define distinct input and output schemas.
 
 Let's consider a simple example:
 
@@ -48,7 +48,7 @@ This state tracks a list of [message](https://python.langchain.com/docs/concepts
 
 ### Define graph structure
 
-Let's build an example graph with a single node. Our [node](../../concepts/low_level/#nodes.md) is just a Python function that reads our graph's state and makes updates to it. The first argument to this function will always be the state:
+Let's build an example graph with a single node. Our [node](../concepts/low_level.md#nodes.md) is just a Python function that reads our graph's state and makes updates to it. The first argument to this function will always be the state:
 
 ```python exec="on" source="above" session="1"
 from langchain_core.messages import AIMessage
@@ -67,7 +67,7 @@ This node simply appends a message to our message list, and populates an extra f
 
     Nodes should return updates to the state directly, instead of mutating the state.
 
-Let's next define a simple graph containing this node. We use [StateGraph](../../concepts/low_level/#stategraph.md) to define a graph that operates on this state. We then use [add_node](../../concepts/low_level/#messagesstate.md) populate our graph.
+Let's next define a simple graph containing this node. We use [StateGraph](../concepts/low_level.md#stategraph.md) to define a graph that operates on this state. We then use [add_node](../concepts/low_level#messagesstate.md) populate our graph.
 
 
 ```python exec="on" source="above" session="1"
@@ -119,7 +119,7 @@ for message in result["messages"]:
 
 ## Process state updates with reducers
 
-Each key in the state can have its own independent [reducer](../../concepts/low_level/#reducers.md) function, which controls how updates from nodes are applied. If no reducer function is explicitly specified then it is assumed that all updates to the key should override it.
+Each key in the state can have its own independent [reducer](../concepts/low_level.md#reducers.md) function, which controls how updates from nodes are applied. If no reducer function is explicitly specified then it is assumed that all updates to the key should override it.
 
 For `TypedDict` state schemas, we can define reducers by annotating the corresponding field of the state with a reducer function.
 
@@ -169,7 +169,7 @@ for message in result["messages"]:
 In practice, there are additional considerations for updating lists of messages:
 
 - We may wish to update an existing message in the state.
-- We may want to accept short-hands for [message formats](../../concepts/low_level/#using-messages-in-your-graph.md), such as [OpenAI format](https://python.langchain.com/docs/concepts/messages/#openai-format).
+- We may want to accept short-hands for [message formats](../concepts/low_level.md#using-messages-in-your-graph.md), such as [OpenAI format](https://python.langchain.com/docs/concepts/messages/#openai-format).
 
 LangGraph includes a built-in reducer `add_messages` that handles these considerations:
 
@@ -216,5 +216,5 @@ class State(MessagesState):
 
 ## Next steps
 
-- Continue with the [Graph API Basics](../../how-tos/#graph-api-basics.md) guides.
-- See more detail on [state management](../../how-tos/#state-management.md).
+- Continue with the [Graph API Basics](index.md#graph-api-basics.md) guides.
+- See more detail on [state management](index.md#state-management.md).
