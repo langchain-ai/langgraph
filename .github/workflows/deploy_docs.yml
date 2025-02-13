@@ -83,6 +83,8 @@ jobs:
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
+          OPENAI_API_KEY: sf-proj-1234567890 # fake placeholder, shouldn't actually be used
+          ANTHROPIC_API_KEY: sk-ant-api03-1234567890 # fake placeholder, shouldn't actually be used
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
