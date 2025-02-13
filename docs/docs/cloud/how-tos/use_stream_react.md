@@ -1,8 +1,8 @@
 # How to stream runs in your React frontend
 
 !!! info "Prerequisites"
-    - [LangGraph Platform](../concepts/langgraph_platform.md)
-    - [LangGraph Server](../concepts/langgraph_server.md)
+    - [LangGraph Platform](../../concepts/langgraph_platform.md)
+    - [LangGraph Server](../../concepts/langgraph_server.md)
 
 The `useStream()` React hook provides a seamless way to integrate LangGraph runs into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
 
@@ -400,7 +400,7 @@ The `useStream()` hook provides several callback options to help you respond to 
 - `onError`: Called when an error occurs.
 - `onFinish`: Called when the stream is finished.
 - `onUpdateEvent`: Called when an update event is received.
-- `onCustomEvent`: Called when a custom event is received. See [Custom events](../concepts/custom-events.md) to learn how to stream custom events.
+- `onCustomEvent`: Called when a custom event is received. See [Custom events](../../concepts/streaming.md#custom) to learn how to stream custom events.
 - `onMetadataEvent`: Called when a metadata event is received.
 
 ## Learn More
