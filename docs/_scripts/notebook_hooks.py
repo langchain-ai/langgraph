@@ -183,7 +183,7 @@ def handle_vcr_setup(
             id = _hash_string(code)
 
         if session is not None and session != "":
-            logger.info(f"new session {session} on page {document_filename}")
+            logger.info(f"new {language} session {session} on page {document_filename}")
 
         cassette_prefix = document_filename.replace(".md", "").replace(os.path.sep, "_")
 
@@ -239,8 +239,7 @@ def handle_vcr_teardown(
     if document_filename is None:
         logger.warning(f"no document filename found while tearing down {session}!")
     else:
-        logger.info(f"tearing down {session} on {document_filename}")
-        logger.info(traceback.format_stack())
+        logger.info(f"tearing down {language} {session} on {document_filename}")
 
     kwargs = dict(
         code=code,
@@ -274,7 +273,7 @@ def _on_page_markdown_with_config(
 
     # Append API reference links to code blocks
     if add_api_references:
-        markdown = update_markdown_with_imports(markdown)
+        markdown = update_markdown_with_imports(markdown, page.file.src_path)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
 
