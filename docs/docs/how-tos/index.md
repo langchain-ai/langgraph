@@ -162,7 +162,7 @@ One of the big benefits of LangGraph is that you can easily create your own agen
 
 These guides show how to use the prebuilt ReAct agent:
 
-- [How to use the pre-built ReAct agent](create-react-agent.ipynb)
+- [How to use the pre-built ReAct agent](create-react-agent.md)
 - [How to add thread-level memory to a ReAct Agent](create-react-agent-memory.ipynb)
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
