@@ -128,10 +128,25 @@ interface ValidSequence<StateType = any> {
 }
 
 export type MessageMetadata<StateType extends Record<string, unknown>> = {
+  /**
+   * The ID of the message used.
+   */
   messageId: string;
+
+  /**
+   * The first thread state the message was seen in.
+   */
   firstSeenState: ThreadState<StateType> | undefined;
 
+  /**
+   * The branch of the message.
+   */
   branch: string | undefined;
+
+  /**
+   * The list of branches this message is part of.
+   * This is useful for displaying branching controls.
+   */
   branchOptions: string[] | undefined;
 };
 
@@ -319,11 +334,11 @@ const useControllableThreadId = (options?: {
   return [options.threadId, onThreadId];
 };
 
-export function useStream<
+interface UseStreamOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   UpdateType extends Record<string, unknown> = Partial<StateType>,
   CustomType = unknown,
->(options: {
+> {
   /**
    * The ID of the assistant to use.
    */
@@ -372,9 +387,113 @@ export function useStream<
    */
   onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
 
+  /**
+   * The ID of the thread to fetch history and current values from.
+   */
   threadId?: string | null;
+
+  /**
+   * Callback that is called when the thread ID is updated (ie when a new thread is created).
+   */
   onThreadId?: (threadId: string) => void;
-}) {
+}
+
+interface UseStream<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  UpdateType extends Record<string, unknown> = Partial<StateType>,
+> {
+  /**
+   * The current values of the thread.
+   */
+  values: StateType;
+
+  /**
+   * Last seen error from the thread or during streaming.
+   */
+  error: unknown;
+
+  /**
+   * Whether the stream is currently running.
+   */
+  isLoading: boolean;
+
+  /**
+   * Stops the stream.
+   */
+  stop: () => void;
+
+  /**
+   * Create and stream a run to the thread.
+   */
+  submit: (values: UpdateType, options?: SubmitOptions<StateType>) => void;
+
+  /**
+   * The current branch of the thread.
+   */
+  branch: string;
+
+  /**
+   * Set the branch of the thread.
+   */
+  setBranch: (branch: string) => void;
+
+  /**
+   * Flattened history of thread states of a thread.
+   */
+  history: ThreadState<StateType>[];
+
+  /**
+   * Tree of all branches for the thread.
+   * @experimental
+   */
+  experimental_branchTree: Sequence<StateType>;
+
+  /**
+   * Messages inferred from the thread.
+   * Will automatically update with incoming message chunks.
+   */
+  messages: Message[];
+
+  /**
+   * Get the metadata for a message, such as first thread state the message
+   * was seen in and branch information.
+   
+   * @param message - The message to get the metadata for.
+   * @param index - The index of the message in the thread.
+   * @returns The metadata for the message.
+   */
+  getMessagesMetadata: (
+    message: Message,
+    index?: number,
+  ) => MessageMetadata<StateType> | undefined;
+}
+
+interface SubmitOptions<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+> {
+  config?: Config;
+  checkpoint?: Omit<Checkpoint, "thread_id"> | null;
+  command?: Command;
+  interruptBefore?: "*" | string[];
+  interruptAfter?: "*" | string[];
+  metadata?: Metadata;
+  multitaskStrategy?: MultitaskStrategy;
+  onCompletion?: OnCompletionBehavior;
+  onDisconnect?: DisconnectMode;
+  feedbackKeys?: string[];
+  streamMode?: Array<StreamMode>;
+  optimisticValues?:
+    | Partial<StateType>
+    | ((prev: StateType) => Partial<StateType>);
+}
+
+export function useStream<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  UpdateType extends Record<string, unknown> = Partial<StateType>,
+  CustomType = unknown,
+>(
+  options: UseStreamOptions<StateType, UpdateType, CustomType>,
+): UseStream<StateType, UpdateType> {
   type EventStreamEvent =
     | ValuesStreamEvent<StateType>
     | UpdatesStreamEvent<UpdateType>
@@ -521,22 +640,7 @@ export function useStream<
 
   const submit = async (
     values: UpdateType | undefined,
-    submitOptions?: {
-      config?: Config;
-      checkpoint?: Omit<Checkpoint, "thread_id"> | null;
-      command?: Command;
-      interruptBefore?: "*" | string[];
-      interruptAfter?: "*" | string[];
-      metadata?: Metadata;
-      multitaskStrategy?: MultitaskStrategy;
-      onCompletion?: OnCompletionBehavior;
-      onDisconnect?: DisconnectMode;
-      feedbackKeys?: string[];
-      streamMode?: Array<StreamMode>;
-      optimisticValues?:
-        | Partial<StateType>
-        | ((prev: StateType) => Partial<StateType>);
-    },
+    submitOptions?: SubmitOptions<StateType>,
   ) => {
     try {
       setIsLoading(true);
