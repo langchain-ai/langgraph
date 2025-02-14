@@ -347,7 +347,7 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
     When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph rendering and tells LangGraph that `my_node` can navigate to `my_other_node`.
 
-Check out this [how-to guide](../how-tos/command.ipynb) for an end-to-end example of how to use `Command`.
+Check out this [how-to guide](../how-tos/command.md) for an end-to-end example of how to use `Command`.
 
 ### When should I use Command instead of conditional edges?
 
@@ -459,7 +459,7 @@ def node_a(state, config):
     ...
 ```
 
-See [this guide](../how-tos/configuration.ipynb) for a full breakdown on configuration.
+See [this guide](../how-tos/configuration.md) for a full breakdown on configuration.
 
 ### Recursion Limit
 
@@ -602,7 +602,7 @@ graph = builder.compile()
 
 ## Visualization
 
-It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.ipynb) for more info.
+It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.md) for more info.
 
 ## Streaming
 

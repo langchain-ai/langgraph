@@ -14,19 +14,19 @@ Here you’ll find answers to “How do I...?” types of questions. These guide
 - [How to update graph state from nodes](state-reducers.md)
 - [How to create a sequence of steps](sequence.md)
 - [How to create branches for parallel execution](branching.md)
-- [How to create and control loops with recursion limits](recursion-limit.ipynb)
-- [How to visualize your graph](visualization.ipynb)
+- [How to create and control loops with recursion limits](recursion-limit.md)
+- [How to visualize your graph](visualization.md)
 
 ### Fine-grained Control
 
 These guides demonstrate LangGraph features that grant fine-grained control over the
 execution of your graph.
 
-- [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
-- [How to update state and jump to nodes in graphs and subgraphs](command.ipynb)
-- [How to add runtime configuration to your graph](configuration.ipynb)
-- [How to add node retries](node-retries.ipynb)
-- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.ipynb)
+- [How to create map-reduce branches for parallel execution](map-reduce.md)
+- [How to update state and jump to nodes in graphs and subgraphs](command.md)
+- [How to add runtime configuration to your graph](configuration.md)
+- [How to add node retries](node-retries.md)
+- [How to return state before hitting recursion limit](return-when-recursion-limit-hits.md)
 
 ### Persistence
 

@@ -283,4 +283,4 @@ graph.invoke({"aggregate": [], "which": "cd"})
 ## Next steps
 
 - Continue with the [Graph API Basics](../how-tos/index.md#graph-api-basics) guides.
-- Learn how to create [map-reduce](../how-tos/map-reduce.ipynb) branches in which different states can be distributed to multiple instances of a node.
+- Learn how to create [map-reduce](../how-tos/map-reduce.md) branches in which different states can be distributed to multiple instances of a node.
