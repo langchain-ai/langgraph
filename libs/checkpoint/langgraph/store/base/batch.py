@@ -67,7 +67,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
     ) -> Optional[Item]:
         fut = self._loop.create_future()
-        self._aqueue.put((fut, GetOp(namespace, key)))
+        self._aqueue.put_nowait((fut, GetOp(namespace, key)))
         return await fut
 
     async def asearch(
@@ -81,7 +81,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
     ) -> list[SearchItem]:
         fut = self._loop.create_future()
-        self._aqueue.put(
+        self._aqueue.put_nowait(
             (fut, SearchOp(namespace_prefix, filter, limit, offset, query))
         )
         return await fut
@@ -95,7 +95,7 @@ class AsyncBatchedBaseStore(BaseStore):
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue.put((fut, PutOp(namespace, key, value, index)))
+        self._aqueue.put_nowait((fut, PutOp(namespace, key, value, index)))
         return await fut
 
     async def adelete(
@@ -104,7 +104,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
     ) -> None:
         fut = self._loop.create_future()
-        self._aqueue.put((fut, PutOp(namespace, key, None)))
+        self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
         return await fut
 
     async def alist_namespaces(
@@ -129,7 +129,7 @@ class AsyncBatchedBaseStore(BaseStore):
             limit=limit,
             offset=offset,
         )
-        self._aqueue.put((fut, op))
+        self._aqueue.put_nowait((fut, op))
         return await fut
 
     @_check_loop
