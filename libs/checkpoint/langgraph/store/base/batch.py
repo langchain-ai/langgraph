@@ -66,6 +66,7 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> Optional[Item]:
+        assert not self._task.done()
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, GetOp(namespace, key)))
         return await fut
@@ -80,6 +81,7 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 10,
         offset: int = 0,
     ) -> list[SearchItem]:
+        assert not self._task.done()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
             (fut, SearchOp(namespace_prefix, filter, limit, offset, query))
@@ -93,6 +95,7 @@ class AsyncBatchedBaseStore(BaseStore):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
     ) -> None:
+        assert not self._task.done()
         _validate_namespace(namespace)
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, PutOp(namespace, key, value, index)))
@@ -103,6 +106,7 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
+        assert not self._task.done()
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
         return await fut
@@ -116,6 +120,7 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
+        assert not self._task.done()
         fut = self._loop.create_future()
         match_conditions = []
         if prefix:
@@ -259,31 +264,32 @@ async def _run(
     while item := await aqueue.get():
         # check if store is still alive
         if s := store():
-            # accumulate operations scheduled "concurrently"
-            items = [item]
-            await asyncio.sleep(0)
-            while item := aqueue.get_nowait():
-                items.append(item)
-            # get the operations to run
-            taken = dict(items)
-            # action each operation
             try:
-                values = list(taken.values())
-                listen, dedupped = _dedupe_ops(values)
-                results = await s.abatch(dedupped)
-                if listen is not None:
-                    results = [results[ix] for ix in listen]
+                # accumulate operations scheduled in same tick
+                items = [item]
+                try:
+                    while item := aqueue.get_nowait():
+                        items.append(item)
+                except asyncio.QueueEmpty:
+                    pass
+                # get the operations to run
+                futs = [item[0] for item in items]
+                values = [item[1] for item in items]
+                # action each operation
+                try:
+                    listen, dedupped = _dedupe_ops(values)
+                    results = await s.abatch(dedupped)
+                    if listen is not None:
+                        results = [results[ix] for ix in listen]
 
-                # set the results of each operation
-                for fut, result in zip(taken, results):
-                    fut.set_result(result)
-            except Exception as e:
-                for fut in taken:
-                    fut.set_exception(e)
-            # remove the operations from the queue
-            for fut in taken:
-                del aqueue[fut]
+                    # set the results of each operation
+                    for fut, result in zip(futs, results):
+                        fut.set_result(result)
+                except Exception as e:
+                    for fut in futs:
+                        fut.set_exception(e)
+            finally:
+                # remove strong ref to store
+                del s
         else:
             break
-        # remove strong ref to store
-        del s
