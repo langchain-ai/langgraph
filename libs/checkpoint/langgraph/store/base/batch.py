@@ -1,7 +1,8 @@
 import asyncio
 import functools
 import weakref
-from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, Union
+from collections.abc import Iterable
+from typing import Any, Callable, Literal, Optional, TypeVar, Union
 
 from langgraph.store.base import (
     BaseStore,
@@ -55,9 +56,11 @@ class AsyncBatchedBaseStore(BaseStore):
         super().__init__()
         self._loop = asyncio.get_running_loop()
         self._aqueue: dict[asyncio.Future, Op] = {}
+        self._aqueue_ = asyncio.Queue()
         self._task = self._loop.create_task(_run(self._aqueue, weakref.ref(self)))
 
     def __del__(self) -> None:
+        print("cancelling task")
         self._task.cancel()
 
     async def aget(
@@ -66,7 +69,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
     ) -> Optional[Item]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = GetOp(namespace, key)
+        self._aqueue_.put((fut, GetOp(namespace, key)))
         return await fut
 
     async def asearch(
@@ -80,7 +83,9 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
     ) -> list[SearchItem]:
         fut = self._loop.create_future()
-        self._aqueue[fut] = SearchOp(namespace_prefix, filter, limit, offset, query)
+        self._aqueue_.put(
+            (fut, SearchOp(namespace_prefix, filter, limit, offset, query))
+        )
         return await fut
 
     async def aput(
@@ -92,7 +97,7 @@ class AsyncBatchedBaseStore(BaseStore):
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, key, value, index)
+        self._aqueue_.put((fut, PutOp(namespace, key, value, index)))
         return await fut
 
     async def adelete(
@@ -101,7 +106,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
     ) -> None:
         fut = self._loop.create_future()
-        self._aqueue[fut] = PutOp(namespace, key, None)
+        self._aqueue_.put((fut, PutOp(namespace, key, None)))
         return await fut
 
     async def alist_namespaces(
@@ -126,7 +131,7 @@ class AsyncBatchedBaseStore(BaseStore):
             limit=limit,
             offset=offset,
         )
-        self._aqueue[fut] = op
+        self._aqueue_.put((fut, op))
         return await fut
 
     @_check_loop
@@ -250,16 +255,19 @@ def _dedupe_ops(values: list[Op]) -> tuple[Optional[list[int]], list[Op]]:
 
 
 async def _run(
-    aqueue: dict[asyncio.Future, Op],
+    aqueue: asyncio.Queue[tuple[asyncio.Future, Op]],
     store: weakref.ReferenceType[BaseStore],
 ) -> None:
-    while True:
-        await asyncio.sleep(0)
-        if not aqueue:
-            continue
+    while item := await aqueue.get():
+        # check if store is still alive
         if s := store():
+            # accumulate operations scheduled "concurrently"
+            items = [item]
+            await asyncio.sleep(0)
+            while item := aqueue.get_nowait():
+                items.append(item)
             # get the operations to run
-            taken = aqueue.copy()
+            taken = dict(items)
             # action each operation
             try:
                 values = list(taken.values())
