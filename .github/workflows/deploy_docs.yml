@@ -56,6 +56,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/checkout@v4
+        with:
+          repository: langchain-ai/langchainjs
+          token: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
+          path: docs/langchainjs
+
       - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
@@ -72,6 +78,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          cd langchainjs && yarn && yarn build && cd ..
           yarn
           poetry install --with test --with docs --no-root
           poetry run pip install -U \
