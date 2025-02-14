@@ -50,7 +50,7 @@ pip install -U langchain-anthropic langgraph
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python
 import os
 import getpass
 
@@ -183,7 +183,7 @@ app = graph.compile()
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 from IPython.display import Image
 
 Image(app.get_graph().draw_mermaid_png())

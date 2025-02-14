@@ -34,7 +34,7 @@ pip install -U langgraph langchain_anthropic
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python exec="on" source="above" session="1"
 import getpass
 import os
 

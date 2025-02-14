@@ -39,6 +39,7 @@ Let's consider a simple graph with a loop to better understand how these mechani
 ## Summary
 
 When creating a loop, you can include a conditional edge that specifies a termination condition:
+
 ```python
 builder = StateGraph(State)
 builder.add_node(a)
@@ -132,7 +133,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1"
+```python
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))
@@ -150,10 +151,6 @@ Invoking the graph, we see that we alternate between nodes `"a"` and `"b"` befor
 ```python exec="on" source="above" session="1" result="ansi"
 graph.invoke({"aggregate": []})
 ```
-
-
-
-
 
 
 ## Impose a recursion limit
@@ -235,7 +232,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1"
+```python
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))

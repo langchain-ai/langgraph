@@ -106,10 +106,9 @@ If preferred, we could render the Graph into a  `.png`. Here we could use three 
 
 By default, `draw_mermaid_png()` uses Mermaid.Ink's API to generate the diagram.
 
-
-```python exec="on" source="above" session="1"
+```python
 from IPython.display import Image, display
-from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
+from langchain_core.runnables.graph import MermaidDrawMethod
 
 display(
     Image(
@@ -131,8 +130,9 @@ pip install --quiet nest_asyncio
 ```
 
 
-```python exec="on" source="above" session="1"
+```python
 import nest_asyncio
+from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
 nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
 
@@ -161,7 +161,7 @@ pip install pygraphviz
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python
 try:
     display(Image(app.get_graph().draw_png()))
 except ImportError:
