@@ -98,7 +98,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))
@@ -163,7 +163,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1"
+```python
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))
@@ -262,7 +262,7 @@ graph = builder.compile()
 ```
 
 
-```python exec="on" source="above" session="1"
+```python
 from IPython.display import Image, display
 
 display(Image(graph.get_graph().draw_mermaid_png()))

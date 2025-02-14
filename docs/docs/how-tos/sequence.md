@@ -166,7 +166,7 @@ We next [compile](../concepts/low_level.md#compiling-your-graph) our graph. This
 graph = graph_builder.compile()
 ```
 
-LangGraph provides built-in utilities for visualizing your graph. Let's inspect our sequence. See [this guide](../how-tos/visualization.ipynb) for detail on visualization.
+LangGraph provides built-in utilities for visualizing your graph. Let's inspect our sequence. See [this guide](../how-tos/visualization.md) for detail on visualization.
 
 
 ```python exec="on" source="above" session="1"

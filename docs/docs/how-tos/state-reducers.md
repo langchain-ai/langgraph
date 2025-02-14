@@ -78,7 +78,7 @@ graph_builder.set_entry_point("node")
 graph = graph_builder.compile()
 ```
 
-LangGraph provides built-in utilities for visualizing your graph. Let's inspect our graph. See [this guide](../how-tos/visualization.ipynb) for detail on visualization.
+LangGraph provides built-in utilities for visualizing your graph. Let's inspect our graph. See [this guide](../how-tos/visualization.md) for detail on visualization.
 
 
 ```python
