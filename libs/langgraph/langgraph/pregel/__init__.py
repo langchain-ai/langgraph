@@ -206,7 +206,7 @@ class Pregel(PregelProtocol):
     ### Basic channels: LastValue and Topic
 
     - `LastValue`: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next
-    - `Topic`: A configurable PubSub Topic, useful for sending multiple values between chains, or for accumulating output. Can be configured to deduplicate values, and/or to accummulate values over the course of multiple steps.
+    - `Topic`: A configurable PubSub Topic, useful for sending multiple values between chains, or for accumulating output. Can be configured to deduplicate values, and/or to accumulate values over the course of multiple steps.
 
     ### Advanced channels: Context and BinaryOperatorAggregate
 
