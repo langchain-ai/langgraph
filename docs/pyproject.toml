@@ -10,6 +10,7 @@ readme = "README.md"
 python = "^3.10"
 aiohappyeyeballs = "2.4.3"
 hub = "^3.0.1"
+pytest = "^8.3.4"
 
 [tool.poetry.group.docs.dependencies]
 langgraph = { path = "../libs/langgraph/", develop = true }

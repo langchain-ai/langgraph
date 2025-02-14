@@ -111,7 +111,7 @@ print("Hello, World!")
 
 
 END_TO_END_INPUT_HIGHLIGHT_1_EXPECT = """\
-```python exec="on" source="below" hl_lines="2" path="dummy.md"
+```python exec="on" source="below" hl_lines="2"
 print("Hello, World!")
 print("Hello, World!")
 ```

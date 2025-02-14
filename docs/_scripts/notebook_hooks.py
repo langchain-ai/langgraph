@@ -16,7 +16,7 @@ from markdown_exec.hooks import SessionHistoryEntry
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
 from _scripts.notebook_convert import convert_notebook
-from _scripts.setup_vcr import load_postamble, load_preamble, _hash_string
+from _scripts.setup_vcr import get_hash_for_session, load_postamble, load_preamble, _hash_string
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -157,7 +157,12 @@ def handle_vcr_setup(
     try:
         if hook_state['document_filename'] == '__UNKNOWN__':
             raise SuperFencesException(
-                f"error while processing {language} block: document filename is unknown"
+                f"error while processing {language} block: document filename hasn't been set yet"
+            )
+        
+        if hook_state['document_content'] == '__UNKNOWN__':
+            raise SuperFencesException(
+                f"error while processing {language} block: document content hasn't been set yet"
             )
 
         if session is None or session == "" and id is None or id == "":
@@ -181,8 +186,9 @@ def handle_vcr_setup(
 
         # Add context manager at start with explicit __enter__ and __exit__ calls
 
+        hash_ = get_hash_for_session(language, session, hook_state['document_content'])
         wrapped_lines = [
-            load_preamble(language, code, cassette_name),
+            load_preamble(language, hash_, cassette_name),
             code,
         ]
 
@@ -220,24 +226,17 @@ def handle_vcr_teardown(
     session: str,
     history: list[SessionHistoryEntry],
 ):
-    last_inputs = dict(history[-1].inputs)
     code = load_postamble(language)
-    md = last_inputs["md"]
     html = False
     update_toc = False
 
-    path = last_inputs.get("extra", {}).get("path", None)
-
-    if path is None:
-        logger.warning(f"no document filename found while tearing down {session}!")
-    else:
-        logger.info(f"tearing down {language} {session} on {path}")
+    logger.info(f"tearing down {language} {session} on {hook_state['document_filename']}")
 
     kwargs = dict(
         code=code,
         session=session,
         id=f"{id}_vcr_end",
-        md=md,
+        md=None, # md is unused by the formatter, but it's a required argument
         html=html,
         update_toc=update_toc,
         extra={},
@@ -344,4 +343,5 @@ def on_post_build(config):
 def on_pre_page(page: Page, **kwargs: Dict[str, Any]):
     logger.info(f"on_pre_page: {page.file.src_path}")
     hook_state['document_filename'] = page.file.src_path
+    hook_state['document_content'] = page.file.content_string
     return page

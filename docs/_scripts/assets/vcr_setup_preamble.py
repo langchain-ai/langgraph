@@ -63,7 +63,7 @@ class HashedCassette:
                 content = f.read()
             try:
                 cassette_data = serializer.deserialize(content)
-            except Exception as e:
+            except Exception:
                 os.remove(self.cassette_path)
             else:
                 existing_hash = cassette_data.get("cassette_hash")
@@ -96,7 +96,7 @@ class HashedCassette:
                 content = f.read()
             try:
                 cassette_data = serializer.deserialize(content)
-            except Exception as e:
+            except Exception:
                 return result
             # Update the cassette data with the expected hash.
             if cassette_data.get("cassette_hash") != self.hash_value:

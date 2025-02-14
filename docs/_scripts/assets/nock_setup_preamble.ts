@@ -24,14 +24,16 @@ function decompressData(compressedString: string): NockCassetteData {
   return msgpack.decode(decompressed) as NockCassetteData;
 }
 
-// deno-lint-ignore no-unused-vars
 class HashedCassette {
+  hash: string;
   private recording = true;
 
   constructor(
     private readonly cassettePath: string,
-    private readonly hash: string
-  ) {}
+    hash: string
+  ) {
+    this.hash = hash;
+  }
 
   async enter() {
     try {
