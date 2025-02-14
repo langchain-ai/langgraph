@@ -1,5 +1,7 @@
 import nbformat
 
+from _scripts.notebook_convert import md_executable, _convert_links_in_markdown
+import pytest
 from _scripts.notebook_convert import md_executable, _has_output
 
 
@@ -58,6 +60,27 @@ def test_convert_input_cell() -> None:
     assert markdown == STDIN_OUTPUT
 
 
+NO_STDOUT = """\
+```python
+display(x)
+```
+"""
+
+NO_STDOUT_EXPECTED = """\
+```python
+display(x)
+```
+"""
+
+
+def test_convert_block_without_output() -> None:
+    notebook = nbformat.v4.new_notebook()
+    notebook.metadata.language_info = {"name": "python", "version": "3.11"}
+    notebook.cells.append(nbformat.v4.new_code_cell(NO_STDOUT))
+    markdown, _ = md_executable.from_notebook_node(notebook)
+    assert markdown == NO_STDOUT_EXPECTED
+
+
 def test_has_output() -> None:
     """Test if a given code block is expected to have output."""
     assert _has_output("print('Hello, world!')") is True
@@ -67,3 +90,20 @@ def test_has_output() -> None:
     assert _has_output("assert 1 == 1") is False
     assert _has_output("def foo(): pass") is False
     assert _has_output("import foobar") is False
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        (
+            "This is a [link](https://example.com).",
+            "This is a [link](https://example.com).",
+        ),
+        ("This is a [link](../foo).", "This is a [link](foo.md)."),
+        ("This is a [link](../foo#hello).", "This is a [link](foo.md#hello)."),
+        ("This is a [link](../foo/#hello).", "This is a [link](foo.md#hello)."),
+    ],
+)
+def test_link_conversion(source: str, expected: str) -> None:
+    """Test logic to convert links in markdown cells."""
+    assert _convert_links_in_markdown(source) == expected
