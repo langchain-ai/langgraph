@@ -55,8 +55,7 @@ class AsyncBatchedBaseStore(BaseStore):
     def __init__(self) -> None:
         super().__init__()
         self._loop = asyncio.get_running_loop()
-        self._aqueue: dict[asyncio.Future, Op] = {}
-        self._aqueue_ = asyncio.Queue()
+        self._aqueue: asyncio.Queue[tuple[asyncio.Future, Op]] = asyncio.Queue()
         self._task = self._loop.create_task(_run(self._aqueue, weakref.ref(self)))
 
     def __del__(self) -> None:
@@ -68,7 +67,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
     ) -> Optional[Item]:
         fut = self._loop.create_future()
-        self._aqueue_.put((fut, GetOp(namespace, key)))
+        self._aqueue.put((fut, GetOp(namespace, key)))
         return await fut
 
     async def asearch(
@@ -82,7 +81,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
     ) -> list[SearchItem]:
         fut = self._loop.create_future()
-        self._aqueue_.put(
+        self._aqueue.put(
             (fut, SearchOp(namespace_prefix, filter, limit, offset, query))
         )
         return await fut
@@ -96,7 +95,7 @@ class AsyncBatchedBaseStore(BaseStore):
     ) -> None:
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue_.put((fut, PutOp(namespace, key, value, index)))
+        self._aqueue.put((fut, PutOp(namespace, key, value, index)))
         return await fut
 
     async def adelete(
@@ -105,7 +104,7 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
     ) -> None:
         fut = self._loop.create_future()
-        self._aqueue_.put((fut, PutOp(namespace, key, None)))
+        self._aqueue.put((fut, PutOp(namespace, key, None)))
         return await fut
 
     async def alist_namespaces(
@@ -130,7 +129,7 @@ class AsyncBatchedBaseStore(BaseStore):
             limit=limit,
             offset=offset,
         )
-        self._aqueue_.put((fut, op))
+        self._aqueue.put((fut, op))
         return await fut
 
     @_check_loop
