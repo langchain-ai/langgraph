@@ -245,18 +245,6 @@ class Pregel(PregelProtocol):
 
         assert app.invoke("a") == "aaaaaaaa"
         ```
-
-    ## StateGraph (GraphAPI)
-
-    LangGraphs [StateGraph][langgraph.graph.StateGraph] is a graph-based
-    representation of a LangGraph application. Compiling a StateGraph returns
-    a [Pregel][langgraph.pregel.Pregel] instance, which can be executed to run
-    the application.
-
-    ## entrypoint (FunctionalAPI)
-
-    The [entrypoint][langgraph.functional.entrypoint] is a functional API for
-    creating a Pregel runtime.
     """
 
     nodes: dict[str, PregelNode]
