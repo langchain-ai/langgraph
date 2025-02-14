@@ -28,7 +28,7 @@ pip install -U langgraph langchain_anthropic langchain_community
 ```
 
 
-```python exec="on" source="above" session="1" result="ansi"
+```python
 import getpass
 import os
 
