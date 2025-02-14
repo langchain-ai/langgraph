@@ -1,9 +1,11 @@
 import nbformat
-
-from _scripts.notebook_convert import md_executable, _convert_links_in_markdown
 import pytest
-from _scripts.notebook_convert import md_executable, _has_output
 
+from _scripts.notebook_convert import (
+    _convert_links_in_markdown,
+    md_executable,
+    _has_output,
+)
 
 EXPECTED_OUTPUT = """\
 ```python exec="on" source="above" session="1" result="ansi"
@@ -60,14 +62,8 @@ def test_convert_input_cell() -> None:
     assert markdown == STDIN_OUTPUT
 
 
-NO_STDOUT = """\
-```python
-display(x)
-```
-"""
-
 NO_STDOUT_EXPECTED = """\
-```python
+```python exec="on" source="above" session="1"
 display(x)
 ```
 """
@@ -76,7 +72,7 @@ display(x)
 def test_convert_block_without_output() -> None:
     notebook = nbformat.v4.new_notebook()
     notebook.metadata.language_info = {"name": "python", "version": "3.11"}
-    notebook.cells.append(nbformat.v4.new_code_cell(NO_STDOUT))
+    notebook.cells.append(nbformat.v4.new_code_cell("display(x)"))
     markdown, _ = md_executable.from_notebook_node(notebook)
     assert markdown == NO_STDOUT_EXPECTED
 

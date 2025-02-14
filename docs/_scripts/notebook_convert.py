@@ -67,36 +67,42 @@ def _rewrite_cell_magic(code: str) -> str:
 class PrintCallVisitor(ast.NodeVisitor):
     """
     This visitor sets self.has_print to True if it encounters a call
-    to a function whose name starts with "print" that is not inside any
-    function (i.e. is at module level or inside control structures).
+    to a print within the global scope.
 
-    This should catch calls to print(), print_stream(), etc.
+    This should catch calls to print(), print_stream(), etc. (Prefixed with "print").
 
     May have some false positives, but it's not meant to be perfect.
+
+    Temporary code for notebook conversion.
     """
 
     def __init__(self):
         self.has_print = False
-        self._in_function = 0  # counter to track whether we're inside a def/lambda
+        self.scope_level = 0  # counter to track whether we're inside a def/lambda
 
     def visit_FunctionDef(self, node):
-        self._in_function += 1
+        self.scope_level += 1
         self.generic_visit(node)
-        self._in_function -= 1
+        self.scope_level -= 1
 
     def visit_AsyncFunctionDef(self, node):
-        self._in_function += 1
+        self.scope_level += 1
         self.generic_visit(node)
-        self._in_function -= 1
+        self.scope_level -= 1
 
     def visit_Lambda(self, node):
-        self._in_function += 1
+        self.scope_level += 1
         self.generic_visit(node)
-        self._in_function -= 1
+        self.scope_level -= 1
+
+    def visit_ClassDef(self, node):
+        self.scope_level += 1
+        self.generic_visit(node)
+        self.scope_level -= 1
 
     def visit_Call(self, node):
         # Only consider calls when not inside a function definition.
-        if self._in_function == 0:
+        if self.scope_level == 0:
             if isinstance(node.func, ast.Name) and node.func.id.startswith("print"):
                 self.has_print = True
         self.generic_visit(node)
@@ -150,7 +156,6 @@ def _has_output(source: str) -> bool:
                 condition_b = True
 
     return condition_a or condition_b
-
 
 
 def _convert_links_in_markdown(markdown: str) -> str:
@@ -249,6 +254,8 @@ class EscapePreprocessor(Preprocessor):
                 if source.startswith("%%"):
                     cell.source = _rewrite_cell_magic(source)
                     cell.metadata["language"] = "shell"
+
+                cell.metadata["has_output"] = _has_output(source)
 
             # Remove noqa comments
             cell.source = re.sub(r"#\s*noqa.*$", "", cell.source, flags=re.MULTILINE)
