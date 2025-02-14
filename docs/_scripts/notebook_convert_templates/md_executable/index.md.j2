@@ -8,7 +8,7 @@
 {%- elif cell.metadata.get('language') == "shell" -%}
     shell
 {%- elif 'name' in nb.metadata.get('language_info', {}) -%}
-    {{ nb.metadata.language_info.name }}{% if cell.metadata.exec|default(false) %} exec="on" source="above" session="1" result="ansi"{% endif %}
+    {{ nb.metadata.language_info.name }}{% if cell.metadata.exec|default(false) %} exec="on" source="above" session="1"{% if cell.metadata.has_output|default(false) %} result="ansi"{% endif %}{% endif %}
 {%- endif %}
 {{ cell.source}}
 ```
