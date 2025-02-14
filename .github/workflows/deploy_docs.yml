@@ -48,7 +48,7 @@ jobs:
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
-    timeout-minutes: 1  # Job will be cancelled if it runs for more than 10 minutes
+    timeout-minutes: 0  # Job will be cancelled if it runs for more than 10 minutes
     env:
       GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
