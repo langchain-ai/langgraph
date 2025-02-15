@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.base import (
+    EXCLUDED_METADATA_KEYS,
     Checkpoint,
     CheckpointMetadata,
     create_checkpoint,
@@ -19,6 +20,10 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from tests.conftest import DEFAULT_POSTGRES_URI
+
+
+def _exclude_keys(config: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in config.items() if k not in EXCLUDED_METADATA_KEYS}
 
 
 @contextmanager
@@ -205,7 +210,6 @@ def test_combined_metadata(saver_name: str, test_data) -> None:
         assert checkpoint.metadata == {
             **metadata,
             "thread_id": "thread-2",
-            "checkpoint_ns": "",
             "run_id": "my_run_id",
         }
 
@@ -233,14 +237,14 @@ def test_search(saver_name: str, test_data) -> None:
         search_results_1 = list(saver.list(None, filter=query_1))
         assert len(search_results_1) == 1
         assert search_results_1[0].metadata == {
-            **configs[0]["configurable"],
+            **_exclude_keys(configs[0]["configurable"]),
             **metadata[0],
         }
 
         search_results_2 = list(saver.list(None, filter=query_2))
         assert len(search_results_2) == 1
         assert search_results_2[0].metadata == {
-            **configs[1]["configurable"],
+            **_exclude_keys(configs[1]["configurable"]),
             **metadata[1],
         }
 

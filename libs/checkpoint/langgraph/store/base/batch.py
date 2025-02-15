@@ -59,7 +59,10 @@ class AsyncBatchedBaseStore(BaseStore):
         self._task = self._loop.create_task(_run(self._aqueue, weakref.ref(self)))
 
     def __del__(self) -> None:
-        self._task.cancel()
+        try:
+            self._task.cancel()
+        except RuntimeError:
+            pass
 
     async def aget(
         self,

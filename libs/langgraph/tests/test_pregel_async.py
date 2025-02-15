@@ -606,8 +606,6 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
         if "shallow" not in checkpointer_name:
             assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
                 {
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "parents": {},
                     "source": "loop",
                     "step": 0,
@@ -615,7 +613,6 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 {
-                    "checkpoint_ns": "",
                     "parents": {},
                     "source": "input",
                     "step": -1,
@@ -644,8 +641,6 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -672,8 +667,6 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "update",
                 "step": 1,
@@ -798,8 +791,6 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 c.metadata async for c in tool_two.checkpointer.alist(thread1root)
             ] == [
                 {
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "parents": {},
                     "source": "loop",
                     "step": 0,
@@ -807,7 +798,6 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 {
-                    "checkpoint_ns": "",
                     "parents": {},
                     "source": "input",
                     "step": -1,
@@ -842,8 +832,6 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -870,8 +858,6 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "update",
                 "step": 1,
@@ -990,8 +976,6 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
         if "shallow" not in checkpointer_name:
             assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
                 {
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "parents": {},
                     "source": "loop",
                     "step": 0,
@@ -999,7 +983,6 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 {
-                    "checkpoint_ns": "",
                     "parents": {},
                     "source": "input",
                     "step": -1,
@@ -1038,8 +1021,6 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -1083,8 +1064,6 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "fork",
                 "step": 1,
@@ -1251,8 +1230,6 @@ async def test_cancel_graph_astream(checkpointer_name: str) -> None:
             assert state.values == {"value": 3}  # 1 + 2
             assert state.next == ("aparallelwhile",)
             assert state.metadata == {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -1330,8 +1307,6 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
             assert state.values == {"value": 2}
             assert state.next == ("awhile",)
             assert state.metadata == {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 1,
@@ -2032,8 +2007,6 @@ async def test_pending_writes_resume(
             ),
         )
         assert state.metadata == {
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -2132,8 +2105,6 @@ async def test_pending_writes_resume(
                 "channel_values": {"one": "one", "two": "two", "value": 6},
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "step": 1,
                 "source": "loop",
@@ -2186,8 +2157,6 @@ async def test_pending_writes_resume(
                 },
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "step": 0,
                 "source": "loop",
@@ -2231,7 +2200,6 @@ async def test_pending_writes_resume(
                 "channel_values": {"__start__": {"value": 1}},
             },
             metadata={
-                "checkpoint_ns": "",
                 "parents": {},
                 "step": -1,
                 "source": "input",
@@ -2810,8 +2778,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     }
                 },
                 metadata={
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "source": "loop",
                     "writes": {"3": ["3"]},
                     "thread_id": "1",
@@ -2848,8 +2814,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     }
                 },
                 metadata={
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "source": "loop",
                     "writes": {"2": ["2|3"], "3": ["3"], "flaky": ["flaky|4"]},
                     "thread_id": "1",
@@ -2893,8 +2857,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     }
                 },
                 metadata={
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "source": "loop",
                     "writes": {
                         "2": [
@@ -2960,8 +2922,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     }
                 },
                 metadata={
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "source": "loop",
                     "writes": {"1": ["1"]},
                     "thread_id": "1",
@@ -3017,8 +2977,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     }
                 },
                 metadata={
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
                     "source": "loop",
                     "writes": None,
                     "thread_id": "1",
@@ -3056,7 +3014,6 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                     }
                 },
                 metadata={
-                    "checkpoint_ns": "",
                     "source": "input",
                     "writes": {"__start__": ["0"]},
                     "thread_id": "1",
@@ -3229,8 +3186,6 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "step": 1,
                 "source": "loop",
                 "writes": {
@@ -3302,8 +3257,6 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "step": 2,
                 "source": "update",
                 "writes": {
@@ -3391,8 +3344,6 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "step": 1,
                 "source": "loop",
                 "writes": {
@@ -3485,8 +3436,6 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "step": 2,
                 "source": "update",
                 "writes": {
@@ -3702,8 +3651,6 @@ async def test_send_react_interrupt_control(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "step": 1,
                 "source": "loop",
                 "writes": {
@@ -3775,8 +3722,6 @@ async def test_send_react_interrupt_control(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "step": 2,
                 "source": "update",
                 "writes": {
@@ -4726,8 +4671,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -6202,8 +6145,6 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {
                     "alice": {
