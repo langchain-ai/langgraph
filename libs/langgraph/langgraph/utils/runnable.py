@@ -141,6 +141,12 @@ class _RunnableWithStore(Protocol[Input, Output]):
     def __call__(self, state: Input, *, store: BaseStore) -> Output: ...
 
 
+class _RunnableWithWriterStore(Protocol[Input, Output]):
+    def __call__(
+        self, state: Input, *, writer: StreamWriter, store: BaseStore
+    ) -> Output: ...
+
+
 class _RunnableWithConfigWriter(Protocol[Input, Output]):
     def __call__(
         self, state: Input, *, config: RunnableConfig, writer: StreamWriter
@@ -168,6 +174,7 @@ RunnableLike = Union[
     LCRunnableLike,
     _RunnableWithWriter[Input, Output],
     _RunnableWithStore[Input, Output],
+    _RunnableWithWriterStore[Input, Output],
     _RunnableWithConfigWriter[Input, Output],
     _RunnableWithConfigStore[Input, Output],
     _RunnableWithConfigWriterStore[Input, Output],
