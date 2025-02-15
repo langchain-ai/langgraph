@@ -60,7 +60,7 @@ class TestMemorySaver:
         self.metadata_3: CheckpointMetadata = {}
 
     def test_combined_metadata(self) -> None:
-        config = {
+        config: RunnableConfig = {
             "configurable": {
                 "thread_id": "thread-2",
                 "checkpoint_ns": "",
@@ -70,6 +70,7 @@ class TestMemorySaver:
         }
         self.memory_saver.put(config, self.chkpnt_2, self.metadata_2, {})
         checkpoint = self.memory_saver.get_tuple(config)
+        assert checkpoint is not None
         assert checkpoint.metadata == {
             **self.metadata_2,
             "thread_id": "thread-2",
