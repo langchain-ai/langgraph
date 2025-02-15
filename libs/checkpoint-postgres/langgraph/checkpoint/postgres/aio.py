@@ -281,8 +281,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
                                 k: v
                                 for k, v in config["configurable"].items()
                                 if not k.startswith("__")
+                                and isinstance(v, (str, int, bool, float))
                             },
-                            **config.get("metadata", {}),
+                            **{
+                                k: v
+                                for k, v in config.get("metadata", {}).items()
+                                if not k.startswith("__")
+                                and isinstance(v, (str, int, bool, float))
+                            },
                             **metadata,
                         }
                     ),
