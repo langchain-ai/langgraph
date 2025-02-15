@@ -135,8 +135,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 6,
@@ -158,8 +156,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 5,
@@ -181,8 +177,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": 4,
@@ -204,8 +198,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 3,
@@ -227,8 +219,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": 2,
@@ -250,8 +240,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 1,
@@ -273,8 +261,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -296,7 +282,6 @@ def test_invoke_two_processes_in_out_interrupt(
                 }
             },
             metadata={
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": -1,
@@ -364,8 +349,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 5,
@@ -387,8 +370,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 4,
@@ -410,8 +391,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 3,
@@ -433,8 +412,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 2,
@@ -456,8 +433,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 1,
@@ -479,8 +454,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -502,7 +475,6 @@ def test_fork_always_re_runs_nodes(
                 }
             },
             metadata={
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": -1,
@@ -787,8 +759,6 @@ def test_conditional_graph(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -853,8 +823,6 @@ def test_conditional_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 1,
@@ -977,8 +945,6 @@ def test_conditional_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 4,
@@ -1052,8 +1018,6 @@ def test_conditional_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -1112,8 +1076,6 @@ def test_conditional_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 1,
@@ -1236,8 +1198,6 @@ def test_conditional_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 4,
@@ -1311,8 +1271,6 @@ def test_conditional_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -1712,8 +1670,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -1767,8 +1723,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -1857,8 +1811,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -1920,8 +1872,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -1974,8 +1924,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -2062,8 +2010,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -2114,8 +2060,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -2158,8 +2102,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -2226,8 +2168,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 2,
@@ -2306,8 +2246,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -2374,8 +2312,6 @@ def test_conditional_state_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 2,
@@ -3114,8 +3050,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -3180,8 +3114,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -3295,8 +3227,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 4,
@@ -3374,8 +3304,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -3455,8 +3383,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -3515,8 +3441,6 @@ def test_state_graph_packets(
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -3630,8 +3554,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 4,
@@ -3707,8 +3629,6 @@ def test_state_graph_packets(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -3998,8 +3918,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -4051,8 +3969,6 @@ def test_message_graph(
         config=next_config,
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -4146,8 +4062,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 4,
@@ -4211,8 +4125,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -4276,8 +4188,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -4335,8 +4245,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -4430,8 +4338,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 4,
@@ -4496,8 +4402,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -4550,8 +4454,6 @@ def test_message_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 6,
@@ -4839,8 +4741,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -4892,8 +4792,6 @@ def test_root_graph(
         config=next_config,
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -4988,8 +4886,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 4,
@@ -5054,8 +4950,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -5119,8 +5013,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -5178,8 +5070,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 2,
@@ -5274,8 +5164,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 4,
@@ -5339,8 +5227,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 5,
@@ -5393,8 +5279,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 6,
@@ -5478,8 +5362,6 @@ def test_root_graph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 6,
@@ -5840,8 +5722,6 @@ def test_dynamic_interrupt(
     if "shallow" not in checkpointer_name:
         assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
             {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -5849,7 +5729,6 @@ def test_dynamic_interrupt(
                 "thread_id": "1",
             },
             {
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": -1,
@@ -5884,8 +5763,6 @@ def test_dynamic_interrupt(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -5914,8 +5791,6 @@ def test_dynamic_interrupt(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 1,
@@ -6024,8 +5899,6 @@ def test_copy_checkpoint(
     if "shallow" not in checkpointer_name:
         assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
             {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -6033,7 +5906,6 @@ def test_copy_checkpoint(
                 "thread_id": "1",
             },
             {
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": -1,
@@ -6074,8 +5946,6 @@ def test_copy_checkpoint(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -6123,8 +5993,6 @@ def test_copy_checkpoint(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "fork",
             "step": 1,
@@ -6233,8 +6101,6 @@ def test_dynamic_interrupt_subgraph(
             )
         ] == [
             {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -6242,7 +6108,6 @@ def test_dynamic_interrupt_subgraph(
                 "thread_id": "1",
             },
             {
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": -1,
@@ -6283,8 +6148,6 @@ def test_dynamic_interrupt_subgraph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -6317,8 +6180,6 @@ def test_dynamic_interrupt_subgraph(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 1,
@@ -6407,8 +6268,6 @@ def test_start_branch_then(
     if "shallow" not in checkpointer_name:
         assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
             {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "step": 0,
@@ -6417,7 +6276,6 @@ def test_start_branch_then(
                 "thread_id": "1",
             },
             {
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "step": -1,
@@ -6440,8 +6298,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -6473,8 +6329,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -6508,8 +6362,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -6541,8 +6393,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -6576,8 +6426,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 0,
@@ -6606,8 +6454,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 1,
@@ -6639,8 +6485,6 @@ def test_start_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 2,
@@ -7015,8 +6859,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -7047,8 +6889,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 3,
@@ -7081,8 +6921,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -7113,8 +6951,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 3,
@@ -7155,8 +6991,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 2,
@@ -7188,8 +7022,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 3,
@@ -7230,8 +7062,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -7262,8 +7092,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 3,
@@ -7296,8 +7124,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -7328,8 +7154,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 3,
@@ -7360,7 +7184,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_ns": "",
             "parents": {},
             "source": "update",
             "step": 0,
@@ -7388,8 +7211,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 1,
@@ -7420,8 +7241,6 @@ def test_branch_then(
         },
         created_at=AnyStr(),
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "step": 3,
@@ -7558,8 +7377,6 @@ def test_send_dedupe_on_resume(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {"3": ["3"]},
                 "thread_id": "1",
@@ -7596,8 +7413,6 @@ def test_send_dedupe_on_resume(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {"2": ["2|3"], "3": ["3"], "flaky": ["flaky|4"]},
                 "thread_id": "1",
@@ -7641,8 +7456,6 @@ def test_send_dedupe_on_resume(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {
                     "2": [
@@ -7708,8 +7521,6 @@ def test_send_dedupe_on_resume(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {"1": ["1"]},
                 "thread_id": "1",
@@ -7765,8 +7576,6 @@ def test_send_dedupe_on_resume(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": None,
                 "thread_id": "1",
@@ -7804,7 +7613,6 @@ def test_send_dedupe_on_resume(
                 }
             },
             metadata={
-                "checkpoint_ns": "",
                 "source": "input",
                 "writes": {"__start__": ["0"]},
                 "thread_id": "1",
@@ -7908,8 +7716,6 @@ def test_nested_graph_state(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -7961,8 +7767,6 @@ def test_nested_graph_state(
                         }
                     },
                     metadata={
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict({"": AnyStr()}),
                         "parents": {
                             "": AnyStr(),
                         },
@@ -8009,8 +7813,6 @@ def test_nested_graph_state(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8057,8 +7859,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8097,8 +7897,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": None,
@@ -8133,7 +7931,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "writes": {"__start__": {"my_key": "my value"}},
@@ -8167,8 +7964,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "loop",
                 "writes": {
                     "inner_1": {
@@ -8217,8 +8012,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "loop",
                 "writes": None,
                 "step": 0,
@@ -8268,8 +8061,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": None,
-                "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "input",
                 "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
@@ -8315,8 +8106,6 @@ def test_nested_graph_state(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {
@@ -8353,8 +8142,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {
@@ -8395,8 +8182,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"inner": {"my_key": "hi my value here and there"}},
@@ -8434,8 +8219,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8470,8 +8253,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": None,
@@ -8506,7 +8287,6 @@ def test_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "input",
                 "writes": {"__start__": {"my_key": "my value"}},
@@ -8617,8 +8397,6 @@ def test_doubly_nested_graph_state(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {"parent_1": {"my_key": "hi my value"}},
@@ -8665,8 +8443,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {"": AnyStr()},
                 "source": "loop",
                 "writes": None,
@@ -8713,8 +8489,6 @@ def test_doubly_nested_graph_state(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child:"): AnyStr()}),
             "parents": AnyDict(
                 {
                     "": AnyStr(),
@@ -8794,10 +8568,6 @@ def test_doubly_nested_graph_state(
                                     }
                                 },
                                 metadata={
-                                    "checkpoint_id": AnyStr(),
-                                    "checkpoint_map": AnyDict(
-                                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                                    ),
                                     "parents": AnyDict(
                                         {
                                             "": AnyStr(),
@@ -8856,8 +8626,6 @@ def test_doubly_nested_graph_state(
                         }
                     },
                     metadata={
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict({"": AnyStr()}),
                         "parents": {"": AnyStr()},
                         "source": "loop",
                         "writes": None,
@@ -8897,8 +8665,6 @@ def test_doubly_nested_graph_state(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {"parent_1": {"my_key": "hi my value"}},
@@ -8944,8 +8710,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {
@@ -8987,8 +8751,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {
@@ -9017,8 +8779,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": {"child": {"my_key": "hi my value here and there"}},
                 "step": 2,
@@ -9067,8 +8827,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"parent_1": {"my_key": "hi my value"}},
@@ -9095,8 +8853,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "source": "loop",
                 "writes": None,
                 "step": 0,
@@ -9131,7 +8887,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_ns": "",
                 "source": "input",
                 "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
@@ -9167,8 +8922,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "loop",
                 "writes": {"child_1": {"my_key": "hi my value here and there"}},
                 "step": 1,
@@ -9208,8 +8961,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "loop",
                 "writes": None,
                 "step": 0,
@@ -9262,8 +9013,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": None,
-                "checkpoint_map": AnyDict({"": AnyStr()}),
                 "source": "input",
                 "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
@@ -9309,8 +9058,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "loop",
                 "writes": {"grandchild_2": {"my_key": "hi my value here and there"}},
                 "step": 2,
@@ -9366,8 +9113,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "loop",
                 "writes": {"grandchild_1": {"my_key": "hi my value here"}},
                 "step": 1,
@@ -9430,8 +9175,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": AnyStr(),
-                "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "loop",
                 "writes": None,
                 "step": 0,
@@ -9494,8 +9237,6 @@ def test_doubly_nested_graph_state(
                 }
             },
             metadata={
-                "checkpoint_id": None,
-                "checkpoint_map": AnyDict({"": AnyStr(), AnyStr("child1:"): AnyStr()}),
                 "source": "input",
                 "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
@@ -9761,8 +9502,6 @@ def test_send_react_interrupt(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "step": 1,
             "source": "loop",
             "writes": {
@@ -9834,8 +9573,6 @@ def test_send_react_interrupt(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "step": 2,
             "source": "update",
             "writes": {
@@ -9923,8 +9660,6 @@ def test_send_react_interrupt(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "step": 1,
             "source": "loop",
             "writes": {
@@ -10019,8 +9754,6 @@ def test_send_react_interrupt(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "step": 2,
             "source": "update",
             "writes": {
@@ -10237,8 +9970,6 @@ def test_send_react_interrupt_control(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "step": 1,
             "source": "loop",
             "writes": {
@@ -10310,8 +10041,6 @@ def test_send_react_interrupt_control(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "step": 2,
             "source": "update",
             "writes": {
@@ -10503,8 +10232,6 @@ def test_weather_subgraph(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "source": "loop",
             "writes": {"router_node": {"route": "weather"}},
             "step": 1,
@@ -10597,8 +10324,6 @@ def test_weather_subgraph(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "source": "loop",
             "writes": {"router_node": {"route": "weather"}},
             "step": 1,
@@ -10644,8 +10369,6 @@ def test_weather_subgraph(
                         }
                     },
                     metadata={
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict({"": AnyStr()}),
                         "source": "loop",
                         "writes": {"model_node": {"city": "San Francisco"}},
                         "step": 1,
@@ -10709,8 +10432,6 @@ def test_weather_subgraph(
             }
         },
         metadata={
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "source": "loop",
             "writes": {"router_node": {"route": "weather"}},
             "step": 1,
@@ -10757,7 +10478,6 @@ def test_weather_subgraph(
                         }
                     },
                     metadata={
-                        "checkpoint_map": AnyDict({"": AnyStr()}),
                         "step": 2,
                         "source": "update",
                         "writes": {

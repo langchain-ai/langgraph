@@ -16,6 +16,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
@@ -275,23 +276,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(
-                        {
-                            **{
-                                k: v
-                                for k, v in config["configurable"].items()
-                                if not k.startswith("__")
-                                and isinstance(v, (str, int, bool, float))
-                            },
-                            **{
-                                k: v
-                                for k, v in config.get("metadata", {}).items()
-                                if not k.startswith("__")
-                                and isinstance(v, (str, int, bool, float))
-                            },
-                            **metadata,
-                        }
-                    ),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config

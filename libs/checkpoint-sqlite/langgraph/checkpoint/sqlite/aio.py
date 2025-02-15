@@ -16,6 +16,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import ChannelProtocol
@@ -464,19 +465,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
         serialized_metadata = self.jsonplus_serde.dumps(
-            {
-                **{
-                    k: v
-                    for k, v in config["configurable"].items()
-                    if not k.startswith("__") and isinstance(v, (str, int, bool, float))
-                },
-                **{
-                    k: v
-                    for k, v in config.get("metadata", {}).items()
-                    if not k.startswith("__") and isinstance(v, (str, int, bool, float))
-                },
-                **metadata,
-            }
+            get_checkpoint_metadata(config, metadata)
         )
         async with (
             self.lock,

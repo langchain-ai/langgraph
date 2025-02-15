@@ -24,6 +24,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.postgres import _ainternal, _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
@@ -423,23 +424,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(
-                        {
-                            **{
-                                k: v
-                                for k, v in config["configurable"].items()
-                                if not k.startswith("__")
-                                and isinstance(v, (str, int, bool, float))
-                            },
-                            **{
-                                k: v
-                                for k, v in config.get("metadata", {}).items()
-                                if not k.startswith("__")
-                                and isinstance(v, (str, int, bool, float))
-                            },
-                            **metadata,
-                        }
-                    ),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -758,23 +743,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(
-                        {
-                            **{
-                                k: v
-                                for k, v in config["configurable"].items()
-                                if not k.startswith("__")
-                                and isinstance(v, (str, int, bool, float))
-                            },
-                            **{
-                                k: v
-                                for k, v in config.get("metadata", {}).items()
-                                if not k.startswith("__")
-                                and isinstance(v, (str, int, bool, float))
-                            },
-                            **metadata,
-                        }
-                    ),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config

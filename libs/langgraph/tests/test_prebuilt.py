@@ -63,7 +63,6 @@ from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
 from langgraph.utils.config import get_stream_writer
-from tests.any_str import AnyStr
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_SYNC,
@@ -183,8 +182,6 @@ def test_no_prompt(
             "agent": "agent",
         }
         assert saved.metadata == {
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
             "parents": {},
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
@@ -217,8 +214,6 @@ async def test_no_prompt_async(checkpointer_name: str) -> None:
                 "agent": "agent",
             }
             assert saved.metadata == {
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
                 "parents": {},
                 "source": "loop",
                 "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
