@@ -459,7 +459,7 @@ def get_checkpoint_metadata(
                 continue
             v = obj[key]
             if isinstance(v, (str, int, bool, float)):
-                metadata[key] = v
+                metadata[key] = v  # type: ignore[literal-required]
     return metadata
 
 
