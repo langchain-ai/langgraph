@@ -348,7 +348,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.10"
+version = "2.0.15"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1255,4 +1255,4 @@ watchmedo = ["PyYAML (>=3.10)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9.0,<4.0"
-content-hash = "ca18ea480430714e47685ff0f25da9990dbbdecd38e9c1a3ca41d42be7069067"
+content-hash = "369bfffecb9489835b43b8255932e043176a11d2f639aad2d055ffd89263ca1e"
