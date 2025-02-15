@@ -658,6 +658,11 @@
   resolved "https://registry.yarnpkg.com/@octokit/openapi-types/-/openapi-types-22.2.0.tgz#75aa7dcd440821d99def6a60b5f014207ae4968e"
   integrity sha512-QBhVjcUa9W7Wwhm6DBFu6ZZ+1/t/oYxqc2tp81Pi41YNuJinbFRx8B133qVOrAaBbF7D/m0Et6f9/pZt9Rc+tg==
 
+"@octokit/openapi-types@^23.0.1":
+  version "23.0.1"
+  resolved "https://registry.yarnpkg.com/@octokit/openapi-types/-/openapi-types-23.0.1.tgz#3721646ecd36b596ddb12650e0e89d3ebb2dd50e"
+  integrity sha512-izFjMJ1sir0jn0ldEKhZ7xegCTj/ObmEDlEfpFrx4k/JyZSMRHbO3/rBwgE7f3m2DHt+RrNGIVw4wSmwnm3t/g==
+
 "@octokit/plugin-paginate-rest@^11.0.0":
   version "11.3.5"
   resolved "https://registry.yarnpkg.com/@octokit/plugin-paginate-rest/-/plugin-paginate-rest-11.3.5.tgz#a1929b3ba3dc7b63bc73bb6d3c7a3faf2a9c7649"
@@ -678,11 +683,11 @@
     "@octokit/types" "^13.6.1"
 
 "@octokit/request-error@^6.0.1":
-  version "6.1.5"
-  resolved "https://registry.yarnpkg.com/@octokit/request-error/-/request-error-6.1.5.tgz#907099e341c4e6179db623a0328d678024f54653"
-  integrity sha512-IlBTfGX8Yn/oFPMwSfvugfncK2EwRLjzbrpifNaMY8o/HTEAFqCA1FZxjD9cWvSKBHgrIhc4CSBIzMxiLsbzFQ==
+  version "6.1.7"
+  resolved "https://registry.yarnpkg.com/@octokit/request-error/-/request-error-6.1.7.tgz#44fc598f5cdf4593e0e58b5155fe2e77230ff6da"
+  integrity sha512-69NIppAwaauwZv6aOzb+VVLwt+0havz9GT5YplkeJv7fG7a40qpLt/yZKyiDxAhgz0EtgNdNcb96Z0u+Zyuy2g==
   dependencies:
-    "@octokit/types" "^13.0.0"
+    "@octokit/types" "^13.6.2"
 
 "@octokit/request@^9.0.0":
   version "9.1.3"
@@ -710,6 +715,13 @@
   integrity sha512-PHZE9Z+kWXb23Ndik8MKPirBPziOc0D2/3KH1P+6jK5nGWe96kadZuE4jev2/Jq7FvIfTlT2Ltg8Fv2x1v0a5g==
   dependencies:
     "@octokit/openapi-types" "^22.2.0"
+
+"@octokit/types@^13.6.2":
+  version "13.8.0"
+  resolved "https://registry.yarnpkg.com/@octokit/types/-/types-13.8.0.tgz#3815885e5abd16ed9ffeea3dced31d37ce3f8a0a"
+  integrity sha512-x7DjTIbEpEWXK99DMd01QfWy0hd5h4EN+Q7shkdKds3otGQP+oWE/y0A76i1OvH9fygo4ddvNf7ZvF0t78P98A==
+  dependencies:
+    "@octokit/openapi-types" "^23.0.1"
 
 "@pkgjs/parseargs@^0.11.0":
   version "0.11.0"
