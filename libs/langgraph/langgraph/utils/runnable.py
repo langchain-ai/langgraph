@@ -13,6 +13,7 @@ from typing import (
     Coroutine,
     Iterator,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Union,
@@ -35,7 +36,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from typing_extensions import Concatenate, ParamSpec, TypeGuard
+from typing_extensions import TypeGuard
 
 from langgraph.constants import (
     CONF,
@@ -132,12 +133,51 @@ Each tuple contains:
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
 
 
-P = ParamSpec("P")  # to handle injected kwargs like `writer` / `store`
+class _RunnableWithWriter(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, writer: StreamWriter) -> Output: ...
+
+
+class _RunnableWithStore(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, store: BaseStore) -> Output: ...
+
+
+class _RunnableWithWriterStore(Protocol[Input, Output]):
+    def __call__(
+        self, state: Input, *, writer: StreamWriter, store: BaseStore
+    ) -> Output: ...
+
+
+class _RunnableWithConfigWriter(Protocol[Input, Output]):
+    def __call__(
+        self, state: Input, *, config: RunnableConfig, writer: StreamWriter
+    ) -> Output: ...
+
+
+class _RunnableWithConfigStore(Protocol[Input, Output]):
+    def __call__(
+        self, state: Input, *, config: RunnableConfig, store: BaseStore
+    ) -> Output: ...
+
+
+class _RunnableWithConfigWriterStore(Protocol[Input, Output]):
+    def __call__(
+        self,
+        state: Input,
+        *,
+        config: RunnableConfig,
+        writer: StreamWriter,
+        store: BaseStore,
+    ) -> Output: ...
+
 
 RunnableLike = Union[
     LCRunnableLike,
-    Callable[Concatenate[Input, P], Output],
-    Callable[Concatenate[Input, P], Awaitable[Output]],
+    _RunnableWithWriter[Input, Output],
+    _RunnableWithStore[Input, Output],
+    _RunnableWithWriterStore[Input, Output],
+    _RunnableWithConfigWriter[Input, Output],
+    _RunnableWithConfigStore[Input, Output],
+    _RunnableWithConfigWriterStore[Input, Output],
 ]
 
 
