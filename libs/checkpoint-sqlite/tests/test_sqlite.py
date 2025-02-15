@@ -73,7 +73,6 @@ class TestSqliteSaver:
             assert checkpoint.metadata == {
                 **self.metadata_2,
                 "thread_id": "thread-2",
-                "checkpoint_ns": "",
                 "run_id": "my_run_id",
             }
 
@@ -97,14 +96,15 @@ class TestSqliteSaver:
             search_results_1 = list(saver.list(None, filter=query_1))
             assert len(search_results_1) == 1
             assert search_results_1[0].metadata == {
-                **self.config_1["configurable"],
+                "thread_id": "thread-1",
+                "thread_ts": "1",
                 **self.metadata_1,
             }
 
             search_results_2 = list(saver.list(None, filter=query_2))
             assert len(search_results_2) == 1
             assert search_results_2[0].metadata == {
-                **self.config_2["configurable"],
+                "thread_id": "thread-2",
                 **self.metadata_2,
             }
 
