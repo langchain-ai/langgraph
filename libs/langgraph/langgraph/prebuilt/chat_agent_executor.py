@@ -14,6 +14,7 @@ from typing import (
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langchain_core.prompt_values import PromptValue
 from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
@@ -63,15 +64,15 @@ PROMPT_RUNNABLE_NAME = "Prompt"
 MessagesModifier = Union[
     SystemMessage,
     str,
-    Callable[[Sequence[BaseMessage]], Sequence[BaseMessage]],
-    Runnable[Sequence[BaseMessage], Sequence[BaseMessage]],
+    Callable[[Sequence[BaseMessage]], Union[Sequence[BaseMessage], PromptValue]],
+    Runnable[Sequence[BaseMessage], Union[Sequence[BaseMessage], PromptValue]],
 ]
 
 Prompt = Union[
     SystemMessage,
     str,
-    Callable[[StateSchema], Sequence[BaseMessage]],
-    Runnable[StateSchema, Sequence[BaseMessage]],
+    Callable[[StateSchema], Union[Sequence[BaseMessage], PromptValue]],
+    Runnable[StateSchema, Union[Sequence[BaseMessage], PromptValue]],
 ]
 
 
