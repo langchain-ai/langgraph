@@ -7,7 +7,7 @@
   "scripts": {
     "clean": "rm -rf dist/ dist-cjs/",
     "build": "yarn clean && yarn lc_build --create-entrypoints --pre --tree-shaking",
-    "prepublish": "yarn run build",
+    "prepack": "yarn run build",
     "format": "prettier --write src",
     "lint": "prettier --check src && tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathIgnorePatterns=\\.int\\.test.ts",
