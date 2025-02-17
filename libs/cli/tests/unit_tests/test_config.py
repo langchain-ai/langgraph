@@ -179,7 +179,9 @@ def test_config_to_docker_simple():
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
-        validate_config({"dependencies": ["."], "graphs": graphs}),
+        validate_config(
+            {"dependencies": [".", "../examples/graphs_reqs_a"], "graphs": graphs}
+        ),
         "langchain/langgraph-api",
     )
     expected_docker_stdin = """\
