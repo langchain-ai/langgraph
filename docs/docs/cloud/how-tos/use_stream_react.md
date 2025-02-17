@@ -15,7 +15,7 @@ Key features:
 
 Let's explore how to use `useStream()` in your React application.
 
-The `useStream()` provides a solid foundation for creating bespoke chat experiences. For pre-built chat components and interfaces, we recommend checking out [CopilotKit](https://docs.copilotkit.ai/coagents/quickstart/langgraph) and [assistant-ui](https://github.com/langchain-ai/assistant-ui).
+The `useStream()` provides a solid foundation for creating bespoke chat experiences. For pre-built chat components and interfaces, we recommend checking out [CopilotKit](https://docs.copilotkit.ai/coagents/quickstart/langgraph) and [assistant-ui](https://www.assistant-ui.com/docs/runtimes/langgraph).
 
 ## Example
 
