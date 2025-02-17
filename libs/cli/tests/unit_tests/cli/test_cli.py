@@ -130,7 +130,7 @@ services:
         build:
             context: .
             additional_contexts:
-                - cli_1: /Users/nuno/dev/langgraph/libs/cli
+                - cli_1: {str(pathlib.Path(__file__).parent.parent.parent.parent.absolute())}
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
                 # -- Adding local package . --

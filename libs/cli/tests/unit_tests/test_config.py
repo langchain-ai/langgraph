@@ -244,7 +244,7 @@ WORKDIR /deps/__outer_unit_tests/unit_tests\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {
-        "__outer_tests": "/Users/nuno/dev/langgraph/libs/cli/tests"
+        "__outer_tests": str(pathlib.Path(__file__).parent.parent.absolute()),
     }
 
 
