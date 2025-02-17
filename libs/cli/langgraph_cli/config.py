@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 import textwrap
+from collections import Counter
 from typing import NamedTuple, Optional, TypedDict, Union
 
 import click
@@ -294,10 +295,10 @@ class LocalDeps(NamedTuple):
             tuples. Each entry points to a local `requirements.txt` file and where
             it should be placed inside the Docker container before running `pip install`.
 
-        real_pkgs: A dictionary mapping a local directory path (host side) to the
-            same dependency string from the config. These directories contain the
-            necessary files (e.g., `pyproject.toml` or `setup.py`) to be installed
-            as a standard Python package with pip.
+        real_pkgs: A dictionary mapping a local directory path (host side) to a
+            tuple of (dependency_string, container_package_path). These directories
+            contain the necessary files (e.g., `pyproject.toml` or `setup.py`) to be
+            installed as a standard Python package with pip.
 
         faux_pkgs: A dictionary mapping a local directory path (host side) to a
             tuple of (dependency_string, container_package_path). For these
@@ -310,16 +311,23 @@ class LocalDeps(NamedTuple):
             directory. If the local dependency `"."` is present in the config, this
             field captures the path where that dependency will appear in the
             container (e.g., `/deps/<name>` or similar). Otherwise, it may be `None`.
+
+        additional_contexts: A list of paths to directories that contain local
+            dependencies in parent directories. These directories are added to the
+            Docker build context to ensure that the Dockerfile can access them.
     """
 
     pip_reqs: list[tuple[str, str]]
-    real_pkgs: dict[pathlib.Path, str]
+    real_pkgs: dict[pathlib.Path, tuple[str, str]]
     faux_pkgs: dict[pathlib.Path, tuple[str, str]]
     # if . is in dependencies, use it as working_dir
     working_dir: Optional[str] = None
+    # if there are local dependencies in parent directories, use additional_contexts
+    additional_contexts: list[pathlib.Path] = None
 
 
 def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps:
+    config_path = config_path.resolve()
     # ensure reserved package names are not used
     reserved = {
         "src",
@@ -336,6 +344,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
         "httpx",
         "langsmith",
     }
+    counter = Counter()
 
     def check_reserved(name: str, ref: str):
         if name in reserved:
@@ -348,7 +357,8 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
     pip_reqs = []
     real_pkgs = {}
     faux_pkgs = {}
-    working_dir = None
+    working_dir: Optional[str] = None
+    additional_contexts: list[pathlib.Path] = []
 
     for local_dep in config["dependencies"]:
         if not local_dep.startswith("."):
@@ -357,7 +367,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
 
         # Verify that the local dependency can be resolved
         # (e.g., this would raise an informative error if a user mistyped a path).
-        resolved = config_path.parent / local_dep
+        resolved = (config_path.parent / local_dep).resolve()
 
         # validate local dependency
         if not resolved.exists():
@@ -366,25 +376,28 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
             raise NotADirectoryError(
                 f"Local dependency must be a directory: {resolved}"
             )
-        elif not resolved.is_relative_to(config_path.parent):
-            raise ValueError(
-                f"Local dependency '{resolved}' must be a subdirectory of '{config_path.parent}'"
-            )
+        elif resolved == config_path.parent:
+            pass
+        elif config_path.parent not in resolved.parents:
+            additional_contexts.append(resolved)
 
         # Check for pyproject.toml or setup.py
         # If found, treat as a real package, if not treat as a faux package.
         # For faux packages, we'll also check for presence of requirements.txt.
         files = os.listdir(resolved)
-        if "pyproject.toml" in files:
+        if "pyproject.toml" in files or "setup.py" in files:
             # real package
-            real_pkgs[resolved] = local_dep
+
+            # assign a unique folder name
+            container_name = resolved.name
+            if counter[container_name] > 0:
+                container_name += f"_{counter[container_name]}"
+            counter[container_name] += 1
+            # add to deps
+            real_pkgs[resolved] = (local_dep, container_name)
+            # set working_dir
             if local_dep == ".":
-                working_dir = f"/deps/{resolved.name}"
-        elif "setup.py" in files:
-            # real package
-            real_pkgs[resolved] = local_dep
-            if local_dep == ".":
-                working_dir = f"/deps/{resolved.name}"
+                working_dir = f"/deps/{container_name}"
         else:
             # We could not find a pyproject.toml or setup.py, so treat as a faux package
             if any(file == "__init__.py" for file in files):
@@ -428,7 +441,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                     )
                 )
 
-    return LocalDeps(pip_reqs, real_pkgs, faux_pkgs, working_dir)
+    return LocalDeps(pip_reqs, real_pkgs, faux_pkgs, working_dir, additional_contexts)
 
 
 def _update_graph_paths(
@@ -556,7 +569,7 @@ def _update_auth_path(
 
 def python_config_to_docker(
     config_path: pathlib.Path, config: Config, base_image: str
-) -> str:
+) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     # configure pip
     pip_install = (
@@ -591,7 +604,14 @@ def python_config_to_docker(
     # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#package-data
     # https://til.simonwillison.net/python/pyproject
     faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
-        f"""ADD {relpath} {destpath}
+        (
+            f"""# -- Adding non-package dependency {fullpath.name} --
+COPY --from=__outer_{fullpath.name} . {destpath}"""
+            if fullpath in local_deps.additional_contexts
+            else f"""# -- Adding non-package dependency {fullpath.name} --
+ADD {relpath} {destpath}"""
+        )
+        + f"""
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "{fullpath.name}"' \\
@@ -599,12 +619,20 @@ RUN set -ex && \\
                 '[tool.setuptools.package-data]' \\
                 '"*" = ["**/*"]'; do \\
         echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
-    done"""
+    done
+# -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
+
     local_pkgs_str = os.linesep.join(
-        f"ADD {relpath} /deps/{fullpath.name}"
-        for fullpath, relpath in local_deps.real_pkgs.items()
+        f"""# -- Adding local package {relpath} --
+COPY --from={name} . /deps/{name}
+# -- End of local package {relpath} --"""
+        if fullpath in local_deps.additional_contexts
+        else f"""# -- Adding local package {relpath} --
+ADD {relpath} /deps/{name}
+# -- End of local package {relpath} --"""
+        for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
     installs = f"{os.linesep}{os.linesep}".join(
@@ -638,15 +666,30 @@ RUN set -ex && \\
         "",
         installs,
         "",
+        "# -- Installing all local dependencies --",
         f"RUN {pip_install} -e /deps/*",
+        "# -- End of local dependencies install --",
         os.linesep.join(env_vars),
         "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]
-    return os.linesep.join(docker_file_contents)
+
+    additional_contexts: dict[str, str] = {}
+    for p in local_deps.additional_contexts:
+        if p in local_deps.real_pkgs:
+            name = local_deps.real_pkgs[p][1]
+        elif p in local_deps.faux_pkgs:
+            name = f"__outer_{p.name}"
+        else:
+            raise RuntimeError(f"Unknown additional context: {p}")
+        additional_contexts[name] = str(p)
+
+    return os.linesep.join(docker_file_contents), additional_contexts
 
 
-def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+def node_config_to_docker(
+    config_path: pathlib.Path, config: Config, base_image: str
+) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
 
     def test_file(file_name):
@@ -686,7 +729,8 @@ ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
 ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
 """
 
-    return f"""FROM {base_image}:{config['node_version']}
+    return (
+        f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
 
@@ -698,10 +742,14 @@ ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 WORKDIR {faux_path}
 
-RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
+RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts""",
+        {},
+    )
 
 
-def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+def config_to_docker(
+    config_path: pathlib.Path, config: Config, base_image: str
+) -> tuple[str, dict[str, str]]:
     if config.get("node_version"):
         return node_config_to_docker(config_path, config, base_image)
 
@@ -737,13 +785,24 @@ def config_to_compose(
     else:
         watch_str = ""
 
+    dockerfile, additional_contexts = config_to_docker(config_path, config, base_image)
+
+    additional_contexts_str = "\n".join(
+        f"                - {name}: {path}"
+        for name, path in additional_contexts.items()
+    )
+    if additional_contexts_str:
+        additional_contexts_str = f"""
+            additional_contexts:
+{additional_contexts_str}"""
+
     return f"""
 {textwrap.indent(env_vars_str, "            ")}
         {env_file_str}
         pull_policy: build
         build:
-            context: .
+            context: .{additional_contexts_str}
             dockerfile_inline: |
-{textwrap.indent(config_to_docker(config_path, config, base_image), "                ")}
+{textwrap.indent(dockerfile, "                ")}
         {watch_str}
 """
