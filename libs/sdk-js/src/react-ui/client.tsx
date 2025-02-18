@@ -63,10 +63,14 @@ const EXT_STORE_SYMBOL = Symbol.for("LGUI_EXT_STORE");
 const REQUIRE_SYMBOL = Symbol.for("LGUI_REQUIRE");
 
 export function LoadExternalComponent({
+  apiUrl = "http://localhost:2024",
+  assistantId,
   stream,
   message,
   className,
 }: {
+  apiUrl?: string;
+  assistantId: string;
   stream: ReturnType<typeof useStream>;
   message: UIMessage;
   className?: string;
@@ -82,7 +86,7 @@ export function LoadExternalComponent({
   const state = React.useSyncExternalStore(store.subscribe, store.getSnapshot);
 
   React.useEffect(() => {
-    fetch("http://localhost:3123", {
+    fetch(`${apiUrl}/ui/${assistantId}`, {
       headers: { "Content-Type": "application/json" },
       method: "POST",
       body: JSON.stringify({ name: message.name, shadowRootId }),
@@ -95,7 +99,7 @@ export function LoadExternalComponent({
         const fragment = document.createRange().createContextualFragment(html);
         root.appendChild(fragment);
       });
-  }, [message.name, shadowRootId]);
+  }, [apiUrl, assistantId, message.name, shadowRootId]);
 
   return (
     <>
