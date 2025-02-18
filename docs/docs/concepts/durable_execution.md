@@ -6,7 +6,9 @@ LangGraph's built-in [persistence](./persistence.md) layer provides durable exec
 
 !!! tip
 
-    If you are using LangGraph with a checkpointer, you already have durable execution enabled. You can pause and resume workflows at any point, even after interruptions or failures. You can 
+    If you are using LangGraph with a checkpointer, you already have durable execution enabled. You can pause and resume workflows at any point, even after interruptions or failures.
+    To make the most of durable execution, ensure that your workflow is designed to be [deterministic](#determinism-and-consistent-replay) and [idempotent](#idempotency) and warp
+    any side effects or non-deterministic operations inside [tasks](./functional_api.md#task).
 
 ## Requirements
 
