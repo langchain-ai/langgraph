@@ -39,7 +39,7 @@ vercel-build-docs: install-vercel-deps
 serve-clean-docs: clean-docs
 	poetry run python -m mkdocs serve -c -f mkdocs.yml --strict -w ../libs/langgraph
 
-serve-docs: build-typedoc
+serve-docs: build-typedoc build-prebuilt
 	poetry run python -m mkdocs serve -f mkdocs.yml -w ../libs/langgraph  -w ../libs/checkpoint -w ../libs/sdk-py --dirty
 
 clean-docs:
