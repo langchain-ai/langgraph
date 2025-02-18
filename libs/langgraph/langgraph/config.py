@@ -177,4 +177,4 @@ def get_stream_writer() -> StreamWriter:
         ```
     """
     config = get_config()
-    return config[CONF][CONFIG_KEY_STREAM_WRITER]
+    return config[CONF].get(CONFIG_KEY_STREAM_WRITER, lambda c: None)
