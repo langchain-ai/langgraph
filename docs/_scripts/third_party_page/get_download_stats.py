@@ -37,21 +37,18 @@ def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
     for package in packages:
         url = f"https://pypistats.org/api/packages/{package['name']}/overall"
 
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
 
-            sorted_data = sorted(
-                data["data"],
-                key=lambda x: datetime.strptime(x["date"], "%Y-%m-%d"),
-                reverse=True,
-            )
+        sorted_data = sorted(
+            data["data"],
+            key=lambda x: datetime.strptime(x["date"], "%Y-%m-%d"),
+            reverse=True,
+        )
 
-            # Sum the last 7 days of downloads
-            num_downloads = sum(entry["downloads"] for entry in sorted_data[:7])
-        except requests.exceptions.HTTPError:
-            num_downloads = None
+        # Sum the last 7 days of downloads
+        num_downloads = sum(entry["downloads"] for entry in sorted_data[:7])
 
         resolved_packages.append(
             {
