@@ -49,7 +49,7 @@ def check_capabilities(runner) -> DockerCapabilities:
         raise click.UsageError("Docker not installed") from None
 
     try:
-        stdout, _ = runner.run(subp_exec("docker", "info", "-f", "json", collect=True))
+        stdout, _ = runner.run(subp_exec("docker", "info", "-f", "{{json .}}", collect=True))
         info = json.loads(stdout)
     except (click.exceptions.Exit, json.JSONDecodeError):
         raise click.UsageError("Docker not installed or not running") from None
