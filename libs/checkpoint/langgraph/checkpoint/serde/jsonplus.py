@@ -5,6 +5,7 @@ import json
 import pathlib
 import re
 from collections import deque
+from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from inspect import isclass
@@ -16,13 +17,13 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Callable, Optional, Sequence, Union, cast
+from typing import Any, Callable, Optional, Union, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import msgpack  # type: ignore[import-untyped]
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
-from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
@@ -502,15 +503,5 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
 
 
-ENC_POOL: deque[msgpack.Packer] = deque(maxlen=32)
-
-
 def _msgpack_enc(data: Any) -> bytes:
-    try:
-        enc = ENC_POOL.popleft()
-    except IndexError:
-        enc = msgpack.Packer(default=_msgpack_default)
-    try:
-        return enc.pack(data)
-    finally:
-        ENC_POOL.append(enc)
+    return msgpack.packb(data, default=_msgpack_default)
