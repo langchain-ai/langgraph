@@ -6499,7 +6499,6 @@ def test_pydantic_none_state_update() -> None:
 
 
 def test_get_stream_writer() -> None:
-
     class State(TypedDict):
         foo: str
 
@@ -6510,16 +6509,19 @@ def test_get_stream_writer() -> None:
 
     graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
     assert list(graph.stream({"foo": "bar"}, stream_mode="custom")) == ["custom!"]
-    assert list(graph.stream({"foo": "bar"}, stream_mode="values")) == [{"foo": "bar"}, {"foo": "bar"}]
+    assert list(graph.stream({"foo": "bar"}, stream_mode="values")) == [
+        {"foo": "bar"},
+        {"foo": "bar"},
+    ]
     assert list(graph.stream({"foo": "bar"}, stream_mode=["custom", "updates"])) == [
-            (
-                "custom",
-                "custom!",
-            ),
-            (
-                "updates",
-                {
-                    "my_node": {
+        (
+            "custom",
+            "custom!",
+        ),
+        (
+            "updates",
+            {
+                "my_node": {
                     "foo": "bar",
                 },
             },
