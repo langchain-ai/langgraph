@@ -1,10 +1,8 @@
-import argparse
 import ast
-import glob
 import os
 import re
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import nbformat
 from nbconvert.exporters import MarkdownExporter
@@ -352,17 +350,6 @@ exporter = MarkdownExporter(
     ],
 )
 
-md_executable = MarkdownExporter(
-    preprocessors=[
-        ExtractAttachmentsPreprocessor,
-        EscapePreprocessor(markdown_exec_migration=True),
-    ],
-    template_name="md_executable",
-    extra_template_basedirs=[
-        os.path.join(os.path.dirname(__file__), "notebook_convert_templates")
-    ],
-)
-
 
 def convert_notebook(
     notebook_path: Path,
@@ -372,99 +359,5 @@ def convert_notebook(
         nb = nbformat.read(f, as_version=4)
 
     nb.metadata.mode = mode
-    if mode == "markdown":
-        body, _ = exporter.from_notebook_node(nb)
-    else:
-        body, _ = md_executable.from_notebook_node(nb)
+    body, _ = exporter.from_notebook_node(nb)
     return body
-
-
-HERE = Path(__file__).parent
-DOCS = HERE.parent / "docs"
-
-
-# Convert notebooks to markdown
-def _convert_notebooks(
-    *,
-    output_dir: Optional[Path] = None,
-    replace: bool = False,
-    pattern: str = "*.ipynb",
-) -> None:
-    """Converting notebooks."""
-    if not output_dir and not replace:
-        raise ValueError("Either --output_dir or --replace must be specified")
-
-    output_dir_path = DOCS if replace else Path(output_dir)
-
-    # Get the directory where the script was executed
-    base_dir = os.getcwd()
-    # Build the full search pattern using the current working directory as the base
-    full_pattern = os.path.join(base_dir, args.pattern)
-
-    # Use glob with recursive search enabled
-    matching_files = glob.glob(full_pattern, recursive=True)
-    paths = [Path(file) for file in matching_files]
-
-    file_names = [notebook.name for notebook in paths]
-
-    for notebook in paths:
-        markdown = convert_notebook(notebook, mode="exec")
-        markdown_path = output_dir_path / notebook.relative_to(DOCS).with_suffix(".md")
-        markdown_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(markdown_path, "w") as f:
-            f.write(markdown)
-        if replace:
-            notebook.unlink(missing_ok=False)
-
-    if replace:
-        # The regex will match markdown links that point to *.ipynb files.
-        # It captures:
-        #   group(1): the link text (inside the square brackets)
-        #   group(2): the file path (without the trailing .ipynb)
-        link_pattern = r"(?<!!)\[([^\]]+)\]\((?![^)]*//)([^)]+)\.ipynb\)"
-
-        def replace_link(match: re.Match) -> str:
-            link_text = match.group(1)
-            link_target = match.group(2)
-            # Reconstruct the file name with the .ipynb extension.
-            # For example, if link_target is "foo/bar", then linked_file becomes "bar.ipynb".
-            linked_file = Path(link_target).name + ".ipynb"
-            # Only update if the notebook was among those converted.
-            if linked_file in file_names:
-                # Change the extension from .ipynb to .md
-                return f"[{link_text}]({link_target}.md)"
-            # Otherwise, leave the original link intact.
-            return match.group(0)
-
-        # Process all markdown files in the output directory.
-        for path in output_dir_path.rglob("**/*.md"):
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-            new_content = re.sub(link_pattern, replace_link, content)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(new_content)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert notebooks to markdown")
-    parser.add_argument(
-        "--output_dir",
-        default=None,
-        help="Directory to output markdown files",
-    )
-    parser.add_argument(
-        "--replace",
-        action="store_true",
-        help="Replace original notebooks with markdown files",
-    )
-    parser.add_argument(
-        "--pattern",
-        default="*.ipynb",
-        help="Glob pattern to match notebooks to convert",
-    )
-    args = parser.parse_args()
-    _convert_notebooks(
-        replace=args.replace,
-        output_dir=args.output_dir,
-        pattern=args.pattern,
-    )

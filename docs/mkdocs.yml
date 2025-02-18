@@ -56,29 +56,6 @@ plugins:
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - autorefs
-  - markdown-exec:
-      ansi: required
-      hooks:
-        python:
-          pre_session:
-            - _scripts.notebook_hooks:handle_vcr_setup
-          post_session:
-            - _scripts.notebook_hooks:handle_vcr_teardown
-        py:
-          pre_session:
-            - _scripts.notebook_hooks:handle_vcr_setup
-          post_session:
-            - _scripts.notebook_hooks:handle_vcr_teardown
-        typescript:
-          pre_session:
-            - _scripts.notebook_hooks:handle_vcr_setup
-          post_session:
-            - _scripts.notebook_hooks:handle_vcr_teardown
-        ts:
-          pre_session:
-            - _scripts.notebook_hooks:handle_vcr_setup
-          post_session:
-            - _scripts.notebook_hooks:handle_vcr_teardown
   - mkdocstrings:
       handlers:
         python:
@@ -123,9 +100,9 @@ nav:
           - LangGraph: how-tos#langgraph
           - Graph API Basics:
               - Graph API Basics: how-tos#graph-api-basics
-              - how-tos/state-reducers.md
-              - how-tos/sequence.md
-              - how-tos/branching.md
+              - how-tos/state-reducers.ipynb
+              - how-tos/sequence.ipynb
+              - how-tos/branching.ipynb
               - how-tos/recursion-limit.ipynb
               - how-tos/visualization.ipynb
           - Controllability:
@@ -203,7 +180,7 @@ nav:
               - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
               - Prebuilt ReAct Agent: how-tos#prebuilt-react-agent
-              - how-tos/create-react-agent.md
+              - how-tos/create-react-agent.ipynb
               - how-tos/create-react-agent-memory.ipynb
               - how-tos/create-react-agent-system-prompt.ipynb
               - how-tos/create-react-agent-hitl.ipynb

@@ -2,18 +2,13 @@ import logging
 import os
 import posixpath
 import re
-import traceback
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 
-from markdown import Markdown
-from markdown_exec.hooks import SessionHistoryEntry
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
-from pymdownx.superfences import SuperFencesException
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
 from _scripts.notebook_convert import convert_notebook
-from _scripts.setup_vcr import load_postamble, load_preamble, _hash_string
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -161,118 +156,6 @@ def _highlight_code_blocks(markdown: str) -> str:
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
     return markdown
-
-
-def handle_vcr_setup(
-    *,
-    formatter: Callable,
-    language: str,
-    code: str,
-    session: str,
-    id: str,
-    md: Markdown,
-    **kwargs: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Handle VCR setup in markdown content if necessary."""
-    try:
-        if kwargs.get("extra", None) is None:
-            raise SuperFencesException(
-                f"error while processing {language} block: extra dict is required"
-            )
-
-        if kwargs["extra"].get("path", None) is None:
-            raise SuperFencesException(
-                f"error while processing {language} block: path is required"
-            )
-
-        document_filename = kwargs["extra"]["path"]
-
-        if session is None or session == "" and id is None or id == "":
-            id = _hash_string(code)
-
-        if session is not None and session != "":
-            logger.info(f"new {language} session {session} on page {document_filename}")
-
-        cassette_prefix = document_filename.replace(".md", "").replace(os.path.sep, "_")
-
-        cassette_dir = os.path.abspath(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "cassettes")
-        )
-        os.makedirs(cassette_dir, exist_ok=True)
-
-        # Build a unique cassette name.
-        cassette_name = os.path.join(
-            cassette_dir,
-            f"{cassette_prefix}_{session if session else id}_{language}.msgpack.zlib",
-        )
-
-        # Add context manager at start with explicit __enter__ and __exit__ calls
-
-        wrapped_lines = [
-            load_preamble(language, code, cassette_name),
-            code,
-        ]
-
-        if session is None or session == "":
-            logger.info(
-                f"no session, adding postamble for {language} in {document_filename}"
-            )
-            wrapped_lines.append(load_postamble(language))
-
-        transformed_source = "\n".join(wrapped_lines)
-
-        # Propagate extras
-        keep_extras = {
-            key: value
-            for key, value in kwargs["extra"].items()
-            if key
-            in {
-                "hl_lines",
-            }
-        }
-
-        return dict(
-            transform_source=lambda code: (transformed_source, code),
-            id=id,
-            extra=keep_extras,
-        )
-    except Exception as e:
-        raise SuperFencesException(traceback.format_exc()) from e
-
-
-def handle_vcr_teardown(
-    *,
-    formatter: Callable,
-    language: str,
-    session: str,
-    history: list[SessionHistoryEntry],
-):
-    last_inputs = dict(history[-1].inputs)
-    code = load_postamble(language)
-    md = last_inputs["md"]
-    html = False
-    update_toc = False
-
-    document_filename = last_inputs.get("extra", {}).get("path", None)
-
-    if document_filename is None:
-        logger.warning(f"no document filename found while tearing down {session}!")
-    else:
-        logger.info(f"tearing down {language} {session} on {document_filename}")
-
-    kwargs = dict(
-        code=code,
-        session=session,
-        id=f"{id}_vcr_end",
-        md=md,
-        html=html,
-        update_toc=update_toc,
-        extra={},
-    )
-
-    # This doesn't actually render anything, we just call the formatter so it
-    # executes in the same context as the session of which we're disposing.
-    formatter(**kwargs)
 
 
 def _on_page_markdown_with_config(
