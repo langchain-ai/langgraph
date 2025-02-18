@@ -219,8 +219,11 @@ ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:gr
 WORKDIR /deps/__outer_unit_tests/unit_tests\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
+
     assert additional_contexts == {
-        "__outer_graphs_reqs_a": "/Users/nuno/dev/langgraph/libs/cli/examples/graphs_reqs_a"
+        "__outer_graphs_reqs_a": str(
+            (pathlib.Path(__file__).parent / "../../examples/graphs_reqs_a").resolve()
+        )
     }
 
 
