@@ -323,7 +323,6 @@ class RemoteGraph(PregelProtocol):
             if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
 
-        # Preserve top-level keys like recursion_limit.
         sanitized = {
             "tags": config.get("tags") or [],
             "metadata": config.get("metadata") or {},
