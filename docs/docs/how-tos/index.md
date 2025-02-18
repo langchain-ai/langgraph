@@ -39,8 +39,7 @@ execution of your graph.
 - [How to use MongoDB checkpointer for persistence](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
 
-See the below guides for how-to add persistence to your workflow using the (beta)
-[Functional API](../concepts/functional_api.md):
+See the below guides for how-to add persistence to your workflow using the [Functional API](../concepts/functional_api.md):
 
 - [How to add thread-level persistence (functional API)](persistence-functional.ipynb)
 - [How to add cross-thread persistence (functional API)](cross-thread-persistence-functional.ipynb)
@@ -73,7 +72,7 @@ Other methods:
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb): Edit graph state using `graph.update_state` method. Use this if implementing a **human-in-the-loop** workflow via **static breakpoints**.
 - [How to add dynamic breakpoints with `NodeInterrupt`](human_in_the_loop/dynamic_breakpoints.ipynb): **Not recommended**: Use the [`interrupt` function](../concepts/human_in_the_loop.md) instead.
 
-See the below guides for how-to implement human-in-the-loop workflows with the (beta)
+See the below guides for how-to implement human-in-the-loop workflows with the
 [Functional API](../concepts/functional_api.md):
 
 - [How to wait for user input (Functional API)](wait-user-input-functional.ipynb)
@@ -130,8 +129,7 @@ These how-to guides show common patterns for tool calling with LangGraph:
 
 See the [multi-agent tutorials](../tutorials/index.md#multi-agent-systems) for implementations of other multi-agent architectures.
 
-See the below guides for how to implement multi-agent workflows with the (beta)
-[Functional API](../concepts/functional_api.md):
+See the below guides for how to implement multi-agent workflows with the [Functional API](../concepts/functional_api.md):
 
 - [How to build a multi-agent network (functional API)](multi-agent-network-functional.ipynb)
 - [How to add multi-turn conversation in a multi-agent application (functional API)](multi-agent-multi-turn-convo-functional.ipynb)
@@ -149,8 +147,7 @@ See the below guides for how to implement multi-agent workflows with the (beta)
 - [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 - [How to integrate LangGraph with AutoGen, CrewAI, and other frameworks](autogen-integration.ipynb)
 
-See the below guide for how to integrate with other frameworks using the (beta)
-[Functional API](../concepts/functional_api.md):
+See the below guide for how to integrate with other frameworks using the [Functional API](../concepts/functional_api.md):
 
 - [How to integrate LangGraph (functional API) with AutoGen, CrewAI, and other frameworks](autogen-integration-functional.ipynb)
 
@@ -174,8 +171,7 @@ overview of its underlying implementation to help you customize for your own nee
 
 - [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)
 
-See the below guide for how-to build ReAct agents with the (beta)
-[Functional API](../concepts/functional_api.md):
+See the below guide for how-to build ReAct agents with the [Functional API](../concepts/functional_api.md):
 
 - [How to create a ReAct agent from scratch (Functional API)](react-agent-from-scratch-functional.ipynb)
 
