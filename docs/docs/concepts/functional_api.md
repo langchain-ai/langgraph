@@ -829,7 +829,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.func import entrypoint, task
 from langgraph.types import StreamWriter
 
-# Global variable to track the number of attempts
+# This variable is just used for demonstration purposes to simulate a network failure.
+# It's not something you will have in your actual code.
 attempts = 0
 
 @task()
