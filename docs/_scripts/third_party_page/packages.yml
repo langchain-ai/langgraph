@@ -12,3 +12,6 @@ packages:
   - name: "langmem"
     repo: "langchain-ai/langmem"
     description: "Build agents that learn and adapt from interactions over time."
+  - name: "langchain-mcp-adapters"
+    repo: "langchain-ai/langchain-mcp-adapters"
+    description: "Make Anthropic Model Context Protocol (MCP) tools compatible with LangGraph agents."
