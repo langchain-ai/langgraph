@@ -286,7 +286,7 @@ class StateGraph(Graph):
         Will take the name of the function/runnable as the node name.
 
         Args:
-            node (Union[str, RunnableLike)]: The function or runnable this node will run.
+            node (Union[str, RunnableLike]): The function or runnable this node will run.
             action (Optional[RunnableLike]): The action associated with the node. (default: None)
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
