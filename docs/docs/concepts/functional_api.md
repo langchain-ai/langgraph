@@ -1,8 +1,5 @@
 # Functional API
 
-!!! warning "Beta"
-    The Functional API is currently in **beta** and is subject to change. Please [report any issues](https://github.com/langchain-ai/langgraph/issues) or feedback to the LangGraph team.
-
 ## Overview
 
 The **Functional API** allows you to add LangGraph's key features -- [persistence](./persistence.md), [memory](./memory.md), [human-in-the-loop](./human_in_the_loop.md), and [streaming](./streaming.md) — to your applications with minimal changes to your existing code.

@@ -28,7 +28,7 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 - [Persistence](persistence.md): LangGraph has a built-in persistence layer, implemented through checkpointers. This persistence layer helps to support powerful capabilities like human-in-the-loop, memory, time travel, and fault-tolerance.
 - [Memory](memory.md): Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences.
 - [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
-- [Functional API (beta)](functional_api.md): An alternative to [Graph API (StateGraph)](low_level.md#stategraph) for development in LangGraph.
+- [Functional API](functional_api.md): `@entrypoint` and `@task` decorators that allow you to add LangGraph functionality to an existing codebase.
 - [FAQ](faq.md): Frequently asked questions about LangGraph.
 
 ## LangGraph Platform

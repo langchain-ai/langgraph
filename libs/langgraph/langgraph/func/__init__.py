@@ -57,9 +57,6 @@ def task(
 ]:
     """Define a LangGraph task using the `task` decorator.
 
-    !!! warning "Beta"
-        The Functional API is currently in beta and is subject to change.
-
     !!! important "Requires python 3.11 or higher for async functions"
         The `task` decorator supports both sync and async functions. To use async
         functions, ensure that you are using Python 3.11 or higher.
@@ -152,10 +149,6 @@ S = TypeVar("S")
 # In addition, we'll be able to surface this information in the API Reference.
 class entrypoint:
     """Define a LangGraph workflow using the `entrypoint` decorator.
-
-    !!! warning "Beta"
-        The Functional API is currently in beta and is subject to change.
-
 
     ### Function signature
 
