@@ -53,6 +53,9 @@ def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
                 if first_release_date is None or upload_time < first_release_date:
                     first_release_date = upload_time
 
+        if first_release_date is None:
+            raise AssertionError(f"Package {package['name']} has no releases yet")
+
         # If package was published in last 48 hours, skip download stats
         if (datetime.now() - first_release_date).total_seconds() >= 48 * 3600:
             url = f"https://pypistats.org/api/packages/{package['name']}/overall"
