@@ -59,6 +59,7 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
@@ -1755,7 +1756,7 @@ class Pregel(PregelProtocol):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=loop.submit,
+                    submit=config[CONF].get(CONFIG_KEY_RUNNER_SUBMIT, loop.submit),
                     put_writes=loop.put_writes,
                     schedule_task=loop.accept_push,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
@@ -2047,7 +2048,7 @@ class Pregel(PregelProtocol):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=loop.submit,
+                    submit=config[CONF].get(CONFIG_KEY_RUNNER_SUBMIT, loop.submit),
                     put_writes=loop.put_writes,
                     schedule_task=loop.accept_push,
                     use_astream=do_stream is not None,
