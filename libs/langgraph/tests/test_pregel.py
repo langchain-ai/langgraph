@@ -54,6 +54,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
+from langgraph.config import get_stream_writer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.func import entrypoint, task
@@ -6495,3 +6496,34 @@ def test_pydantic_none_state_update() -> None:
 
     graph = StateGraph(State).add_node(node_a).add_edge(START, "node_a").compile()
     assert graph.invoke({"foo": ""}) == {"foo": None}
+
+
+def test_get_stream_writer() -> None:
+    class State(TypedDict):
+        foo: str
+
+    def my_node(state):
+        writer = get_stream_writer()
+        writer("custom!")
+        return state
+
+    graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
+    assert list(graph.stream({"foo": "bar"}, stream_mode="custom")) == ["custom!"]
+    assert list(graph.stream({"foo": "bar"}, stream_mode="values")) == [
+        {"foo": "bar"},
+        {"foo": "bar"},
+    ]
+    assert list(graph.stream({"foo": "bar"}, stream_mode=["custom", "updates"])) == [
+        (
+            "custom",
+            "custom!",
+        ),
+        (
+            "updates",
+            {
+                "my_node": {
+                    "foo": "bar",
+                },
+            },
+        ),
+    ]
