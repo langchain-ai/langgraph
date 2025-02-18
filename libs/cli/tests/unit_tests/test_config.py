@@ -180,12 +180,16 @@ def test_config_to_docker_simple():
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
         validate_config(
-            {"dependencies": [".", "../examples/graphs_reqs_a"], "graphs": graphs}
+            {"dependencies": [".", "../../examples/graphs_reqs_a"], "graphs": graphs}
         ),
         "langchain/langgraph-api",
     )
     expected_docker_stdin = """\
 FROM langchain/langgraph-api:3.11
+# -- Installing local requirements --
+COPY --from=__outer_requirements.txt requirements.txt /deps/__outer_graphs_reqs_a/graphs_reqs_a/requirements.txt
+RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -r /deps/__outer_graphs_reqs_a/graphs_reqs_a/requirements.txt
+# -- End of local requirements install --
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/__outer_unit_tests/unit_tests
 RUN set -ex && \\
@@ -197,6 +201,17 @@ RUN set -ex && \\
         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
     done
 # -- End of non-package dependency unit_tests --
+# -- Adding non-package dependency graphs_reqs_a --
+COPY --from=__outer_graphs_reqs_a . /deps/__outer_graphs_reqs_a/graphs_reqs_a
+RUN set -ex && \\
+    for line in '[project]' \\
+                'name = "graphs_reqs_a"' \\
+                'version = "0.1"' \\
+                '[tool.setuptools.package-data]' \\
+                '"*" = ["**/*"]'; do \\
+        echo "$line" >> /deps/__outer_graphs_reqs_a/pyproject.toml; \\
+    done
+# -- End of non-package dependency graphs_reqs_a --
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
@@ -204,7 +219,9 @@ ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:gr
 WORKDIR /deps/__outer_unit_tests/unit_tests\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
-    assert additional_contexts == {}
+    assert additional_contexts == {
+        "__outer_graphs_reqs_a": "/Users/nuno/dev/langgraph/libs/cli/examples/graphs_reqs_a"
+    }
 
 
 def test_config_to_docker_outside_path():

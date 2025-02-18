@@ -317,7 +317,7 @@ class LocalDeps(NamedTuple):
             Docker build context to ensure that the Dockerfile can access them.
     """
 
-    pip_reqs: list[tuple[str, str]]
+    pip_reqs: list[tuple[pathlib.Path, str]]
     real_pkgs: dict[pathlib.Path, tuple[str, str]]
     faux_pkgs: dict[pathlib.Path, tuple[str, str]]
     # if . is in dependencies, use it as working_dir
@@ -436,7 +436,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                 rfile = resolved / "requirements.txt"
                 pip_reqs.append(
                     (
-                        rfile.relative_to(config_path.parent).as_posix(),
+                        rfile,
                         f"{container_path}/requirements.txt",
                     )
                 )
@@ -594,9 +594,15 @@ def python_config_to_docker(
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
-            f"ADD {reqpath} {destpath}" for reqpath, destpath in local_deps.pip_reqs
+            f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
+            if reqpath.parent in local_deps.additional_contexts
+            else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+            for reqpath, destpath in local_deps.pip_reqs
         )
         pip_reqs_str += f'{os.linesep}RUN {pip_install} {" ".join("-r " + r for _,r in local_deps.pip_reqs)}'
+        pip_reqs_str = f"""# -- Installing local requirements --
+{pip_reqs_str}
+# -- End of local requirements install --"""
 
     else:
         pip_reqs_str = ""
