@@ -323,7 +323,7 @@ class RemoteGraph(PregelProtocol):
             if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
 
-        sanitized = {
+        sanitized: RunnableConfig = {
             "tags": config.get("tags") or [],
             "metadata": config.get("metadata") or {},
             "configurable": new_configurable,
