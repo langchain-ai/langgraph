@@ -4452,7 +4452,9 @@ def _provided_vals(d: dict):
     return {k: v for k, v in d.items() if v is not None}
 
 
-_registered_transports: typing.Optional[list[httpx.ASGITransport]] = []
+_registered_transports: list[httpx.ASGITransport] = []
+
+
 # Do not move; this is used in the server.
 def configure_loopback_transports(app: Any) -> None:
     for transport in _registered_transports:
