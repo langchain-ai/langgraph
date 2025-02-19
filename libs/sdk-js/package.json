@@ -43,6 +43,14 @@
     "react": "^18 || ^19",
     "@langchain/core": ">=0.2.31 <0.4.0"
   },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "@langchain/core": {
+      "optional": true
+    }
+  },
   "exports": {
     ".": {
       "types": {
