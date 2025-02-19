@@ -7,7 +7,7 @@ LangGraph's built-in [persistence](./persistence.md) layer provides durable exec
 !!! tip
 
     If you are using LangGraph with a checkpointer, you already have durable execution enabled. You can pause and resume workflows at any point, even after interruptions or failures.
-    To make the most of durable execution, ensure that your workflow is designed to be [deterministic](#determinism-and-consistent-replay) and [idempotent](#idempotency) and warp any side effects or non-deterministic operations inside [tasks](./functional_api.md#task). You can use [tasks](./functional_api.md#task) from both the [Graph API](./low_level.md) and the [Functional API](./functional_api.md).
+    To make the most of durable execution, ensure that your workflow is designed to be [deterministic](#determinism-and-consistent-replay) and [idempotent](#idempotency) and wrap any side effects or non-deterministic operations inside [tasks](./functional_api.md#task). You can use [tasks](./functional_api.md#task) from both the [StateGraph (Graph API)](./low_level.md) and the [Functional API](./functional_api.md).
 
 ## Requirements
 
@@ -23,125 +23,119 @@ When you resume a workflow run, the code does **NOT** resume from the **same lin
 
 As a result, when you are writing a workflow for durable execution, you must wrap any non-deterministic operations (e.g., random number generation) and any operations with side effects (e.g., file writes, API calls) inside [tasks](./functional_api.md#task) or [nodes](./low_level.md#nodes).
 
-!!! tip "Using Tasks with StateGraph API"
+To ensure that your workflow is deterministic and can be consistently replayed, follow these guidelines:
 
-    If a node contains multiple operations, it is easier to convert each operation into a **task** rather than refactor the operations into individual nodes. See the [example below](#__tabbed_1_2) for more details.
-
-- **Avoid Repeating Work**:  Place operations that produce side effects (such as logging, file writes, or network calls) after an interrupt in StateGraph (Graph API) **nodes** or encapsulate them within [tasks](./functional_api.md#task). This prevents their unintended repetition when the workflow is resumed. LangGraph will look up information stored in the persistence layer previously executed **nodes** or **tasks** for the specific run and will swap in the results of those tasks instead of re-executing them.
+- **Avoid Repeating Work**:  If a [node](./low_level.md#nodes) contains multiple operations with side effects (e.g., logging, file writes, or network calls), wrap each operation in a separate **task**. This ensures that when the workflow is resumed, the operations are not repeated, and their results are retrieved from the persistence layer.
 - **Encapsulate Non-Deterministic Operations:**  Wrap any code that might yield non-deterministic results (e.g., random number generation) inside **tasks** or **nodes**. This ensures that, upon resumption, the workflow follows the exact recorded sequence of steps with the same outcomes.
-
-
-??? example "Using Tasks in a StateGraph (Graph API)"
-
-    If a node contains multiple operations, it is easier to wrap each operation in a **task** rather than separate each operation into its own node. See
-    example below for more details.
-
-    === "Original"
-
-        ```python
-        from typing import NotRequired
-        from typing_extensions import TypedDict
-        import uuid
-
-        from langgraph.graph import StateGraph, START, END
-        from langgraph.checkpoint.memory import MemorySaver
-        import requests
-
-        # Define a TypedDict to represent the state
-        class State(TypedDict):
-            url: str
-            result: NotRequired[str]
-
-        def call_api(state: State):
-            """Example node that makes an API request."""
-            # highlight-next-line
-            result = requests.get(state['url']).text[:100]  # Side-effect
-            return {
-                "result": result
-            }
-
-        # Create a StateGraph builder and add a node for the call_api function
-        builder = StateGraph(State)
-        builder.add_node("call_api", call_api)
-
-        # Connect the start and end nodes to the call_api node
-        builder.add_edge(START, "call_api")
-        builder.add_edge("call_api", END)
-
-        # Specify a checkpointer
-        checkpointer = MemorySaver()
-
-        # Compile the graph with the checkpointer
-        graph = builder.compile(checkpointer=checkpointer)
-
-        # Define a config with a thread ID.
-        thread_id = uuid.uuid4()
-        config = {"configurable": {"thread_id": thread_id}}
-
-        # Invoke the graph
-        graph.invoke({"url": "https://www.example.com"}, config)
-        ```
-
-    === "With task"
-
-        ```python
-        from typing import NotRequired
-        from typing_extensions import TypedDict
-        import uuid
-
-        from langgraph.graph import StateGraph, START, END
-        from langgraph.func import task
-        import requests
-
-        # Define a TypedDict to represent the state
-        class State(TypedDict):
-            urls: list[str]
-            result: NotRequired[list[str]]
-
-
-        @task
-        def _make_request(url: str):
-            """Make a request."""
-            # highlight-next-line
-            return requests.get(url).text[:100]
-
-        def call_api(state: State):
-            """Example node that makes an API request."""
-            # highlight-next-line
-            requests = [_make_request(url) for url in state['urls']]
-            results = [request.result() for request in requests]
-            return {
-                "results": results
-            }
-
-        # Create a StateGraph builder and add a node for the call_api function
-        builder = StateGraph(State)
-        builder.add_node("call_api", call_api)
-
-        # Connect the start and end nodes to the call_api node
-        builder.add_edge(START, "call_api")
-        builder.add_edge("call_api", END)
-
-        # Specify a checkpointer
-        checkpointer = MemorySaver()
-
-        # Compile the graph with the checkpointer
-        graph = builder.compile(checkpointer=checkpointer)
-
-        # Define a config with a thread ID.
-        thread_id = uuid.uuid4()
-        config = {"configurable": {"thread_id": thread_id}}
-
-        # Invoke the graph
-        graph.invoke({"urls": ["https://www.example.com"]}, config)
-        ```
+- **Use Idempotent Operations**: When possible ensure that side effects (e.g., API calls, file writes) are idempotent. This means that if an operation is retried after a failure in the workflow, it will have the same effect as the first time it was executed. This is particularly important for operations that result in data writes. In the event that a **task** starts but fails to complete successfully, the workflow's resumption will re-run the **task**, relying on recorded outcomes to maintain consistency. Use idempotency keys or verify existing results to avoid unintended duplication, ensuring a smooth and predictable workflow execution.
 
 For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_api.md#common-pitfalls) section in the functional API, which shows
 how to structure your code using **tasks** to avoid these issues. The same principles apply to the [StateGraph (Graph API)][langgraph.graph.state.StateGraph].
 
-## Idempotency
+## Using tasks in nodes
 
-Idempotency ensures that running the same operation multiple times produces the same result. This helps prevent duplicate API calls and redundant processing if a step is rerun due to a failure. Always place API calls inside **tasks** functions for checkpointing, and design them to be idempotent in case of re-execution. Re-execution can occur if a **task** starts, but does not complete successfully. Then, if the workflow is resumed, the **task** will run again. Use idempotency keys or verify existing results to avoid duplication.
+If a [node](./low_level.md#nodes) contains multiple operations, you may find it easier to convert each operation into a **task** rather than refactor the operations into individual nodes.
+
+=== "Original"
+
+    ```python
+    from typing import NotRequired
+    from typing_extensions import TypedDict
+    import uuid
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import StateGraph, START, END
+    import requests
+
+    # Define a TypedDict to represent the state
+    class State(TypedDict):
+        url: str
+        result: NotRequired[str]
+
+    def call_api(state: State):
+        """Example node that makes an API request."""
+        # highlight-next-line
+        result = requests.get(state['url']).text[:100]  # Side-effect
+        return {
+            "result": result
+        }
+
+    # Create a StateGraph builder and add a node for the call_api function
+    builder = StateGraph(State)
+    builder.add_node("call_api", call_api)
+
+    # Connect the start and end nodes to the call_api node
+    builder.add_edge(START, "call_api")
+    builder.add_edge("call_api", END)
+
+    # Specify a checkpointer
+    checkpointer = MemorySaver()
+
+    # Compile the graph with the checkpointer
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Define a config with a thread ID.
+    thread_id = uuid.uuid4()
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Invoke the graph
+    graph.invoke({"url": "https://www.example.com"}, config)
+    ```
+
+=== "With task"
+
+    ```python
+    from typing import NotRequired
+    from typing_extensions import TypedDict
+    import uuid
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.func import task
+    from langgraph.graph import StateGraph, START, END
+    import requests
+
+    # Define a TypedDict to represent the state
+    class State(TypedDict):
+        urls: list[str]
+        result: NotRequired[list[str]]
+
+
+    @task
+    def _make_request(url: str):
+        """Make a request."""
+        # highlight-next-line
+        return requests.get(url).text[:100]
+
+    def call_api(state: State):
+        """Example node that makes an API request."""
+        # highlight-next-line
+        requests = [_make_request(url) for url in state['urls']]
+        results = [request.result() for request in requests]
+        return {
+            "results": results
+        }
+
+    # Create a StateGraph builder and add a node for the call_api function
+    builder = StateGraph(State)
+    builder.add_node("call_api", call_api)
+
+    # Connect the start and end nodes to the call_api node
+    builder.add_edge(START, "call_api")
+    builder.add_edge("call_api", END)
+
+    # Specify a checkpointer
+    checkpointer = MemorySaver()
+
+    # Compile the graph with the checkpointer
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Define a config with a thread ID.
+    thread_id = uuid.uuid4()
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Invoke the graph
+    graph.invoke({"urls": ["https://www.example.com"]}, config)
+    ```
 
 ## Resuming Workflows
 
