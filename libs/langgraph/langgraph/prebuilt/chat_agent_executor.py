@@ -56,6 +56,10 @@ class AgentState(TypedDict):
 
     remaining_steps: RemainingSteps
 
+
+class AgentStateWithStructuredResponse(AgentState):
+    """The state of the agent with a structured response."""
+
     structured_response: StructuredResponse
 
 
@@ -603,6 +607,13 @@ def create_react_agent(
         if missing_keys := required_keys - set(state_schema.__annotations__):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
+    if state_schema is None:
+        state_schema = (
+            AgentStateWithStructuredResponse
+            if response_format is not None
+            else AgentState
+        )
+
     if isinstance(tools, ToolExecutor):
         tool_classes: Sequence[BaseTool] = tools.tools
         tool_node = ToolNode(tool_classes)
@@ -752,7 +763,7 @@ def create_react_agent(
 
     if not tool_calling_enabled:
         # Define a new graph
-        workflow = StateGraph(state_schema or AgentState)
+        workflow = StateGraph(state_schema)
         workflow.add_node("agent", RunnableCallable(call_model, acall_model))
         workflow.set_entry_point("agent")
         if response_format is not None:
