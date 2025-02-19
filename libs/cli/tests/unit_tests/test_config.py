@@ -32,6 +32,7 @@ def test_validate_config():
         "env": {},
         "store": None,
         "auth": None,
+        "http": None,
         **expected_config,
     }
     actual_config = validate_config(expected_config)
@@ -50,6 +51,7 @@ def test_validate_config():
         "env": env,
         "store": None,
         "auth": None,
+        "http": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
@@ -108,6 +110,18 @@ def test_validate_config():
         }
     )
     assert config["python_version"] == "3.12-slim"
+    with pytest.raises(
+        ValueError,
+        match="Invalid http.app format",
+    ):
+        validate_config(
+            {
+                "python_version": "3.12",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "http": {"app": "../../examples/my_app.py"},
+            }
+        )
 
 
 def test_validate_config_file():
@@ -180,7 +194,11 @@ def test_config_to_docker_simple():
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
         validate_config(
-            {"dependencies": [".", "../../examples/graphs_reqs_a"], "graphs": graphs}
+            {
+                "dependencies": [".", "../../examples/graphs_reqs_a", "../../examples"],
+                "graphs": graphs,
+                "http": {"app": "../../examples/my_app.py:app"},
+            }
         ),
         "langchain/langgraph-api",
     )
@@ -190,6 +208,9 @@ FROM langchain/langgraph-api:3.11
 COPY --from=__outer_requirements.txt requirements.txt /deps/__outer_graphs_reqs_a/graphs_reqs_a/requirements.txt
 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -r /deps/__outer_graphs_reqs_a/graphs_reqs_a/requirements.txt
 # -- End of local requirements install --
+# -- Adding local package ../../examples --
+COPY --from=examples . /deps/examples
+# -- End of local package ../../examples --
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/__outer_unit_tests/unit_tests
 RUN set -ex && \\
@@ -215,6 +236,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
+ENV LANGGRAPH_HTTP='{"app": "/deps/examples/my_app.py:app"}'
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
 WORKDIR /deps/__outer_unit_tests/unit_tests\
 """
@@ -223,7 +245,8 @@ WORKDIR /deps/__outer_unit_tests/unit_tests\
     assert additional_contexts == {
         "__outer_graphs_reqs_a": str(
             (pathlib.Path(__file__).parent / "../../examples/graphs_reqs_a").resolve()
-        )
+        ),
+        "examples": str((pathlib.Path(__file__).parent / "../../examples").resolve()),
     }
 
 
