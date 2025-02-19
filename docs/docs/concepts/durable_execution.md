@@ -146,8 +146,11 @@ Once you have enabled durable execution in your workflow, you can resume executi
 
 ## Starting Points for Resuming Workflows
 
-If you're using a [StateGraph (Graph API)][langgraph.graph.state.StateGraph], the starting point is the beginning of the [**node**](./low_level.md#nodes) where execution stopped. If you're using the Functional API, the starting point is the beginning of the [**entrypoint**](./functional_api.md#entrypoint) where execution stopped.
-
-If you're making a subgraph call inside a node, the starting point will be the **parent** node that called the subgraph that was halted.
+* If you're using a [StateGraph (Graph API)][langgraph.graph.state.StateGraph], the starting point is the beginning of the [**node**](./low_level.md#nodes) where execution stopped. 
+* If you're making a subgraph call inside a node, the starting point will be the **parent** node that called the subgraph that was halted.
 Inside the subgraph, the starting point will be the specific [**node**](./low_level.md#nodes) where execution stopped.
+* If you're using the Functional API, the starting point is the beginning of the [**entrypoint**](./functional_api.md#entrypoint) where execution stopped.
+
+
+
 
