@@ -401,6 +401,7 @@ interface UseStreamOptions<
 interface UseStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   UpdateType extends Record<string, unknown> = Partial<StateType>,
+  ConfigurableType extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
    * The current values of the thread.
@@ -425,7 +426,10 @@ interface UseStream<
   /**
    * Create and stream a run to the thread.
    */
-  submit: (values: UpdateType, options?: SubmitOptions<StateType>) => void;
+  submit: (
+    values: UpdateType,
+    options?: SubmitOptions<StateType, ConfigurableType>,
+  ) => void;
 
   /**
    * The current branch of the thread.
@@ -468,10 +472,14 @@ interface UseStream<
   ) => MessageMetadata<StateType> | undefined;
 }
 
+type ConfigWithConfigurable<ConfigurableType extends Record<string, unknown>> =
+  Config & { configurable?: ConfigurableType };
+
 interface SubmitOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
+  ConfigurableType extends Record<string, unknown> = Record<string, unknown>,
 > {
-  config?: Config;
+  config?: ConfigWithConfigurable<ConfigurableType>;
   checkpoint?: Omit<Checkpoint, "thread_id"> | null;
   command?: Command;
   interruptBefore?: "*" | string[];
@@ -490,10 +498,11 @@ interface SubmitOptions<
 export function useStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   UpdateType extends Record<string, unknown> = Partial<StateType>,
+  ConfigurableType extends Record<string, unknown> = Record<string, unknown>,
   CustomType = unknown,
 >(
   options: UseStreamOptions<StateType, UpdateType, CustomType>,
-): UseStream<StateType, UpdateType> {
+): UseStream<StateType, UpdateType, ConfigurableType> {
   type EventStreamEvent =
     | ValuesStreamEvent<StateType>
     | UpdatesStreamEvent<UpdateType>
@@ -640,7 +649,7 @@ export function useStream<
 
   const submit = async (
     values: UpdateType | undefined,
-    submitOptions?: SubmitOptions<StateType>,
+    submitOptions?: SubmitOptions<StateType, ConfigurableType>,
   ) => {
     try {
       setIsLoading(true);
