@@ -270,6 +270,7 @@ nav:
           - concepts/memory.md
           - concepts/streaming.md
           - concepts/functional_api.md
+          - concepts/durable_execution.md
         - LangGraph Platform:
           - LangGraph Platform: concepts#langgraph-platform
           - High Level:
