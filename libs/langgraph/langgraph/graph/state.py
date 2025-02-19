@@ -675,7 +675,9 @@ class CompiledStateGraph(CompiledGraph):
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
-                return input._update_as_tuples()
+                return [
+                    (k, v) for k, v in input._update_as_tuples() if k in output_keys
+                ]
             elif (
                 isinstance(input, (list, tuple))
                 and input
@@ -686,7 +688,9 @@ class CompiledStateGraph(CompiledGraph):
                     if isinstance(i, Command):
                         if i.graph == Command.PARENT:
                             continue
-                        updates.extend(i._update_as_tuples())
+                        updates.extend(
+                            (k, v) for k, v in i._update_as_tuples() if k in output_keys
+                        )
                     else:
                         updates.extend(_get_updates(i) or ())
                 return updates
