@@ -83,7 +83,7 @@ node at a time or if you want to pause the graph execution at specific nodes.
 
 ### `NodeInterrupt` exception
 
-We recommend that you [**use the `interrupt` function instead**](#the-interrupt-function) of the `NodeInterrupt` exception if you're trying to implement
+We recommend that you [**use the `interrupt` function instead**][langgraph.types.interrupt] of the `NodeInterrupt` exception if you're trying to implement
 [human-in-the-loop](./human_in_the_loop.md) workflows. The `interrupt` function is easier to use and more flexible.
 
 ??? node "`NodeInterrupt` exception"
