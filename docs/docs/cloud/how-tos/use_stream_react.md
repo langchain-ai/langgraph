@@ -17,6 +17,13 @@ Let's explore how to use `useStream()` in your React application.
 
 The `useStream()` provides a solid foundation for creating bespoke chat experiences. For pre-built chat components and interfaces, we recommend checking out [CopilotKit](https://docs.copilotkit.ai/coagents/quickstart/langgraph) and [assistant-ui](https://www.assistant-ui.com/docs/runtimes/langgraph).
 
+
+## Installation
+
+```bash
+npm install @langchain/langgraph-sdk @langchain/langchain-core react
+```
+
 ## Example
 
 ```tsx
@@ -382,7 +389,7 @@ import {
 
 const AgentState = Annotation.Root({
   ...MessagesAnnotation.spec,
-  context: Annotation.Optional(Annotation.Any()),
+  context: Annotation<string>(),
 });
 
 const thread = useStream<
