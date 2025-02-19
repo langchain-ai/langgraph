@@ -1,4 +1,4 @@
-# Iterating on your graph in Studio
+# Prompt Engineering in LangGraph Studio
 
 In LangGraph Studio you can iterate on the prompts used within your graph by utilizing the LangSmith Playground. To do so:
 
