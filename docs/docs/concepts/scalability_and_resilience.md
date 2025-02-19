@@ -21,3 +21,15 @@ When a graceful shutdown request is received (SIGINT) an instance enters shutdow
 - stops the instance from picking up more runs from the queue
 
 If a hard shutdown occurs, eg. due to a server crash, or an infra failure, any runs that were in progress will be picked up by a periodic sweeper task that looks for in-progress runs that have breached their heartbeat window, which will put them back in the queue for another instance to pick them up.
+
+## Postgres resilience
+
+For deployment modalities where we manage the Postgres database we have periodic backups, continuously replicated standby replicas for automatic failover. Optionally, on request, we can also setup read replicas as well as other advanced failover capabilities.
+
+All communication with Postgres implements retries for retry-able errors. If Postgres is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of the Postgres instance will switch traffic to the failover replica. If the failover replica also fails before the primary is brought back online the service would become unavailable.
+
+## Redis resilience
+
+All data that requires durable storage is stored in Postgres, not Redis. Redis is used only for ephemeral metadata, and communication between instances. Refer to the [architecture](./platform_architecture.md) page for more details on how we use Redis. Therefore we place no durability requirements on Redis.
+
+All communication with Redis implements retries for retry-able errors. If Redis is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of Redis will render the LGP service unavailable.
