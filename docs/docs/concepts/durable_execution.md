@@ -21,14 +21,20 @@ To leverage durable execution in LangGraph, you need to:
 
 When you resume a workflow run, the code does **NOT** resume from the **same line of code** where execution stopped; instead, it will identify an appropriate [starting point](#starting-points-for-resuming-workflows) from which to pick up where it left off. This means that the workflow will replay all steps from the [starting point](#starting-points-for-resuming-workflows) until it reaches the point where it was stopped.
 
-As a result, when you're writing a workflow for durable execution, you should wrap any non-deterministic operations (e.g., random number generation) and any operations with side effects (e.g., file writes, API calls) inside [tasks](./functional_api.md#task).
+As a result, when you are writing a workflow for durable execution, you must wrap any non-deterministic operations (e.g., random number generation) and any operations with side effects (e.g., file writes, API calls) inside [tasks](./functional_api.md#task) or [nodes](./low_level.md#nodes).
 
-- **Avoid Repeating Work**:  Place operations that produce side effects (such as logging, file writes, or network calls) after an interrupt in Graph API nodes or encapsulate them within [tasks](./functional_api.md#task). This prevents their unintended repetition when the workflow is resumed. LangGraph will look up information stored in the persistence layer about any **nodes** and **tasks** that were previously executed for the specific run and will swap in the results of those tasks instead of re-executing them.
-- **Encapsulate Non-Deterministic Operations:**  Wrap any code that might yield non-deterministic results (e.g., random number generation) inside **tasks**. This ensures that, upon resumption, the workflow follows the exact recorded sequence of steps with the same outcomes.
+!!! tip "Using Tasks with StateGraph API"
 
-??? example "Wrapping Side effects in Tasks with StateGraph"
+    If a node contains multiple operations, it is easier to convert each operation into a **task** rather than refactor the operations into individual nodes. See the [example below](#__tabbed_1_2) for more details.
 
-    If you're using the [StateGraph (Graph API)][langgraph.graph.state.StateGraph], you can use [nodes](./low_level.md#nodes) to encapsulate non-deterministic operations and side effects. However, if an individual node contains multiple operations, you may find it easier to wrap each operation in a **task** rather than separate each operation into its own node. 
+- **Avoid Repeating Work**:  Place operations that produce side effects (such as logging, file writes, or network calls) after an interrupt in StateGraph (Graph API) **nodes** or encapsulate them within [tasks](./functional_api.md#task). This prevents their unintended repetition when the workflow is resumed. LangGraph will look up information stored in the persistence layer previously executed **nodes** or **tasks** for the specific run and will swap in the results of those tasks instead of re-executing them.
+- **Encapsulate Non-Deterministic Operations:**  Wrap any code that might yield non-deterministic results (e.g., random number generation) inside **tasks** or **nodes**. This ensures that, upon resumption, the workflow follows the exact recorded sequence of steps with the same outcomes.
+
+
+??? example "Using Tasks in a StateGraph (Graph API)"
+
+    If a node contains multiple operations, it is easier to wrap each operation in a **task** rather than separate each operation into its own node. See
+    example below for more details.
 
     === "Original"
 
@@ -129,7 +135,6 @@ As a result, when you're writing a workflow for durable execution, you should wr
         # Invoke the graph
         graph.invoke({"urls": ["https://www.example.com"]}, config)
         ```
-
 
 For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_api.md#common-pitfalls) section in the functional API, which shows
 how to structure your code using **tasks** to avoid these issues. The same principles apply to the [StateGraph (Graph API)][langgraph.graph.state.StateGraph].
