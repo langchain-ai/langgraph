@@ -1,6 +1,6 @@
 {
   "name": "@langchain/langgraph-sdk",
-  "version": "0.0.42",
+  "version": "0.0.43",
   "description": "Client library for interacting with the LangGraph API",
   "type": "module",
   "packageManager": "yarn@1.22.19",
@@ -42,6 +42,14 @@
   "peerDependencies": {
     "react": "^18 || ^19",
     "@langchain/core": ">=0.2.31 <0.4.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "@langchain/core": {
+      "optional": true
+    }
   },
   "exports": {
     ".": {
