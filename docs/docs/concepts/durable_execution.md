@@ -26,112 +26,113 @@ As a result, when you're writing a workflow for durable execution, you should wr
 - **Avoid Repeating Work**:  Place operations that produce side effects (such as logging, file writes, or network calls) after an interrupt in Graph API nodes or encapsulate them within [tasks](./functional_api.md#task). This prevents their unintended repetition when the workflow is resumed. LangGraph will look up information stored in the persistence layer about any **nodes** and **tasks** that were previously executed for the specific run and will swap in the results of those tasks instead of re-executing them.
 - **Encapsulate Non-Deterministic Operations:**  Wrap any code that might yield non-deterministic results (e.g., random number generation) inside **tasks**. This ensures that, upon resumption, the workflow follows the exact recorded sequence of steps with the same outcomes.
 
+??? example "Wrapping Side effects in Tasks with StateGraph"
 
-If you're using the [StateGraph (Graph API)][langgraph.graph.state.StateGraph], you can use [nodes](./low_level.md#nodes) to encapsulate non-deterministic operations and side effects. However, if an individual node contains multiple operations, you may find it easier to wrap each operation in a **task** rather than separate each operation into its own node. 
+    If you're using the [StateGraph (Graph API)][langgraph.graph.state.StateGraph], you can use [nodes](./low_level.md#nodes) to encapsulate non-deterministic operations and side effects. However, if an individual node contains multiple operations, you may find it easier to wrap each operation in a **task** rather than separate each operation into its own node. 
 
-=== "Original"
+    === "Original"
 
-    ```python
-    from typing import NotRequired
-    from typing_extensions import TypedDict
-    import uuid
+        ```python
+        from typing import NotRequired
+        from typing_extensions import TypedDict
+        import uuid
 
-    from langgraph.graph import StateGraph, START, END
-    from langgraph.checkpoint.memory import MemorySaver
-    import requests
+        from langgraph.graph import StateGraph, START, END
+        from langgraph.checkpoint.memory import MemorySaver
+        import requests
 
-    # Define a TypedDict to represent the state
-    class State(TypedDict):
-        url: str
-        result: NotRequired[str]
+        # Define a TypedDict to represent the state
+        class State(TypedDict):
+            url: str
+            result: NotRequired[str]
 
-    def call_api(state: State):
-        """Example node that makes an API request."""
-        # highlight-next-line
-        result = requests.get(state['url']).text[:100]  # Side-effect
-        return {
-            "result": result
-        }
+        def call_api(state: State):
+            """Example node that makes an API request."""
+            # highlight-next-line
+            result = requests.get(state['url']).text[:100]  # Side-effect
+            return {
+                "result": result
+            }
 
-    # Create a StateGraph builder and add a node for the call_api function
-    builder = StateGraph(State)
-    builder.add_node("call_api", call_api)
+        # Create a StateGraph builder and add a node for the call_api function
+        builder = StateGraph(State)
+        builder.add_node("call_api", call_api)
 
-    # Connect the start and end nodes to the call_api node
-    builder.add_edge(START, "call_api")
-    builder.add_edge("call_api", END)
+        # Connect the start and end nodes to the call_api node
+        builder.add_edge(START, "call_api")
+        builder.add_edge("call_api", END)
 
-    # Specify a checkpointer
-    checkpointer = MemorySaver()
+        # Specify a checkpointer
+        checkpointer = MemorySaver()
 
-    # Compile the graph with the checkpointer
-    graph = builder.compile(checkpointer=checkpointer)
+        # Compile the graph with the checkpointer
+        graph = builder.compile(checkpointer=checkpointer)
 
-    # Define a config with a thread ID.
-    thread_id = uuid.uuid4()
-    config = {"configurable": {"thread_id": thread_id}}
+        # Define a config with a thread ID.
+        thread_id = uuid.uuid4()
+        config = {"configurable": {"thread_id": thread_id}}
 
-    # Invoke the graph
-    graph.invoke({"url": "https://www.example.com"}, config)
-    ```
+        # Invoke the graph
+        graph.invoke({"url": "https://www.example.com"}, config)
+        ```
 
-=== "With task"
+    === "With task"
 
-    ```python
-    from typing import NotRequired
-    from typing_extensions import TypedDict
-    import uuid
+        ```python
+        from typing import NotRequired
+        from typing_extensions import TypedDict
+        import uuid
 
-    from langgraph.graph import StateGraph, START, END
-    from langgraph.func import task
-    import requests
+        from langgraph.graph import StateGraph, START, END
+        from langgraph.func import task
+        import requests
 
-    # Define a TypedDict to represent the state
-    class State(TypedDict):
-        urls: list[str]
-        result: NotRequired[list[str]]
+        # Define a TypedDict to represent the state
+        class State(TypedDict):
+            urls: list[str]
+            result: NotRequired[list[str]]
 
 
-    @task
-    def _make_request(url: str):
-        """Make a request."""
-        # highlight-next-line
-        return requests.get(url).text[:100]
+        @task
+        def _make_request(url: str):
+            """Make a request."""
+            # highlight-next-line
+            return requests.get(url).text[:100]
 
-    def call_api(state: State):
-        """Example node that makes an API request."""
-        # highlight-next-line
-        requests = [_make_request(url) for url in state['urls']]
-        results = [request.result() for request in requests]
-        return {
-            "results": results
-        }
+        def call_api(state: State):
+            """Example node that makes an API request."""
+            # highlight-next-line
+            requests = [_make_request(url) for url in state['urls']]
+            results = [request.result() for request in requests]
+            return {
+                "results": results
+            }
 
-    # Create a StateGraph builder and add a node for the call_api function
-    builder = StateGraph(State)
-    builder.add_node("call_api", call_api)
+        # Create a StateGraph builder and add a node for the call_api function
+        builder = StateGraph(State)
+        builder.add_node("call_api", call_api)
 
-    # Connect the start and end nodes to the call_api node
-    builder.add_edge(START, "call_api")
-    builder.add_edge("call_api", END)
+        # Connect the start and end nodes to the call_api node
+        builder.add_edge(START, "call_api")
+        builder.add_edge("call_api", END)
 
-    # Specify a checkpointer
-    checkpointer = MemorySaver()
+        # Specify a checkpointer
+        checkpointer = MemorySaver()
 
-    # Compile the graph with the checkpointer
-    graph = builder.compile(checkpointer=checkpointer)
+        # Compile the graph with the checkpointer
+        graph = builder.compile(checkpointer=checkpointer)
 
-    # Define a config with a thread ID.
-    thread_id = uuid.uuid4()
-    config = {"configurable": {"thread_id": thread_id}}
+        # Define a config with a thread ID.
+        thread_id = uuid.uuid4()
+        config = {"configurable": {"thread_id": thread_id}}
 
-    # Invoke the graph
-    graph.invoke({"urls": ["https://www.example.com"]}, config)
-    ```
+        # Invoke the graph
+        graph.invoke({"urls": ["https://www.example.com"]}, config)
+        ```
 
 
 For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_api.md#common-pitfalls) section in the functional API, which shows
-how to structure your code using **tasks** to avoid these issues. The same principles apply to the Graph API.
+how to structure your code using **tasks** to avoid these issues. The same principles apply to the [StateGraph (Graph API)][langgraph.graph.state.StateGraph].
 
 ## Idempotency
 
