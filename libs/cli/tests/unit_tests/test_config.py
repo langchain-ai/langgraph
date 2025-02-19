@@ -195,7 +195,7 @@ def test_config_to_docker_simple():
         PATH_TO_CONFIG,
         validate_config(
             {
-                "dependencies": [".", "../../examples/graphs_reqs_a", "../../examples"],
+                "dependencies": [".", "../../examples/graphs_reqs_a"],
                 "graphs": graphs,
                 "http": {"app": "../../examples/my_app.py:app"},
             }

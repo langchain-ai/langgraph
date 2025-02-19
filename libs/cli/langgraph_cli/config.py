@@ -479,6 +479,47 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                     )
                 )
 
+    if auth_conf := config.get("auth"):
+        if auth_path := auth_conf.get("path"):
+            module_str, _, _ = auth_path.partition(":")
+            if module_str.startswith("."):
+                auth_file = (config_path.parent / module_str).resolve()
+                auth_dir = auth_file.parent
+                if (config_path.parent not in auth_dir.parents) and (
+                    auth_dir not in additional_contexts
+                ):
+                    additional_contexts.append(auth_dir)
+                # Also add auth_dir to faux_pkgs if not already added.
+                if auth_dir not in real_pkgs and auth_dir not in faux_pkgs:
+                    files = os.listdir(auth_dir)
+                    if "__init__.py" in files:
+                        container_path = (
+                            f"/deps/__outer_{auth_dir.name}/{auth_dir.name}"
+                        )
+                    else:
+                        container_path = f"/deps/__outer_{auth_dir.name}/src"
+                    faux_pkgs[auth_dir] = (str(auth_dir), container_path)
+    if http_conf := config.get("http"):
+        if http_path := http_conf.get("app"):
+            module_str, _, _ = http_path.partition(":")
+            if module_str.startswith("."):
+                http_file = (config_path.parent / module_str).resolve()
+                http_dir = http_file.parent
+                if (config_path.parent not in http_dir.parents) and (
+                    http_dir not in additional_contexts
+                ):
+                    additional_contexts.append(http_dir)
+                # Also add http_dir to faux_pkgs if not already added.
+                if http_dir not in real_pkgs and http_dir not in faux_pkgs:
+                    files = os.listdir(http_dir)
+                    if "__init__.py" in files:
+                        container_path = (
+                            f"/deps/__outer_{http_dir.name}/{http_dir.name}"
+                        )
+                    else:
+                        container_path = f"/deps/__outer_{http_dir.name}/src"
+                    faux_pkgs[http_dir] = (str(http_dir), container_path)
+
     return LocalDeps(pip_reqs, real_pkgs, faux_pkgs, working_dir, additional_contexts)
 
 
@@ -598,9 +639,17 @@ def _update_auth_path(
             auth_conf["path"] = new_path
             return
 
+    # -- New: Check additional contexts for auth --
+    for add_ctx in local_deps.additional_contexts:
+        if resolved.is_relative_to(add_ctx):
+            new_path = f"/deps/__outer_{add_ctx.name}/{resolved.relative_to(add_ctx)}:{attr_str}"
+            auth_conf["path"] = new_path
+            return
+    # ------------------------------------------------
+
     raise ValueError(
-        f"Auth file '{resolved}' not covered by dependencies.\n"
-        "Add its parent directory to the 'dependencies' array in your config.\n"
+        f"Auth file '{resolved}' not covered by dependencies or additional contexts.\n"
+        "Add its parent directory to the 'dependencies' array in your config, or let the auto-include logic add it.\n"
         f"Current dependencies: {config['dependencies']}"
     )
 
@@ -650,10 +699,16 @@ def _update_http_app_path(
                         module_str = f"{destpath}/{container_subpath.as_posix()}"
                         break
                 else:
-                    raise ValueError(
-                        f"HTTP app module '{app_str}' not found in 'dependencies' list. "
-                        "Add its containing package to 'dependencies' list."
-                    )
+                    # -- New: Check additional contexts for HTTP app --
+                    for add_ctx in local_deps.additional_contexts:
+                        if resolved.is_relative_to(add_ctx):
+                            module_str = f"/deps/__outer_{add_ctx.name}/{resolved.relative_to(add_ctx)}"
+                            break
+                    else:
+                        raise ValueError(
+                            f"HTTP app module '{app_str}' not found in 'dependencies' or additional contexts. "
+                            "Add its containing package to 'dependencies' list."
+                        )
         # update the config
         http_config["app"] = f"{module_str}:{attr_str}"
 
@@ -687,9 +742,11 @@ def python_config_to_docker(
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
-            f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
-            if reqpath.parent in local_deps.additional_contexts
-            else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+            (
+                f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
+                if reqpath.parent in local_deps.additional_contexts
+                else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+            )
             for reqpath, destpath in local_deps.pip_reqs
         )
         pip_reqs_str += f'{os.linesep}RUN {pip_install} {" ".join("-r " + r for _,r in local_deps.pip_reqs)}'
@@ -724,13 +781,15 @@ RUN set -ex && \\
     )
 
     local_pkgs_str = os.linesep.join(
-        f"""# -- Adding local package {relpath} --
+        (
+            f"""# -- Adding local package {relpath} --
 COPY --from={name} . /deps/{name}
 # -- End of local package {relpath} --"""
-        if fullpath in local_deps.additional_contexts
-        else f"""# -- Adding local package {relpath} --
+            if fullpath in local_deps.additional_contexts
+            else f"""# -- Adding local package {relpath} --
 ADD {relpath} /deps/{name}
 # -- End of local package {relpath} --"""
+        )
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
