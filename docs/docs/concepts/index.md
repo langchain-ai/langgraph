@@ -7,7 +7,7 @@ description: Conceptual Guide for LangGraph
 
 This guide provides explanations of the key concepts behind the LangGraph framework and AI applications more broadly.
 
-We recommend that you go through at least the [Quick Start](../tutorials/introduction.ipynb) before diving into the conceptual guide. This will provide practical context that will make it easier to understand the concepts discussed here.
+We recommend that you go through at least the [Quickstart](../tutorials/introduction.ipynb) before diving into the conceptual guide. This will provide practical context that will make it easier to understand the concepts discussed here.
 
 The conceptual guide does not cover step-by-step instructions or specific implementation examples — those are found in the [Tutorials](../tutorials/index.md) and [How-to guides](../how-tos/index.md). For detailed reference material, please see the [API reference](../reference/index.md).
 
