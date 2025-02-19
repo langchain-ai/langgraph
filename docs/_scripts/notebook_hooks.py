@@ -175,7 +175,7 @@ def _on_page_markdown_with_config(
 
     # Append API reference links to code blocks
     if add_api_references:
-        markdown = update_markdown_with_imports(markdown, page.file.src_path)
+        markdown = update_markdown_with_imports(markdown)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
 
