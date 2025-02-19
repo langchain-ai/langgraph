@@ -15,5 +15,6 @@ export const config = {
   tsConfigPath: resolve("./tsconfig.json"),
   cjsSource: "./dist-cjs",
   cjsDestination: "./dist",
+  additionalGitignorePaths: ["docs"],
   abs,
 };
