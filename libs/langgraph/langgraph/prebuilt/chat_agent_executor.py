@@ -254,6 +254,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v1",
     name: Optional[str] = None,
+    bind_kwargs: Optional[dict[str, Any]] = None,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -315,6 +316,8 @@ def create_react_agent(
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
+        bind_kwargs: Optional keyword arguments to pass to the model's `bind_tools` method.
+            This is useful if you need to pass additional arguments, like `parallel_tool_calls=False`.
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
@@ -629,7 +632,9 @@ def create_react_agent(
     tool_calling_enabled = len(tool_classes) > 0
 
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+        model = cast(BaseChatModel, model).bind_tools(
+            tool_classes, **(bind_kwargs or {})
+        )
 
     model_runnable = _get_prompt_runnable(prompt) | model
 
