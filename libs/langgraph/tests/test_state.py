@@ -328,3 +328,46 @@ def test__get_node_name() -> None:
 
     # class method
     assert _get_node_name(MyClass().class_method) == "class_method"
+
+
+def test_routing_function_receives_correct_state_fields():
+    from operator import add
+    from typing import TypedDict, Annotated
+    from langgraph.graph import StateGraph, START, END
+
+    class PersonState(TypedDict):
+        name: str
+        money: Annotated[int, add]
+
+    class PurchasesState(TypedDict):
+        purchases: Annotated[list[str], add]
+        total_cost: Annotated[int, add]
+
+    class OverallState(PersonState, PurchasesState):
+        pass
+
+    def pay_salary(state: PersonState) -> OverallState:
+        return {"money": 1000}
+
+    def subtract_expenses(state: PurchasesState) -> OverallState:
+        return {'money': -100, "purchases": ["new iphone"], 'total_cost': 100}
+
+    def add_assistance(state: OverallState) -> OverallState:
+        return {"money": 100}
+
+    def check_if_poor(state: OverallState):
+        if (state['money'] < 100): return "node_3"
+        else: return END
+
+    graph = StateGraph(OverallState, input=PersonState)
+    graph.add_edge(START, 'node_1')
+    graph.add_node('node_1', pay_salary)
+    graph.add_edge('node_1', 'node_2')
+    graph.add_node('node_2', subtract_expenses)
+    graph.add_conditional_edges('node_2', check_if_poor)
+    graph.add_node('node_3', add_assistance)
+    graph.add_edge("node_3", END)
+
+    workflow = graph.compile()
+    output_dict = workflow.invoke({"name": "Ahmed"})
+    assert output_dict == {'name': 'Ahmed', 'money': 1000, 'purchases': ['new iphone'], 'total_cost': 100}
