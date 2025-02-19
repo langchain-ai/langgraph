@@ -94,7 +94,7 @@ class ImportInformation(TypedDict):
     imported: str  # The name of the class that was imported.
     source: str  # The full module path from which the class was imported.
     docs: str  # The URL pointing to the class's documentation.
-    path: str  # THe path of the file where the markdown content originated.
+    path: str  # The path of the file where the markdown content originated.
 
 
 def get_imports(code: str, path: str) -> List[ImportInformation]:
