@@ -262,7 +262,7 @@ class Pregel(PregelProtocol):
     ## Examples
 
     Most users will interact with Pregel via a
-    [StateGraph (Graph API)][langgraph.stategraph.StateGraph] or via an
+    [StateGraph (Graph API)][langgraph.graph.StateGraph] or via an
     [entrypoint (Functional API)][langgraph.func.entrypoint].
 
     However, for **advanced** use cases, Pregel can be used directly. If you're
