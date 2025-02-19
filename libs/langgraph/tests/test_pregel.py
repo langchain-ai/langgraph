@@ -6247,6 +6247,10 @@ def test_merging_updates_command_parent():
             {"subgraph_node_1": {"foo": "foo", "bar": ["subgraph_node_1"]}},
         ),
         (
+            (AnyStr("node_2:"),),
+            {"subgraph_node_2": {"bar": ["subgraph_node_2"]}},
+        ),
+        (
             (),
             {
                 "node_2": [
