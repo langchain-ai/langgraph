@@ -86,6 +86,33 @@ class AuthConfig(TypedDict, total=False):
     """
 
 
+class CorsConfig(TypedDict, total=False):
+    allow_origins: list[str]
+    allow_methods: list[str]
+    allow_headers: list[str]
+    allow_credentials: bool
+    allow_origin_regex: str
+    expose_headers: list[str]
+    max_age: int
+
+
+class HttpConfig(TypedDict, total=False):
+    app: str
+    """Import path for a custom Starlette/FastAPI app to mount"""
+    disable_assistants: bool
+    """Disable /assistants routes"""
+    disable_threads: bool
+    """Disable /threads routes"""
+    disable_runs: bool
+    """Disable /runs routes"""
+    disable_store: bool
+    """Disable /store routes"""
+    disable_meta: bool
+    """Disable /ok, /info, /metrics, and /docs routes"""
+    cors: Optional[CorsConfig]
+    """Cross-Origin Resource Sharing (CORS) configuration"""
+
+
 class Config(TypedDict, total=False):
     """Configuration for langgraph-cli."""
 
@@ -124,6 +151,9 @@ class Config(TypedDict, total=False):
     auth: Optional[AuthConfig]
     """Configuration for authentication."""
 
+    http: Optional[HttpConfig]
+    """Configuration for HTTP server."""
+
 
 def _parse_version(version_str: str) -> tuple[int, int]:
     """Parse a version string into a tuple of (major, minor)."""
@@ -158,6 +188,7 @@ def validate_config(config: Config) -> Config:
             "env": config.get("env", {}),
             "store": config.get("store"),
             "auth": config.get("auth"),
+            "http": config.get("http"),
         }
         if config.get("node_version")
         else {
@@ -169,6 +200,7 @@ def validate_config(config: Config) -> Config:
             "env": config.get("env", {}),
             "store": config.get("store"),
             "auth": config.get("auth"),
+            "http": config.get("http"),
         }
     )
 
@@ -221,7 +253,13 @@ def validate_config(config: Config) -> Config:
                     f"Invalid auth.path format: '{auth_conf['path']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
-
+    if http_conf := config.get("http"):
+        if "app" in http_conf:
+            if ":" not in http_conf["app"]:
+                raise ValueError(
+                    f"Invalid http.app format: '{http_conf['app']}'. "
+                    "Must be in format './path/to/file.py:attribute_name'"
+                )
     return config
 
 
@@ -567,6 +605,59 @@ def _update_auth_path(
     )
 
 
+def _update_http_app_path(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update the HTTP app path to point to the correct location in the Docker container.
+
+    Similar to _update_graph_paths, this ensures that if a custom app is specified via
+    a local file path, that file is included in the Docker build context and its path
+    is updated to point to the correct location in the container.
+    """
+    if not (http_config := config.get("http")) or not (
+        app_str := http_config.get("app")
+    ):
+        return
+
+    module_str, _, attr_str = app_str.partition(":")
+    if not module_str or not attr_str:
+        message = (
+            'Import string "{import_str}" must be in format "<module>:<attribute>".'
+        )
+        raise ValueError(message.format(import_str=app_str))
+
+    # Check if it's a file path
+    if "/" in module_str or "\\" in module_str:
+        # Resolve the local path properly on the current OS
+        resolved = (config_path.parent / module_str).resolve()
+        if not resolved.exists():
+            raise FileNotFoundError(f"Could not find HTTP app module: {resolved}")
+        elif not resolved.is_file():
+            raise IsADirectoryError(f"HTTP app module must be a file: {resolved}")
+        else:
+            for path in local_deps.real_pkgs:
+                if resolved.is_relative_to(path):
+                    container_path = (
+                        pathlib.Path("/deps") / path.name / resolved.relative_to(path)
+                    )
+                    module_str = container_path.as_posix()
+                    break
+            else:
+                for faux_pkg, (_, destpath) in local_deps.faux_pkgs.items():
+                    if resolved.is_relative_to(faux_pkg):
+                        container_subpath = resolved.relative_to(faux_pkg)
+                        # Construct the final path, ensuring POSIX style
+                        module_str = f"{destpath}/{container_subpath.as_posix()}"
+                        break
+                else:
+                    raise ValueError(
+                        f"HTTP app module '{app_str}' not found in 'dependencies' list. "
+                        "Add its containing package to 'dependencies' list."
+                    )
+        # update the config
+        http_config["app"] = f"{module_str}:{attr_str}"
+
+
 def python_config_to_docker(
     config_path: pathlib.Path, config: Config, base_image: str
 ) -> tuple[str, dict[str, str]]:
@@ -590,6 +681,8 @@ def python_config_to_docker(
     _update_graph_paths(config_path, config, local_deps)
     # Rewrite auth path, so it points to the correct location in the Docker container
     _update_auth_path(config_path, config, local_deps)
+    # Rewrite HTTP app path, so it points to the correct location in the Docker container
+    _update_http_app_path(config_path, config, local_deps)
 
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:
@@ -662,6 +755,9 @@ ADD {relpath} /deps/{name}
     if (auth_config := config.get("auth")) is not None:
         env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
+    if (http_config := config.get("http")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
     graphs = config["graphs"]
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(graphs)}'")
 
@@ -733,6 +829,10 @@ ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
     if (auth_config := config.get("auth")) is not None:
         env_additional_config += f"""
 ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
+"""
+    if (http_config := config.get("http")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'
 """
 
     return (
