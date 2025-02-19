@@ -32,17 +32,11 @@ def validate_graph(
 
     for chan in subscribed_channels:
         if chan not in channels:
-            raise ValueError(
-                f"Subscribed channel '{chan}' not "
-                f"in known channels: '{repr(sorted(channels))[:100]}'"
-            )
+            raise ValueError(f"Subscribed channel '{chan}' not in 'channels'")
 
     if isinstance(input_channels, str):
         if input_channels not in channels:
-            raise ValueError(
-                f"Input channel '{input_channels}' not "
-                f"in known channels: '{repr(sorted(channels))[:100]}'"
-            )
+            raise ValueError(f"Input channel '{input_channels}' not in 'channels'")
         if input_channels not in subscribed_channels:
             raise ValueError(
                 f"Input channel {input_channels} is not subscribed to by any node"
@@ -50,13 +44,10 @@ def validate_graph(
     else:
         for chan in input_channels:
             if chan not in channels:
-                raise ValueError(
-                    f"Input channel '{chan}' not in '{repr(sorted(channels))[:100]}'"
-                )
+                raise ValueError(f"Input channel '{chan}' not in 'channels'")
         if all(chan not in subscribed_channels for chan in input_channels):
             raise ValueError(
-                f"None of the input channels {input_channels} "
-                f"are subscribed to by any node"
+                f"None of the input channels {input_channels} are subscribed to by any node"
             )
 
     all_output_channels = set[str]()
@@ -71,10 +62,7 @@ def validate_graph(
 
     for chan in all_output_channels:
         if chan not in channels:
-            raise ValueError(
-                f"Output channel '{chan}' not "
-                f"in known channels: '{repr(sorted(channels))[:100]}'"
-            )
+            raise ValueError(f"Output channel '{chan}' not in 'channels'")
 
     if interrupt_after_nodes != "*":
         for n in interrupt_after_nodes:
