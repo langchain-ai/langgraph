@@ -20,6 +20,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
@@ -356,7 +357,7 @@ class InMemorySaver(
             {
                 checkpoint["id"]: (
                     self.serde.dumps_typed(c),
-                    self.serde.dumps_typed(metadata),
+                    self.serde.dumps_typed(get_checkpoint_metadata(config, metadata)),
                     config["configurable"].get("checkpoint_id"),  # parent
                 )
             }

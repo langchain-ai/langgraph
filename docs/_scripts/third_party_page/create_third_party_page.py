@@ -89,7 +89,7 @@ def generate_markdown(resolved_packages: List[ResolvedPackage], language: str) -
     for package in sorted_packages:
         name = f"**{package['name']}**"
         repo_url = f"[{package['repo']}](https://github.com/{package['repo']})"
-        downloads = package["weekly_downloads"] or 0
+        downloads = package["weekly_downloads"] or "-"
         row = f"| {name} | {repo_url} | {package['description']} | {downloads} |"
         rows.append(row)
     markdown_content = MARKDOWN.format(

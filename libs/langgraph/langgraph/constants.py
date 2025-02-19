@@ -81,6 +81,8 @@ CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
 CONFIG_KEY_PREVIOUS = sys.intern("__pregel_previous")
 # holds the previous return value from a stateful Pregel graph.
+CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
+# holds a function that receives tasks from runner, executes them and returns results
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

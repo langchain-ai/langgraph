@@ -35,20 +35,45 @@ def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
     resolved_packages: list[ResolvedPackage] = []
 
     for package in packages:
-        url = f"https://pypistats.org/api/packages/{package['name']}/overall"
+        # First check if package exists on PyPI
+        pypi_url = f"https://pypi.org/pypi/{package['name']}/json"
+        try:
+            pypi_response = requests.get(pypi_url)
+            pypi_response.raise_for_status()
+        except requests.exceptions.HTTPError:
+            raise AssertionError(f"Package {package['name']} does not exist on PyPI")
 
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
+        # Get first release date
+        pypi_data = pypi_response.json()
+        releases = pypi_data["releases"]
+        first_release_date = None
+        for version_releases in releases.values():
+            if version_releases:  # Some versions may be empty lists
+                upload_time = datetime.fromisoformat(version_releases[0]["upload_time"])
+                if first_release_date is None or upload_time < first_release_date:
+                    first_release_date = upload_time
 
-        sorted_data = sorted(
-            data["data"],
-            key=lambda x: datetime.strptime(x["date"], "%Y-%m-%d"),
-            reverse=True,
-        )
+        if first_release_date is None:
+            raise AssertionError(f"Package {package['name']} has no releases yet")
 
-        # Sum the last 7 days of downloads
-        num_downloads = sum(entry["downloads"] for entry in sorted_data[:7])
+        # If package was published in last 48 hours, skip download stats
+        if (datetime.now() - first_release_date).total_seconds() >= 48 * 3600:
+            url = f"https://pypistats.org/api/packages/{package['name']}/overall"
+
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            sorted_data = sorted(
+                data["data"],
+                key=lambda x: datetime.strptime(x["date"], "%Y-%m-%d"),
+                reverse=True,
+            )
+
+            # Sum the last 7 days of downloads
+            num_downloads = sum(entry["downloads"] for entry in sorted_data[:7])
+        else:
+            num_downloads = None
 
         resolved_packages.append(
             {

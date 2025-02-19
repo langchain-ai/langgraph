@@ -99,7 +99,7 @@ We can stream the results of a stateless run in an almost identical fashion to h
 
     ```bash
     curl --request POST \
-        --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+        --url <DEPLOYMENT_URL>/runs/stream \
         --header 'Content-Type: application/json' \
         --data "{
             \"assistant_id\": \"agent\",
@@ -144,7 +144,7 @@ In addition to streaming, you can also wait for a stateless result by using the 
 
     ```bash
     curl --request POST \
-        --url <DEPLOYMENT_URL>/runs/runs/wait \
+        --url <DEPLOYMENT_URL>/runs/wait \
         --header 'Content-Type: application/json' \
         --data '{
             "assistant_id": <ASSISTANT_IDD>,

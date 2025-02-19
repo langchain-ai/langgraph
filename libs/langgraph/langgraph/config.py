@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
@@ -7,6 +8,10 @@ from langchain_core.runnables.config import var_child_runnable_config
 from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
+
+
+def _no_op_stream_writer(c: Any) -> None:
+    pass
 
 
 def get_config() -> RunnableConfig:
@@ -177,4 +182,4 @@ def get_stream_writer() -> StreamWriter:
         ```
     """
     config = get_config()
-    return config[CONF][CONFIG_KEY_STREAM_WRITER]
+    return config[CONF].get(CONFIG_KEY_STREAM_WRITER, _no_op_stream_writer)

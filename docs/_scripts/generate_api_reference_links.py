@@ -1,8 +1,11 @@
 import importlib
+from importlib.machinery import ModuleSpec
+import importlib.util
 import inspect
 import logging
 import re
 from functools import lru_cache
+import sys
 from typing import List, Literal, Optional
 
 from typing_extensions import TypedDict
@@ -72,9 +75,8 @@ def _make_regular_expression(pkg_prefix: str) -> re.Pattern:
     if not pkg_prefix.isidentifier():
         raise ValueError(f"Invalid package prefix: {pkg_prefix}")
     return re.compile(
-        r"from\s+(" + pkg_prefix + "(?:_\w+)?(?:\.\w+)*?)\s+import\s+"
-        r"((?:\w+(?:,\s*)?)*"  # Match zero or more words separated by a comma+optional ws
-        r"(?:\s*\(.*?\))?)",  # Match optional parentheses block
+        r"from\s+(" + pkg_prefix + r"(?:_\w+)?(?:\.\w+)*?)\s+import\s+\(?"
+        r"((?:\w+(?:,\s*)?)*)\s*\)?",  # Match zero or more words separated by a comma+optional ws
         re.DOTALL,  # Match newlines as well
     )
 
@@ -85,22 +87,57 @@ _IMPORT_LANGGRAPH_RE = _make_regular_expression("langgraph")
 
 
 @lru_cache(maxsize=10_000)
-def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
+def _get_full_module_name(
+    module_path: str, class_name: str | None, doc_title: str
+) -> Optional[str]:
     """Get full module name using inspect, with LRU cache to memoize results."""
     try:
-        module = importlib.import_module(module_path)
-        class_ = getattr(module, class_name)
-        module = inspect.getmodule(class_)
-        if module is None:
-            # For constants, inspect.getmodule() might return None
-            # In this case, we'll return the original module_path
-            return module_path
+        if module_path in sys.modules:
+            module = sys.modules[module_path]
+        else:
+            spec: ModuleSpec | None = importlib.util.find_spec(module_path)
+            if spec is not None:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_path] = module
+                spec.loader.exec_module(module)
+
+        if class_name is not None:
+            class_ = getattr(module, class_name)
+
+            if re.match(r"\w+\s+as\s+\w+", class_name):
+                # Handle cases like "A as B"
+                class_name, _ = class_name.split(" as ")
+
+            module = inspect.getmodule(class_)
+            if module is None:
+                # For constants, inspect.getmodule() might return None
+                # In this case, we'll return the original module_path
+                return module_path
         return module.__name__
     except AttributeError as e:
-        logger.warning(f"API Reference: Could not find module for {class_name}, {e}")
+        if class_name is not None:
+            # the class_name might actually be a module
+            # e.g. from langchain import hub
+            # try to import it as a module, and if that doesn't work, throw
+            if class_name is not None:
+                module_name = _get_full_module_name(
+                    f"{module_path}.{class_name}", None, doc_title
+                )
+                if module_name is not None:
+                    # return the name of the parent module, rather than the name of the class as though it were a module
+                    return module.__name__
+                logger.warning(
+                    f"API Reference: Could not find module for {class_name} in {module_path}, imported in doc {doc_title}, {e}"
+                )
+            # don't log if we're trying to import the "hub" part as though it were a module
+        logger.warning(
+            f"API Reference: Could not find module for {module_path}, imported in doc {doc_title}, {e}"
+        )
         return None
     except ImportError as e:
-        logger.warning(f"API Reference: Failed to load for class {class_name}, {e}")
+        logger.warning(
+            f"API Reference: Failed to import module {module_path} {doc_title}, {e}"
+        )
         return None
 
 
@@ -160,7 +197,22 @@ def _get_imports(
             if imp.strip()
         ]
         for class_name in imported_classes:
-            module_path = _get_full_module_name(module, class_name)
+            if module == "langchain_core.messages" and class_name == ")":
+                print("WARNING: ", file=sys.stderr)
+                print(
+                    f"WARNING: Trying to import {class_name} from {module} in doc {doc_title}",
+                    file=sys.stderr,
+                )
+                print("WARNING: ", file=sys.stderr)
+                print("WARNING:", import_match.group(0), file=sys.stderr)
+                print("WARNING: ", file=sys.stderr)
+                print(
+                    "\n".join([f"WARNING: {line}" for line in code.splitlines()]),
+                    file=sys.stderr,
+                )
+                print("WARNING: ", file=sys.stderr)
+
+            module_path = _get_full_module_name(module, class_name, doc_title)
             if not module_path:
                 continue
             if len(module_path.split(".")) < 2:
@@ -230,7 +282,7 @@ def get_imports(code: str, doc_title: str) -> List[ImportInformation]:
     return all_imports
 
 
-def update_markdown_with_imports(markdown: str) -> str:
+def update_markdown_with_imports(markdown: str, file_name: str) -> str:
     """Update markdown to include API reference links for imports in Python code blocks.
 
     This function scans the markdown content for Python code blocks, extracts any imports, and appends links to their API documentation.
@@ -250,7 +302,8 @@ def update_markdown_with_imports(markdown: str) -> str:
         This function will append an API reference link to the `TextGenerator` class from the `langchain.nlp` module if it's recognized.
     """
     code_block_pattern = re.compile(
-        r'(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```', re.DOTALL
+        r"(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```",
+        re.DOTALL,
     )
 
     def replace_code_block(match: re.Match) -> str:
@@ -262,11 +315,11 @@ def update_markdown_with_imports(markdown: str) -> str:
         Returns:
             str: The modified code block with API reference links appended if applicable.
         """
-        indent = match.group('indent')
-        code_block = match.group('code')
-        language = match.group('language')  # Preserve the language from the regex match
+        indent = match.group("indent")
+        code_block = match.group("code")
+        language = match.group("language")  # Preserve the language from the regex match
         # Retrieve import information from the code block
-        imports = get_imports(code_block, "__unused__")
+        imports = get_imports(code_block, file_name)
 
         original_code_block = match.group(0)
         # If no imports are found, return the original code block
@@ -274,11 +327,11 @@ def update_markdown_with_imports(markdown: str) -> str:
             return original_code_block
 
         # Generate API reference links for each import
-        api_links = ' | '.join(
+        api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
         # Return the code block with appended API reference links
-        return f'{original_code_block}\n\n{indent}API Reference: {api_links}'
+        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)

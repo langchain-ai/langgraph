@@ -303,7 +303,15 @@ def _build(
         tag,
     ]
     # apply config
-    stdin = langgraph_cli.config.config_to_docker(config, config_json, base_image)
+    stdin, additional_contexts = langgraph_cli.config.config_to_docker(
+        config, config_json, base_image
+    )
+    # add additional_contexts
+    if additional_contexts:
+        additional_contexts_str = ",".join(
+            f"{k}={v}" for k, v in additional_contexts.items()
+        )
+        args.extend(["--build-context", additional_contexts_str])
     # run docker build
     runner.run(
         subp_exec(
@@ -439,19 +447,27 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     secho("✅ Configuration validated!", fg="green")
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
+    dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
+        config,
+        config_json,
+        (
+            "langchain/langgraphjs-api"
+            if config_json.get("node_version")
+            else "langchain/langgraph-api"
+        ),
+    )
     with open(str(save_path), "w", encoding="utf-8") as f:
-        f.write(
-            langgraph_cli.config.config_to_docker(
-                config,
-                config_json,
-                (
-                    "langchain/langgraphjs-api"
-                    if config_json.get("node_version")
-                    else "langchain/langgraph-api"
-                ),
-            )
-        )
+        f.write(dockerfile)
     secho("✅ Created: Dockerfile", fg="green")
+
+    if additional_contexts:
+        additional_contexts_str = ",".join(
+            f"{k}={v}" for k, v in additional_contexts.items()
+        )
+        secho(
+            f"""📝 Run docker build with these additional build contexts `--build-context {additional_contexts_str}`""",
+            fg="yellow",
+        )
 
     if add_docker_compose:
         # Add docker compose and related files
@@ -575,7 +591,7 @@ def dev(
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
-        from langgraph_api.cli import run_server
+        from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
         py_version_msg = ""
         if sys.version_info < (3, 11):
@@ -662,6 +678,7 @@ def prepare_args_and_stdin(
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ) -> Tuple[List[str], str]:
+    assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
     stdin = langgraph_cli.docker.compose(
         capabilities,

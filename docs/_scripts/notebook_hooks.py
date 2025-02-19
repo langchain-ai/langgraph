@@ -1,20 +1,14 @@
 import logging
 import os
+import posixpath
 import re
-import traceback
-from typing import Any, Callable, Dict
+from typing import Any, Dict
 
-from markdown import Markdown
-from pymdownx.superfences import SuperFencesException
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
-import posixpath
 
-from markdown_exec.hooks import SessionHistoryEntry
-
-from generate_api_reference_links import update_markdown_with_imports
-from notebook_convert import convert_notebook
-from setup_vcr import load_postamble, load_preamble, _hash_string
+from _scripts.generate_api_reference_links import update_markdown_with_imports
+from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -100,7 +94,7 @@ def _highlight_code_blocks(markdown: str) -> str:
     # existing hl_lines for Python and JavaScript
     # Pattern to find code blocks with highlight comments, handling optional indentation
     code_block_pattern = re.compile(
-        r"(?P<indent>[ \t]*)```(?P<language>py|python|js|javascript)(?!\s+hl_lines=)\n"
+        r"(?P<indent>[ \t]*)```(?P<language>\w+)[ ]*(?P<attributes>[^\n]*)\n"
         r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
         r"(?P=indent)```"  # Match closing backticks with the same indentation
     )
@@ -109,6 +103,13 @@ def _highlight_code_blocks(markdown: str) -> str:
         indent = match.group("indent")
         language = match.group("language")
         code_block = match.group("code")
+        attributes = match.group("attributes").rstrip()
+
+        # Account for a case where hl_lines is manually specified
+        if "hl_lines" in attributes:
+            # Return original code block
+            return match.group(0)
+
         lines = code_block.split("\n")
         highlighted_lines = []
 
@@ -134,108 +135,27 @@ def _highlight_code_blocks(markdown: str) -> str:
         # Reconstruct the new code block
         new_code_block = "\n".join(lines_to_keep)
 
+        # Construct the full code block that also includes
+        # the fenced code block syntax.
+        opening_fence = f"```{language}"
+
+        if attributes:
+            opening_fence += f" {attributes}"
+
         if highlighted_lines:
-            return (
-                f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"\n'
-                # The indent and terminating \n is already included in the code block
-                f"{new_code_block}"
-                f"{indent}```"
-            )
-        else:
-            return (
-                f"{indent}```{language}\n"
-                # The indent and terminating \n is already included in the code block
-                f"{new_code_block}"
-                f"{indent}```"
-            )
+            opening_fence += f" hl_lines=\"{' '.join(highlighted_lines)}\""
+
+        return (
+            # The indent and opening fence
+            f"{indent}{opening_fence}\n"
+            # The indent and terminating \n is already included in the code block
+            f"{new_code_block}"
+            f"{indent}```"
+        )
 
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
     return markdown
-
-
-def handle_vcr_setup(
-    *,
-    formatter: Callable,
-    language: str,
-    code: str,
-    session: str,
-    id: str,
-    md: Markdown,
-    **kwargs: Dict[str, Any],
-) -> str:
-    """Handle VCR setup in markdown content if necessary."""
-    try:
-        if kwargs.get("extra", None) is None:
-            raise ValueError(
-                f"error while processing {language} block: extra dict is required"
-            )
-
-        if kwargs["extra"].get("path", None) is None:
-            raise ValueError(
-                f"error while processing {language} block: path is required"
-            )
-
-        document_filename = kwargs["extra"]["path"]
-
-        logger.info("document_filename: %s", document_filename)
-
-        if session is None or session == "" and id is None or id == "":
-            id = _hash_string(code)
-
-        cassette_prefix = document_filename.replace(".md", "").replace(os.path.sep, "_")
-
-        cassette_dir = os.path.abspath(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "cassettes")
-        )
-        os.makedirs(cassette_dir, exist_ok=True)
-
-        # Build a unique cassette name.
-        cassette_name = os.path.join(
-            cassette_dir,
-            f"{cassette_prefix}_{session if session else id}_{language}.msgpack.zlib",
-        )
-
-        # Add context manager at start with explicit __enter__ and __exit__ calls
-
-        wrapped_lines = [
-            load_preamble(language, code, cassette_name),
-            code,
-        ]
-
-        if session is None or session == "":
-            wrapped_lines.append(load_postamble(language))
-
-        transformed_source = "\n".join(wrapped_lines)
-        return dict(
-            transform_source=lambda code: (transformed_source, code),
-            id=id,
-            extra={},
-        )
-    except Exception as e:
-        raise SuperFencesException(traceback.format_exc()) from e
-
-
-def handle_vcr_teardown(
-    *,
-    formatter: Callable,
-    language: str,
-    session: str,
-    history: list[SessionHistoryEntry],
-):
-    session = history[-1].inputs["session"]
-    inputs = dict(history[-1].inputs)
-    del inputs["session"]
-    del inputs["code"]
-    del inputs["language"]
-    del inputs["id"]
-    formatter(
-        code="_cassette.__exit__() # markdown-exec: hide",
-        language="python",
-        session=session,
-        id=f"{id}_vcr_end",
-        **inputs,
-    )
 
 
 def _on_page_markdown_with_config(
@@ -250,12 +170,12 @@ def _on_page_markdown_with_config(
         return markdown
 
     if page.file.src_path.endswith(".ipynb"):
-        logger.info("Processing Jupyter notebook: %s", page.file.src_path)
+        # logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
 
     # Append API reference links to code blocks
     if add_api_references:
-        markdown = update_markdown_with_imports(markdown)
+        markdown = update_markdown_with_imports(markdown, page.file.src_path)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
 
@@ -266,7 +186,7 @@ def _on_page_markdown_with_config(
 
     if remove_base64_images:
         # Remove base64 encoded images from markdown
-        markdown = re.sub(r"!\[.*?\]\(data:image/[^;]+;base64,[^\)]+\)", "", markdown)
+        markdown = re.sub(r"!\[.*?\]\(data:image/+;base64,[^\)]+\)", "", markdown)
 
     return markdown
 

@@ -13,3 +13,4 @@ react.d.cts
 node_modules
 dist
 .yarn
+docs

@@ -323,11 +323,15 @@ class RemoteGraph(PregelProtocol):
             if k not in reserved_configurable_keys and not k.startswith("__pregel_")
         }
 
-        return {
+        sanitized: RunnableConfig = {
             "tags": config.get("tags") or [],
             "metadata": config.get("metadata") or {},
             "configurable": new_configurable,
         }
+        if "recursion_limit" in config:
+            sanitized["recursion_limit"] = config["recursion_limit"]
+
+        return sanitized
 
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False

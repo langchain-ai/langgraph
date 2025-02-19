@@ -128,12 +128,144 @@ interface ValidSequence<StateType = any> {
 }
 
 export type MessageMetadata<StateType extends Record<string, unknown>> = {
+  /**
+   * The ID of the message used.
+   */
   messageId: string;
+
+  /**
+   * The first thread state the message was seen in.
+   */
   firstSeenState: ThreadState<StateType> | undefined;
 
+  /**
+   * The branch of the message.
+   */
   branch: string | undefined;
+
+  /**
+   * The list of branches this message is part of.
+   * This is useful for displaying branching controls.
+   */
   branchOptions: string[] | undefined;
 };
+
+function getBranchSequence<StateType extends Record<string, unknown>>(
+  history: ThreadState<StateType>[],
+) {
+  const childrenMap: Record<string, ThreadState<StateType>[]> = {};
+
+  // First pass - collect nodes for each checkpoint
+  history.forEach((state) => {
+    const checkpointId = state.parent_checkpoint?.checkpoint_id ?? "$";
+    childrenMap[checkpointId] ??= [];
+    childrenMap[checkpointId].push(state);
+  });
+
+  // Second pass - create a tree of sequences
+  type Task = { id: string; sequence: Sequence; path: string[] };
+  const rootSequence: Sequence = { type: "sequence", items: [] };
+  const queue: Task[] = [{ id: "$", sequence: rootSequence, path: [] }];
+
+  const paths: string[][] = [];
+
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const task = queue.shift()!;
+    if (visited.has(task.id)) continue;
+    visited.add(task.id);
+
+    const children = childrenMap[task.id];
+    if (children == null || children.length === 0) continue;
+
+    // If we've encountered a fork (2+ children), push the fork
+    // to the sequence and add a new sequence for each child
+    let fork: Fork | undefined;
+    if (children.length > 1) {
+      fork = { type: "fork", items: [] };
+      task.sequence.items.push(fork);
+    }
+
+    for (const value of children) {
+      const id = value.checkpoint.checkpoint_id!;
+
+      let sequence = task.sequence;
+      let path = task.path;
+      if (fork != null) {
+        sequence = { type: "sequence", items: [] };
+        fork.items.unshift(sequence);
+
+        path = path.slice();
+        path.push(id);
+        paths.push(path);
+      }
+
+      sequence.items.push({ type: "node", value, path });
+      queue.push({ id, sequence, path });
+    }
+  }
+
+  return { rootSequence, paths };
+}
+
+const PATH_SEP = ">";
+const ROOT_ID = "$";
+
+// Get flat view
+function getBranchView<StateType extends Record<string, unknown>>(
+  sequence: Sequence<StateType>,
+  paths: string[][],
+  branch: string,
+) {
+  const path = branch.split(PATH_SEP);
+  const pathMap: Record<string, string[][]> = {};
+
+  for (const path of paths) {
+    const parent = path.at(-2) ?? ROOT_ID;
+    pathMap[parent] ??= [];
+    pathMap[parent].unshift(path);
+  }
+
+  const history: ThreadState<StateType>[] = [];
+  const branchByCheckpoint: Record<
+    string,
+    { branch: string | undefined; branchOptions: string[] | undefined }
+  > = {};
+
+  const forkStack = path.slice();
+  const queue: (Node<StateType> | Fork<StateType>)[] = [...sequence.items];
+
+  while (queue.length > 0) {
+    const item = queue.shift()!;
+
+    if (item.type === "node") {
+      history.push(item.value);
+      branchByCheckpoint[item.value.checkpoint.checkpoint_id!] = {
+        branch: item.path.join(PATH_SEP),
+        branchOptions: (item.path.length > 0
+          ? pathMap[item.path.at(-2) ?? ROOT_ID] ?? []
+          : []
+        ).map((p) => p.join(PATH_SEP)),
+      };
+    }
+    if (item.type === "fork") {
+      const forkId = forkStack.shift();
+      const index =
+        forkId != null
+          ? item.items.findIndex((value) => {
+              const firstItem = value.items.at(0);
+              if (!firstItem || firstItem.type !== "node") return false;
+              return firstItem.value.checkpoint.checkpoint_id === forkId;
+            })
+          : -1;
+
+      const nextItems = item.items.at(index)?.items ?? [];
+      queue.push(...nextItems);
+    }
+  }
+
+  return { history, branchByCheckpoint };
+}
 
 function fetchHistory<StateType extends Record<string, unknown>>(
   client: Client,
@@ -179,29 +311,189 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
   };
 }
 
+const useControllableThreadId = (options?: {
+  threadId?: string | null;
+  onThreadId?: (threadId: string) => void;
+}): [string | null, (threadId: string) => void] => {
+  const [localThreadId, _setLocalThreadId] = useState<string | null>(
+    options?.threadId ?? null,
+  );
+
+  const onThreadIdRef = useRef(options?.onThreadId);
+  onThreadIdRef.current = options?.onThreadId;
+
+  const onThreadId = useCallback((threadId: string) => {
+    _setLocalThreadId(threadId);
+    onThreadIdRef.current?.(threadId);
+  }, []);
+
+  if (typeof options?.threadId === "undefined") {
+    return [localThreadId, onThreadId];
+  }
+
+  return [options.threadId, onThreadId];
+};
+
+interface UseStreamOptions<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  UpdateType extends Record<string, unknown> = Partial<StateType>,
+  CustomType = unknown,
+> {
+  /**
+   * The ID of the assistant to use.
+   */
+  assistantId: string;
+
+  /**
+   * The URL of the API to use.
+   */
+  apiUrl: ClientConfig["apiUrl"];
+
+  /**
+   * The API key to use.
+   */
+  apiKey?: ClientConfig["apiKey"];
+
+  /**
+   * Specify the key within the state that contains messages.
+   * Defaults to "messages".
+   *
+   * @default "messages"
+   */
+  messagesKey?: string;
+
+  /**
+   * Callback that is called when an error occurs.
+   */
+  onError?: (error: unknown) => void;
+
+  /**
+   * Callback that is called when the stream is finished.
+   */
+  onFinish?: (state: ThreadState<StateType>) => void;
+
+  /**
+   * Callback that is called when an update event is received.
+   */
+  onUpdateEvent?: (data: UpdatesStreamEvent<UpdateType>["data"]) => void;
+
+  /**
+   * Callback that is called when a custom event is received.
+   */
+  onCustomEvent?: (data: CustomStreamEvent<CustomType>["data"]) => void;
+
+  /**
+   * Callback that is called when a metadata event is received.
+   */
+  onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
+
+  /**
+   * The ID of the thread to fetch history and current values from.
+   */
+  threadId?: string | null;
+
+  /**
+   * Callback that is called when the thread ID is updated (ie when a new thread is created).
+   */
+  onThreadId?: (threadId: string) => void;
+}
+
+interface UseStream<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  UpdateType extends Record<string, unknown> = Partial<StateType>,
+> {
+  /**
+   * The current values of the thread.
+   */
+  values: StateType;
+
+  /**
+   * Last seen error from the thread or during streaming.
+   */
+  error: unknown;
+
+  /**
+   * Whether the stream is currently running.
+   */
+  isLoading: boolean;
+
+  /**
+   * Stops the stream.
+   */
+  stop: () => void;
+
+  /**
+   * Create and stream a run to the thread.
+   */
+  submit: (values: UpdateType, options?: SubmitOptions<StateType>) => void;
+
+  /**
+   * The current branch of the thread.
+   */
+  branch: string;
+
+  /**
+   * Set the branch of the thread.
+   */
+  setBranch: (branch: string) => void;
+
+  /**
+   * Flattened history of thread states of a thread.
+   */
+  history: ThreadState<StateType>[];
+
+  /**
+   * Tree of all branches for the thread.
+   * @experimental
+   */
+  experimental_branchTree: Sequence<StateType>;
+
+  /**
+   * Messages inferred from the thread.
+   * Will automatically update with incoming message chunks.
+   */
+  messages: Message[];
+
+  /**
+   * Get the metadata for a message, such as first thread state the message
+   * was seen in and branch information.
+   
+   * @param message - The message to get the metadata for.
+   * @param index - The index of the message in the thread.
+   * @returns The metadata for the message.
+   */
+  getMessagesMetadata: (
+    message: Message,
+    index?: number,
+  ) => MessageMetadata<StateType> | undefined;
+}
+
+interface SubmitOptions<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+> {
+  config?: Config;
+  checkpoint?: Omit<Checkpoint, "thread_id"> | null;
+  command?: Command;
+  interruptBefore?: "*" | string[];
+  interruptAfter?: "*" | string[];
+  metadata?: Metadata;
+  multitaskStrategy?: MultitaskStrategy;
+  onCompletion?: OnCompletionBehavior;
+  onDisconnect?: DisconnectMode;
+  feedbackKeys?: string[];
+  streamMode?: Array<StreamMode>;
+  optimisticValues?:
+    | Partial<StateType>
+    | ((prev: StateType) => Partial<StateType>);
+}
+
 export function useStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   UpdateType extends Record<string, unknown> = Partial<StateType>,
   CustomType = unknown,
->(options: {
-  assistantId: string;
-
-  apiUrl: ClientConfig["apiUrl"];
-  apiKey?: ClientConfig["apiKey"];
-
-  withMessages?: string;
-
-  onError?: (error: unknown) => void;
-  onFinish?: (state: ThreadState<StateType>) => void;
-
-  onUpdateEvent?: (data: UpdatesStreamEvent<UpdateType>["data"]) => void;
-  onCustomEvent?: (data: CustomStreamEvent<CustomType>["data"]) => void;
-  onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
-
-  // TODO: can we make threadId uncontrollable / controllable?
-  threadId?: string | null;
-  onThreadId?: (threadId: string) => void;
-}) {
+>(
+  options: UseStreamOptions<StateType, UpdateType, CustomType>,
+): UseStream<StateType, UpdateType> {
   type EventStreamEvent =
     | ValuesStreamEvent<StateType>
     | UpdatesStreamEvent<UpdateType>
@@ -214,15 +506,17 @@ export function useStream<
     | ErrorStreamEvent
     | FeedbackStreamEvent;
 
-  const { assistantId, threadId, withMessages, onError, onFinish } = options;
+  let { assistantId, messagesKey, onError, onFinish } = options;
+  messagesKey ??= "messages";
+
   const client = useMemo(
     () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
     [options.apiKey, options.apiUrl],
   );
+  const [threadId, onThreadId] = useControllableThreadId(options);
 
-  const [branchPath, setBranchPath] = useState<string[]>([]);
+  const [branch, setBranch] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [_, setEvents] = useState<EventStreamEvent[]>([]);
 
   const [streamError, setStreamError] = useState<unknown>(undefined);
   const [streamValues, setStreamValues] = useState<StateType | null>(null);
@@ -269,118 +563,20 @@ export function useStream<
   );
 
   const getMessages = useMemo(() => {
-    if (withMessages == null) return undefined;
     return (value: StateType) =>
-      Array.isArray(value[withMessages])
-        ? (value[withMessages] as Message[])
+      Array.isArray(value[messagesKey])
+        ? (value[messagesKey] as Message[])
         : [];
-  }, [withMessages]);
+  }, [messagesKey]);
 
-  const [sequence, pathMap] = (() => {
-    const childrenMap: Record<string, ThreadState<StateType>[]> = {};
+  const { rootSequence, paths } = getBranchSequence(history.data);
+  const { history: flatHistory, branchByCheckpoint } = getBranchView(
+    rootSequence,
+    paths,
+    branch,
+  );
 
-    // First pass - collect nodes for each checkpoint
-    history.data.forEach((state) => {
-      const checkpointId = state.parent_checkpoint?.checkpoint_id ?? "$";
-      childrenMap[checkpointId] ??= [];
-      childrenMap[checkpointId].push(state);
-    });
-
-    // Second pass - create a tree of sequences
-    type Task = { id: string; sequence: Sequence; path: string[] };
-    const rootSequence: Sequence = { type: "sequence", items: [] };
-    const queue: Task[] = [{ id: "$", sequence: rootSequence, path: [] }];
-
-    const paths: string[][] = [];
-
-    const visited = new Set<string>();
-    while (queue.length > 0) {
-      const task = queue.shift()!;
-      if (visited.has(task.id)) continue;
-      visited.add(task.id);
-
-      const children = childrenMap[task.id];
-      if (children == null || children.length === 0) continue;
-
-      // If we've encountered a fork (2+ children), push the fork
-      // to the sequence and add a new sequence for each child
-      let fork: Fork | undefined;
-      if (children.length > 1) {
-        fork = { type: "fork", items: [] };
-        task.sequence.items.push(fork);
-      }
-
-      for (const value of children) {
-        const id = value.checkpoint.checkpoint_id!;
-
-        let sequence = task.sequence;
-        let path = task.path;
-        if (fork != null) {
-          sequence = { type: "sequence", items: [] };
-          fork.items.unshift(sequence);
-
-          path = path.slice();
-          path.push(id);
-          paths.push(path);
-        }
-
-        sequence.items.push({ type: "node", value, path });
-        queue.push({ id, sequence, path });
-      }
-    }
-
-    // Third pass, create a map for available forks
-    const pathMap: Record<string, string[][]> = {};
-    for (const path of paths) {
-      const parent = path.at(-2) ?? "$";
-      pathMap[parent] ??= [];
-      pathMap[parent].unshift(path);
-    }
-
-    return [rootSequence as ValidSequence, pathMap];
-  })();
-
-  const [flatValues, flatPaths] = (() => {
-    const result: ThreadState<StateType>[] = [];
-    const flatPaths: Record<
-      string,
-      { current: string[] | undefined; branches: string[][] | undefined }
-    > = {};
-
-    const forkStack = branchPath.slice();
-    const queue: (Node<StateType> | Fork<StateType>)[] = [...sequence.items];
-
-    while (queue.length > 0) {
-      const item = queue.shift()!;
-
-      if (item.type === "node") {
-        result.push(item.value);
-        flatPaths[item.value.checkpoint.checkpoint_id!] = {
-          current: item.path,
-          branches:
-            item.path.length > 0 ? pathMap[item.path.at(-2) ?? "$"] ?? [] : [],
-        };
-      }
-      if (item.type === "fork") {
-        const forkId = forkStack.shift();
-        const index =
-          forkId != null
-            ? item.items.findIndex((value) => {
-                const firstItem = value.items.at(0);
-                if (!firstItem || firstItem.type !== "node") return false;
-                return firstItem.value.checkpoint.checkpoint_id === forkId;
-              })
-            : -1;
-
-        const nextItems = item.items.at(index)?.items ?? [];
-        queue.push(...nextItems);
-      }
-    }
-
-    return [result, flatPaths];
-  })();
-
-  const threadHead: ThreadState<StateType> | undefined = flatValues.at(-1);
+  const threadHead: ThreadState<StateType> | undefined = flatHistory.at(-1);
   const historyValues = threadHead?.values ?? ({} as StateType);
   const historyError = (() => {
     const error = threadHead?.tasks?.at(-1)?.error;
@@ -399,8 +595,6 @@ export function useStream<
   })();
 
   const messageMetadata = (() => {
-    if (getMessages == null) return undefined;
-
     const alreadyShown = new Set<string>();
     return getMessages(historyValues).map(
       (message, idx): MessageMetadata<StateType> => {
@@ -416,13 +610,13 @@ export function useStream<
           | undefined;
 
         let branch = firstSeen
-          ? flatPaths[firstSeen.checkpoint.checkpoint_id!]
+          ? branchByCheckpoint[firstSeen.checkpoint.checkpoint_id!]
           : undefined;
 
-        if (!branch?.current?.length) branch = undefined;
+        if (!branch?.branch?.length) branch = undefined;
 
         // serialize branches
-        const optionsShown = branch?.branches?.flat(2).join(",");
+        const optionsShown = branch?.branchOptions?.flat(2).join(",");
         if (optionsShown) {
           if (alreadyShown.has(optionsShown)) branch = undefined;
           alreadyShown.add(optionsShown);
@@ -431,8 +625,9 @@ export function useStream<
         return {
           messageId: messageId.toString(),
           firstSeenState: firstSeen,
-          branch: branch?.current?.join(">"),
-          branchOptions: branch?.branches?.map((b) => b.join(">")),
+
+          branch: branch?.branch,
+          branchOptions: branch?.branchOptions,
         };
       },
     );
@@ -445,22 +640,7 @@ export function useStream<
 
   const submit = async (
     values: UpdateType | undefined,
-    submitOptions?: {
-      config?: Config;
-      checkpoint?: Omit<Checkpoint, "thread_id"> | null;
-      command?: Command;
-      interruptBefore?: "*" | string[];
-      interruptAfter?: "*" | string[];
-      metadata?: Metadata;
-      multitaskStrategy?: MultitaskStrategy;
-      onCompletion?: OnCompletionBehavior;
-      onDisconnect?: DisconnectMode;
-      feedbackKeys?: string[];
-      streamMode?: Array<StreamMode>;
-      optimisticValues?:
-        | Partial<StateType>
-        | ((prev: StateType) => Partial<StateType>);
-    },
+    submitOptions?: SubmitOptions<StateType>,
   ) => {
     try {
       setIsLoading(true);
@@ -472,7 +652,7 @@ export function useStream<
       let usableThreadId = threadId;
       if (!usableThreadId) {
         const thread = await client.threads.create();
-        options?.onThreadId?.(thread.thread_id);
+        onThreadId(thread.thread_id);
         usableThreadId = thread.thread_id;
       }
 
@@ -507,9 +687,10 @@ export function useStream<
 
       // Unbranch things
       const newPath = submitOptions?.checkpoint?.checkpoint_id
-        ? flatPaths[submitOptions?.checkpoint?.checkpoint_id]?.current
+        ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
         : undefined;
-      if (newPath != null) setBranchPath(newPath ?? []);
+
+      if (newPath != null) setBranch(newPath ?? "");
 
       // Assumption: we're setting the initial value
       // Used for instant feedback
@@ -530,32 +711,17 @@ export function useStream<
 
       let streamError: StreamError | undefined;
       for await (const { event, data } of run) {
-        setEvents((events) => [...events, { event, data } as EventStreamEvent]);
-
         if (event === "error") {
           streamError = new StreamError(data);
           break;
         }
 
-        if (event === "updates") {
-          options.onUpdateEvent?.(data);
-        }
+        if (event === "updates") options.onUpdateEvent?.(data);
+        if (event === "custom") options.onCustomEvent?.(data);
+        if (event === "metadata") options.onMetadataEvent?.(data);
 
-        if (event === "custom") {
-          options.onCustomEvent?.(data);
-        }
-
-        if (event === "metadata") {
-          options.onMetadataEvent?.(data);
-        }
-
-        if (event === "values") {
-          setStreamValues(data);
-        }
-
+        if (event === "values") setStreamValues(data);
         if (event === "messages") {
-          if (!getMessages) continue;
-
           const [serialized] = data;
 
           const messageId = messageManagerRef.current.add(serialized);
@@ -577,15 +743,13 @@ export function useStream<
             if (!chunk || index == null) return values;
             messages[index] = toMessageDict(chunk);
 
-            return { ...values, [withMessages!]: messages };
+            return { ...values, [messagesKey!]: messages };
           });
         }
       }
 
       // TODO: stream created checkpoints to avoid an unnecessary network request
       const result = await history.mutate(usableThreadId);
-
-      // TODO: write tests verifying that stream values are properly handled lifecycle-wise
       setStreamValues(null);
 
       if (streamError != null) throw streamError;
@@ -615,11 +779,6 @@ export function useStream<
   const error = isLoading ? streamError : historyError;
   const values = streamValues ?? historyValues;
 
-  const setBranch = useCallback(
-    (path: string) => setBranchPath(path.split(">")),
-    [setBranchPath],
-  );
-
   return {
     get values() {
       trackStreamMode("values");
@@ -631,17 +790,15 @@ export function useStream<
 
     stop,
     submit,
+
+    branch,
     setBranch,
+
+    history: flatHistory,
+    experimental_branchTree: rootSequence,
 
     get messages() {
       trackStreamMode("messages-tuple");
-
-      if (getMessages == null) {
-        throw new Error(
-          "No messages key provided. Make sure that `useStream` contains the `messagesKey` property.",
-        );
-      }
-
       return getMessages(values);
     },
 
@@ -650,13 +807,6 @@ export function useStream<
       index?: number,
     ): MessageMetadata<StateType> | undefined {
       trackStreamMode("messages-tuple");
-
-      if (getMessages == null) {
-        throw new Error(
-          "No messages key provided. Make sure that `useStream` contains the `messagesKey` property.",
-        );
-      }
-
       return messageMetadata?.find(
         (m) => m.messageId === (message.id ?? index),
       );

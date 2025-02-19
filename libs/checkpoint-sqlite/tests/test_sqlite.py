@@ -58,6 +58,24 @@ class TestSqliteSaver:
         }
         self.metadata_3: CheckpointMetadata = {}
 
+    def test_combined_metadata(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config = {
+                "configurable": {
+                    "thread_id": "thread-2",
+                    "checkpoint_ns": "",
+                    "__super_private_key": "super_private_value",
+                },
+                "metadata": {"run_id": "my_run_id"},
+            }
+            saver.put(config, self.chkpnt_2, self.metadata_2, {})
+            checkpoint = saver.get_tuple(config)
+            assert checkpoint.metadata == {
+                **self.metadata_2,
+                "thread_id": "thread-2",
+                "run_id": "my_run_id",
+            }
+
     def test_search(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:
             # set up test
@@ -77,11 +95,18 @@ class TestSqliteSaver:
 
             search_results_1 = list(saver.list(None, filter=query_1))
             assert len(search_results_1) == 1
-            assert search_results_1[0].metadata == self.metadata_1
+            assert search_results_1[0].metadata == {
+                "thread_id": "thread-1",
+                "thread_ts": "1",
+                **self.metadata_1,
+            }
 
             search_results_2 = list(saver.list(None, filter=query_2))
             assert len(search_results_2) == 1
-            assert search_results_2[0].metadata == self.metadata_2
+            assert search_results_2[0].metadata == {
+                "thread_id": "thread-2",
+                **self.metadata_2,
+            }
 
             search_results_3 = list(saver.list(None, filter=query_3))
             assert len(search_results_3) == 3
