@@ -135,7 +135,6 @@ Below are a few different examples to give you a sense of the Pregel API.
         }
     )
 
-
     app = Pregel(
         nodes={"node1": node1, "node2": node2},
         channels={
@@ -159,37 +158,32 @@ Below are a few different examples to give you a sense of the Pregel API.
     This examples demonstrates how to use the BinaryOperatorAggregate channel to implement a reducer.
 
     ```python
-    from langgraph.pregel import Pregel, Channel
     from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
+    from langgraph.pregel import Pregel, Channel
 
 
     node1 = (
-            Channel.subscribe_to("a")
-            | (lambda x: x + x)
-            | {
-                "b": Channel.write_to("b"),
-                "c": Channel.write_to("c")
-            }
+        Channel.subscribe_to("a")
+        | (lambda x: x + x)
+        | {
+            "b": Channel.write_to("b"),
+            "c": Channel.write_to("c")
+        }
     )
 
     node2 = (
-            Channel.subscribe_to("b")
-            | (lambda x: x + x)
-            | {
-                "c": Channel.write_to("c"),
-            }
+        Channel.subscribe_to("b")
+        | (lambda x: x + x)
+        | {
+            "c": Channel.write_to("c"),
+        }
     )
 
-
     def reducer(current, update):
-        """Reducer."""
         if current:
             return current + " | " + "update"
         else:
             return update
-
-
-
 
     app = Pregel(
         nodes={"node1": node1, "node2": node2},
@@ -245,7 +239,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 
 === "StateGraph (Graph API)"
 
-    The [StateGraph (Graph API)][langgraph.graph.states.StateGraph] is a higher-level abstraction that simplifies the creation of Pregel applications. It allows you to define a graph of nodes and edges. When you compile the graph, the StateGraph API automatically creates the Pregel application for you.
+    The [StateGraph (Graph API)][langgraph.graph.StateGraph] is a higher-level abstraction that simplifies the creation of Pregel applications. It allows you to define a graph of nodes and edges. When you compile the graph, the StateGraph API automatically creates the Pregel application for you.
 
     ```python
     from typing import TypedDict, Optional
