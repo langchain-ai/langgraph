@@ -62,6 +62,14 @@ class MessageTupleManager {
   }
 
   add(serialized: Message): string | null {
+    // TODO: this is sometimes sent from the API
+    // figure out how to prevent this or move this to LC.js
+    if (serialized.type.endsWith("MessageChunk")) {
+      serialized.type = serialized.type
+        .slice(0, -"MessageChunk".length)
+        .toLowerCase() as Message["type"];
+    }
+
     const chunk = convertToChunk(coerceMessageLikeToMessage(serialized));
 
     const id = chunk.id;
@@ -772,6 +780,7 @@ export function useStream<
           (error.name === "AbortError" || error.name === "TimeoutError")
         )
       ) {
+        console.error(error);
         setStreamError(error);
         onError?.(error);
       }
@@ -785,7 +794,7 @@ export function useStream<
     }
   };
 
-  const error = isLoading ? streamError : historyError;
+  const error = streamError ?? historyError;
   const values = streamValues ?? historyValues;
 
   return {
