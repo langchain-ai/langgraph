@@ -266,9 +266,6 @@ def create_react_agent(
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools, a ToolExecutor, or a ToolNode instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
-        state_schema: An optional state schema that defines graph state.
-            Must have `messages` and `is_last_step` keys.
-            Defaults to `AgentState` that defines those two keys.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
@@ -297,6 +294,11 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+        state_schema: An optional state schema that defines graph state.
+            Must have `messages` and `is_last_step` keys.
+            Defaults to `AgentState` that defines those two keys.
+        config_schema: An optional schema for configuration.
+            Use this to expose configurable parameters via agent.config_specs.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
