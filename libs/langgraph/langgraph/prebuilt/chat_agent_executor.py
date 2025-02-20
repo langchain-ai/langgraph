@@ -246,12 +246,12 @@ def create_react_agent(
     model: Union[str, LanguageModelLike],
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
-    state_schema: Optional[StateSchemaType] = None,
-    config_schema: Optional[Type[Any]] = None,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    state_schema: Optional[StateSchemaType] = None,
+    config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
