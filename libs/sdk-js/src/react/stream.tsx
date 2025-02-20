@@ -544,7 +544,7 @@ export function useStream<
 
   const trackStreamModeRef = useRef<
     Array<"values" | "updates" | "events" | "custom" | "messages-tuple">
-  >(["values", "messages-tuple"]);
+  >(["values"]);
 
   const trackStreamMode = useCallback(
     (mode: Exclude<StreamMode, "debug" | "messages">) => {
