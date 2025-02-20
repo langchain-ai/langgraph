@@ -15,6 +15,6 @@ packages:
   - name: "langchain-mcp-adapters"
     repo: "langchain-ai/langchain-mcp-adapters"
     description: "Make Anthropic Model Context Protocol (MCP) tools compatible with LangGraph agents."
-  - name: "open_deep_research"
+  - name: "open-deep-research"
     repo: "langchain-ai/open_deep_research"
     description: "Open source assistant for iterative web research and report writing."
