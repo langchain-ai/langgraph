@@ -247,6 +247,7 @@ def create_react_agent(
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
+    config_schema: Optional[Type[Any]] = None,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
@@ -763,7 +764,7 @@ def create_react_agent(
 
     if not tool_calling_enabled:
         # Define a new graph
-        workflow = StateGraph(state_schema)
+        workflow = StateGraph(state_schema, config_schema=config_schema)
         workflow.add_node("agent", RunnableCallable(call_model, acall_model))
         workflow.set_entry_point("agent")
         if response_format is not None:
@@ -803,7 +804,7 @@ def create_react_agent(
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
-    workflow = StateGraph(state_schema or AgentState)
+    workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(call_model, acall_model))
