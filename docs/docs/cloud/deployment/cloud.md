@@ -97,6 +97,7 @@ Starting from the `LangGraph Platform` view...
 
 All traffic from `LangGraph Platform` deployments created after January 6th 2025 will come through a NAT gateway.
 This NAT gateway will have several static ip addresses depending on the region you are deploying in. Refer to the table below for the list of IP addresses to whitelist:
+
 | US | EU |
 | --- | --- |
 |35.197.29.146| 34.13.192.67|
