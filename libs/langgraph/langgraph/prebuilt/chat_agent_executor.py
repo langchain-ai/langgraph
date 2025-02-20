@@ -246,11 +246,12 @@ def create_react_agent(
     model: Union[str, LanguageModelLike],
     tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
-    state_schema: Optional[StateSchemaType] = None,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    state_schema: Optional[StateSchemaType] = None,
+    config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -265,9 +266,6 @@ def create_react_agent(
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools, a ToolExecutor, or a ToolNode instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
-        state_schema: An optional state schema that defines graph state.
-            Must have `messages` and `is_last_step` keys.
-            Defaults to `AgentState` that defines those two keys.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
@@ -296,6 +294,11 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+        state_schema: An optional state schema that defines graph state.
+            Must have `messages` and `is_last_step` keys.
+            Defaults to `AgentState` that defines those two keys.
+        config_schema: An optional schema for configuration.
+            Use this to expose configurable parameters via agent.config_specs.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -763,7 +766,7 @@ def create_react_agent(
 
     if not tool_calling_enabled:
         # Define a new graph
-        workflow = StateGraph(state_schema)
+        workflow = StateGraph(state_schema, config_schema=config_schema)
         workflow.add_node("agent", RunnableCallable(call_model, acall_model))
         workflow.set_entry_point("agent")
         if response_format is not None:
@@ -803,7 +806,7 @@ def create_react_agent(
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
-    workflow = StateGraph(state_schema or AgentState)
+    workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(call_model, acall_model))
