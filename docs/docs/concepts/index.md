@@ -30,6 +30,7 @@ The conceptual guide does not cover step-by-step instructions or specific implem
 - [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
 - [Functional API](functional_api.md): `@entrypoint` and `@task` decorators that allow you to add LangGraph functionality to an existing codebase.
 - [Durable Execution](durable_execution.md): LangGraph's built-in [persistence](./persistence.md) layer provides durable execution for workflows, ensuring that the state of each execution step is saved to a durable store. 
+- [Pregel](pregel.md): Pregel is LangGraph's runtime, which is responsible for managing the execution of LangGraph applications.
 - [FAQ](faq.md): Frequently asked questions about LangGraph.
 
 ## LangGraph Platform
