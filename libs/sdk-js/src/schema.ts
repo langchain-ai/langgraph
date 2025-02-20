@@ -141,8 +141,8 @@ export interface AssistantGraph {
 /**
  * An interrupt thrown inside a thread.
  */
-export interface Interrupt {
-  value: unknown;
+export interface Interrupt<TValue = unknown> {
+  value: TValue;
   when: "during";
   resumable: boolean;
   ns?: string[];
