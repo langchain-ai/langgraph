@@ -1,0 +1,38 @@
+services:
+    langgraph-postgres:
+        image: postgres:16
+        ports:
+            - "5433:5432"
+        environment:
+            POSTGRES_DB: postgres
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+        volumes:
+            - langgraph-data:/var/lib/postgresql/data
+        healthcheck:
+            test: pg_isready -U postgres
+            start_period: 10s
+            timeout: 1s
+            retries: 5
+            interval: 60s
+            start_interval: 1s
+    langgraph-api:
+        image: postgres:16
+        ports:
+            - "8123:${PORT:-8000}"
+        depends_on:
+            langgraph-postgres:
+                condition: service_healthy
+        environment:
+            PORT: ${PORT:-8000}
+            POSTGRES_URI: ${POSTGRES_URI}
+            LANGGRAPH_CLOUD_LICENSE_KEY: ${LANGGRAPH_CLOUD_LICENSE_KEY}
+        healthcheck:
+            test: python /api/healthcheck.py
+            interval: 60s
+            start_interval: 1s
+            start_period: 10s
+        env_file: .env
+volumes:
+    langgraph-data:
+        driver: local
