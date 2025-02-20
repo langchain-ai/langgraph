@@ -43,6 +43,7 @@ import {
   type BaseMessage,
   coerceMessageLikeToMessage,
   convertToChunk,
+  isBaseMessageChunk,
 } from "@langchain/core/messages";
 
 class StreamError extends Error {
@@ -60,8 +61,19 @@ class StreamError extends Error {
   }
 }
 
+function tryConvertToChunk(message: BaseMessage): BaseMessageChunk | null {
+  try {
+    return convertToChunk(message);
+  } catch {
+    return null;
+  }
+}
+
 class MessageTupleManager {
-  chunks: Record<string, { chunk?: BaseMessageChunk; index?: number }> = {};
+  chunks: Record<
+    string,
+    { chunk?: BaseMessageChunk | BaseMessage; index?: number }
+  > = {};
 
   constructor() {
     this.chunks = {};
@@ -76,13 +88,26 @@ class MessageTupleManager {
         .toLowerCase() as Message["type"];
     }
 
-    const chunk = convertToChunk(coerceMessageLikeToMessage(serialized));
+    const message = coerceMessageLikeToMessage(serialized);
+    const chunk = tryConvertToChunk(message);
 
-    const id = chunk.id;
-    if (!id) return null;
+    const id = (chunk ?? message).id;
+    if (!id) {
+      console.warn(
+        "No message ID found for chunk, ignoring in state",
+        serialized,
+      );
+      return null;
+    }
 
     this.chunks[id] ??= {};
-    this.chunks[id].chunk = this.chunks[id]?.chunk?.concat(chunk) ?? chunk;
+    if (chunk) {
+      const prev = this.chunks[id].chunk;
+      this.chunks[id].chunk =
+        (isBaseMessageChunk(prev) ? prev : null)?.concat(chunk) ?? chunk;
+    } else {
+      this.chunks[id].chunk = message;
+    }
 
     return id;
   }
