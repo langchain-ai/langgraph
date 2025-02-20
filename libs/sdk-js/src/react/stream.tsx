@@ -9,7 +9,13 @@ import type {
   OnCompletionBehavior,
 } from "../types.js";
 import type { Message } from "../types.messages.js";
-import type { Checkpoint, Config, Metadata, ThreadState } from "../schema.js";
+import type {
+  Checkpoint,
+  Config,
+  Interrupt,
+  Metadata,
+  ThreadState,
+} from "../schema.js";
 import type {
   CustomStreamEvent,
   DebugStreamEvent,
@@ -342,10 +348,41 @@ const useControllableThreadId = (options?: {
   return [options.threadId, onThreadId];
 };
 
+type BagTemplate = {
+  ConfigurableType?: Record<string, unknown>;
+  InterruptType?: unknown;
+  CustomEventType?: unknown;
+  UpdateType?: unknown;
+};
+
+type GetUpdateType<
+  Bag extends BagTemplate,
+  StateType extends Record<string, unknown>,
+> = Bag extends { UpdateType: unknown }
+  ? Bag["UpdateType"]
+  : Partial<StateType>;
+
+type GetConfigurableType<Bag extends BagTemplate> = Bag extends {
+  ConfigurableType: Record<string, unknown>;
+}
+  ? Bag["ConfigurableType"]
+  : Record<string, unknown>;
+
+type GetInterruptType<Bag extends BagTemplate> = Bag extends {
+  InterruptType: unknown;
+}
+  ? Bag["InterruptType"]
+  : unknown;
+
+type GetCustomEventType<Bag extends BagTemplate> = Bag extends {
+  CustomEventType: unknown;
+}
+  ? Bag["CustomEventType"]
+  : unknown;
+
 interface UseStreamOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
-  UpdateType extends Record<string, unknown> = Partial<StateType>,
-  CustomType = unknown,
+  Bag extends BagTemplate = BagTemplate,
 > {
   /**
    * The ID of the assistant to use.
@@ -383,12 +420,16 @@ interface UseStreamOptions<
   /**
    * Callback that is called when an update event is received.
    */
-  onUpdateEvent?: (data: UpdatesStreamEvent<UpdateType>["data"]) => void;
+  onUpdateEvent?: (
+    data: UpdatesStreamEvent<GetUpdateType<Bag, StateType>>["data"],
+  ) => void;
 
   /**
    * Callback that is called when a custom event is received.
    */
-  onCustomEvent?: (data: CustomStreamEvent<CustomType>["data"]) => void;
+  onCustomEvent?: (
+    data: CustomStreamEvent<GetCustomEventType<Bag>>["data"],
+  ) => void;
 
   /**
    * Callback that is called when a metadata event is received.
@@ -408,8 +449,7 @@ interface UseStreamOptions<
 
 interface UseStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
-  UpdateType extends Record<string, unknown> = Partial<StateType>,
-  ConfigurableType extends Record<string, unknown> = Record<string, unknown>,
+  Bag extends BagTemplate = BagTemplate,
 > {
   /**
    * The current values of the thread.
@@ -435,8 +475,8 @@ interface UseStream<
    * Create and stream a run to the thread.
    */
   submit: (
-    values: UpdateType,
-    options?: SubmitOptions<StateType, ConfigurableType>,
+    values: GetUpdateType<Bag, StateType> | null | undefined,
+    options?: SubmitOptions<StateType, GetConfigurableType<Bag>>,
   ) => void;
 
   /**
@@ -459,6 +499,11 @@ interface UseStream<
    * @experimental
    */
   experimental_branchTree: Sequence<StateType>;
+
+  /**
+   * Get the interrupt value for the stream if interrupted.
+   */
+  interrupt: Interrupt<GetInterruptType<Bag>> | undefined;
 
   /**
    * Messages inferred from the thread.
@@ -505,12 +550,18 @@ interface SubmitOptions<
 
 export function useStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
-  UpdateType extends Record<string, unknown> = Partial<StateType>,
-  ConfigurableType extends Record<string, unknown> = Record<string, unknown>,
-  CustomType = unknown,
->(
-  options: UseStreamOptions<StateType, UpdateType, CustomType>,
-): UseStream<StateType, UpdateType, ConfigurableType> {
+  Bag extends {
+    ConfigurableType?: Record<string, unknown>;
+    InterruptType?: unknown;
+    CustomEventType?: unknown;
+    UpdateType?: unknown;
+  } = BagTemplate,
+>(options: UseStreamOptions<StateType, Bag>): UseStream<StateType, Bag> {
+  type UpdateType = GetUpdateType<Bag, StateType>;
+  type CustomType = GetCustomEventType<Bag>;
+  type InterruptType = GetInterruptType<Bag>;
+  type ConfigurableType = GetConfigurableType<Bag>;
+
   type EventStreamEvent =
     | ValuesStreamEvent<StateType>
     | UpdatesStreamEvent<UpdateType>
@@ -656,7 +707,7 @@ export function useStream<
   }, []);
 
   const submit = async (
-    values: UpdateType | undefined,
+    values: UpdateType | null | undefined,
     submitOptions?: SubmitOptions<StateType, ConfigurableType>,
   ) => {
     try {
@@ -814,6 +865,17 @@ export function useStream<
 
     history: flatHistory,
     experimental_branchTree: rootSequence,
+
+    get interrupt() {
+      // Don't show the interrupt if the stream is loading
+      if (isLoading) return undefined;
+
+      const interrupts = threadHead?.tasks?.at(-1)?.interrupts;
+      if (interrupts == null || interrupts.length === 0) return undefined;
+
+      // Return only the current interrupt
+      return interrupts.at(-1) as Interrupt<InterruptType> | undefined;
+    },
 
     get messages() {
       trackStreamMode("messages-tuple");
