@@ -6588,3 +6588,35 @@ def test_get_stream_writer() -> None:
             },
         ),
     ]
+
+
+def test_foo_bar() -> None:
+    checkpointer = MemorySaver()
+
+    @entrypoint(checkpointer=checkpointer)
+    def bar(inputs):
+        yield "a"
+        yield "b"
+        yield entrypoint.final(value="c", save="d")
+
+    config = {
+        "configurable": {
+            "thread_id": "1",
+        }
+    }
+
+    assert list(bar.stream({}, config=config)) == ["a", "b"]
+
+    @entrypoint(checkpointer=checkpointer)
+    def main(inputs):
+        # This is odd?
+        return list(bar.stream({}, stream_mode="custom"))
+
+    config = {
+        "configurable": {
+            "thread_id": "2",
+        }
+    }
+
+    chunks = [chunk for chunk in main.stream({}, config)]
+    assert chunks == [{"main": ["c"]}]
