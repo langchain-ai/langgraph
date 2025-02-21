@@ -36,7 +36,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 | Concurrency Control | Simple threading                                          | Supports double-texting                                                                                |
 | Scheduling          | None                                                      | Cron scheduling                                                                                        |
 | Monitoring          | None                                                      | Integrated with LangSmith for observability                                                            |
-| IDE integration     | LangGraph Studio for Desktop                              | LangGraph Studio for Desktop & Cloud                                                                   |
+| IDE integration     | LangGraph Studio                                          | LangGraph Studio                                                                                       |
 
 ## What are my deployment options for LangGraph Platform?
 

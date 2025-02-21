@@ -1,6 +1,6 @@
 # LangGraph CLI
 
-The LangGraph command line interface includes commands to build and run a LangGraph Cloud API server locally in [Docker](https://www.docker.com/). For development and testing, you can use the CLI to deploy a local API server as an alternative to the [Studio desktop app](../../concepts/langgraph_studio.md).
+The LangGraph command line interface includes commands to build and run a LangGraph Cloud API server locally in [Docker](https://www.docker.com/). For development and testing, you can use the CLI to deploy a local API server.
 
 ## Installation
 
