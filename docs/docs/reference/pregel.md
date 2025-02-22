@@ -1,9 +1,7 @@
-::: langgraph.pregel.Pregel
+# Pregel
+
+::: langgraph.pregel
     options:
       members:
-        - stream
-        - astream
-        - invoke
-        - ainvoke
-        - update_state
-        - aupdate_state
+        - Pregel 
+        - PregelNode 

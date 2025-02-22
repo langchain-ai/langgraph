@@ -271,6 +271,7 @@ nav:
           - concepts/streaming.md
           - concepts/functional_api.md
           - concepts/durable_execution.md
+          - concepts/pregel.md
         - LangGraph Platform:
           - LangGraph Platform: concepts#langgraph-platform
           - High Level:
