@@ -11,26 +11,52 @@ We recommend that you go through at least the [Quickstart](../tutorials/introduc
 
 The conceptual guide does not cover step-by-step instructions or specific implementation examples — those are found in the [Tutorials](../tutorials/index.md) and [How-to guides](../how-tos/index.md). For detailed reference material, please see the [API reference](../reference/index.md).
 
-## LangGraph
+## [Why LangGraph?](high_level.md)
 
-### High Level
+A high-level overview of LangGraph and its goals.
 
-- [Why LangGraph?](high_level.md): A high-level overview of LangGraph and its goals.
+## [Graph API Basics](low_level.md) 
 
-### Concepts
+LangGraph workflows are designed as graphs, with nodes representing different components and edges representing the flow of information between them. This guide provides an overview of the key concepts associated with LangGraph graph primitives.
 
-- [LangGraph Glossary](low_level.md): LangGraph workflows are designed as graphs, with nodes representing different components and edges representing the flow of information between them. This guide provides an overview of the key concepts associated with LangGraph graph primitives.
-- [Common Agentic Patterns](agentic_concepts.md): An agent uses an LLM to pick its own control flow to solve more complex problems! Agents are a key building block in many LLM applications. This guide explains the different types of agent architectures and how they can be used to control the flow of an application.
-- [Multi-Agent Systems](multi_agent.md): Complex LLM applications can often be broken down into multiple agents, each responsible for a different part of the application. This guide explains common patterns for building multi-agent systems.
-- [Breakpoints](breakpoints.md): Breakpoints allow pausing the execution of a graph at specific points. Breakpoints allow stepping through graph execution for debugging purposes.
-- [Human-in-the-Loop](human_in_the_loop.md): Explains different ways of integrating human feedback into a LangGraph application.
-- [Time Travel](time-travel.md): Time travel allows you to replay past actions in your LangGraph application to explore alternative paths and debug issues.
-- [Persistence](persistence.md): LangGraph has a built-in persistence layer, implemented through checkpointers. This persistence layer helps to support powerful capabilities like human-in-the-loop, memory, time travel, and fault-tolerance.
-- [Memory](memory.md): Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences.
-- [Streaming](streaming.md): Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs.
-- [Functional API](functional_api.md): `@entrypoint` and `@task` decorators that allow you to add LangGraph functionality to an existing codebase.
-- [Durable Execution](durable_execution.md): LangGraph's built-in [persistence](./persistence.md) layer provides durable execution for workflows, ensuring that the state of each execution step is saved to a durable store. 
-- [FAQ](faq.md): Frequently asked questions about LangGraph.
+## [Common Agentic Patterns](agentic_concepts.md) 
+
+An agent uses an LLM to pick its own control flow to solve more complex problems! Agents are a key building block in many LLM applications. This guide explains the different types of agent architectures and how they can be used to control the flow of an application.
+
+## [Multi-Agent Systems](multi_agent.md)
+
+Complex LLM applications can often be broken down into multiple agents, each responsible for a different part of the application. This guide explains common patterns for building multi-agent systems.
+
+## [Breakpoints](breakpoints.md)
+
+Breakpoints allow pausing the execution of a graph at specific points. Breakpoints allow stepping through graph execution for debugging purposes.
+
+## [Human-in-the-Loop](human_in_the_loop.md)
+
+Explains different ways of integrating human feedback into a LangGraph application.
+
+## [Time Travel](time-travel.md)
+Time travel allows you to replay past actions in your LangGraph application to explore alternative paths and debug issues.
+
+##  [Persistence](persistence.md)
+
+LangGraph has a built-in persistence layer, implemented through checkpointers. This persistence layer helps to support powerful capabilities like human-in-the-loop, memory, time travel, and fault-tolerance.
+
+## [Memory](memory.md)
+
+Memory in AI applications refers to the ability to process, store, and effectively recall information from past interactions. With memory, your agents can learn from feedback and adapt to users' preferences.
+
+## [Streaming](streaming.md)
+
+Streaming is crucial for enhancing the responsiveness of applications built on LLMs. By displaying output progressively, even before a complete response is ready, streaming significantly improves user experience (UX), particularly when dealing with the latency of LLMs. 
+
+## [Functional API](functional_api.md)
+
+`@entrypoint` and `@task` decorators that allow you to add LangGraph functionality to an existing codebase.
+
+## [Durable Execution](durable_execution.md)
+
+LangGraph's built-in [persistence](./persistence.md) layer provides durable execution for workflows, ensuring that the state of each execution step is saved to a durable store. 
 
 ## LangGraph Platform
 
