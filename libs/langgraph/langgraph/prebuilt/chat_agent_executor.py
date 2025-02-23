@@ -10,6 +10,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.language_models import (
@@ -28,7 +29,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph.errors import ErrorCode, create_error_message
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
@@ -58,6 +59,12 @@ class AgentState(TypedDict):
 
 
 class AgentStateWithStructuredResponse(AgentState):
+    """The state of the agent with a structured response."""
+
+    structured_response: StructuredResponse
+
+
+class MessagesStateWithStructuredResponse(MessagesState):
     """The state of the agent with a structured response."""
 
     structured_response: StructuredResponse
@@ -295,8 +302,7 @@ def create_react_agent(
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
         state_schema: An optional state schema that defines graph state.
-            Must have `messages` and `is_last_step` keys.
-            Defaults to `AgentState` that defines those two keys.
+            Must have `messages` key. Defaults to `MessagesState` that defines it.
         config_schema: An optional schema for configuration.
             Use this to expose configurable parameters via agent.config_specs.
         checkpointer: An optional checkpoint saver object. This is used for persisting
@@ -603,18 +609,20 @@ def create_react_agent(
         )
 
     if state_schema is not None:
-        required_keys = {"messages", "remaining_steps"}
+        required_keys = {"messages"}
         if response_format is not None:
             required_keys.add("structured_response")
 
-        if missing_keys := required_keys - set(state_schema.__annotations__):
+        state_keys = set(get_type_hints(state_schema).keys())
+
+        if missing_keys := required_keys - state_keys:
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if state_schema is None:
         state_schema = (
-            AgentStateWithStructuredResponse
+            MessagesStateWithStructuredResponse
             if response_format is not None
-            else AgentState
+            else MessagesState
         )
 
     if isinstance(tools, ToolExecutor):
@@ -652,7 +660,7 @@ def create_react_agent(
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
     # Define the function that calls the model
-    def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
+    def call_model(state: AgentState, config: RunnableConfig) -> MessagesState:
         _validate_chat_history(state["messages"])
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
@@ -691,7 +699,7 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
+    async def acall_model(state: AgentState, config: RunnableConfig) -> MessagesState:
         _validate_chat_history(state["messages"])
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
@@ -732,7 +740,7 @@ def create_react_agent(
 
     def generate_structured_response(
         state: AgentState, config: RunnableConfig
-    ) -> AgentState:
+    ) -> MessagesStateWithStructuredResponse:
         # NOTE: we exclude the last message because there is enough information
         # for the LLM to generate the structured response
         messages = state["messages"][:-1]
@@ -749,7 +757,7 @@ def create_react_agent(
 
     async def agenerate_structured_response(
         state: AgentState, config: RunnableConfig
-    ) -> AgentState:
+    ) -> MessagesStateWithStructuredResponse:
         # NOTE: we exclude the last message because there is enough information
         # for the LLM to generate the structured response
         messages = state["messages"][:-1]
@@ -806,10 +814,12 @@ def create_react_agent(
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
-    workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
+    workflow = StateGraph(state_schema, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", RunnableCallable(call_model, acall_model))
+    workflow.add_node(
+        "agent", RunnableCallable(call_model, acall_model), input=AgentState
+    )
     workflow.add_node("tools", tool_node)
 
     # Set the entrypoint as `agent`

@@ -2090,6 +2090,44 @@ def test_create_react_agent_inject_vars(version: str) -> None:
     assert result["foo"] == 2
 
 
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_create_react_agent_pydantic_state(version: str) -> None:
+    class AgentBaseState(BaseModel):
+        messages: Annotated[Sequence[BaseMessage], add_messages]
+
+    class AgentExtraState(AgentBaseState):
+        foo: int
+
+    def tool1(some_val: int, state: Annotated[AgentExtraState, InjectedState]):
+        """Tool 1 docstring."""
+        return some_val + state.foo
+
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+    agent = create_react_agent(
+        model,
+        [tool1],
+        state_schema=AgentExtraState,
+        version=version,
+    )
+    input_message = HumanMessage("hi")
+    result = agent.invoke({"messages": [input_message], "foo": 2})
+    print(result)
+
+    assert result["messages"] == [
+        input_message,
+        AIMessage(content="hi", tool_calls=[tool_call], id="0"),
+        _AnyIdToolMessage(content="3", name="tool1", tool_call_id="some 0"),
+        AIMessage("hi-hi-3", id="1"),
+    ]
+    assert result["foo"] == 2
+
+
 @pytest.mark.skipif(
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
