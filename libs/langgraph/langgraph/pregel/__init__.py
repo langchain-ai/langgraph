@@ -210,11 +210,10 @@ class Pregel(PregelProtocol):
 
     Each step consists of three phases:
 
-    - **Plan**: Determine which **actors** to execute in this step.
-        For example, select in the first step, **actors** that
-        subscribe to the special **input** channels, and in consecutive
-        steps **actors** that subscribe to channels that were updated
-        in the previous step.
+    - **Plan**: Determine which **actors** to execute in this step. For example,
+        in the first step, select the **actors** that subscribe to the special
+        **input** channels; in subsequent steps,
+        select the **actors** that subscribe to channels updated in the previous step.
     - **Execution**: Execute all selected **actors** in parallel,
         until all complete, or one fails, or a timeout is reached. During this
         phase, channel updates are invisible to actors until the next step.
