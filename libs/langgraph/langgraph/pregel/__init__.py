@@ -246,7 +246,7 @@ class Pregel(PregelProtocol):
     - `LastValue`: The default channel, stores the last value sent to the channel,
        useful for input and output values, or for sending data from one step to the next
     - `Topic`: A configurable PubSub Topic, useful for sending multiple values
-       between chains, or for accumulating output. Can be configured to deduplicate
+       between *actors*, or for accumulating output. Can be configured to deduplicate
        values, and/or to accumulate values over the course of multiple steps.
 
     ### Advanced channels: Context and BinaryOperatorAggregate
@@ -377,53 +377,53 @@ class Pregel(PregelProtocol):
         {'c': ['foofoo', 'foofoofoofoo']}
         ```
 
-        Example: Using a BinaryOperatorAggregate channel
-            ```python
-            from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
-            from langgraph.pregel import Pregel, Channel
+    Example: Using a BinaryOperatorAggregate channel
+        ```python
+        from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
+        from langgraph.pregel import Pregel, Channel
 
 
-            node1 = (
-                Channel.subscribe_to("a")
-                | (lambda x: x + x)
-                | {
-                    "b": Channel.write_to("b"),
-                    "c": Channel.write_to("c")
-                }
-            )
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
 
-            node2 = (
-                Channel.subscribe_to("b")
-                | (lambda x: x + x)
-                | {
-                    "c": Channel.write_to("c"),
-                }
-            )
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
 
 
-            def reducer(current, update):
-                if current:
-                    return current + " | " + "update"
-                else:
-                    return update
+        def reducer(current, update):
+            if current:
+                return current + " | " + "update"
+            else:
+                return update
 
-            app = Pregel(
-                nodes={"node1": node1, "node2": node2},
-                channels={
-                    "a": EphemeralValue(str),
-                    "b": EphemeralValue(str),
-                    "c": BinaryOperatorAggregate(str, operator=reducer),
-                },
-                input_channels=["a"],
-                output_channels=["c"]
-            )
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": BinaryOperatorAggregate(str, operator=reducer),
+            },
+            input_channels=["a"],
+            output_channels=["c"]
+        )
 
-            app.invoke({"a": "foo"})
-            ```
+        app.invoke({"a": "foo"})
+        ```
 
-            ```con
-            {'c': 'foofoo | foofoofoofoo'}
-            ```
+        ```con
+        {'c': 'foofoo | foofoofoofoo'}
+        ```
 
     Example: Introducing a cycle
         This example demonstrates how to introduce a cycle in the graph, by having

@@ -1,4 +1,4 @@
-# LangGraph's runtime (Pregel)
+# LangGraph's Runtime (Pregel)
 
 [Pregel][langgraph.pregel.Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
 
@@ -31,7 +31,7 @@ Channels are used to communicate between actors (PregelNodes). Each channel has 
 ### Basic channels: LastValue and Topic
 
 - [LastValue][langgraph.channels.LastValue]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
-- [Topic][langgraph.channels.Topic]: A configurable PubSub Topic, useful for sending multiple values between chains, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
+- [Topic][langgraph.channels.Topic]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
 
 ### Advanced channels: Context and BinaryOperatorAggregate
 
