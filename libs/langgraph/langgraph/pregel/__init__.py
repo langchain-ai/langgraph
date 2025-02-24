@@ -200,10 +200,42 @@ class Channel:
 class Pregel(PregelProtocol):
     """Pregel manages the runtime behavior for LangGraph applications.
 
+    ## Overview
+
+    Pregel combines [**actors**](https://en.wikipedia.org/wiki/Actor_model)
+    and **channels** into a single application.
+    **Actors** read data from channels and write data to channels.
+    Pregel organizes the execution of the application into multiple steps,
+    following the **Pregel Algorithm**/**Bulk Synchronous Parallel** model.
+
+    Each step consists of three phases:
+
+    - **Plan**: Determine which **actors** to execute in this step. For example,
+        in the first step, select the **actors** that subscribe to the special
+        **input** channels; in subsequent steps,
+        select the **actors** that subscribe to channels updated in the previous step.
+    - **Execution**: Execute all selected **actors** in parallel,
+        until all complete, or one fails, or a timeout is reached. During this
+        phase, channel updates are invisible to actors until the next step.
+    - **Update**: Update the channels with the values written by the **actors**
+        in this step.
+
+    Repeat until no **actors** are selected for execution, or a maximum number of
+    steps is reached.
+
+    ## Actors
+
+    An **actor** is a [PregelNode][langgraph.pregel.read.PregelNode].
+    It subscribes to channels, reads data from them, and writes data to them.
+    It can be thought of as an **actor** in the Pregel algorithm.
+    [PregelNodes][langgraph.pregel.read.PregelNode] implement LangChain's
+    Runnable interface.
+
     ## Channels
 
-    Channels are used to communicate between chains. Each channel has a value type,
-    an update type, and an update function – which takes a sequence of updates and
+    Channels are used to communicate between actors (PregelNodes).
+    Each channel has a value type, an update type, and an update function – which
+    takes a sequence of updates and
     modifies the stored value. Channels can be used to send data from one chain to
     another, or to send data from a chain to itself in a future step. LangGraph
     provides a number of built-in channels:
@@ -213,7 +245,7 @@ class Pregel(PregelProtocol):
     - `LastValue`: The default channel, stores the last value sent to the channel,
        useful for input and output values, or for sending data from one step to the next
     - `Topic`: A configurable PubSub Topic, useful for sending multiple values
-       between chains, or for accumulating output. Can be configured to deduplicate
+       between *actors*, or for accumulating output. Can be configured to deduplicate
        values, and/or to accumulate values over the course of multiple steps.
 
     ### Advanced channels: Context and BinaryOperatorAggregate
@@ -226,30 +258,202 @@ class Pregel(PregelProtocol):
        sent to the channel, useful for computing aggregates over multiple steps. eg.
       `total = BinaryOperatorAggregate(int, operator.add)`
 
-    ## Chains
+    ## Examples
 
-    Chains are LCEL Runnables which subscribe to one or more channels, and write to
-    one or more channels. Any valid LCEL expression can be used as a chain. Chains
-    can be combined into a Pregel application, which coordinates the execution of the
-    chains across multiple steps.
+    Most users will interact with Pregel via a
+    [StateGraph (Graph API)][langgraph.graph.StateGraph] or via an
+    [entrypoint (Functional API)][langgraph.func.entrypoint].
 
-    ## Pregel
+    However, for **advanced** use cases, Pregel can be used directly. If you're
+    not sure whether you need to use Pregel directly, then the answer is probably no
+    – you should use the Graph API or Functional API instead. These are higher-level
+    interfaces that will compile down to Pregel under the hood.
 
-    Pregel combines multiple chains (or actors) into a single application. It
-    coordinates the execution of the chains across multiple steps, following the
-    Pregel/Bulk Synchronous Parallel model. Each step consists of three phases:
+    Here are some examples to give you a sense of how it works:
 
-    - **Plan**: Determine which chains to execute in this step, ie. the chains that
-      subscribe to channels updated in the previous step (or, in the first step,
-      chains that subscribe to input channels)
-    - **Execution**: Execute those chains in parallel, until all complete, or one fails,
-      or a timeout is reached. Any channel updates are invisible to other
-      chains until the next step.
-     - **Update**: Update the channels with the values written by the
-      chains in this step.
+    Example: Single node application
+        ```python
+        from langgraph.channels import EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
 
-    Repeat until no chains are planned for execution, or a maximum number of steps
-    is reached.
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | Channel.write_to("b")
+        )
+
+        app = Pregel(
+            nodes={"node1": node1},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+            },
+            input_channels=["a"],
+            output_channels=["b"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'b': 'foofoo'}
+        ```
+
+    Example: Using multiple nodes and multiple output channels
+        ```python
+        from langgraph.channels import LastValue, EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | Channel.write_to("b")
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | Channel.write_to("c")
+        )
+
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": LastValue(str),
+                "c": EphemeralValue(str),
+            },
+            input_channels=["a"],
+            output_channels=["b", "c"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'b': 'foofoo', 'c': 'foofoofoofoo'}
+        ```
+
+    Example: Using a Topic channel
+        ```python
+        from langgraph.channels import LastValue, EphemeralValue, Topic
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
+
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": Topic(str, accumulate=True),
+            },
+            input_channels=["a"],
+            output_channels=["c"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```pycon
+        {'c': ['foofoo', 'foofoofoofoo']}
+        ```
+
+    Example: Using a BinaryOperatorAggregate channel
+        ```python
+        from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
+        from langgraph.pregel import Pregel, Channel
+
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
+
+
+        def reducer(current, update):
+            if current:
+                return current + " | " + "update"
+            else:
+                return update
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": BinaryOperatorAggregate(str, operator=reducer),
+            },
+            input_channels=["a"],
+            output_channels=["c"]
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'c': 'foofoo | foofoofoofoo'}
+        ```
+
+    Example: Introducing a cycle
+        This example demonstrates how to introduce a cycle in the graph, by having
+        a chain write to a channel it subscribes to. Execution will continue
+        until a None value is written to the channel.
+
+        ```python
+        from langgraph.channels import EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWrite, ChannelWriteEntry
+
+        example_node = (
+            Channel.subscribe_to("value")
+            | (lambda x: x + x if len(x) < 10 else None)
+            | ChannelWrite(writes=[ChannelWriteEntry(channel="value", skip_none=True)])
+        )
+
+        app = Pregel(
+            nodes={"example_node": example_node},
+            channels={
+                "value": EphemeralValue(str),
+            },
+            input_channels=["value"],
+            output_channels=["value"]
+        )
+
+        app.invoke({"value": "a"})
+        ```
+
+        ```con
+        {'value': 'aaaaaaaaaaaaaaaa'}
+        ```
     """
 
     nodes: dict[str, PregelNode]
