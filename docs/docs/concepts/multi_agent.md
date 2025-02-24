@@ -112,6 +112,7 @@ In this architecture, agents are defined as graph nodes. Each agent can communic
 ```python
 from typing import Literal
 from langchain_openai import ChatOpenAI
+from langgraph.types import Command
 from langgraph.graph import StateGraph, MessagesState, START, END
 
 model = ChatOpenAI()
@@ -158,6 +159,7 @@ In this architecture, we define agents as nodes and add a supervisor node (LLM) 
 ```python
 from typing import Literal
 from langchain_openai import ChatOpenAI
+from langgraph.types import Command
 from langgraph.graph import StateGraph, MessagesState, START, END
 
 model = ChatOpenAI()
