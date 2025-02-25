@@ -20,7 +20,7 @@ The `useStream()` provides a solid foundation for creating bespoke chat experien
 ## Installation
 
 ```bash
-npm install @langchain/langgraph-sdk @langchain/langchain-core react
+npm install @langchain/langgraph-sdk @langchain/core
 ```
 
 ## Example
