@@ -71,7 +71,7 @@ If you navigate to `localhost:2024/hello` in your browser (2024 is the default d
 
 ## Deploying
 
-You can deploy this app as-is to the managed langgraph cloud or to your self-hsoted platform.
+You can deploy this app as-is to the managed langgraph cloud or to your self-hosted platform.
 
 ## Next steps
 
