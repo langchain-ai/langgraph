@@ -48,6 +48,7 @@ The LangGraph Platform offers a few different deployment options described in th
 
 - [Why LangGraph Platform?](./langgraph_platform.md): The LangGraph platform is an opinionated way to deploy and manage LangGraph applications. This guide provides an overview of the key features and concepts behind LangGraph Platform.
 - [Platform Architecture](./platform_architecture.md): A high-level overview of the architecture of the LangGraph Platform.
+- [Scalability and Resilience](./scalability_and_resilience.md): LangGraph Platform is designed to be scalable and resilient. This document explains how the platform achieves this.
 - [Deployment Options](./deployment_options.md): LangGraph Platform offers four deployment options: [Self-Hosted Lite](./self_hosted.md#self-hosted-lite), [Self-Hosted Enterprise](./self_hosted.md#self-hosted-enterprise), [bring your own cloud (BYOC)](./bring_your_own_cloud.md), and [Cloud SaaS](./langgraph_cloud.md). This guide explains the differences between these options, and which Plans they are available on.
 - [Plans](./plans.md): LangGraph Platforms offer three different plans: Developer, Plus, Enterprise. This guide explains the differences between these options, what deployment options are available for each, and how to sign up for each one.
 - [Template Applications](./template_applications.md): Reference applications designed to help you get started quickly when building with LangGraph.
