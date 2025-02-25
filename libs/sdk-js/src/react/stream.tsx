@@ -896,7 +896,12 @@ export function useStream<
       if (isLoading) return undefined;
 
       const interrupts = threadHead?.tasks?.at(-1)?.interrupts;
-      if (interrupts == null || interrupts.length === 0) return undefined;
+      if (interrupts == null || interrupts.length === 0) {
+        // check if there's a next task present
+        const next = threadHead?.next ?? [];
+        if (!next.length || error != null) return undefined;
+        return { when: "breakpoint" };
+      }
 
       // Return only the current interrupt
       return interrupts.at(-1) as Interrupt<InterruptType> | undefined;
