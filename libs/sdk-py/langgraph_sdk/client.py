@@ -1834,7 +1834,7 @@ class RunsClient:
         run_id: str,
         *,
         cancel_on_disconnect: bool = False,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -1844,7 +1844,9 @@ class RunsClient:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
             cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
-            stream_mode: The stream mode(s) to use.
+            stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
+                when creating the run. Background runs default to having the union of all
+                stream modes.
 
         Returns:
             None
@@ -3981,7 +3983,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
         cancel_on_disconnect: bool = False,
     ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
@@ -3991,7 +3993,9 @@ class SyncRunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
-            stream_mode: The stream mode(s) to use.
+            stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
+                when creating the run. Background runs default to having the union of all
+                stream modes.
             cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
