@@ -70,7 +70,7 @@ pip install -U langgraph
 Let's build a tool-calling [ReAct-style](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#react-implementation) agent that uses a search tool!
 
 ```shell
-pip install langchain-anthropic
+pip install langgraph-prebuilt langchain-anthropic
 ```
 
 ```shell
