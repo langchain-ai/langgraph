@@ -211,17 +211,7 @@ A branch can be created in following ways:
 
 import type { Message } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
-import {
-  Annotation,
-  MessagesAnnotation,
-  type StateType,
-  type UpdateType,
-} from "@langchain/langgraph/web";
 import { useState } from "react";
-
-const AgentState = Annotation.Root({
-  ...MessagesAnnotation.spec,
-});
 
 function BranchSwitcher({
   branch,
@@ -300,10 +290,7 @@ function EditMessage({
 }
 
 export default function App() {
-  const thread = useStream<
-    StateType<typeof AgentState.spec>,
-    { UpdateType: UpdateType<typeof AgentState.spec> }
-  >({
+  const thread = useStream({
     apiUrl: "http://localhost:2024",
     assistantId: "agent",
     messagesKey: "messages",
@@ -326,7 +313,7 @@ export default function App() {
                   onEdit={(message) =>
                     thread.submit(
                       { messages: [message] },
-                      { checkpoint: parentCheckpoint }
+                      { checkpoint: parentCheckpoint },
                     )
                   }
                 />
