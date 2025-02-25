@@ -797,7 +797,9 @@ def create_react_agent(
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState) -> Union[str, list]:
-        messages = state["messages"]
+        messages = (
+            state["messages"] if isinstance(state, dict) else getattr(state, "messages")
+        )
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
@@ -839,11 +841,16 @@ def create_react_agent(
     else:
         should_continue_destinations = ["tools", END]
 
+    if version == "v2":
+        # Dummy node to get the full state_schema
+        workflow.add_node("get_state", lambda _: None, input=state_schema)
+        workflow.add_edge("agent", "get_state")
+
     # We now add a conditional edge
     workflow.add_conditional_edges(
         # First, we define the start node. We use `agent`.
         # This means these are the edges taken after the `agent` node is called.
-        "agent",
+        "get_state" if version == "v2" else "agent",
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
         path_map=should_continue_destinations,
