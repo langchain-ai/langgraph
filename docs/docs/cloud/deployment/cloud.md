@@ -93,6 +93,15 @@ Starting from the `LangGraph Platform` view...
     1. Branch creation/deletion and tag creation/deletion events will not trigger an update. Only pushes to an existing branch will trigger an update.
     1. Pushes in quick succession to a branch will not trigger subsequent updates. In the future, this functionality may be changed/improved.
 
+## Add or Remove GitHub Repositories
+
+After installing and authorizing LangChain's `hosted-langserve` GitHub app, repository access for the app can be modified to add new repositories or remove existing repositories. If a new repository is created, it may need to be added explicitly.
+
+1. From the GitHub profile, navigate to `Settings` > `Applications` > `hosted-langserve` > click `Configure`.
+1. Under `Repository access`, select `All repositories` or `Only select repositories`. If `Only select repositories` is selected, new repositories must be explicitly added.
+1. Click `Save`.
+1. When creating a new deployment, the list of GitHub repositories in the dropdown menu will be updated to reflect the repository access changes.
+
 ## Whitelisting IP Addresses
 
 All traffic from `LangGraph Platform` deployments created after January 6th 2025 will come through a NAT gateway.
