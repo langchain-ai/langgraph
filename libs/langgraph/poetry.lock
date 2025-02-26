@@ -1395,7 +1395,7 @@ files = []
 develop = true
 
 [package.dependencies]
-aiosqlite = "^0.20.0"
+aiosqlite = ">=0.20,<0.22"
 langgraph-checkpoint = "^2.0.15"
 
 [package.source]
@@ -1404,7 +1404,7 @@ url = "../checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "1.0.0"
+version = "0.1.0"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 optional = false
 python-versions = "^3.9.0,<4.0"
