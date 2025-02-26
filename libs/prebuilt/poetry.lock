@@ -501,7 +501,7 @@ files = []
 develop = true
 
 [package.dependencies]
-aiosqlite = "^0.20.0"
+aiosqlite = ">=0.20,<0.22"
 langgraph-checkpoint = "^2.0.15"
 
 [package.source]
