@@ -973,8 +973,9 @@ class Pregel(PregelProtocol):
         config = merge_configs(self.config, config) if self.config else config
         if self.checkpointer is True:
             ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-            config = ensure_config(config)
-            config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
 
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
@@ -1011,8 +1012,9 @@ class Pregel(PregelProtocol):
         config = merge_configs(self.config, config) if self.config else config
         if self.checkpointer is True:
             ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-            config = ensure_config(config)
-            config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
 
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
