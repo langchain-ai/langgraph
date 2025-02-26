@@ -184,7 +184,7 @@ As noted in the [Anthropic blog](https://www.anthropic.com/research/building-eff
 
     See our lesson on Prompt Chaining [here](https://github.com/langchain-ai/langchain-academy/blob/main/module-1/chain.ipynb).
 
-=== "Functional API (beta)"
+=== "Functional API"
 
     ```python
     from langgraph.func import entrypoint, task
@@ -335,7 +335,7 @@ With parallelization, LLMs work simultaneously on a task:
 
     See our lesson on parallelization [here](https://github.com/langchain-ai/langchain-academy/blob/main/module-1/simple-graph.ipynb).
 
-=== "Functional API (beta)"
+=== "Functional API"
 
     ```python
     @task
@@ -524,7 +524,7 @@ Routing classifies an input and directs it to a followup task. As noted in the [
 
     [Here](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_adaptive_rag_local/) is RAG workflow that routes questions. See our video [here](https://www.youtube.com/watch?v=bq1Plo2RhYI).
 
-=== "Functional API (beta)"
+=== "Functional API"
 
     ```python
     from typing_extensions import Literal
@@ -761,7 +761,7 @@ With orchestrator-worker, an orchestrator breaks down a task and delegates each 
     [Here](https://github.com/langchain-ai/report-mAIstro) is a project that uses orchestrator-worker for report planning and writing. See our video [here](https://www.youtube.com/watch?v=wSxZ7yFbbas).
 
 
-=== "Functional API (beta)"
+=== "Functional API"
 
     ```python
     from typing import List
@@ -952,7 +952,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
     [Here](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_adaptive_rag_local/) is a RAG workflow that grades answers for hallucinations or errors. See our video [here](https://www.youtube.com/watch?v=bq1Plo2RhYI).
 
-=== "Functional API (beta)"
+=== "Functional API"
 
     ```python
     # Schema for structured output to use in evaluation
@@ -1161,7 +1161,7 @@ llm_with_tools = llm.bind_tools(tools)
 
     [Here](https://github.com/langchain-ai/memory-agent) is a project that uses a tool calling agent to create / store long-term memories.
 
-=== "Functional API (beta)"
+=== "Functional API"
 
     ```python
     from langgraph.graph import add_messages
