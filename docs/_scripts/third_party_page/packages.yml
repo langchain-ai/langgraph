@@ -21,3 +21,6 @@ packages:
   - name: "langgraph-swarm"
     repo: "langchain-ai/langgraph-swarm-py"
     description: "Build swarm-style multi-agent systems using LangGraph."
+  - name: "delve-taxonomy-generator"
+    repo: "andrestorres123/delve"
+    description: "A taxonomy generator for unstructured data"
