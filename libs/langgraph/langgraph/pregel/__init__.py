@@ -791,7 +791,7 @@ class Pregel(PregelProtocol):
                         CONF: {
                             CONFIG_KEY_CHECKPOINTER: recurse,
                             "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
+                            CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(task_ns),
                         }
                     }
                     task_states[task.id] = subgraphs[task.name].get_state(
@@ -905,7 +905,7 @@ class Pregel(PregelProtocol):
                         CONF: {
                             CONFIG_KEY_CHECKPOINTER: recurse,
                             "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
+                            CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(task_ns),
                         }
                     }
                     task_states[task.id] = await subgraphs[task.name].aget_state(
@@ -1911,9 +1911,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -2201,9 +2199,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
