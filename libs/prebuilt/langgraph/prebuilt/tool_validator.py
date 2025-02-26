@@ -29,6 +29,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
+from langchain_core.utils.pydantic import is_basemodel_subclass
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
@@ -176,6 +177,13 @@ class ValidationNode(RunnableCallable):
                 if schema.args_schema is None:
                     raise ValueError(
                         f"Tool {schema.name} does not have an args_schema defined."
+                    )
+                elif not isinstance(
+                    schema.args_schema, type
+                ) or not is_basemodel_subclass(schema.args_schema):
+                    raise ValueError(
+                        "Validation node only works with tools that have a pydantic BaseModel args_schema. "
+                        f"Got {schema.name} with args_schema: {schema.args_schema}."
                     )
                 self.schemas_by_name[schema.name] = schema.args_schema
             elif isinstance(schema, type) and issubclass(
