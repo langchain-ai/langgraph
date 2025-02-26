@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
@@ -317,7 +316,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
-                        json.dumps(cast(dict, op.value)),
+                        orjson.dumps(cast(dict, op.value)),
                     ]
                 )
 
@@ -349,7 +348,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at)
                 VALUES {values_str}
             """
-            queries.append((query, tuple(insertion_params)))
+            queries.append((query, tuple(insertion_params)))  # type: ignore[arg-type]
 
             if vector_values:
                 values_str = ",".join(vector_values)
@@ -395,7 +394,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                         filter_conditions.append(
                             "json_extract(value, '$." + key + "') = ?"
                         )
-                        filter_params.append(json.dumps(value))
+                        filter_params.append(orjson.dumps(value))
 
             # Vector search branch
             if op.query and self.index_config:
@@ -551,7 +550,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             Tuple of SQL condition and parameters.
         """
         if op == "$eq":
-            return f"json_extract(value, '$.{key}') = ?", [json.dumps(value)]
+            return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
         elif op == "$gt":
             return f"json_extract(value, '$.{key}') > ?", [str(value)]
         elif op == "$gte":
@@ -561,7 +560,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         elif op == "$lte":
             return f"json_extract(value, '$.{key}') <= ?", [str(value)]
         elif op == "$ne":
-            return f"json_extract(value, '$.{key}') != ?", [json.dumps(value)]
+            return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
@@ -672,7 +671,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             # Convert vectors to SQLite-friendly format
             vector_params = []
             for (ns, k, pathname, _), vector in zip(txt_params, vectors):
-                vector_params.extend([ns, k, pathname, json.dumps(vector)])
+                vector_params.extend([ns, k, pathname, orjson.dumps(vector)])
 
             queries.append((query, vector_params))
 
@@ -708,12 +707,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
 
             # Replace placeholders with actual embeddings
             for (idx, _), embedding in zip(embedding_requests, vectors):
-                _params_list = queries[idx][1]
+                _params_list: list = queries[idx][1]
                 for i, param in enumerate(_params_list):
                     if param is _PLACEHOLDER:
-                        _params_list[i] = json.dumps(
-                            embedding
-                        )  # Convert to JSON string for SQLite
+                        _params_list[i] = orjson.dumps(embedding)
 
         for (idx, _), (query, params) in zip(search_ops, queries):
             await cur.execute(query, params)

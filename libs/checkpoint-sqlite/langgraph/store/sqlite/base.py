@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 import sqlite3
@@ -101,7 +100,7 @@ def _json_loads(content: Union[bytes, str, orjson.Fragment]) -> Any:
     elif isinstance(content, bytes):
         return orjson.loads(content)
     else:
-        return json.loads(content)
+        return orjson.loads(content)
 
 
 def _row_to_item(
@@ -434,7 +433,7 @@ class SqliteStore(BaseStore):
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
-                        json.dumps(cast(dict, op.value)),
+                        orjson.dumps(cast(dict, op.value)),
                     ]
                 )
 
@@ -531,7 +530,7 @@ class SqliteStore(BaseStore):
                             filter_conditions.append(
                                 "json_extract(value, '$." + key + "') = ?"
                             )
-                            filter_params.append(json.dumps(value))
+                            filter_params.append(orjson.dumps(value))
 
             # Vector search branch
             if op.query and self.index_config:
@@ -704,7 +703,7 @@ class SqliteStore(BaseStore):
             elif isinstance(value, (int, float)):
                 return f"json_extract(value, '$.{key}') = {value}", []
             else:
-                return f"json_extract(value, '$.{key}') = ?", [json.dumps(value)]
+                return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
         elif op == "$gt":
             # For numeric values, SQLite needs to compare as numbers, not strings
             if isinstance(value, (int, float)):
@@ -717,7 +716,7 @@ class SqliteStore(BaseStore):
                     [],
                 )
             else:
-                return f"json_extract(value, '$.{key}') > ?", [json.dumps(value)]
+                return f"json_extract(value, '$.{key}') > ?", [orjson.dumps(value)]
         elif op == "$gte":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) >= {value}", []
@@ -729,7 +728,7 @@ class SqliteStore(BaseStore):
                     [],
                 )
             else:
-                return f"json_extract(value, '$.{key}') >= ?", [json.dumps(value)]
+                return f"json_extract(value, '$.{key}') >= ?", [orjson.dumps(value)]
         elif op == "$lt":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) < {value}", []
@@ -741,7 +740,7 @@ class SqliteStore(BaseStore):
                     [],
                 )
             else:
-                return f"json_extract(value, '$.{key}') < ?", [json.dumps(value)]
+                return f"json_extract(value, '$.{key}') < ?", [orjson.dumps(value)]
         elif op == "$lte":
             if isinstance(value, (int, float)):
                 return f"CAST(json_extract(value, '$.{key}') AS REAL) <= {value}", []
@@ -753,7 +752,7 @@ class SqliteStore(BaseStore):
                     [],
                 )
             else:
-                return f"json_extract(value, '$.{key}') <= ?", [json.dumps(value)]
+                return f"json_extract(value, '$.{key}') <= ?", [orjson.dumps(value)]
         elif op == "$ne":
             if isinstance(value, str):
                 return (
@@ -769,7 +768,7 @@ class SqliteStore(BaseStore):
             elif isinstance(value, (int, float)):
                 return f"json_extract(value, '$.{key}') != {value}", []
             else:
-                return f"json_extract(value, '$.{key}') != ?", [json.dumps(value)]
+                return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
@@ -865,7 +864,7 @@ class SqliteStore(BaseStore):
             # Convert vectors to SQLite-friendly format
             vector_params = []
             for (ns, k, pathname, _), vector in zip(txt_params, vectors):
-                vector_params.extend([ns, k, pathname, json.dumps(vector)])
+                vector_params.extend([ns, k, pathname, orjson.dumps(vector)])
 
             queries.append((query, vector_params))
 
@@ -914,12 +913,10 @@ class SqliteStore(BaseStore):
 
             # Replace placeholders with actual embeddings
             for (idx, _), embedding in zip(embedding_requests, embeddings):
-                _params_list = queries[idx][1]
+                _params_list: list = queries[idx][1]
                 for i, param in enumerate(_params_list):
                     if param is _PLACEHOLDER:
-                        _params_list[i] = json.dumps(
-                            embedding
-                        )  # Convert to JSON string for SQLite
+                        _params_list[i] = orjson.dumps(embedding)
 
         for (idx, _), (query, params) in zip(search_ops, queries):
             cur.execute(query, params)
@@ -1009,8 +1006,8 @@ def _ensure_index_config(
 
 def _dot_product(vec1_json: str, vec2_json: str) -> float:
     """SQLite function to compute dot product between two vectors stored as JSON strings."""
-    vec1 = json.loads(vec1_json)
-    vec2 = json.loads(vec2_json)
+    vec1 = orjson.loads(vec1_json)
+    vec2 = orjson.loads(vec2_json)
 
     if len(vec1) != len(vec2):
         raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")
@@ -1020,7 +1017,7 @@ def _dot_product(vec1_json: str, vec2_json: str) -> float:
 
 def _vector_magnitude(vec_json: str) -> float:
     """SQLite function to compute the magnitude of a vector stored as JSON string."""
-    vec = json.loads(vec_json)
+    vec = orjson.loads(vec_json)
     return sum(v**2 for v in vec) ** 0.5
 
 
@@ -1030,8 +1027,8 @@ def _cosine_similarity(vec1_json: str, vec2_json: str) -> float:
     Returns the cosine similarity in the full range [-1, 1], where 1 is identical,
     -1 is completely opposite, and 0 indicates orthogonality.
     """
-    vec1 = json.loads(vec1_json)
-    vec2 = json.loads(vec2_json)
+    vec1 = orjson.loads(vec1_json)
+    vec2 = orjson.loads(vec2_json)
 
     if len(vec1) != len(vec2):
         raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")
@@ -1048,8 +1045,8 @@ def _cosine_similarity(vec1_json: str, vec2_json: str) -> float:
 
 def _l2_distance(vec1_json: str, vec2_json: str) -> float:
     """SQLite function to compute L2 distance between two vectors stored as JSON strings."""
-    vec1 = json.loads(vec1_json)
-    vec2 = json.loads(vec2_json)
+    vec1 = orjson.loads(vec1_json)
+    vec2 = orjson.loads(vec2_json)
 
     if len(vec1) != len(vec2):
         raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")

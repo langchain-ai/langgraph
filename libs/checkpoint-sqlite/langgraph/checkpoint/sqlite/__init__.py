@@ -1,8 +1,9 @@
 import random
 import sqlite3
 import threading
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
