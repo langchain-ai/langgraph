@@ -7282,9 +7282,7 @@ async def test_multiple_subgraphs_mixed_state_graph(
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_subgraphs_checkpointer(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
+async def test_multiple_subgraphs_checkpointer(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         class SubgraphState(TypedDict):
@@ -7513,3 +7511,99 @@ async def test_tags_stream_mode_messages() -> None:
             },
         )
     ]
+
+
+async def test_stream_messages_dedupe_inputs() -> None:
+    from langchain_core.messages import AIMessage
+
+    async def call_model(state):
+        return {"messages": AIMessage("hi", id="1")}
+
+    async def route(state):
+        return Command(goto="node_2", graph=Command.PARENT)
+
+    subgraph = (
+        StateGraph(MessagesState)
+        .add_node(call_model)
+        .add_node(route)
+        .add_edge(START, "call_model")
+        .add_edge("call_model", "route")
+        .compile()
+    )
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("node_1", subgraph)
+        .add_node("node_2", lambda state: state)
+        .add_edge(START, "node_1")
+        .compile()
+    )
+
+    chunks = [
+        chunk
+        async for ns, chunk in graph.astream(
+            {"messages": "hi"}, stream_mode="messages", subgraphs=True
+        )
+    ]
+
+    assert len(chunks) == 1
+    assert chunks[0][0] == AIMessage("hi", id="1")
+    assert chunks[0][1]["langgraph_node"] == "call_model"
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_stream_messages_dedupe_state(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        from langchain_core.messages import AIMessage
+
+        to_emit = [AIMessage("bye", id="1"), AIMessage("bye again", id="2")]
+
+        async def call_model(state):
+            return {"messages": to_emit.pop(0)}
+
+        async def route(state):
+            return Command(goto="node_2", graph=Command.PARENT)
+
+        subgraph = (
+            StateGraph(MessagesState)
+            .add_node(call_model)
+            .add_node(route)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", "route")
+            .compile()
+        )
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("node_1", subgraph)
+            .add_node("node_2", lambda state: state)
+            .add_edge(START, "node_1")
+            .compile(checkpointer=checkpointer)
+        )
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        chunks = [
+            chunk
+            async for ns, chunk in graph.astream(
+                {"messages": "hi"}, thread1, stream_mode="messages", subgraphs=True
+            )
+        ]
+
+        assert len(chunks) == 1
+        assert chunks[0][0] == AIMessage("bye", id="1")
+        assert chunks[0][1]["langgraph_node"] == "call_model"
+
+        chunks = [
+            chunk
+            async for ns, chunk in graph.astream(
+                {"messages": "hi again"},
+                thread1,
+                stream_mode="messages",
+                subgraphs=True,
+            )
+        ]
+
+        assert len(chunks) == 1
+        assert chunks[0][0] == AIMessage("bye again", id="2")
+        assert chunks[0][1]["langgraph_node"] == "call_model"
