@@ -1,0 +1,66 @@
+import enum
+from _typeshed import Incomplete
+from langchain_core.runnables.base import Runnable, RunnableConfig as RunnableConfig
+from langchain_core.runnables.utils import Input, Output
+from langgraph.store.base import BaseStore
+from langgraph.types import StreamWriter
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Protocol, Sequence
+from typing_extensions import TypeGuard
+
+class StrEnum(str, enum.Enum): ...
+
+ANY_TYPE: Incomplete
+ASYNCIO_ACCEPTS_CONTEXT: Incomplete
+KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...]
+VALID_KINDS: Incomplete
+
+class _RunnableWithWriter(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, writer: StreamWriter) -> Output: ...
+
+class _RunnableWithStore(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, store: BaseStore) -> Output: ...
+
+class _RunnableWithWriterStore(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, writer: StreamWriter, store: BaseStore) -> Output: ...
+
+class _RunnableWithConfigWriter(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, config: RunnableConfig, writer: StreamWriter) -> Output: ...
+
+class _RunnableWithConfigStore(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, config: RunnableConfig, store: BaseStore) -> Output: ...
+
+class _RunnableWithConfigWriterStore(Protocol[Input, Output]):
+    def __call__(self, state: Input, *, config: RunnableConfig, writer: StreamWriter, store: BaseStore) -> Output: ...
+
+RunnableLike: Incomplete
+
+class RunnableCallable(Runnable):
+    name: Incomplete
+    func: Incomplete
+    afunc: Incomplete
+    tags: Incomplete
+    kwargs: Incomplete
+    trace: Incomplete
+    recurse: Incomplete
+    explode_args: Incomplete
+    func_accepts_config: Incomplete
+    func_accepts: Incomplete
+    def __init__(self, func: Callable[..., Any | Runnable] | None, afunc: Callable[..., Awaitable[Any | Runnable]] | None = None, *, name: str | None = None, tags: Sequence[str] | None = None, trace: bool = True, recurse: bool = True, explode_args: bool = False, **kwargs: Any) -> None: ...
+    def invoke(self, input: Any, config: RunnableConfig | None = None, **kwargs: Any) -> Any: ...
+    async def ainvoke(self, input: Any, config: RunnableConfig | None = None, **kwargs: Any) -> Any: ...
+
+def is_async_callable(func: Any) -> TypeGuard[Callable[..., Awaitable]]: ...
+def is_async_generator(func: Any) -> TypeGuard[Callable[..., AsyncIterator]]: ...
+def coerce_to_runnable(thing: RunnableLike, *, name: str | None, trace: bool) -> Runnable: ...
+
+class RunnableSeq(Runnable):
+    steps: Incomplete
+    name: Incomplete
+    trace_inputs: Incomplete
+    def __init__(self, *steps: RunnableLike, name: str | None = None, trace_inputs: Callable[[Any], Any] | None = None) -> None: ...
+    def __or__(self, other: Any) -> Runnable: ...
+    def __ror__(self, other: Any) -> Runnable: ...
+    def invoke(self, input: Input, config: RunnableConfig | None = None, **kwargs: Any) -> Any: ...
+    async def ainvoke(self, input: Input, config: RunnableConfig | None = None, **kwargs: Any | None) -> Any: ...
+    def stream(self, input: Input, config: RunnableConfig | None = None, **kwargs: Any | None) -> Iterator[Any]: ...
+    async def astream(self, input: Input, config: RunnableConfig | None = None, **kwargs: Any | None) -> AsyncIterator[Any]: ...

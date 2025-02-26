@@ -1,0 +1,9 @@
+from langgraph.channels.base import BaseChannel
+from langgraph.checkpoint.base import Checkpoint as Checkpoint
+from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec as ManagedValueSpec
+from langgraph.types import LoopProtocol as LoopProtocol
+from typing import AsyncIterator, Iterator, Mapping
+
+def ChannelsManager(specs: Mapping[str, BaseChannel | ManagedValueSpec], checkpoint: Checkpoint, loop: LoopProtocol, *, skip_context: bool = False) -> Iterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]: ...
+async def AsyncChannelsManager(specs: Mapping[str, BaseChannel | ManagedValueSpec], checkpoint: Checkpoint, loop: LoopProtocol, *, skip_context: bool = False) -> AsyncIterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]: ...
+def noop_context() -> Iterator[None]: ...

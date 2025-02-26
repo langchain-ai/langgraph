@@ -1,0 +1,3 @@
+from langgraph.graph.state import StateGraph
+
+def wide_state(n: int) -> StateGraph: ...

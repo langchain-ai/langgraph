@@ -1,0 +1,6 @@
+from langgraph.checkpoint.base import ChannelVersions as ChannelVersions
+from langgraph.pregel.protocol import PregelProtocol
+from langgraph.utils.runnable import Runnable as Runnable
+
+def get_new_channel_versions(previous_versions: ChannelVersions, current_versions: ChannelVersions) -> ChannelVersions: ...
+def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None: ...
