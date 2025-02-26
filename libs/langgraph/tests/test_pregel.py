@@ -3372,6 +3372,59 @@ def test_subgraph_checkpoint_true(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_subgraph_checkpoint_true_interrupt(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    # Define subgraph
+    class SubgraphState(TypedDict):
+        # note that none of these keys are shared with the parent graph state
+        bar: str
+        baz: str
+
+    def subgraph_node_1(state: SubgraphState):
+        baz_value = interrupt("Provide baz value")
+        return {"baz": baz_value}
+
+    def subgraph_node_2(state: SubgraphState):
+        return {"bar": state["bar"] + state["baz"]}
+
+    subgraph_builder = StateGraph(SubgraphState)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.add_node(subgraph_node_2)
+    subgraph_builder.add_edge(START, "subgraph_node_1")
+    subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+    subgraph = subgraph_builder.compile(checkpointer=True)
+
+    class ParentState(TypedDict):
+        foo: str
+
+    def node_1(state: ParentState):
+        return {"foo": "hi! " + state["foo"]}
+
+    def node_2(state: ParentState):
+        response = subgraph.invoke({"bar": state["foo"]})
+        return {"foo": response["bar"]}
+
+    builder = StateGraph(ParentState)
+    builder.add_node("node_1", node_1)
+    builder.add_node("node_2", node_2)
+    builder.add_edge(START, "node_1")
+    builder.add_edge("node_1", "node_2")
+
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert graph.invoke({"foo": "foo"}, config) == {"foo": "hi! foo"}
+    assert graph.get_state(config, subgraphs=True).tasks[0].state.values == {
+        "bar": "hi! foo"
+    }
+    assert graph.invoke(Command(resume="baz"), config) == {"foo": "hi! foobaz"}
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_stream_subgraphs_during_execution(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
