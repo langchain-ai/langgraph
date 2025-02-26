@@ -971,6 +971,12 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
             config,
@@ -1004,6 +1010,12 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
             config,
@@ -1911,9 +1923,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -2201,9 +2211,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
