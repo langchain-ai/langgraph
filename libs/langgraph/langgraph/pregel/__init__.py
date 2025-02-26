@@ -794,7 +794,8 @@ class Pregel(PregelProtocol):
                             CONFIG_KEY_CHECKPOINT_NS: (
                                 recast_checkpoint_ns(task_ns)
                                 if hasattr(subgraphs[task.name], "checkpointer")
-                                and cast(Pregel, subgraphs[task.name]).checkpointer is True
+                                and cast(Pregel, subgraphs[task.name]).checkpointer
+                                is True
                                 else task_ns
                             ),
                         }
@@ -913,7 +914,8 @@ class Pregel(PregelProtocol):
                             CONFIG_KEY_CHECKPOINT_NS: (
                                 recast_checkpoint_ns(task_ns)
                                 if hasattr(subgraphs[task.name], "checkpointer")
-                                and cast(Pregel, subgraphs[task.name]).checkpointer is True
+                                and cast(Pregel, subgraphs[task.name]).checkpointer
+                                is True
                                 else task_ns
                             ),
                         }
