@@ -6238,26 +6238,31 @@ def test_merging_updates_command_parent():
         "bar": ["node_1", "subgraph_node_1", "subgraph_node_2", "node_3"],
     }
 
-    assert list(
+    stream_results = list(
         main_graph.stream({"foo": ""}, stream_mode="updates", subgraphs=True)
-    ) == [
-        ((), {"node_1": {"bar": ["node_1"]}}),
-        (
-            (AnyStr("node_2:"),),
-            {"subgraph_node_1": {"foo": "foo", "bar": ["subgraph_node_1"]}},
-        ),
-        (
-            (),
-            {
+    )
+
+    assert len(stream_results) == 5
+    assert stream_results[0] == ((), {"node_1": {"bar": ["node_1"]}})
+    assert stream_results[1] == (
+        (AnyStr("node_2:"),),
+        {"subgraph_node_1": {"foo": "foo", "bar": ["subgraph_node_1"]}},
+    )
+    assert stream_results[2] == (
+        (AnyStr("node_2:"),),
+        {"subgraph_node_2": None},
+    )
+    assert stream_results[3] == (
+        (),
+        {
                 "node_2": [
                     {"foo": "foo"},
                     {"bar": ["node_1", "subgraph_node_1"]},
                     {"bar": ["subgraph_node_2"]},
                 ]
             },
-        ),
-        ((), {"node_3": {"bar": ["node_3"]}}),
-    ]
+        )
+    assert stream_results[4] == ((), {"node_3": {"bar": ["node_3"]}})
 
 
 def test_merging_non_overlapping_updates_command_parent():
