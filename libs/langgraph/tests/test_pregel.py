@@ -7358,6 +7358,156 @@ def test_multiple_subgraphs_checkpointer(
     ]
 
 
+def test_merging_updates_command_parent():
+    # simple reducer
+    def append_unique(left, right):
+        combined = list(left)
+        for item in right:
+            if item in combined:
+                continue
+            else:
+                combined.append(item)
+        return combined
+
+    class State(TypedDict):
+        foo: str
+        bar: Annotated[list[str], append_unique]
+
+    # Define subgraph
+    def subgraph_node_1(state: State):
+        return Command(
+            goto="subgraph_node_2",
+            update={
+                "foo": "foo",
+                "bar": ["subgraph_node_1"],
+            },
+        )
+
+    def subgraph_node_2(state: State):
+        return Command(
+            goto="node_3",
+            update={"bar": ["subgraph_node_2"]},
+            graph=Command.PARENT,
+        )
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.add_node(subgraph_node_2)
+    subgraph_builder.add_edge(START, "subgraph_node_1")
+
+    # Define main graph
+    def node_1(state: State):
+        return Command(
+            goto="node_2",
+            update={"bar": ["node_1"]},
+        )
+
+    def node_3(state: State, store):
+        return Command(
+            update={"bar": ["node_3"]},
+        )
+
+    main_builder = StateGraph(State)
+    main_builder.add_node("node_1", node_1)
+    main_builder.add_node("node_2", subgraph_builder.compile())
+    main_builder.add_node("node_3", node_3)
+    main_builder.add_edge(START, "node_1")
+    main_builder.add_edge("node_2", "node_3")
+    main_graph = main_builder.compile()
+
+    assert main_graph.invoke({"foo": ""}) == {
+        "foo": "foo",
+        "bar": ["node_1", "subgraph_node_1", "subgraph_node_2", "node_3"],
+    }
+
+    stream_results = list(
+        main_graph.stream({"foo": ""}, stream_mode="updates", subgraphs=True)
+    )
+
+    assert len(stream_results) == 5
+    assert stream_results[0] == ((), {"node_1": {"bar": ["node_1"]}})
+    assert stream_results[1] == (
+        (AnyStr("node_2:"),),
+        {"subgraph_node_1": {"foo": "foo", "bar": ["subgraph_node_1"]}},
+    )
+    assert stream_results[2] == (
+        (AnyStr("node_2:"),),
+        {"subgraph_node_2": None},
+    )
+    assert stream_results[3] == (
+        (),
+        {
+            "node_2": [
+                {"foo": "foo"},
+                {"bar": ["node_1", "subgraph_node_1"]},
+                {"bar": ["subgraph_node_2"]},
+            ]
+        },
+    )
+    assert stream_results[4] == ((), {"node_3": {"bar": ["node_3"]}})
+
+
+def test_merging_non_overlapping_updates_command_parent():
+    # simple reducer
+    def append_unique(left, right):
+        combined = list(left)
+        for item in right:
+            if item in combined:
+                continue
+            else:
+                combined.append(item)
+        return combined
+
+    class State(TypedDict):
+        foo: Annotated[list, append_unique]
+
+    # Define subgraph
+    def subgraph_node_1(state: State):
+        return Command(
+            goto="subgraph_node_2",
+            update={
+                "foo": ["bar"],
+                "bar": ["subgraph_node_1"],
+            },
+        )
+
+    def subgraph_node_2(state: State):
+        return Command(
+            goto="node_3",
+            update={"bar": ["subgraph_node_2"]},
+            graph=Command.PARENT,
+        )
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.add_node(subgraph_node_2)
+    subgraph_builder.add_edge(START, "subgraph_node_1")
+
+    # Define main graph
+    def node_1(state: State):
+        return Command(
+            goto="node_2",
+            update={"foo": ["foo"]},
+        )
+
+    def node_3(state: State, store):
+        return Command(
+            update={"foo": ["baz"]},
+        )
+
+    main_builder = StateGraph(State)
+    main_builder.add_node("node_1", node_1)
+    main_builder.add_node("node_2", subgraph_builder.compile())
+    main_builder.add_node("node_3", node_3)
+    main_builder.add_edge(START, "node_1")
+    main_builder.add_edge("node_2", "node_3")
+    main_graph = main_builder.compile()
+
+    assert main_graph.invoke({"foo": []}) == {
+        "foo": ["foo", "bar", "baz"],
+    }
+
+
 def test_entrypoint_output_schema_with_return_and_save() -> None:
     """Test output schema inference with entrypoint.final."""
 
