@@ -791,7 +791,12 @@ class Pregel(PregelProtocol):
                         CONF: {
                             CONFIG_KEY_CHECKPOINTER: recurse,
                             "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(task_ns),
+                            CONFIG_KEY_CHECKPOINT_NS: (
+                                recast_checkpoint_ns(task_ns)
+                                if hasattr(subgraphs[task.name], "checkpointer")
+                                and cast(Pregel, subgraphs[task.name]).checkpointer is True
+                                else task_ns
+                            ),
                         }
                     }
                     task_states[task.id] = subgraphs[task.name].get_state(
@@ -905,7 +910,12 @@ class Pregel(PregelProtocol):
                         CONF: {
                             CONFIG_KEY_CHECKPOINTER: recurse,
                             "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(task_ns),
+                            CONFIG_KEY_CHECKPOINT_NS: (
+                                recast_checkpoint_ns(task_ns)
+                                if hasattr(subgraphs[task.name], "checkpointer")
+                                and cast(Pregel, subgraphs[task.name]).checkpointer is True
+                                else task_ns
+                            ),
                         }
                     }
                     task_states[task.id] = await subgraphs[task.name].aget_state(
