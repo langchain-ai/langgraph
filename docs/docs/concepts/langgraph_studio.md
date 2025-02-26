@@ -15,7 +15,7 @@ With visual graphs and the ability to edit state, you can better understand agen
 
 The key features of LangGraph Studio are:
 
-- Visualizes your graph
+- Visualize your graphs
 - Test your graph by running it from the UI
 - Debug your agent by [modifying its state and rerunning](human_in_the_loop.md)
 - Create and manage [assistants](assistants.md)
@@ -53,19 +53,17 @@ For more information please see the following:
 
 - [LangGraph Studio how-to guides](../how-tos/index.md#langgraph-studio)
 
-## Studio FAQs
+## LangGraph Studio FAQs
 
 ### Why is my project failing to start?
 
-There are a few reasons that your project might fail to start, here are some of the most common ones.
-
-#### Configuration or environment issues
-
-Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables.
+A project may fail to start if the configuration file is defined incorrectly, or if required environment variables are missing. See [here](../cloud/reference/cli.md#configuration-file) for how your configuration file should be defined.
 
 ### How does interrupt work?
 
 When you select the `Interrupts` dropdown and select a node to interrupt the graph will pause execution before and after (unless the node goes straight to `END`) that node has run. This means that you will be able to both edit the state before the node is ran and the state after the node has ran. This is intended to allow developers more fine-grained control over the behavior of a node and make it easier to observe how the node is behaving. You will not be able to edit the state after the node has ran if the node is the final node in the graph.
+
+For more information on interrupts and human in the loop, see [here](../human_in_the_loop).
 
 ### Why are extra edges showing up in my graph?
 
@@ -101,33 +99,37 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
         return "node_c"
 ```
 
-### LangGraph Studio Desktop App FAQs
+### Studio Desktop FAQs
 
 !!! warning "Deprecation Warning"
-    In order to support more platforms, we now recommend following the above instructions to connect to LangGraph Studio using the development server instead of the desktop app.
+    In order to support a wider range of platforms and users, we now recommend following the above instructions to connect to LangGraph Studio using the development server instead of the desktop app.
 
 The LangGraph Studio Desktop App is a standalone application that allows you to connect to your LangGraph application and visualize and interact with your graph. It is available for MacOS only and requires Docker to be installed.
 
-#### Docker issues
+#### Why is my project failing to start?
 
-LangGraph Studio (desktop) requires Docker Desktop version 4.24 or higher. Please make sure you have a version of Docker installed that satisfies that requirement and also make sure you have the Docker Desktop app up and running before trying to use LangGraph Studio. In addition, make sure you have docker-compose updated to version 2.22.0 or higher.
+In addition to the reasons listed above, for the desktop app there are a few more reasons that your project might fail to start:
 
 !!! Important "Note "
 
     LangGraph Studio Desktop automatically populates `LANGCHAIN_*` environment variables for license verification and tracing, regardless of the contents of the `.env` file. All other environment variables defined in `.env` will be read as normal.
 
-#### Incorrect data region
+##### Docker issues
+
+LangGraph Studio (desktop) requires Docker Desktop version 4.24 or higher. Please make sure you have a version of Docker installed that satisfies that requirement and also make sure you have the Docker Desktop app up and running before trying to use LangGraph Studio. In addition, make sure you have docker-compose updated to version 2.22.0 or higher.
+
+##### Incorrect data region
 
 If you receive a license verification error when attempting to start the LangGraph Server, you may be logged into the incorrect LangSmith data region. Ensure that you're logged into the correct LangSmith data region and ensure that the LangSmith account has access to LangGraph platform.
 
 1. In the top right-hand corner, click the user icon and select `Logout`.
 1. At the login screen, click the `Data Region` dropdown menu and select the appropriate data region. Then click `Login to LangSmith`.
 
-### How do I reload the app?  
+### How do I reload the app?
 
 If you would like to reload the app, don't use Command+R as you might normally do. Instead, close and reopen the app for a full refresh.
 
-### How does automatic rebuilding work?  
+### How does automatic rebuilding work?
 
 One of the key features of LangGraph Studio is that it automatically rebuilds your image when you change the source code. This allows for a super fast development and testing cycle which makes it easy to iterate on your graph. There are two different ways that LangGraph rebuilds your image: either by editing the image or completely rebuilding it.
 
@@ -139,6 +141,6 @@ If you modified the source code only (no configuration or dependency changes!) t
 
 If you edit your graph configuration file (`langgraph.json`) or the dependencies (either `pyproject.toml` or `requirements.txt`) then the entire image will be rebuilt. This will cause the UI to switch away from the graph view and start showing the logs of the new image building process. This can take a minute or two, and once it is done your updated image will be ready to use!
 
-### Why is my graph taking so long to startup?  
+### Why is my graph taking so long to startup?
 
 The LangGraph Studio interacts with a local LangGraph API server. To stay aligned with ongoing updates, the LangGraph API requires regular rebuilding. As a result, you may occasionally experience slight delays when starting up your project.
