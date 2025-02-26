@@ -3507,17 +3507,17 @@ langchain-core = ">=0.3.34,<1.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.2.74"
+version = "0.3.0"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
-groups = ["docs", "test"]
+groups = ["docs"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = []
 develop = true
 
 [package.dependencies]
-langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14,!=0.3.15,!=0.3.16,!=0.3.17,!=0.3.18,!=0.3.19,!=0.3.20,!=0.3.21,!=0.3.22"
+langchain-core = ">=0.1,<0.4"
 langgraph-checkpoint = "^2.0.10"
 langgraph-sdk = "^0.1.42"
 
@@ -3546,22 +3546,21 @@ url = "../libs/checkpoint"
 
 [[package]]
 name = "langgraph-checkpoint-mongodb"
-version = "0.1.0"
+version = "0.1.1"
 description = "Library with a MongoDB implementation of LangGraph checkpoint saver."
 optional = false
-python-versions = "<4.0.0,>=3.9.0"
+python-versions = ">=3.9"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "langgraph_checkpoint_mongodb-0.1.0-py3-none-any.whl", hash = "sha256:52f20956b36e0275ff805a1eea1db4c1a7e5e0ffe0a1ade65969004fa1654703"},
-    {file = "langgraph_checkpoint_mongodb-0.1.0.tar.gz", hash = "sha256:3165c134ad5c82a3fe02fef04c81dcd48a3f5d031e07a9d1cb84457241f76793"},
+    {file = "langgraph_checkpoint_mongodb-0.1.1-py3-none-any.whl", hash = "sha256:1ff2c3cb2a9139c38ea9cf398659b8b32d6bbfcc4999713b62014431477c5ac5"},
+    {file = "langgraph_checkpoint_mongodb-0.1.1.tar.gz", hash = "sha256:350d347b0458fb7977231ac1295095bef512458ee0debe09fd394d913b8d89d3"},
 ]
 
 [package.dependencies]
-langgraph = ">=0.2.38,<0.3.0"
-langgraph-checkpoint = ">=2.0.0,<3.0.0"
+langgraph-checkpoint = ">=2.0.0"
 motor = ">3.5.0"
-pymongo = ">=4.9.0,<4.10.0"
+pymongo = ">=4.9,<4.12"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
@@ -3604,12 +3603,32 @@ type = "directory"
 url = "../libs/checkpoint-sqlite"
 
 [[package]]
+name = "langgraph-prebuilt"
+version = "1.0.0"
+description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
+optional = false
+python-versions = "^3.9.0,<4.0"
+groups = ["docs"]
+markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
+files = []
+develop = true
+
+[package.dependencies]
+langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14,!=0.3.15,!=0.3.16,!=0.3.17,!=0.3.18,!=0.3.19,!=0.3.20,!=0.3.21,!=0.3.22"
+langgraph = ">=0.3,<0.4"
+langgraph-checkpoint = "^2.0.10"
+
+[package.source]
+type = "directory"
+url = "../libs/prebuilt"
+
+[[package]]
 name = "langgraph-sdk"
 version = "0.1.53"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
-groups = ["docs", "test"]
+groups = ["docs"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = []
 develop = true
@@ -8631,4 +8650,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "6dce741bb0e3d73af45d234fb1605d97f1bbf23c2e71e0a456cc6987d67554e7"
+content-hash = "ac9af57c6abaddd1f181551a7bb8194ef3e4491391a0f2dc71417d68e85cb5b3"
