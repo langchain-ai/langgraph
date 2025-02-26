@@ -39,6 +39,7 @@ jobs:
               - 'libs/checkpoint-sqlite/**'
               - 'libs/checkpoint-postgres/**'
               - 'libs/scheduler-kafka/**'
+              - 'libs/prebuilt/**'
             sdk-js:
               - 'libs/sdk-js/**'
 
@@ -56,6 +57,7 @@ jobs:
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
             "libs/scheduler-kafka",
+            "libs/prebuilt",
           ]
     if: needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/_lint.yml
@@ -74,6 +76,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
+            "libs/prebuilt",
           ]
     if: needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/_test.yml
