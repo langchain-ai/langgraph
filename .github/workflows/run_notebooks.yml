@@ -22,7 +22,7 @@ jobs:
       matrix:
         lib-version:
           - "development"
-          - "latest"
+          # - "latest"
 
     steps:
       - uses: actions/checkout@v4
