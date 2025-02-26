@@ -59,7 +59,7 @@ class TestAsyncSqliteSaver:
 
     async def test_combined_metadata(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-            config = {
+            config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
                     "checkpoint_ns": "",
@@ -69,6 +69,7 @@ class TestAsyncSqliteSaver:
             }
             await saver.aput(config, self.chkpnt_2, self.metadata_2, {})
             checkpoint = await saver.aget_tuple(config)
+            assert checkpoint is not None
             assert checkpoint.metadata == {
                 **self.metadata_2,
                 "thread_id": "thread-2",
