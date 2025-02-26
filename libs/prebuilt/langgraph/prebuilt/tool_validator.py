@@ -79,7 +79,7 @@ class ValidationNode(RunnableCallable):
         >>> from typing_extensions import TypedDict
         ...
         >>> from langchain_anthropic import ChatAnthropic
-        >>> from pydantic import BaseModel, validator
+        >>> from pydantic import BaseModel, field_validator
         ...
         >>> from langgraph.graph import END, START, StateGraph
         >>> from langgraph.prebuilt import ValidationNode
@@ -89,18 +89,15 @@ class ValidationNode(RunnableCallable):
         >>> class SelectNumber(BaseModel):
         ...     a: int
         ...
-        ...     @validator("a")
+        ...     @field_validator("a")
         ...     def a_must_be_meaningful(cls, v):
         ...         if v != 37:
         ...             raise ValueError("Only 37 is allowed")
         ...         return v
         ...
         ...
-        >>> class State(TypedDict):
-        ...     messages: Annotated[list, add_messages]
-        ...
-        >>> builder = StateGraph(State)
-        >>> llm = ChatAnthropic(model="claude-3-haiku-20240307").bind_tools([SelectNumber])
+        >>> builder = StateGraph(Annotated[list, add_messages])
+        >>> llm = ChatAnthropic(model="claude-3-5-haiku-latest").bind_tools([SelectNumber])
         >>> builder.add_node("model", llm)
         >>> builder.add_node("validation", ValidationNode([SelectNumber]))
         >>> builder.add_edge(START, "model")

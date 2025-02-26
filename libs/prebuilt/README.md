@@ -40,6 +40,8 @@ app.invoke(
 
 ## Tools
 
+### ToolNode
+
 `langgraph-prebuilt` provides an [implementation](https://langchain-ai.github.io/langgraph/reference/prebuilt/#langgraph.prebuilt.tool_node.ToolNode) of a node that executes tool calls - `ToolNode`:
 
 ```python
@@ -58,6 +60,31 @@ tool_calls = [{"name": "search", "args": {"query": "what is the weather in sf"},
 ai_message = AIMessage(content="", tool_calls=tool_calls)
 # execute tool call
 tool_node.invoke({"messages": [ai_message]})
+```
+
+### ValidationNode
+
+`langgraph-prebuilt` provides an [implementation](https://langchain-ai.github.io/langgraph/reference/prebuilt/#langgraph.prebuilt.tool_validator.ValidationNode) of a node that validates tool calls against a pydantic schema - `ValidationNode`:
+
+```python
+from pydantic import BaseModel, field_validator
+from langgraph.prebuilt import ValidationNode
+from langchain_core.messages import AIMessage
+
+
+class SelectNumber(BaseModel):
+    a: int
+
+    @field_validator("a")
+    def a_must_be_meaningful(cls, v):
+        if v != 37:
+            raise ValueError("Only 37 is allowed")
+        return v
+
+validation_node = ValidationNode([SelectNumber])
+validation_node.invoke({
+    "messages": [AIMessage("", tool_calls=[{"name": "SelectNumber", "args": {"a": 42}, "id": "1"}])]
+})
 ```
 
 ## Agent Inbox
