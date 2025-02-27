@@ -24,3 +24,6 @@ packages:
   - name: "delve-taxonomy-generator"
     repo: "andrestorres123/delve"
     description: "A taxonomy generator for unstructured data"
+  - name: "nodeology"
+    repo: "xyin-anl/Nodeology"
+    description: "Enable researcher to build scientific workflows easily with simplified interface."
