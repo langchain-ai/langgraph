@@ -439,7 +439,7 @@ version = "0.3.0"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
-groups = ["main", "dev"]
+groups = ["dev"]
 files = []
 develop = true
 
@@ -514,7 +514,7 @@ version = "0.1.53"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "<4.0.0,>=3.9.0"
-groups = ["main", "dev"]
+groups = ["dev"]
 files = [
     {file = "langgraph_sdk-0.1.53-py3-none-any.whl", hash = "sha256:4fab62caad73661ffe4c3ababedcd0d7bfaaba986bee4416b9c28948458a3af5"},
     {file = "langgraph_sdk-0.1.53.tar.gz", hash = "sha256:12906ed965905fa27e0c28d9fa07dc6fd89e6895ff321ff049fdf3965d057cc4"},
@@ -780,6 +780,7 @@ files = [
     {file = "orjson-3.10.15-cp39-cp39-win_amd64.whl", hash = "sha256:efcf6c735c3d22ef60c4aa27a5238f1a477df85e9b15f2142f9d669beb2d13fd"},
     {file = "orjson-3.10.15.tar.gz", hash = "sha256:05ca7fe452a2e9d8d9d706a2984c95b9c2ebc5db417ce0b7a49b91d50642a23e"},
 ]
+markers = {main = "platform_python_implementation != \"PyPy\""}
 
 [[package]]
 name = "packaging"
@@ -1472,4 +1473,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9.0,<4.0"
-content-hash = "59dd6cf2dcd8192cd19115ea667079ee41c2ca4ae0ea8d4b429be232c79cf010"
+content-hash = "af5dc04219a8b3bce05705a0664ff424b40b426e47575d0a8a36415563553942"
