@@ -29,7 +29,7 @@ There are two ways to connect your LangGraph app with the studio:
 
 ### Deployed Application
 
-If you have deployed your LangGraph application on LangGraph Platform (Cloud), you can access the studio as part of that deployment. To do so, navigate to the deployment in LangGraph Platform and click the "LangGraph Studio" button.
+If you have deployed your LangGraph application on LangGraph Platform, you can access the studio as part of that deployment. To do so, navigate to the deployment in LangGraph Platform within the LangSmith UI and click the "LangGraph Studio" button.
 
 ### Local Development Server
 
