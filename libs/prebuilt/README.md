@@ -2,11 +2,8 @@
 
 This library defines high-level APIs for creating and executing LangGraph agents and tools.
 
-## Installation
-
-```bash
-pip install langgraph-prebuilt
-```
+> [!IMPORTANT]
+> This library is meant to be bundled with `langgraph`, don't install it directly
 
 ## Agents
 
