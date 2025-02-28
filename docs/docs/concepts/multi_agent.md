@@ -348,7 +348,7 @@ A common, generic way for agents to communicate is via a list of messages. This 
 - How are [**handoffs represented in the list of messages**](#representing-handoffs-in-message-history)?
 - How do you [**manage state for subagents**](#state-management-for-subagents)?
 
-If you are dealing with more complex agents or wish to keep individual agent state separate from the multi-agent system state, you may need to use [**different state schemas**](#using-different-state-schemas).
+Additionally, if you are dealing with more complex agents or wish to keep individual agent state separate from the multi-agent system state, you may need to use [**different state schemas**](#using-different-state-schemas).
 
 ### Handoffs vs tool calls
 
@@ -374,7 +374,7 @@ For agents called as tools, the supervisor determines the inputs based on the to
 
 #### Indicating agent name in messages
 
-Additionally, it can be helpful to indicate which agent a particular AI message is from, especially for long message histories. Some LLM providers (like OpenAI) support adding a `name` parameter to messages — you can use that to attach the agent name to the message. If that is not supported, you can consider manually injecting the agent name into the message content, e.g., `<agent>alice</agent><message>message from alice</message>`.
+It can be helpful to indicate which agent a particular AI message is from, especially for long message histories. Some LLM providers (like OpenAI) support adding a `name` parameter to messages — you can use that to attach the agent name to the message. If that is not supported, you can consider manually injecting the agent name into the message content, e.g., `<agent>alice</agent><message>message from alice</message>`.
 
 ### Representing handoffs in message history
 
