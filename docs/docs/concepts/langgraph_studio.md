@@ -103,7 +103,7 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
 ### Studio Desktop FAQs
 
 !!! warning "Deprecation Warning"
-In order to support a wider range of platforms and users, we now recommend following the above instructions to connect to LangGraph Studio using the development server instead of the desktop app.
+    In order to support a wider range of platforms and users, we now recommend following the above instructions to connect to LangGraph Studio using the development server instead of the desktop app.
 
 The LangGraph Studio Desktop App is a standalone application that allows you to connect to your LangGraph application and visualize and interact with your graph. It is available for MacOS only and requires Docker to be installed.
 
