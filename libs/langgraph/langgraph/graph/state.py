@@ -33,7 +33,7 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.constants import EMPTY_SEQ, NS_END, NS_SEP, SELF, TAG_HIDDEN
+from langgraph.constants import EMPTY_SEQ, MISSING, NS_END, NS_SEP, SELF, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
     InvalidUpdateError,
@@ -90,7 +90,7 @@ class StateNodeSpec(NamedTuple):
     metadata: Optional[dict[str, Any]]
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
-    ends: Optional[tuple[str, ...]] = EMPTY_SEQ
+    ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
 
 
 class StateGraph(Graph):
@@ -230,6 +230,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        destinations: Optional[Union[dict[str, str], tuple[str]]] = None,
     ) -> Self:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -254,6 +255,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        destinations: Optional[Union[dict[str, str], tuple[str]]] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -277,18 +279,23 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        destinations: Optional[Union[dict[str, str], tuple[str]]] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
         Will take the name of the function/runnable as the node name.
 
         Args:
-            node (Union[str, RunnableLike)]: The function or runnable this node will run.
+            node (Union[str, RunnableLike]): The function or runnable this node will run.
             action (Optional[RunnableLike]): The action associated with the node. (default: None)
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
             retry (Optional[RetryPolicy]): The policy for retrying the node. (default: None)
-
+            destinations (Optional[Union[dict[str, str], tuple[str]]]): Destinations that indicate where a node can route to.
+                This is useful for edgeless graphs with nodes that return `Command` objects.
+                If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+                If a tuple is provided, the values will be used as the target node names.
+                NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
         Raises:
             ValueError: If the key is already being used as a state key.
 
@@ -357,7 +364,7 @@ class StateGraph(Graph):
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
 
-        ends = EMPTY_SEQ
+        ends: Union[tuple[str, ...], dict[str, str]] = EMPTY_SEQ
         try:
             if (
                 isfunction(action)
@@ -401,6 +408,10 @@ class StateGraph(Graph):
                         ends = vals
         except (TypeError, StopIteration):
             pass
+
+        if destinations is not None:
+            ends = destinations
+
         if input is not None:
             self._add_schema(input)
         self.nodes[cast(str, node)] = StateNodeSpec(
@@ -664,7 +675,9 @@ class CompiledStateGraph(CompiledGraph):
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
-                return input._update_as_tuples()
+                return [
+                    (k, v) for k, v in input._update_as_tuples() if k in output_keys
+                ]
             elif (
                 isinstance(input, (list, tuple))
                 and input
@@ -675,15 +688,30 @@ class CompiledStateGraph(CompiledGraph):
                     if isinstance(i, Command):
                         if i.graph == Command.PARENT:
                             continue
-                        updates.extend(i._update_as_tuples())
+                        updates.extend(
+                            (k, v) for k, v in i._update_as_tuples() if k in output_keys
+                        )
                     else:
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
+                # if input is a Pydantic model, only update values
+                # for the keys that have been explicitly set by the users
+                # (this is needed to avoid sending updates for fields with None defaults)
+                output_keys_ = output_keys
+                # Pydantic v2
+                if hasattr(input, "model_fields_set"):
+                    output_keys_ = [
+                        k for k in output_keys if k in input.model_fields_set
+                    ]
+                # Pydantic v1
+                elif hasattr(input, "__fields_set__"):
+                    output_keys_ = [k for k in output_keys if k in input.__fields_set__]
+
                 return [
                     (k, getattr(input, k))
-                    for k in output_keys
-                    if getattr(input, k, None) is not None
+                    for k in output_keys_
+                    if getattr(input, k, MISSING) is not MISSING
                 ]
             else:
                 msg = create_error_message(

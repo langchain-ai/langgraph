@@ -1,14 +1,14 @@
 import logging
 import os
+import posixpath
 import re
 from typing import Any, Dict
 
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
-import posixpath
 
-from generate_api_reference_links import update_markdown_with_imports
-from notebook_convert import convert_notebook
+from _scripts.generate_api_reference_links import update_markdown_with_imports
+from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -57,6 +57,29 @@ def on_files(files: Files, **kwargs: Dict[str, Any]):
     return new_files
 
 
+def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
+    """Add the path to the code blocks."""
+    code_block_pattern = re.compile(
+        r"(?P<indent>[ \t]*)```(?P<language>\w+)[ ]*(?P<attributes>[^\n]*)\n"
+        r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
+        r"(?P=indent)```"  # Match closing backticks with the same indentation
+    )
+
+    def replace_code_block_header(match: re.Match) -> str:
+        indent = match.group("indent")
+        language = match.group("language")
+        attributes = match.group("attributes").rstrip()
+
+        if 'exec="on"' not in attributes:
+            # Return original code block
+            return match.group(0)
+
+        code = match.group("code")
+        return f'{indent}```{language} {attributes} path="{page.file.src_path}"\n{code}{indent}```'
+
+    return code_block_pattern.sub(replace_code_block_header, markdown)
+
+
 def _highlight_code_blocks(markdown: str) -> str:
     """Find code blocks with highlight comments and add hl_lines attribute.
 
@@ -71,7 +94,7 @@ def _highlight_code_blocks(markdown: str) -> str:
     # existing hl_lines for Python and JavaScript
     # Pattern to find code blocks with highlight comments, handling optional indentation
     code_block_pattern = re.compile(
-        r"(?P<indent>[ \t]*)```(?P<language>py|python|js|javascript)(?!\s+hl_lines=)\n"
+        r"(?P<indent>[ \t]*)```(?P<language>\w+)[ ]*(?P<attributes>[^\n]*)\n"
         r"(?P<code>((?:.*\n)*?))"  # Capture the code inside the block using named group
         r"(?P=indent)```"  # Match closing backticks with the same indentation
     )
@@ -80,6 +103,13 @@ def _highlight_code_blocks(markdown: str) -> str:
         indent = match.group("indent")
         language = match.group("language")
         code_block = match.group("code")
+        attributes = match.group("attributes").rstrip()
+
+        # Account for a case where hl_lines is manually specified
+        if "hl_lines" in attributes:
+            # Return original code block
+            return match.group(0)
+
         lines = code_block.split("\n")
         highlighted_lines = []
 
@@ -105,20 +135,23 @@ def _highlight_code_blocks(markdown: str) -> str:
         # Reconstruct the new code block
         new_code_block = "\n".join(lines_to_keep)
 
+        # Construct the full code block that also includes
+        # the fenced code block syntax.
+        opening_fence = f"```{language}"
+
+        if attributes:
+            opening_fence += f" {attributes}"
+
         if highlighted_lines:
-            return (
-                f'{indent}```{language} hl_lines="{" ".join(highlighted_lines)}"\n'
-                # The indent and terminating \n is already included in the code block
-                f'{new_code_block}'
-                f'{indent}```'
-            )
-        else:
-            return (
-                f"{indent}```{language}\n"
-                # The indent and terminating \n is already included in the code block
-                f"{new_code_block}"
-                f"{indent}```"
-            )
+            opening_fence += f" hl_lines=\"{' '.join(highlighted_lines)}\""
+
+        return (
+            # The indent and opening fence
+            f"{indent}{opening_fence}\n"
+            # The indent and terminating \n is already included in the code block
+            f"{new_code_block}"
+            f"{indent}```"
+        )
 
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
@@ -135,19 +168,25 @@ def _on_page_markdown_with_config(
 ) -> str:
     if DISABLED:
         return markdown
+
     if page.file.src_path.endswith(".ipynb"):
-        logger.info("Processing Jupyter notebook: %s", page.file.src_path)
+        # logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
 
     # Append API reference links to code blocks
     if add_api_references:
-        markdown = update_markdown_with_imports(markdown)
+        markdown = update_markdown_with_imports(markdown, page.file.abs_src_path)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
 
+    # Add file path as an attribute to code blocks that are executable.
+    # This file path is used to associate fixtures with the executable code
+    # which can be used in CI to test the docs without making network requests.
+    markdown = _add_path_to_code_blocks(markdown, page)
+
     if remove_base64_images:
         # Remove base64 encoded images from markdown
-        markdown = re.sub(r"!\[.*?\]\(data:image/[^;]+;base64,[^\)]+\)", "", markdown)
+        markdown = re.sub(r"!\[.*?\]\(data:image/+;base64,[^\)]+\)", "", markdown)
 
     return markdown
 
@@ -159,6 +198,7 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         add_api_references=True,
         **kwargs,
     )
+
 
 # redirects
 

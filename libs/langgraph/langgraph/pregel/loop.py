@@ -888,7 +888,11 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             )
 
     def _update_mv(self, key: str, values: Sequence[Any]) -> None:
-        return self.submit(cast(WritableManagedValue, self.managed[key]).update, values)
+        managed_value = self.managed.get(key)
+        if managed_value is None:
+            return
+
+        return self.submit(cast(WritableManagedValue, managed_value).update, values)
 
     # context manager
 
@@ -1023,9 +1027,11 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             )
 
     def _update_mv(self, key: str, values: Sequence[Any]) -> None:
-        return self.submit(
-            cast(WritableManagedValue, self.managed[key]).aupdate, values
-        )
+        managed_value = self.managed.get(key)
+        if managed_value is None:
+            return
+
+        return self.submit(cast(WritableManagedValue, managed_value).aupdate, values)
 
     # context manager
 

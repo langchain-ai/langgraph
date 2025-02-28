@@ -59,6 +59,7 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
@@ -197,6 +198,264 @@ class Channel:
 
 
 class Pregel(PregelProtocol):
+    """Pregel manages the runtime behavior for LangGraph applications.
+
+    ## Overview
+
+    Pregel combines [**actors**](https://en.wikipedia.org/wiki/Actor_model)
+    and **channels** into a single application.
+    **Actors** read data from channels and write data to channels.
+    Pregel organizes the execution of the application into multiple steps,
+    following the **Pregel Algorithm**/**Bulk Synchronous Parallel** model.
+
+    Each step consists of three phases:
+
+    - **Plan**: Determine which **actors** to execute in this step. For example,
+        in the first step, select the **actors** that subscribe to the special
+        **input** channels; in subsequent steps,
+        select the **actors** that subscribe to channels updated in the previous step.
+    - **Execution**: Execute all selected **actors** in parallel,
+        until all complete, or one fails, or a timeout is reached. During this
+        phase, channel updates are invisible to actors until the next step.
+    - **Update**: Update the channels with the values written by the **actors**
+        in this step.
+
+    Repeat until no **actors** are selected for execution, or a maximum number of
+    steps is reached.
+
+    ## Actors
+
+    An **actor** is a [PregelNode][langgraph.pregel.read.PregelNode].
+    It subscribes to channels, reads data from them, and writes data to them.
+    It can be thought of as an **actor** in the Pregel algorithm.
+    [PregelNodes][langgraph.pregel.read.PregelNode] implement LangChain's
+    Runnable interface.
+
+    ## Channels
+
+    Channels are used to communicate between actors (PregelNodes).
+    Each channel has a value type, an update type, and an update function – which
+    takes a sequence of updates and
+    modifies the stored value. Channels can be used to send data from one chain to
+    another, or to send data from a chain to itself in a future step. LangGraph
+    provides a number of built-in channels:
+
+    ### Basic channels: LastValue and Topic
+
+    - `LastValue`: The default channel, stores the last value sent to the channel,
+       useful for input and output values, or for sending data from one step to the next
+    - `Topic`: A configurable PubSub Topic, useful for sending multiple values
+       between *actors*, or for accumulating output. Can be configured to deduplicate
+       values, and/or to accumulate values over the course of multiple steps.
+
+    ### Advanced channels: Context and BinaryOperatorAggregate
+
+    - `Context`: exposes the value of a context manager, managing its lifecycle.
+      Useful for accessing external resources that require setup and/or teardown. eg.
+      `client = Context(httpx.Client)`
+    - `BinaryOperatorAggregate`: stores a persistent value, updated by applying
+       a binary operator to the current value and each update
+       sent to the channel, useful for computing aggregates over multiple steps. eg.
+      `total = BinaryOperatorAggregate(int, operator.add)`
+
+    ## Examples
+
+    Most users will interact with Pregel via a
+    [StateGraph (Graph API)][langgraph.graph.StateGraph] or via an
+    [entrypoint (Functional API)][langgraph.func.entrypoint].
+
+    However, for **advanced** use cases, Pregel can be used directly. If you're
+    not sure whether you need to use Pregel directly, then the answer is probably no
+    – you should use the Graph API or Functional API instead. These are higher-level
+    interfaces that will compile down to Pregel under the hood.
+
+    Here are some examples to give you a sense of how it works:
+
+    Example: Single node application
+        ```python
+        from langgraph.channels import EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | Channel.write_to("b")
+        )
+
+        app = Pregel(
+            nodes={"node1": node1},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+            },
+            input_channels=["a"],
+            output_channels=["b"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'b': 'foofoo'}
+        ```
+
+    Example: Using multiple nodes and multiple output channels
+        ```python
+        from langgraph.channels import LastValue, EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | Channel.write_to("b")
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | Channel.write_to("c")
+        )
+
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": LastValue(str),
+                "c": EphemeralValue(str),
+            },
+            input_channels=["a"],
+            output_channels=["b", "c"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'b': 'foofoo', 'c': 'foofoofoofoo'}
+        ```
+
+    Example: Using a Topic channel
+        ```python
+        from langgraph.channels import LastValue, EphemeralValue, Topic
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
+
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": Topic(str, accumulate=True),
+            },
+            input_channels=["a"],
+            output_channels=["c"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```pycon
+        {'c': ['foofoo', 'foofoofoofoo']}
+        ```
+
+    Example: Using a BinaryOperatorAggregate channel
+        ```python
+        from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
+        from langgraph.pregel import Pregel, Channel
+
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
+
+
+        def reducer(current, update):
+            if current:
+                return current + " | " + "update"
+            else:
+                return update
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": BinaryOperatorAggregate(str, operator=reducer),
+            },
+            input_channels=["a"],
+            output_channels=["c"]
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'c': 'foofoo | foofoofoofoo'}
+        ```
+
+    Example: Introducing a cycle
+        This example demonstrates how to introduce a cycle in the graph, by having
+        a chain write to a channel it subscribes to. Execution will continue
+        until a None value is written to the channel.
+
+        ```python
+        from langgraph.channels import EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWrite, ChannelWriteEntry
+
+        example_node = (
+            Channel.subscribe_to("value")
+            | (lambda x: x + x if len(x) < 10 else None)
+            | ChannelWrite(writes=[ChannelWriteEntry(channel="value", skip_none=True)])
+        )
+
+        app = Pregel(
+            nodes={"example_node": example_node},
+            channels={
+                "value": EphemeralValue(str),
+            },
+            input_channels=["value"],
+            output_channels=["value"]
+        )
+
+        app.invoke({"value": "a"})
+        ```
+
+        ```con
+        {'value': 'aaaaaaaaaaaaaaaa'}
+        ```
+    """
+
     nodes: dict[str, PregelNode]
 
     channels: dict[str, Union[BaseChannel, ManagedValueSpec]]
@@ -712,6 +971,12 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
             config,
@@ -745,6 +1010,12 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
             config,
@@ -1652,9 +1923,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1682,7 +1951,7 @@ class Pregel(PregelProtocol):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=loop.submit,
+                    submit=config[CONF].get(CONFIG_KEY_RUNNER_SUBMIT, loop.submit),
                     put_writes=loop.put_writes,
                     schedule_task=loop.accept_push,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
@@ -1942,9 +2211,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1974,7 +2241,7 @@ class Pregel(PregelProtocol):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=loop.submit,
+                    submit=config[CONF].get(CONFIG_KEY_RUNNER_SUBMIT, loop.submit),
                     put_writes=loop.put_writes,
                     schedule_task=loop.accept_push,
                     use_astream=do_stream is not None,

@@ -83,12 +83,12 @@ node at a time or if you want to pause the graph execution at specific nodes.
 
 ### `NodeInterrupt` exception
 
-We recommend that you [**use the `interrupt` function instead**](#the-interrupt-function) of the `NodeInterrupt` exception if you're trying to implement
+We recommend that you [**use the `interrupt` function instead**][langgraph.types.interrupt] of the `NodeInterrupt` exception if you're trying to implement
 [human-in-the-loop](./human_in_the_loop.md) workflows. The `interrupt` function is easier to use and more flexible.
 
 ??? node "`NodeInterrupt` exception"
 
-    The developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of [dynamic breakpoints](./low_level.md#dynamic-breakpoints) is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
+    The developer can define some *condition* that must be met for a breakpoint to be triggered. This concept of _dynamic breakpoints_ is useful when the developer wants to halt the graph under *a particular condition*. This uses a `NodeInterrupt`, which is a special type of exception that can be raised from within a node based upon some condition. As an example, we can define a dynamic breakpoint that triggers when the `input` is longer than 5 characters.
 
     ```python
     def my_node(state: State) -> State:

@@ -147,15 +147,21 @@ def get_client(
         # example usage: client.<model>.<method_name>()
         assistants = await client.assistants.get(assistant_id="some_uuid")
     """
+
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
-        try:
-            from langgraph_api.server import app  # type: ignore
-
+        if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
+            transport = httpx.ASGITransport(app=None, root_path="/noauth")
+            _registered_transports.append(transport)
             url = "http://api"
-            transport = httpx.ASGITransport(app, root_path="/noauth")
-        except Exception:
-            url = "http://localhost:8123"
+        else:
+            try:
+                from langgraph_api.server import app  # type: ignore
+
+                url = "http://api"
+                transport = httpx.ASGITransport(app, root_path="/noauth")
+            except Exception:
+                url = "http://localhost:8123"
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
@@ -1318,9 +1324,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": {k: v for k, v in command.items() if v is not None}
-            if command
-            else None,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -1505,9 +1511,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": {k: v for k, v in command.items() if v is not None}
-            if command
-            else None,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -1676,9 +1682,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": {k: v for k, v in command.items() if v is not None}
-            if command
-            else None,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -3483,9 +3489,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": {k: v for k, v in command.items() if v is not None}
-            if command
-            else None,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3670,9 +3676,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": {k: v for k, v in command.items() if v is not None}
-            if command
-            else None,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3838,9 +3844,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": {k: v for k, v in command.items() if v is not None}
-            if command
-            else None,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -4444,3 +4450,12 @@ class SyncStoreClient:
 
 def _provided_vals(d: dict):
     return {k: v for k, v in d.items() if v is not None}
+
+
+_registered_transports: list[httpx.ASGITransport] = []
+
+
+# Do not move; this is used in the server.
+def configure_loopback_transports(app: Any) -> None:
+    for transport in _registered_transports:
+        transport.app = app

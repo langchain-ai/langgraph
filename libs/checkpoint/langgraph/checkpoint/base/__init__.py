@@ -446,6 +446,23 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
     )
 
 
+def get_checkpoint_metadata(
+    config: RunnableConfig, metadata: CheckpointMetadata
+) -> CheckpointMetadata:
+    """Get checkpoint metadata in a backwards-compatible manner."""
+    metadata = metadata.copy()
+    for obj in (config.get("metadata"), config.get("configurable")):
+        if not obj:
+            continue
+        for key in obj:
+            if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
+                continue
+            v = obj[key]
+            if isinstance(v, (str, int, bool, float)):
+                metadata[key] = v  # type: ignore[literal-required]
+    return metadata
+
+
 """
 Mapping from error type to error index.
 Regular writes just map to their index in the list of writes being saved.
@@ -454,3 +471,9 @@ conflicting with regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
 WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
+
+EXCLUDED_METADATA_KEYS = {
+    "checkpoint_id",
+    "checkpoint_ns",
+    "checkpoint_map",
+}

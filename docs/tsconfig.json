@@ -1,0 +1,23 @@
+{
+  "extends": "@tsconfig/recommended",
+  "compilerOptions": {
+    "rootDir": "",
+    "noEmit": true,
+    "target": "ES2021",
+    "lib": ["ES2021", "ES2022.Object", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "esModuleInterop": true,
+    "declaration": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useDefineForClassFields": true,
+    "strictPropertyInitialization": false,
+    "allowJs": true,
+    "strict": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

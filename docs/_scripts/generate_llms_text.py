@@ -2,12 +2,11 @@
 
 import glob
 import os
-import pathlib
 
 from mkdocs.structure.files import File
 from mkdocs.structure.pages import Page
 
-from notebook_hooks import _on_page_markdown_with_config
+from _scripts.notebook_hooks import _on_page_markdown_with_config
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Get source directory (parent of HERE / docs)

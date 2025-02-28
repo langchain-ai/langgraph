@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 class NodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]] = None
-    ends: Optional[tuple[str, ...]] = EMPTY_SEQ
+    ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
 
 
 class Branch(NamedTuple):
@@ -625,7 +625,10 @@ class CompiledGraph(Pregel):
                     if branch.then is not None:
                         add_edge(end, branch.then)
         for key, n in self.builder.nodes.items():
-            if n.ends:
+            if isinstance(n.ends, dict):
+                for end, label in n.ends.items():
+                    add_edge(key, end, label, conditional=True)
+            elif isinstance(n.ends, tuple):
                 for end in n.ends:
                     add_edge(key, end, conditional=True)
 
