@@ -1737,8 +1737,8 @@ class RunsClient:
 
         Example Usage:
 
-            await client.runs.delete(
-                thread_id="thread_id_to_delete",
+            await client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
@@ -3881,8 +3881,8 @@ class SyncRunsClient:
 
         Example Usage:
 
-            client.runs.delete(
-                thread_id="thread_id_to_delete",
+            client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
