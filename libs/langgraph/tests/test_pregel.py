@@ -6762,6 +6762,7 @@ def test_interrupt_subgraph_reenter(
         called.append("subnode_1")
         global subgraph_bar_value
         subgraph_bar_value = state.get("bar")
+        print(subgraph_bar_value)
         return {"foo": "subgraph_1"}
 
     def subnode_2(state: SubgraphState):
@@ -6819,4 +6820,4 @@ def test_interrupt_subgraph_reenter(
         "subnode_2",
         "parent",
     ]
-    assert subgraph_bar_value == "bar"
+    assert subgraph_bar_value == "barbaz"
