@@ -10,7 +10,7 @@ import warnings
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from random import randrange
 from typing import (
     Annotated,
@@ -273,6 +273,62 @@ def test_checkpoint_errors() -> None:
     graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
     with pytest.raises(ValueError, match="Faulty put_writes"):
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
+
+
+def test_config_json_schema() -> None:
+    """Test that config json schema is generated properly."""
+    config = {"configurable": {"thread_id": "1"}}
+    chain = Channel.subscribe_to("input") | Channel.write_to("output")
+
+    @dataclass
+    class Foo:
+        x: int
+        y: str = field(default="foo")
+
+    app = Pregel(
+        nodes={
+            "one": chain,
+        },
+        channels={
+            "ephemeral": EphemeralValue(Any),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels=["input", "ephemeral"],
+        output_channels="output",
+        config_type=Foo,
+    )
+
+    assert app.get_config_jsonschema() == {
+        "$defs": {
+            "Foo": {
+                "properties": {
+                    "x": {
+                        "title": "X",
+                        "type": "integer",
+                    },
+                    "y": {
+                        "default": "foo",
+                        "title": "Y",
+                        "type": "string",
+                    },
+                },
+                "required": [
+                    "x",
+                ],
+                "title": "Foo",
+                "type": "object",
+            },
+        },
+        "properties": {
+            "configurable": {
+                "$ref": "#/$defs/Foo",
+                "default": None,
+            },
+        },
+        "title": "LangGraphConfig",
+        "type": "object",
+    }
 
 
 def test_node_schemas_custom_output() -> None:
