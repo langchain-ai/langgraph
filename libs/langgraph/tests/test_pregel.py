@@ -277,7 +277,6 @@ def test_checkpoint_errors() -> None:
 
 def test_config_json_schema() -> None:
     """Test that config json schema is generated properly."""
-    config = {"configurable": {"thread_id": "1"}}
     chain = Channel.subscribe_to("input") | Channel.write_to("output")
 
     @dataclass
