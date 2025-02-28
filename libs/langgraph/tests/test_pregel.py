@@ -6742,7 +6742,7 @@ def test_stream_messages_dedupe_state(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_interrupt_subgraph_reenter(
+def test_interrupt_subgraph_reenter_checkpointer_true(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
@@ -6756,13 +6756,11 @@ def test_interrupt_subgraph_reenter(
         counter: int
 
     called = []
-    subgraph_bar_value = None
+    bar_values = []
 
     def subnode_1(state: SubgraphState):
         called.append("subnode_1")
-        global subgraph_bar_value
-        subgraph_bar_value = state.get("bar")
-        print(subgraph_bar_value)
+        bar_values.append(state.get("bar"))
         return {"foo": "subgraph_1"}
 
     def subnode_2(state: SubgraphState):
@@ -6805,6 +6803,10 @@ def test_interrupt_subgraph_reenter(
     config = {"configurable": {"thread_id": "1"}}
     assert parent.invoke({"foo": "", "counter": 0}, config) == {"foo": "", "counter": 0}
     assert parent.invoke(Command(resume="bar"), config) == {
+        "foo": "subgraph_2",
+        "counter": 1,
+    }
+    assert parent.invoke(Command(resume="qux"), config) == {
         "foo": "subgraph_2|parent",
         "counter": 1,
     }
@@ -6818,6 +6820,15 @@ def test_interrupt_subgraph_reenter(
         "call_subgraph",
         "subnode_1",
         "subnode_2",
+        "call_subgraph",
+        "subnode_2",
         "parent",
     ]
-    assert subgraph_bar_value == "barbaz"
+
+    # invoke parent again (new turn)
+    assert parent.invoke({"foo": "meow", "counter": 0}, config) == {
+        "foo": "meow",
+        "counter": 0,
+    }
+    # confirm that we preserve the state values from the previous invocation
+    assert bar_values == [None, "barbaz", "quxbaz"]
