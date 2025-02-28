@@ -337,72 +337,68 @@ builder.add_edge(START, "agent_1")
 builder.add_edge("agent_1", "agent_2")
 ```
 
-## State Management in Multi-Agent Systems
+## Communication and state management
 
 The most important thing when building multi-agent systems is figuring out how the agents communicate.
 
-A common, generic way for agents to communicate is with a list of messages. There are still a lot of questions:
+A common, generic way for agents to communicate is via a list of messages. This opens up the following questions:
 
-- Do agents communicate via [**via handoffs or via tool calls**](#handoff-vs-tool-calls)?
-- What messages are [**passed from one agent to the next**](#what-messages-are-passed-from-one-agent-to-the-next)?
-- How are [**handoffs represented in the list of messages**](#how-are-handoffs-represented)?
-- Do you [**maintain state for subagents**](#maintain-state-for-subagents)
+- Do agents communicate [**via handoffs or via tool calls**](#handoffs-vs-tool-calls)?
+- What messages are [**passed from one agent to the next**](#message-passing-between-agents)?
+- How are [**handoffs represented in the list of messages**](#representing-handoffs-in-message-history)?
+- How do you [**manage state for subagents**](#state-management-for-subagents)?
 
-If you are dealing with more complex agents, you may need to deal with communication between agents with different state schemas
+If you are dealing with more complex agents or wish to keep individual agent state separate from the multi-agent system state, you may need to use [**different state schemas**](#using-different-state-schemas).
 
-- What if two agents have [**different state schemas**](#different-state-schemas)?
+### Handoffs vs tool calls
 
-### Handoff vs tool calls
-
-What is the "payload" that is being passed around between agents? In most of the architectures discussed above the agents communicate via the [graph state](./low_level.md#state). We refer to this as a "hand-off". In the case of the [supervisor with tool-calling](#supervisor-tool-calling), the payloads are tool call arguments.
+What is the "payload" that is being passed around between agents? In most of the architectures discussed above, the agents communicate via [handoffs](#handoffs) and pass the [graph state](./low_level.md#state) as part of the handoff payload. Specifically, agents pass around lists of messages as part of the graph state. In the case of the [supervisor with tool-calling](#supervisor-tool-calling), the payloads are tool call arguments.
 
 ![](./img/multi_agent/request.png)
 
+### Message passing between agents
 
-### What messages are passed from one agent to the next?
-
-The most common way for the agents to communicate is via a shared state channel, typically a list of messages. This assumes that there is always at least a single channel (key) in the state that is shared by the agents. When communicating via a shared message list there is an additional consideration: should the agents [share the full history](#share-full-history) of their thought process or only [the final result](#share-final-result)?
+The most common way for agents to communicate is via a shared state channel, typically a list of messages. This assumes that there is always at least a single channel (key) in the state that is shared by the agents (e.g., `messages`). When communicating via a shared message list, there is an additional consideration: should the agents [share the full history](#sharing-full-thought-process) of their thought process or only [the final result](#sharing-only-final-results)?
 
 ![](./img/multi_agent/response.png)
 
-#### Share full history
+#### Sharing full thought process
 
-Agents can **share the full history** of their thought process (i.e. "scratchpad") with all other agents. This "scratchpad" would typically look like a [list of messages](./low_level.md#why-use-messages). The benefit of sharing full thought process is that it might help other agents make better decisions and improve reasoning ability for the system as a whole. The downside is that as the number of agents and their complexity grows, the "scratchpad" will grow quickly and might require additional strategies for [memory management](./memory.md/#managing-long-conversation-history).
+Agents can **share the full history** of their thought process (i.e., "scratchpad") with all other agents. This "scratchpad" would typically look like a [list of messages](./low_level.md#why-use-messages). The benefit of sharing the full thought process is that it might help other agents make better decisions and improve reasoning ability for the system as a whole. The downside is that as the number of agents and their complexity grows, the "scratchpad" will grow quickly and might require additional strategies for [memory management](./memory.md/#managing-long-conversation-history).
 
-#### Share final result
+#### Sharing only final results
 
-Agents can have their own private "scratchpad" and only **share the final result** with the rest of the agents. This approach might work better for systems with many agents or agents that are more complex. In this case, you would need to define agents with [different state schemas](#different-state-schemas)
+Agents can have their own private "scratchpad" and only **share the final result** with the rest of the agents. This approach might work better for systems with many agents or agents that are more complex. In this case, you would need to define agents with [different state schemas](#using-different-state-schemas).
 
 For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](https://langchain-ai.github.io/langgraph/how-tos/pass-run-time-values-to-tools/#pass-graph-state-to-tools) to individual tools at runtime, so subordinate agents can access parent state, if needed.
 
-### How are handoffs represented?
+#### Indicating agent name in messages
 
-How are handoffs represented in the list of messages?
+Additionally, it can be helpful to indicate which agent a particular AI message is from, especially for long message histories. Some LLM providers (like OpenAI) support adding a `name` parameter to messages — you can use that to attach the agent name to the message. If that is not supported, you can consider manually injecting the agent name into the message content, e.g., `<agent>alice</agent><message>message from alice</message>`.
 
-Handoffs are typically done by the LLM making a tool call. This is represented as an AI Message with tool calls.
+### Representing handoffs in message history
 
-This will be passed to the next agent (LLM). Most LLMs don't support being passed an AI Message with tool calls **without** corresponding tool messages.
+Handoffs are typically done via the LLM calling a dedicated [handoff tool](#handoffs-as-tools). This is represented as an [AI message](https://python.langchain.com/docs/concepts/messages/#aimessage) with tool calls that is passed to the next agent (LLM). Most LLM providers don't support receiving AI messages with tool calls **without** corresponding tool messages.
 
 You therefore have two options:
 
-1. Add an extra ToolMessage to the message list, something like "Successfully passed to Agent X"
+1. Add an extra [tool message](https://python.langchain.com/docs/concepts/messages/#toolmessage) to the message list, e.g., "Successfully transferred to agent X"
 2. Remove the AI message with the tool calls
 
 In practice, we see that most developers opt for option (1).
 
-### Maintain state for subagents
+### State management for subagents
 
-A common practice is to have multiple agents communicating on a shared message list, but only adding their final messages to the list.
-This means that any intermediate messages (e.g. tool calls) are not saved in this message list.
+A common practice is to have multiple agents communicating on a shared message list, but only [adding their final messages to the list](#sharing-only-final-results). This means that any intermediate messages (e.g., tool calls) are not saved in this list.
 
-What if you want to save these messages so that if this particular sub agent is invoked in the future you can pass those back in?
+What if you __do__ want to save these messages so that if this particular subagent is invoked in the future you can pass those back in?
 
-There are two high level approaches:
+There are two high-level approaches to achieve that:
 
-1. Store these messages in the shared message list, but just filter it appropriately before passing it to the LLM. E.g. filter out all tool calls from **other** agents.
-2. Store a separate message list for each agent. This would be their "view" of what the message history looks like.
+1. Store these messages in the shared message list, but filter the list before passing it to the subagent LLM. For example, you can choose to filter out all tool calls from **other** agents.
+2. Store a separate message list for each agent (e.g., `alice_messages`) in the subagent's graph state. This would be their "view" of what the message history looks like.
 
-### Different state schemas
+### Using different state schemas
 
 An agent might need to have a different state schema from the rest of the agents. For example, a search agent might only need to keep track of queries and retrieved documents. There are two ways to achieve this in LangGraph:
 
