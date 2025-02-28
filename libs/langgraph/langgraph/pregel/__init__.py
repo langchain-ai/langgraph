@@ -18,6 +18,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -609,6 +610,32 @@ class Pregel(PregelProtocol):
             ]
         ]
 
+    def config_schema(
+        self, *, include: Optional[Sequence[str]] = None
+    ) -> Type[BaseModel]:
+        if self.config_type is None:
+            return super().config_schema(include=include)
+
+        include = include or []
+        fields = {
+            "configurable": (self.config_type, None),
+            **{
+                field_name: (field_type, None)
+                for field_name, field_type in get_type_hints(RunnableConfig).items()
+                if field_name in [i for i in include if i != "configurable"]
+            },
+        }
+        return create_model(self.get_name("Config"), field_definitions=fields)
+
+    def get_config_jsonschema(
+        self, *, include: Optional[Sequence[str]] = None
+    ) -> Dict[str, Any]:
+        schema = self.config_schema(include=include)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
+
     @property
     def InputType(self) -> Any:
         if isinstance(self.input_channels, str):
@@ -634,7 +661,7 @@ class Pregel(PregelProtocol):
 
     def get_input_jsonschema(
         self, config: Optional[RunnableConfig] = None
-    ) -> Dict[All, Any]:
+    ) -> Dict[str, Any]:
         schema = self.get_input_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -666,7 +693,7 @@ class Pregel(PregelProtocol):
 
     def get_output_jsonschema(
         self, config: Optional[RunnableConfig] = None
-    ) -> Dict[All, Any]:
+    ) -> Dict[str, Any]:
         schema = self.get_output_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
