@@ -6739,3 +6739,84 @@ def test_stream_messages_dedupe_state(
     assert len(chunks) == 1
     assert chunks[0][0] == AIMessage("bye again", id="2")
     assert chunks[0][1]["langgraph_node"] == "call_model"
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_interrupt_subgraph_reenter(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class SubgraphState(TypedDict):
+        foo: str
+        bar: str
+
+    class ParentState(TypedDict):
+        foo: str
+        counter: int
+
+    called = []
+    subgraph_bar_value = None
+
+    def subnode_1(state: SubgraphState):
+        called.append("subnode_1")
+        global subgraph_bar_value
+        subgraph_bar_value = state.get("bar")
+        return {"foo": "subgraph_1"}
+
+    def subnode_2(state: SubgraphState):
+        called.append("subnode_2")
+        value = interrupt("Provide value")
+        value += "baz"
+        return {"foo": "subgraph_2", "bar": value}
+
+    subgraph = (
+        StateGraph(SubgraphState)
+        .add_node(subnode_1)
+        .add_node(subnode_2)
+        .add_edge(START, "subnode_1")
+        .add_edge("subnode_1", "subnode_2")
+        .compile(checkpointer=True)
+    )
+
+    def call_subgraph(state: ParentState):
+        called.append("call_subgraph")
+        return subgraph.invoke(state)
+
+    def node(state: ParentState):
+        called.append("parent")
+        if state["counter"] < 1:
+            return Command(
+                goto="call_subgraph", update={"counter": state["counter"] + 1}
+            )
+
+        return {"foo": state["foo"] + "|" + "parent"}
+
+    parent = (
+        StateGraph(ParentState)
+        .add_node(call_subgraph)
+        .add_node(node)
+        .add_edge(START, "call_subgraph")
+        .add_edge("call_subgraph", "node")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent.invoke({"foo": "", "counter": 0}, config) == {"foo": "", "counter": 0}
+    assert parent.invoke(Command(resume="bar"), config) == {
+        "foo": "subgraph_2|parent",
+        "counter": 1,
+    }
+    assert called == [
+        "call_subgraph",
+        "subnode_1",
+        "subnode_2",
+        "call_subgraph",
+        "subnode_2",
+        "parent",
+        "call_subgraph",
+        "subnode_1",
+        "subnode_2",
+        "parent",
+    ]
+    assert subgraph_bar_value == "bar"
