@@ -403,6 +403,7 @@ class PregelLoop(LoopProtocol):
             self.status = "interrupt_before"
             raise GraphInterrupt()
         elif all(task.writes for task in self.tasks.values()):
+            # finish superstep
             writes = [w for t in self.tasks.values() for w in t.writes]
             # debug flag
             if self.debug:
@@ -451,6 +452,9 @@ class PregelLoop(LoopProtocol):
             ):
                 self.status = "interrupt_after"
                 raise GraphInterrupt()
+
+            # unset resuming flag
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             return False
 
