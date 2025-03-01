@@ -1,6 +1,0 @@
-DEFAULT_CONFIG = "langgraph.json"
-DEFAULT_PORT = 8123
-
-# analytics
-SUPABASE_PUBLIC_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6cmxwcG9qaW5wY3l5YWlweG5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTkyNTc1NzksImV4cCI6MjAzNDgzMzU3OX0.kkVOlLz3BxemA5nP-vat3K4qRtrDuO4SwZSR_htcX9c"
-SUPABASE_URL = "https://kzrlppojinpcyyaipxnb.supabase.co"

@@ -1,4 +1,0 @@
-requests
-langchain_anthropic
-langchain_openai
-langchain_community

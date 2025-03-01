@@ -1,2 +1,0 @@
-[global]
-timeout = 60
