@@ -506,7 +506,7 @@ class Pregel(PregelProtocol):
 
     stream_eager: bool = False
     """Whether to force emitting stream events eagerly, automatically turned on
-    for stream_mode "messages" and "custom"."""
+    for stream_mode "custom"."""
 
     output_channels: Union[str, Sequence[str]]
 
