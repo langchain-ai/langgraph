@@ -613,7 +613,11 @@ class Pregel(PregelProtocol):
     def config_schema(
         self, *, include: Optional[Sequence[str]] = None
     ) -> Type[BaseModel]:
-        if self.config_type is None:
+        # If the config type is not set explicitly OR
+        # if the checkpointer is turned on, then we'll want to infer the config.
+        # When the checkpointer is turned on, additional fields are injected
+        # into the configurable object which correspond to the checkpointing parameters.
+        if self.config_type is None or self.checkpointer is not None:
             return super().config_schema(include=include)
 
         include = include or []

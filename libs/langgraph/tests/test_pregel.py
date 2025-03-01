@@ -1499,7 +1499,7 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     mapper_calls = 0
 
-    class Config:
+    class Configurable:
         model: str
 
     @task()
@@ -1509,7 +1509,7 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
         time.sleep(input / 100)
         return str(input) * 2
 
-    @entrypoint(checkpointer=checkpointer, config_schema=Config)
+    @entrypoint(checkpointer=checkpointer, config_schema=Configurable)
     def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
